@@ -247,10 +247,9 @@ end
 
 function UI.PopupRaidDebit(name, deducted, after)
     local dlg = UI.CreatePopup({ title = "Participation clôturée", width = 520, height = 220 })
-    local moneyText = (UI and UI.MoneyText) and UI.MoneyText or function(v) return tostring(v).." po" end
     local body = ("Bon raid !\n\n|cffffd200Montant déduit :|r %s\n|cffffd200Solde restant :|r %s")
-        :format(moneyText(math.floor(tonumber(deducted) or 0)),
-                moneyText(math.floor(tonumber(after) or 0)))
+        :format(UI.MoneyText(math.floor(tonumber(deducted) or 0)),
+                UI.MoneyText(math.floor(tonumber(after) or 0)))
     dlg:SetMessage(body)
     dlg:SetButtons({ { text = "Fermer", default = true } })
     dlg:Show()

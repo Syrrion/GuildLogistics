@@ -250,11 +250,10 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "TX_APPLIED" then
         if not shouldApply() then return end
-        local uid   = kv.uid
-        local delta = safenum(kv.delta, 0)
-        local ts    = (lm>=0) and lm or now()
-        local by    = kv.by or sender
-        local nm    = kv.name
+        local uid = kv.uid; local delta = safenum(kv.delta,0)
+        local ts = (lm>=0) and lm or now()
+        local by = kv.by or sender
+        local nm = kv.name
 
         if uid and nm then
             if CDZ.MapUID then CDZ.MapUID(uid, nm) end
@@ -265,6 +264,15 @@ function CDZ._HandleFull(sender, msgType, kv)
         meta.rev = (rv>=0) and rv or myrv
         meta.lastModified = ts
         refreshActive()
+
+        -- Popup uniquement pour la personne concernée par une clôture de raid non silencieuse
+        if kv.reason == "RAID_CLOSE" and not kv.silent and delta < 0 then
+            local me = UnitName("player")
+            if me and nm and CDZ.NormName(me) == CDZ.NormName(nm) then
+                local after = CDZ.GetSolde and CDZ.GetSolde(nm) or 0
+                if ns.UI and ns.UI.PopupRaidDebit then ns.UI.PopupRaidDebit(nm, -delta, after) end
+            end
+        end
 
         -- Popup "Bon raid !" uniquement pour la personne concernée par une clôture de raid
         if kv.reason == "RAID_CLOSE" and delta < 0 then
@@ -350,13 +358,10 @@ function CDZ.GM_ApplyAndBroadcastEx(name, delta, extra)
     local uid = CDZ.GetOrAssignUID(name); if not uid then return end
     local rv = incRev(); local lm = now()
     local nm = CDZ.GetNameByUID(uid) or name
-    local payload = { uid = uid, name = nm, delta = delta, rv = rv, lm = lm, by = playerFullName() }
-    if type(extra) == "table" then
-        for k, v in pairs(extra) do if payload[k] == nil then payload[k] = v end end
-    end
-    CDZ.Comm_Broadcast("TX_APPLIED", payload)
+    local p = { uid = uid, name = nm, delta = delta, rv = rv, lm = lm, by = playerFullName() }
+    if type(extra) == "table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
+    CDZ.Comm_Broadcast("TX_APPLIED", p)
 end
-
 
 function CDZ.GM_ApplyAndBroadcastByUID(uid, delta)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
