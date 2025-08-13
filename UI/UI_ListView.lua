@@ -4,7 +4,7 @@ local UI = ns.UI
 
 -- ListView générique
 -- cols: { {key,title,w|min,flex,justify,pad}, ... }
--- opts: { topOffset=number, safeRight=true|false, buildRow(row)->fields, updateRow(i,row,fields,item) }
+-- opts: { topOffset=number, safeRight=true|false, bottomAnchor=Frame, buildRow(row)->fields, updateRow(i,row,fields,item) }
 function UI.ListView(parent, cols, opts)
     opts = opts or {}
 
@@ -16,6 +16,15 @@ function UI.ListView(parent, cols, opts)
 
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
+
+    -- Ancrage bas optionnel (ex : footer) pour limiter la hauteur de scroll
+    lv._bottomAnchor = opts.bottomAnchor
+    if lv._bottomAnchor and lv._bottomAnchor.HookScript then
+        -- si le footer change de taille, on relayout la liste
+        lv._bottomAnchor:HookScript("OnSizeChanged", function()
+            if lv and lv.Layout then lv:Layout() end
+        end)
+    end
 
     -- Overlay d'état vide (grisé + texte centré)
     function lv:_EnsureEmptyOverlay()
@@ -190,6 +199,17 @@ function UI.ListView(parent, cols, opts)
 
     -- Relayout public
     function lv:Refresh()
+        self:Layout()
+    end
+
+    -- Change dynamiquement l’ancrage bas (ex : si le footer est construit après)
+    function lv:SetBottomAnchor(anchor)
+        self._bottomAnchor = anchor
+        if anchor and anchor.HookScript then
+            anchor:HookScript("OnSizeChanged", function()
+                if self and self.Layout then self:Layout() end
+            end)
+        end
         self:Layout()
     end
 
