@@ -11,8 +11,14 @@ function UI.CreatePopup(opts)
     f:SetPoint("CENTER")
     f:SetMovable(true); f:EnableMouse(true)
 
+    -- Permettre le drag partout (incl. header décoratif via HitRectInsets de la skin)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    f:SetScript("OnDragStop",  function(self) self:StopMovingOrSizing() end)
+    if f.SetClampedToScreen then f:SetClampedToScreen(true) end
+
     -- Habillage Neutral (même look que la fenêtre principale)
-    local skin = UI.ApplyNeutralFrameSkin(f, { showRibbon = false })
+    local skin = UI.ApplyNeutralFrameSkin(f, { showRibbon = false, shadow = false })
     local L, R, T, B = skin:GetInsets()
 
     -- Zone draggable (sur la frise du titre)
