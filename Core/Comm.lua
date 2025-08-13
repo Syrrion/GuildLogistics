@@ -9,7 +9,8 @@ local MAX_PAY = 240
 local Seq = 0
 
 local Inbox = {} -- réassemblage
-local Q, QBusy = {}, false -- file séquentielle
+local Q, QBusy = {}, false
+local QCounter = 0
 
 -- ===== Utils =====
 local function now() return (time and time()) or 0 end
@@ -140,19 +141,43 @@ end
 function CDZ.Comm_Broadcast(msgType, tbl) send("GUILD", nil, msgType, encode(tbl or {})) end
 function CDZ.Comm_Whisper(target, msgType, tbl) send("WHISPER", target, msgType, encode(tbl or {})) end
 
--- File séquentielle
+-- File séquentielle triée : lm ↑ puis rv ↑ puis ordre d'arrivée
+local function sortQueue()
+    table.sort(Q, function(a, b)
+        local alm = tonumber(a.orderLm) or math.huge
+        local blm = tonumber(b.orderLm) or math.huge
+        if alm ~= blm then return alm < blm end
+
+        local arv = tonumber(a.orderRv) or math.huge
+        local brv = tonumber(b.orderRv) or math.huge
+        if arv ~= brv then return arv < brv end
+
+        return (a.arrival or 0) < (b.arrival or 0)
+    end)
+end
+
 local function processNext()
     if QBusy then return end
-    local item = table.remove(Q, 1); if not item then return end
+    if #Q == 0 then return end
+    sortQueue()
+    local item = table.remove(Q, 1)
     QBusy = true
     local ok, err = pcall(item.handler, item.sender, item.msgType, item.kv)
     if not ok then geterrorhandler()(err) end
     C_Timer.After(0, function() QBusy=false; processNext() end)
 end
+
 local function enqueueComplete(sender, msgType, kv)
-    table.insert(Q, { sender=sender, msgType=msgType, kv=kv, handler=ns.CDZ._HandleFull })
+    QCounter = QCounter + 1
+    local lm = tonumber(kv and kv.lm) or nil
+    local rv = tonumber(kv and kv.rv) or nil
+    table.insert(Q, {
+        sender=sender, msgType=msgType, kv=kv, handler=ns.CDZ._HandleFull,
+        orderLm = lm, orderRv = rv, arrival = QCounter,
+    })
     processNext()
 end
+
 
 -- UID
 function CDZ.GetUID(name) local m=ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.ids; return m and m.byName and m.byName[name] end
@@ -225,12 +250,12 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "TX_APPLIED" then
         if not shouldApply() then return end
-        local uid = kv.uid; local delta = safenum(kv.delta,0)
-        local ts = (lm>=0) and lm or now()
-        local by = kv.by or sender
-        local nm = kv.name
+        local uid   = kv.uid
+        local delta = safenum(kv.delta, 0)
+        local ts    = (lm>=0) and lm or now()
+        local by    = kv.by or sender
+        local nm    = kv.name
 
-        -- Si un nom est fourni, on (re)crée le mapping et le roster local
         if uid and nm then
             if CDZ.MapUID then CDZ.MapUID(uid, nm) end
             if CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(nm) end
@@ -240,6 +265,18 @@ function CDZ._HandleFull(sender, msgType, kv)
         meta.rev = (rv>=0) and rv or myrv
         meta.lastModified = ts
         refreshActive()
+
+        -- Popup "Bon raid !" uniquement pour la personne concernée par une clôture de raid
+        if kv.reason == "RAID_CLOSE" and delta < 0 then
+            local my = UnitName("player")
+            local targetName = CDZ.GetNameByUID(uid) or nm
+            if my and targetName and CDZ.NormName and CDZ.NormName(my) == CDZ.NormName(targetName) then
+                local after = (CDZ.GetSolde and CDZ.GetSolde(targetName)) or 0
+                if ns.UI and ns.UI.PopupRaidDebit then
+                    ns.UI.PopupRaidDebit(targetName, -delta, after)
+                end
+            end
+        end
 
     elseif msgType == "TX_REFUSED" then
         UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Demande refusée : "..(kv.reason or "Refusé"), 1, 0.4, 0.4)
@@ -306,6 +343,18 @@ function CDZ.GM_ApplyAndBroadcast(name, delta)
     local rv = incRev(); local lm = now()
     local nm = CDZ.GetNameByUID(uid) or name
     CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=lm, by=playerFullName() })
+end
+
+function CDZ.GM_ApplyAndBroadcastEx(name, delta, extra)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local uid = CDZ.GetOrAssignUID(name); if not uid then return end
+    local rv = incRev(); local lm = now()
+    local nm = CDZ.GetNameByUID(uid) or name
+    local payload = { uid = uid, name = nm, delta = delta, rv = rv, lm = lm, by = playerFullName() }
+    if type(extra) == "table" then
+        for k, v in pairs(extra) do if payload[k] == nil then payload[k] = v end end
+    end
+    CDZ.Comm_Broadcast("TX_APPLIED", payload)
 end
 
 

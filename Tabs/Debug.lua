@@ -129,7 +129,17 @@ local function groupLogs(raw)
         g.lm = tonumber(kv.lm or "") or nil
         out[#out+1] = g
     end
-    table.sort(out, function(a,b) return (a.ts or 0) > (b.ts or 0) end) -- récent → ancien
+    table.sort(out, function(a, b)
+        -- priorité à lm si présent, sinon fallback ts
+        local ad = tonumber(a.lm) or tonumber(a.ts) or 0
+        local bd = tonumber(b.lm) or tonumber(b.ts) or 0
+        if ad ~= bd then return ad > bd end
+        local arv = tonumber(a.rv) or -math.huge
+        local brv = tonumber(b.rv) or -math.huge
+        if arv ~= brv then return arv > brv end
+        return (a.ts or 0) > (b.ts or 0)
+    end)
+
     return out
 end
 

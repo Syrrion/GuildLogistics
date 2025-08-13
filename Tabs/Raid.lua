@@ -88,11 +88,51 @@ local function Build(container)
         local selected = {}
         for name, v in pairs(includes) do if v then table.insert(selected, name) end end
         table.sort(selected)
+
         local per = (#selected > 0) and math.floor(total / #selected) or 0
         for _, n in ipairs(selected) do CDZ.Debit(n, per) end
         if #selected > 0 then CDZ.AddHistorySession(total, per, selected) end
+
         totalInput:SetText("")
-        ns.RefreshAll()
+        if ns.RefreshAll then ns.RefreshAll() end
+
+        -- Popup de confirmation
+        if #selected > 0 then
+            local dlg = UI.CreatePopup({ title = "Clôture effectuée", width = 560, height = 220 })
+            local moneyText = (UI and UI.MoneyText) and UI.MoneyText or function(v) return tostring(v).." po" end
+            dlg:SetMessage(("La clôture a été enregistrée.\nParticipants : %d — Débit par joueur : %s.\n\nSouhaitez-vous notifier les joueurs ?")
+                :format(#selected, moneyText(per)))
+
+            dlg:SetButtons({
+                {
+                    text = "Notifier les joueurs", default = true,
+                    onClick = function()
+                        if not (CDZ.IsMaster and CDZ.IsMaster()) then
+                            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Notification réservée au GM.", 1, 0.4, 0.4)
+                            return
+                        end
+                        for _, n in ipairs(selected) do
+                            if CDZ.GM_ApplyAndBroadcastEx then
+                                CDZ.GM_ApplyAndBroadcastEx(n, -per, { reason = "RAID_CLOSE" })
+                            elseif CDZ.GM_ApplyAndBroadcast then
+                                -- fallback sans étiquette (ne déclenchera pas le 'Bon raid !')
+                                CDZ.GM_ApplyAndBroadcast(n, -per)
+                            end
+                        end
+                    end,
+                },
+                {
+                    text = "Fermer", variant = "ghost",
+                    onClick = function()
+                        if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end
+                    end,
+                },
+            })
+
+            dlg:Show()
+        else
+            if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end
+        end
     end)
 
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = footer })
