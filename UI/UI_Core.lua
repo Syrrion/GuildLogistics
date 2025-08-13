@@ -213,6 +213,82 @@ function UI.CreateFooter(parent, height)
     return f
 end
 
+-- ➕ Pastille (badge) réutilisable
+UI.BADGE_BG       = UI.BADGE_BG       or {0.92, 0.22, 0.22, 1.0}  -- rouge un peu plus saturé
+UI.BADGE_TEXT     = UI.BADGE_TEXT     or "GameFontWhiteSmall"
+UI.BADGE_INSET_X  = UI.BADGE_INSET_X  or 6
+UI.BADGE_OFFSET_X = UI.BADGE_OFFSET_X or -6
+UI.BADGE_OFFSET_Y = UI.BADGE_OFFSET_Y or  6
+UI.BADGE_MAX      = UI.BADGE_MAX      or 99
+UI.BADGE_SHADOW_A = UI.BADGE_SHADOW_A or 0.35                     -- ombre portée pour le contraste
+
+function UI.AttachBadge(frame)
+    if frame._badge then return frame._badge end
+    local b = CreateFrame("Frame", nil, frame)
+    b:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+    b:SetFrameLevel((frame:GetFrameLevel() or 0) + 10)
+    b:SetPoint("TOPRIGHT", frame, "TOPRIGHT", UI.BADGE_OFFSET_X, UI.BADGE_OFFSET_Y)
+    b:Hide()
+
+    -- Ombre circulaire (pour le contraste)
+    b.shadow = b:CreateTexture(nil, "BACKGROUND")
+    b.shadow:SetColorTexture(0, 0, 0, UI.BADGE_SHADOW_A)
+
+    -- Fond de la pastille
+    b.bg = b:CreateTexture(nil, "ARTWORK")
+    local c = UI.BADGE_BG
+    b.bg:SetColorTexture(c[1], c[2], c[3], c[4])
+
+    -- Masque circulaire commun (même masque pour ombre + fond)
+    if b.CreateMaskTexture and b.bg.AddMaskTexture then
+        local mask = b:CreateMaskTexture(nil, "BACKGROUND")
+        mask:SetTexture("Interface/CHARACTERFRAME/TempPortraitAlphaMask") -- masque rond natif
+        mask:SetAllPoints(b)
+
+        b.bg:AddMaskTexture(mask)
+        b.shadow:AddMaskTexture(mask)
+        b._mask = mask
+    end
+
+    -- Texte lisible (blanc + ombre)
+    b.txt = b:CreateFontString(nil, "OVERLAY", UI.BADGE_TEXT)
+    b.txt:SetPoint("CENTER", b, "CENTER")
+    if b.txt.SetTextColor then b.txt:SetTextColor(1,1,1) end
+    if b.txt.SetShadowColor then b.txt:SetShadowColor(0,0,0,0.9) end
+    if b.txt.SetShadowOffset then b.txt:SetShadowOffset(1, -1) end
+
+    function b:SetCount(n)
+        n = tonumber(n) or 0
+        if n <= 0 then self:Hide(); return end
+
+        local max = UI.BADGE_MAX
+        local s = (n > max) and (tostring(max) .. "+") or tostring(n)
+        self.txt:SetText(s)
+
+        local pad = UI.BADGE_INSET_X
+        local w = math.ceil(self.txt:GetStringWidth()) + pad * 2
+        local h = math.ceil(self.txt:GetStringHeight()) + 2
+
+        -- Pastille parfaitement circulaire : diamètre = max(w,h,16)
+        local d = math.max(16, w, h)
+        self:SetSize(d, d)
+
+        -- Fond + ombre suivent la taille du cadre (ombre légèrement plus large)
+        self.bg:ClearAllPoints()
+        self.bg:SetAllPoints(self)
+
+        self.shadow:ClearAllPoints()
+        self.shadow:SetPoint("CENTER", self, "CENTER", 0, 0)
+        self.shadow:SetSize(d + 3, d + 3)
+
+        self:Show()
+    end
+
+    frame._badge = b
+    return b
+end
+
+
 -- Nom + icône de classe
 function UI.CreateNameTag(parent)
     local f = CreateFrame("Frame", nil, parent)

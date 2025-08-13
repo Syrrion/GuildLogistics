@@ -19,7 +19,9 @@ f:SetScript("OnEvent", function(self, event, name)
         end
 
         if ns.UI and ns.UI.Finalize then ns.UI.Finalize() end
+        if ns.UI and ns.UI.UpdateRequestsBadge then ns.UI.UpdateRequestsBadge() end
         if CDZ.Minimap_Init then CDZ.Minimap_Init() end
+
         if CDZ.Comm_Init then CDZ.Comm_Init() end
 
         -- relance automatique initiale

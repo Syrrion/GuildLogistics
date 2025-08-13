@@ -49,15 +49,19 @@ end
 local function Refresh()
     local rows = {}
     if not CDZ.IsMaster or not CDZ.IsMaster() then
-        lv:SetData({}) ; return
+        lv:SetData({})
+        if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
+        return
     end
     for _, r in ipairs(CDZ.GetRequests()) do
         local display = (CDZ.GetNameByUID and CDZ.GetNameByUID(r.uid)) or r.requester or "?"
         rows[#rows+1] = { id=r.id, ts=r.ts, uid=r.uid, name=display, delta=r.delta }
     end
     lv:SetData(rows)
+    if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
     lv:Layout()
 end
+
 
 local function Build(container)
     panel = container

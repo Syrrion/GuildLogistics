@@ -247,6 +247,81 @@ function UI.RefreshAll()
 end
 ns.RefreshAll = UI.RefreshAll
 
+-- ➕ Récupération du bouton d'un onglet par label
+function UI.GetTabButton(label)
+    local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
+    local def = idx and Registered[idx] or nil
+    return def and def._btn, idx
+end
+
+-- ➕ Reflow des onglets visibles (sans « trous »)
+function UI.RelayoutTabs()
+    local lastBtn
+    for i, def in ipairs(Registered) do
+        local b = def._btn
+        if b then
+            b:ClearAllPoints()
+            if b:IsShown() then
+                if not lastBtn then
+                    local L = UI.OUTER_PAD
+                    if Main._cdzNeutral and Main._cdzNeutral.GetInsets then
+                        L = (Main._cdzNeutral:GetInsets())
+                    end
+                    b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.TAB_LEFT_PAD or 12), -52)
+                else
+                    b:SetPoint("LEFT", lastBtn, "RIGHT", 8, 0)
+                end
+                lastBtn = b
+            end
+        end
+    end
+end
+
+-- ➕ Masquer/afficher un onglet avec fallback si on masque l'onglet actif
+function UI.SetTabVisible(label, shown)
+    local b, idx = UI.GetTabButton(label)
+    if not b then return end
+    local wasShown = b:IsShown()
+    b:SetShown(shown and true or false)
+    if (wasShown and not b:IsShown()) and UI._current == idx then
+        -- bascule vers le 1er onglet visible
+        for i, def in ipairs(Registered) do
+            if def._btn and def._btn:IsShown() then
+                UI.ShowPanel(i)
+                if def.refresh then def.refresh() end
+                break
+            end
+        end
+    end
+    UI.RelayoutTabs()
+end
+
+-- ➕ Pastille sur un onglet
+function UI.SetTabBadge(label, count)
+    local b = UI.GetTabButton(label)
+    if not b or not UI.AttachBadge then return end
+    UI.AttachBadge(b):SetCount(tonumber(count) or 0)
+end
+
+-- ➕ Règle métier pour l'onglet "Demandes"
+function UI.UpdateRequestsBadge()
+    local isGM = (ns.CDZ and ns.CDZ.IsMaster and ns.CDZ.IsMaster()) or false
+    local cnt = 0
+    if isGM and ns.CDZ and ns.CDZ.GetRequests then
+        local t = ns.CDZ.GetRequests()
+        cnt = (type(t)=="table") and #t or 0
+    end
+    UI.SetTabBadge("Demandes", cnt)
+    UI.SetTabVisible("Demandes", isGM and cnt > 0)
+end
+
+-- ➕ Hook « RefreshActive » utilisé par Comm.lua
+function UI.RefreshActive()
+    UI.UpdateRequestsBadge()
+    UI.RefreshAll()
+end
+ns.RefreshActive = UI.RefreshActive
+
 function ns.ToggleUI()
     if Main:IsShown() then
         Main:Hide()
