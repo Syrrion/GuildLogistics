@@ -180,19 +180,33 @@ end
 -- Footer générique attaché au bas d’un panel
 function UI.CreateFooter(parent, height)
     local f = CreateFrame("Frame", nil, parent)
-    f:SetHeight(height or 36)
-    f:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, 0)
-    f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)), 0)
+    f:SetHeight(height or UI.FOOTER_H or 36)
+    f:SetPoint("BOTTOMLEFT",  parent, "BOTTOMLEFT",  0, 0)
+    f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0) -- pleine largeur
 
-    -- Fond distinct
+    -- Fond sombre (zone d'action)
     local bg = f:CreateTexture(nil, "BACKGROUND")
-    bg:SetColorTexture(1, 1, 1, 0.05)
+    local c  = UI.FOOTER_BG or {0, 0, 0, 0.22}
+    bg:SetColorTexture(c[1], c[2], c[3], c[4])
     bg:SetAllPoints(f)
 
-    -- Liseré haut
+    -- Léger dégradé vertical pour du relief
+    local grad = f:CreateTexture(nil, "BACKGROUND")
+    grad:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
+    grad:SetAllPoints(f)
+    local gt = UI.FOOTER_GRAD_TOP    or {1, 1, 1, 0.05}
+    local gb = UI.FOOTER_GRAD_BOTTOM or {0, 0, 0, 0.15}
+    if grad.SetGradient then
+        grad:SetGradient("VERTICAL", CreateColor(gt[1], gt[2], gt[3], gt[4]), CreateColor(gb[1], gb[2], gb[3], gb[4]))
+    elseif grad.SetGradientAlpha then
+        grad:SetGradientAlpha("VERTICAL", gt[1], gt[2], gt[3], gt[4], gb[1], gb[2], gb[3], gb[4])
+    end
+
+    -- Liseré supérieur (séparation nette)
     local line = f:CreateTexture(nil, "BORDER")
-    line:SetColorTexture(1, 1, 1, 0.08)
-    line:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 1)
+    local lb = UI.FOOTER_BORDER or {1, 1, 1, 0.12}
+    line:SetColorTexture(lb[1], lb[2], lb[3], lb[4])
+    line:SetPoint("TOPLEFT",  f, "TOPLEFT",  0, 1)
     line:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 1)
     line:SetHeight(1)
 

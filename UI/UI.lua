@@ -9,6 +9,15 @@ UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER, UI.ROW_H = 16, 20, 8, 28
 UI.FONT_YELLOW = {1, 0.82, 0}
 UI.WHITE = {1,1,1}
 UI.ACCENT = {0.22,0.55,0.95}
+UI.FOOTER_RIGHT_PAD = UI.FOOTER_RIGHT_PAD or 8
+
+
+-- Style des footers (centralisé)
+UI.FOOTER_H            = UI.FOOTER_H            or 36
+UI.FOOTER_BG           = UI.FOOTER_BG           or {0, 0, 0, 0.22}
+UI.FOOTER_GRAD_TOP     = UI.FOOTER_GRAD_TOP     or {1, 1, 1, 0.05}
+UI.FOOTER_GRAD_BOTTOM  = UI.FOOTER_GRAD_BOTTOM  or {0, 0, 0, 0.15}
+UI.FOOTER_BORDER       = UI.FOOTER_BORDER       or {1, 1, 1, 0.12}
 
 UI.TAB_EXTRA_GAP       = UI.TAB_EXTRA_GAP       or 14
 UI.CONTENT_SIDE_PAD    = UI.CONTENT_SIDE_PAD    or -23

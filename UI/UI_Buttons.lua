@@ -124,7 +124,9 @@ end
 -- Alignement à droite pour un footer (centré verticalement)
 function UI.AttachButtonsFooterRight(anchor, buttons, gap, dx)
     if not anchor or not buttons or #buttons==0 then return end
-    gap = gap or 8; dx = dx or 0
+    gap = gap or 8
+    local pad = (UI.FOOTER_RIGHT_PAD ~= nil) and UI.FOOTER_RIGHT_PAD or 8
+    dx = (dx ~= nil) and dx or -pad
     local prev
     for i = 1, #buttons do
         local b = buttons[i]
@@ -137,7 +139,6 @@ function UI.AttachButtonsFooterRight(anchor, buttons, gap, dx)
         prev = b
     end
 end
-
 
 -- Barre d’actions alignée à droite, avec marge interne gauche (leftPad) + largeur "naturelle"
 function UI.AttachRowRight(anchor, buttons, gap, dx, opts)

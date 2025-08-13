@@ -48,20 +48,14 @@ function UI.CreatePopup(opts)
 
     f.content = CreateFrame("Frame", nil, f)
     f.content:SetPoint("TOPLEFT",     f, "TOPLEFT",     L + POP_SIDE, -(T + POP_TOP))
-    f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -(R + POP_SIDE), B + 40 + POP_BOT)
+    -- laisse la marge latérale du contenu, mais réserve la hauteur du footer + gap
+    f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -(R + POP_SIDE), B + ( (UI.FOOTER_H or 36) + 8 + POP_BOT))
 
-    f.footer = CreateFrame("Frame", nil, f)
-    f.footer:SetPoint("BOTTOMLEFT",   f, "BOTTOMLEFT",  L + POP_SIDE, B + POP_BOT)
-    f.footer:SetPoint("BOTTOMRIGHT",  f, "BOTTOMRIGHT", -(R + POP_SIDE), B + POP_BOT)
-    f.footer:SetHeight(32)
-
-
-    -- Liseré léger pour séparer le footer (discret pour rester cohérent avec l’atlas)
-    local fl = f.footer:CreateTexture(nil, "BORDER")
-    fl:SetColorTexture(1, 1, 1, 0.06)
-    fl:SetPoint("TOPLEFT", f.footer, "TOPLEFT", 0, 1)
-    fl:SetPoint("TOPRIGHT", f.footer, "TOPRIGHT", 0, 1)
-    fl:SetHeight(1)
+    -- Footer pleine largeur (au sein des insets du skin) + style centralisé
+    f.footer = UI.CreateFooter(f, UI.FOOTER_H or 36)
+    f.footer:ClearAllPoints()
+    f.footer:SetPoint("BOTTOMLEFT",   f, "BOTTOMLEFT",  L,  B + POP_BOT)
+    f.footer:SetPoint("BOTTOMRIGHT",  f, "BOTTOMRIGHT", -R, B + POP_BOT)
 
     -- Redimensionnable + relayout ListView embarqué
     f:SetResizable(true)
