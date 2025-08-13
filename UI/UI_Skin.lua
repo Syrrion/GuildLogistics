@@ -133,22 +133,26 @@ end
 -- Overlay sibling commun, ancré au frame et toujours au-dessus de lui
 local function EnsureOverlay(frame)
     if frame._cdzOverlay then return frame._cdzOverlay end
-    local ov = CreateFrame("Frame", nil, UIParent)
+    local ov = CreateFrame("Frame", nil, frame) -- parent = frame (au lieu de UIParent)
     ov:SetClipsChildren(false)
-    ov:SetPoint("TOPLEFT",     frame, "TOPLEFT")
-    ov:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT")
+    ov:SetAllPoints(frame)
+
     local function sync()
         local fs = frame:GetFrameStrata() or "HIGH"
-        ov:SetFrameStrata( NextStrata(fs) )                -- une strata au-dessus du frame
-        ov:SetFrameLevel( (frame:GetFrameLevel() or 1) )   -- level suffisant (strata > prime)
+        ov:SetFrameStrata( NextStrata(fs) )
+        ov:SetFrameLevel( (frame:GetFrameLevel() or 1) )
     end
     sync()
+
+    -- On conserve les hooks (sécurité), mais l’héritage de visibilité suffit déjà
     frame:HookScript("OnShow", function() ov:Show(); sync() end)
     frame:HookScript("OnHide", function() ov:Hide() end)
     frame:HookScript("OnUpdate", sync)
+
     frame._cdzOverlay = ov
     return ov
 end
+
 
 -- Rognage en pixels d'un atlas, sans étirer (conserve le ratio via targetH)
 local function CropAtlasPx(tex, atlas, cropLeft, cropRight, targetH)
