@@ -84,13 +84,17 @@ function UI.CreatePopup(opts)
 
     -- Message simple multi-ligne
     function f:SetMessage(text)
-        if self.msgFS then self.msgFS:SetText(text or ""); return end
-        self.msgFS = self.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        self.msgFS:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, 0)
-        self.msgFS:SetPoint("RIGHT",  self.content, "RIGHT", 0, 0)
-        self.msgFS:SetJustifyH("LEFT"); self.msgFS:SetJustifyV("TOP")
+        if not self.msgFS then
+            self.msgFS = self.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            -- plein cadre + centrage
+            self.msgFS:SetPoint("TOPLEFT",     self.content, "TOPLEFT",  0, 0)
+            self.msgFS:SetPoint("BOTTOMRIGHT", self.content, "BOTTOMRIGHT", 0, 0)
+            self.msgFS:SetJustifyH("CENTER")
+            self.msgFS:SetJustifyV("MIDDLE")
+        end
         self.msgFS:SetText(text or "")
     end
+
 
     -- Boutons normalisés (UI.Button) + ancrage à droite
     function f:SetButtons(buttons)
@@ -128,8 +132,8 @@ end
 function UI.PopupConfirm(text, onAccept, onCancel, opts)
     local dlg = UI.CreatePopup({
         title  = (opts and opts.title) or "Confirmation",
-        width  = (opts and opts.width)  or 460,
-        height = (opts and opts.height) or 180,
+        width  = math.floor(((opts and opts.width)  or 460) * 1.10),
+        height = math.floor(((opts and opts.height) or 180) * 1.20),
     })
     dlg:SetMessage(text)
     dlg:SetButtons({
@@ -144,17 +148,23 @@ end
 function UI.PopupPromptNumber(title, label, onAccept, opts)
     local dlg = UI.CreatePopup({
         title  = title or "Saisie",
-        width  = (opts and opts.width)  or 460,
-        height = (opts and opts.height) or 220,
+        width  = math.floor(((opts and opts.width)  or 460) * 1.10),
+        height = math.floor(((opts and opts.height) or 220) * 1.20),
     })
 
-    local l = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    l:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 0, 0)
-    l:SetText(label or "")
+    -- Conteneur centré pour (label + input)
+    local stack = CreateFrame("Frame", nil, dlg.content)
+    stack:SetSize(260, 60)       -- assez large/haut pour le label + champ
+    stack:SetPoint("CENTER")     -- centre le groupe dans la popup
 
-    local eb = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate")
-    eb:SetAutoFocus(true); eb:SetNumeric(true); eb:SetSize(180, 28)
-    eb:SetPoint("TOPLEFT", l, "BOTTOMLEFT", 0, -8)
+    local l = stack:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    l:SetText(label or "")
+    l:SetPoint("TOP", stack, "TOP", 0, 0)
+
+    local eb = CreateFrame("EditBox", nil, stack, "InputBoxTemplate")
+    eb:SetAutoFocus(true); eb:SetNumeric(true); eb:SetSize(220, 28)
+    eb:SetPoint("TOP", l, "BOTTOM", 0, -8)
+
     eb:SetScript("OnEnterPressed", function(self)
         local v = (self.GetNumber and self:GetNumber()) or (tonumber(self:GetText()) or 0)
         if onAccept then onAccept(v) end
@@ -175,7 +185,11 @@ end
 -- Demande de transaction entrante (GM)
 function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
     local title = "Demande de transaction"
-    local dlg = UI.CreatePopup({ title = title, width = 520, height = 220 })
+    local dlg = UI.CreatePopup({
+        title  = title,
+        width  = math.floor(520 * 1.10),
+        height = math.floor(220 * 1.20),
+    })
     local op = (tonumber(delta) or 0) >= 0 and "|cff40ff40+|r" or "|cffff6060-|r"
     local amt = UI.MoneyText(math.abs(tonumber(delta) or 0))
 
