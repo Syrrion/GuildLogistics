@@ -241,6 +241,30 @@ function UI.RaiseCloseButton(btn, owner)
     btn:SetFrameLevel((f and f:GetFrameLevel() or 1) + 10)
 end
 
+-- Affichage d'or (valeur en or entiers)
+function UI.MoneyText(gold)
+    local n = math.floor(tonumber(gold) or 0)
+    if BreakUpLargeNumbers then
+        return BreakUpLargeNumbers(n).." po"
+    end
+    local s = tostring(n)
+    local left, num, right = s:match("^([^%d]*%d)(%d*)(.-)$")
+    return (left..(num:reverse():gsub("(%d%d%d)","%1 "):reverse())..right):gsub("^%s+",""):gsub("%s+$","").." po"
+end
+
+-- Affichage détaillé depuis des pièces de cuivre
+function UI.MoneyFromCopper(copper)
+    local c = math.floor(tonumber(copper) or 0)
+    local g = math.floor(c / 10000)
+    local s = math.floor((c % 10000) / 100)
+    local cp = c % 100
+    local out = {}
+    if g > 0 then table.insert(out, UI.MoneyText(g)) end
+    if s > 0 then table.insert(out, s.." pa") end
+    if cp > 0 or #out == 0 then table.insert(out, cp.." pc") end
+    return table.concat(out, " ")
+end
+
 -- ========== UTIL: Format (ex-Format.lua) ==========
 ns.Format = ns.Format or {}
 do

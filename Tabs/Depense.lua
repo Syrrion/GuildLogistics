@@ -13,8 +13,6 @@ local cols = UI.NormalizeColumns({
     { key="act",    title="Actions", w=120 },
 })
 
-local function moneyText(copper) return UI.MoneyFromCopper(copper or 0) end
-
 local function resolveItemName(it)
     if it.itemLink and it.itemLink ~= "" then
         local name = GetItemInfo(it.itemLink)
@@ -77,7 +75,7 @@ local function UpdateRow(i, r, f, it)
     f.itemText:SetText(nameToShow ~= "" and nameToShow or (d.itemName or ""))
     f.qty:SetText(tonumber(d.qty) or 1)
     f.source:SetText(d.source or "")
-    f.amount:SetText(moneyText(d.copper or 0))
+    f.amount:SetText(UI.MoneyFromCopper(d.copper or 0))
     local icon = resolveItemIcon(d)
     if icon then f.icon:SetTexture(icon); f.icon:Show() else f.icon:SetTexture(nil); f.icon:Hide() end
 
@@ -107,7 +105,7 @@ local function Refresh()
     end
     lv:SetData(items)
 
-    totalFS:SetText("|cffffd200Total des dépenses enregistrées :|r " .. moneyText(total))
+    totalFS:SetText("|cffffd200Total des dépenses enregistrées :|r " .. UI.MoneyFromCopper(total))
     btnToggle:SetText(CDZ.IsExpensesRecording() and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
 
     Layout()
