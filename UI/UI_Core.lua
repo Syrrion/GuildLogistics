@@ -236,3 +236,10 @@ function UI.ClassIconMarkup(classTag, size)
     local s = tonumber(size) or 14
     return string.format("|TInterface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes:%d:%d:0:0:256:256:%d:%d:%d:%d|t", s, s, l, r, t, b)
 end
+
+function UI.RaiseCloseButton(btn, owner)
+    local f = owner or btn:GetParent()
+    btn:SetFrameStrata("TOOLTIP")
+    btn:SetFrameLevel((f and f:GetFrameLevel() or 1) + 10)
+end
+

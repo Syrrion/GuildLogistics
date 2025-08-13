@@ -70,26 +70,6 @@ local function NextStrata(name)  -- AJOUT
 end
 
 
--- Frame underlay: sibling toujours SOUS le frame (utile pour les ombres hors clip)
-local function EnsureUnderlay(frame)
-    if frame._cdzUnderlay then return frame._cdzUnderlay end
-    local uv = CreateFrame("Frame", nil, UIParent)
-    uv:SetClipsChildren(false)
-    uv:SetPoint("TOPLEFT",     frame, "TOPLEFT")
-    uv:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT")
-    local function sync()
-        local fs = frame:GetFrameStrata() or "HIGH"
-        uv:SetFrameStrata( PrevStrata(fs) )                  -- une strata en dessous
-        uv:SetFrameLevel( math.max((frame:GetFrameLevel() or 1) - 1, 1) )
-    end
-    sync()
-    frame:HookScript("OnShow", function() uv:Show(); sync() end)
-    frame:HookScript("OnHide", function() uv:Hide() end)
-    frame:HookScript("OnUpdate", sync)
-    frame._cdzUnderlay = uv
-    return uv
-end
-
 -- Helper gradient (compat 10.x/11.x)
 local function SetSoftGradient(tex, orientation, aOuter, aInner)
     tex:SetColorTexture(0,0,0,1)
@@ -133,25 +113,24 @@ end
 -- Overlay sibling commun, ancré au frame et toujours au-dessus de lui
 local function EnsureOverlay(frame)
     if frame._cdzOverlay then return frame._cdzOverlay end
-    local ov = CreateFrame("Frame", nil, frame) -- parent = frame (au lieu de UIParent)
+    local ov = CreateFrame("Frame", nil, frame) -- parent = frame
     ov:SetClipsChildren(false)
+    ov:EnableMouse(false)
     ov:SetAllPoints(frame)
 
     local function sync()
-        local fs = frame:GetFrameStrata() or "HIGH"
-        ov:SetFrameStrata( NextStrata(fs) )
-        ov:SetFrameLevel( (frame:GetFrameLevel() or 1) )
+        ov:SetFrameStrata(frame:GetFrameStrata() or "HIGH")
+        ov:SetFrameLevel((frame:GetFrameLevel() or 1) + 1) -- juste au-dessus du cadre, sous le X
     end
     sync()
 
-    -- On conserve les hooks (sécurité), mais l’héritage de visibilité suffit déjà
     frame:HookScript("OnShow", function() ov:Show(); sync() end)
     frame:HookScript("OnHide", function() ov:Hide() end)
-    frame:HookScript("OnUpdate", sync)
 
     frame._cdzOverlay = ov
     return ov
 end
+
 
 
 -- Rognage en pixels d'un atlas, sans étirer (conserve le ratio via targetH)
@@ -381,98 +360,6 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
     tMid:SetPoint("TOPLEFT",  tLeft,  "TOPRIGHT", -extend, 0)
     tMid:SetPoint("TOPRIGHT", tRight, "TOPLEFT",   extend, 0)
     tMid:SetHeight(TITLE_H)
-
-    -- Ombre portée autour du cadre (underlay sibling pour ne pas être clippée)
-    do
-        local under = EnsureUnderlay(frame)
-        local size   = (opts.shadowSize  ~= nil) and opts.shadowSize  or 28  -- épaisseur
-        local alpha  = (opts.shadowAlpha ~= nil) and opts.shadowAlpha or 0.35
-        local inset2 = 2  -- rapproche de 2 px
-
-        if not skin.shadow then
-            skin.shadow = {
-                left   = under:CreateTexture(nil, "BACKGROUND"),
-                right  = under:CreateTexture(nil, "BACKGROUND"),
-                top    = under:CreateTexture(nil, "BACKGROUND"),
-                bottom = under:CreateTexture(nil, "BACKGROUND"),
-                -- coins arrondis (2 couches par coin : H + V pour simuler un “radial” doux)
-                tlH = MakeMaskedCorner(under), tlV = MakeMaskedCorner(under),
-                trH = MakeMaskedCorner(under), trV = MakeMaskedCorner(under),
-                blH = MakeMaskedCorner(under), blV = MakeMaskedCorner(under),
-                brH = MakeMaskedCorner(under), brV = MakeMaskedCorner(under),
-            }
-        end
-        local sh = skin.shadow
-
-        local function LayoutShadow()
-            -- LATERAUX (rapprochés de 2 px)
-            sh.left:ClearAllPoints()
-            sh.left:SetPoint("TOPLEFT",    under, "TOPLEFT",    -(size - inset2),  inset2)
-            sh.left:SetPoint("BOTTOMLEFT", under, "BOTTOMLEFT", -(size - inset2), -inset2)
-            sh.left:SetWidth(size)
-            SetSoftGradient(sh.left, "HORIZONTAL", 0.0, alpha)    -- extérieur -> bord
-
-            sh.right:ClearAllPoints()
-            sh.right:SetPoint("TOPRIGHT",    under, "TOPRIGHT",    (size - inset2),  inset2)
-            sh.right:SetPoint("BOTTOMRIGHT", under, "BOTTOMRIGHT", (size - inset2), -inset2)
-            sh.right:SetWidth(size)
-            SetSoftGradient(sh.right, "HORIZONTAL", alpha, 0.0)    -- bord -> extérieur
-
-            -- HAUT / BAS : dégradé inversé demandé
-            sh.top:ClearAllPoints()
-            sh.top:SetPoint("TOPLEFT",  under, "TOPLEFT",   inset2,  (size - inset2))
-            sh.top:SetPoint("TOPRIGHT", under, "TOPRIGHT", -inset2,  (size - inset2))
-            sh.top:SetHeight(size)
-            SetSoftGradient(sh.top, "VERTICAL", alpha, 0.0)        -- (inversé) extérieur -> plus clair vers l'extérieur
-
-            sh.bottom:ClearAllPoints()
-            sh.bottom:SetPoint("BOTTOMLEFT",  under, "BOTTOMLEFT",  inset2, -(size - inset2))
-            sh.bottom:SetPoint("BOTTOMRIGHT", under, "BOTTOMRIGHT", -inset2, -(size - inset2))
-            sh.bottom:SetHeight(size)
-            SetSoftGradient(sh.bottom, "VERTICAL", 0.0, alpha)     -- (inversé) plus clair extérieur, plus dense vers le bord
-
-            -- COINS ARRONDIS (quarter-circles), 2 couches (H+V) par coin
-            local function Corner(tH, tV, point, xOff, yOff, horizOuterToInner, vertOuterToInner)
-                -- taille carrée
-                tH:ClearAllPoints(); tH:SetPoint(point, under, point, xOff, yOff); tH:SetSize(size, size)
-                tV:ClearAllPoints(); tV:SetPoint(point, under, point, xOff, yOff); tV:SetSize(size, size)
-
-                -- Appliquer le quadrant de masque selon le coin
-                SetCornerMaskQuad(tH, point)
-                SetCornerMaskQuad(tV, point)
-
-                -- HORIZONTAL
-                if horizOuterToInner then
-                    SetSoftGradient(tH, "HORIZONTAL", 0.0, alpha)  -- extérieur -> bord
-                else
-                    SetSoftGradient(tH, "HORIZONTAL", alpha, 0.0)  -- bord -> extérieur
-                end
-                -- VERTICAL (inversé en haut/bas)
-                if vertOuterToInner then
-                    SetSoftGradient(tV, "VERTICAL", 0.0, alpha)    -- extérieur -> bord
-                else
-                    SetSoftGradient(tV, "VERTICAL", alpha, 0.0)    -- bord -> extérieur
-                end
-            end
-
-
-            -- Offsets des coins (rapprochés de 2 px sur les deux axes)
-            local xN, xP = -(size - inset2),  (size - inset2)
-            local yN, yP = -(size - inset2),  (size - inset2)
-
-            -- TL : extérieur = gauche/haut
-            Corner(sh.tlH, sh.tlV, "TOPLEFT",  xN,  yP, true,  false)  -- H: ext->bord ; V: (haut) inversé
-            -- TR : extérieur = droite/haut
-            Corner(sh.trH, sh.trV, "TOPRIGHT", xP,  yP, false, false)  -- H: bord->ext ; V: (haut) inversé
-            -- BL : extérieur = gauche/bas
-            Corner(sh.blH, sh.blV, "BOTTOMLEFT",  xN,  yN, true,  true) -- H: ext->bord ; V: (bas)  inversé
-            -- BR : extérieur = droite/bas
-            Corner(sh.brH, sh.brV, "BOTTOMRIGHT", xP,  yN, false, true) -- H: bord->ext ; V: (bas)  inversé
-        end
-
-        LayoutShadow()
-        frame:HookScript("OnSizeChanged", LayoutShadow)
-    end
 
     skin.title = {left=tLeft, mid=tMid, right=tRight}
 
