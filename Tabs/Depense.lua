@@ -48,8 +48,11 @@ local function BuildRow(r)
     f.itemText = f.item:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.icon     = f.item:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(16, 16)
     f.icon:SetPoint("LEFT", f.item, "LEFT", 0, 0)
-    f.itemText:SetPoint("LEFT", f.icon, "RIGHT", 6, 0)
+    f.itemText:ClearAllPoints()
+    f.itemText:SetPoint("LEFT",  f.icon, "RIGHT", 3, 0) -- même padding que le NameTag
     f.itemText:SetPoint("RIGHT", f.item, "RIGHT", 0, 0)
+    f.itemText:SetJustifyH("LEFT")
+    if f.itemText.SetWordWrap then f.itemText:SetWordWrap(false) end
 
     f.item:SetScript("OnEnter", function(self)
         if self._link and GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_CURSOR"); GameTooltip:SetHyperlink(self._link); GameTooltip:Show() end

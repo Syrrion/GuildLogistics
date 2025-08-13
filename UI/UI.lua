@@ -24,11 +24,24 @@ UI.CONTENT_SIDE_PAD    = UI.CONTENT_SIDE_PAD    or -23
 UI.CONTENT_BOTTOM_LIFT = UI.CONTENT_BOTTOM_LIFT or -20
 UI.TAB_LEFT_PAD        = UI.TAB_LEFT_PAD        or 18
 
+-- Utilitaires : formatage avec séparateur de milliers
+UI.NUM_THOUSANDS_SEP = UI.NUM_THOUSANDS_SEP or " "
+function UI.FormatThousands(v, sep)
+    local n  = math.floor(math.abs(tonumber(v) or 0))
+    local s  = tostring(n)
+    local sp = sep or UI.NUM_THOUSANDS_SEP or " "
+    local out, k = s, 0
+    repeat
+        out, k = out:gsub("^(%d+)(%d%d%d)", function(a, b) return a .. sp .. b end)
+    until k == 0
+    return out
+end
+
 function UI.MoneyText(v)
     v = tonumber(v) or 0
     local n = math.floor(math.abs(v) + 0.5)
     local iconG = "|TInterface\\MoneyFrame\\UI-GoldIcon:12:12:2:0|t"
-    local txt = n .. " " .. iconG
+    local txt = UI.FormatThousands(n) .. " " .. iconG
     if v < 0 then return "|cffff4040-" .. txt .. "|r" else return txt end
 end
 
@@ -41,7 +54,7 @@ function UI.MoneyFromCopper(copper)
     local iconS = "|TInterface\\MoneyFrame\\UI-SilverIcon:12:12:2:0|t"
     local iconC = "|TInterface\\MoneyFrame\\UI-CopperIcon:12:12:2:0|t"
     local parts = {}
-    if g > 0 then table.insert(parts, g .. " " .. iconG) end
+    if g > 0 then table.insert(parts, UI.FormatThousands(g) .. " " .. iconG) end
     if s > 0 then table.insert(parts, s .. " " .. iconS) end
     if c > 0 or #parts == 0 then table.insert(parts, c .. " " .. iconC) end
     local txt = table.concat(parts, " ")
