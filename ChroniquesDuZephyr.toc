@@ -1,0 +1,30 @@
+## Interface: 110002
+## Title: Chroniques du Zéphyr
+## Notes: Outils de comptabilité (Roster, Dépenses, Historique, Raid)
+## Author: Thibault + ChatGPT
+## Version: 0.7.0
+## SavedVariables: ChroniquesDuZephyrDB, ChroniquesDuZephyrUI
+
+Core/Core.lua
+Core/Comm.lua
+Core/Minimap.lua
+Core/Guild.lua
+Core/Expenses.lua
+Core/Format.lua
+
+UI/UI_Core.lua
+UI/UI_Skin.lua
+UI/UI.lua
+UI/UI_ListView.lua
+UI/UI_Popup.lua
+UI/UI_Buttons.lua
+
+Tabs/Synthese.lua
+Tabs/Raid.lua
+Tabs/Historique.lua
+Tabs/Depense.lua
+Tabs/Joueurs.lua
+Tabs/Demandes.lua
+Tabs/Debug.lua
+
+Core/Events.lua
