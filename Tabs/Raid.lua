@@ -90,51 +90,38 @@ local function Build(container)
         table.sort(selected)
 
         local per = (#selected > 0) and math.floor(total / #selected) or 0
-
-        if #selected == 0 then
-            return
-        end
+        if #selected == 0 then return end
 
         local dlg = UI.CreatePopup({ title = "Clôture effectuée", width = 560, height = 220 })
         dlg:SetMessage(("Participants : %d — Débit par joueur : %s.\nQue souhaitez-vous faire ?")
             :format(#selected, UI.MoneyText(per)))
 
+        local function sendBatch(silentFlag)
+            local adjusts = {}
+            for _, n in ipairs(selected) do
+                adjusts[#adjusts+1] = { name = n, delta = -per }
+            end
+            if CDZ.GM_BroadcastBatch then
+                CDZ.GM_BroadcastBatch(adjusts, { reason = "RAID_CLOSE", silent = silentFlag })
+            else
+                -- Fallback (très vieux clients) : envoi unitaire
+                for _, a in ipairs(adjusts) do
+                    if CDZ.GM_ApplyAndBroadcastEx then
+                        CDZ.GM_ApplyAndBroadcastEx(a.name, a.delta, { reason = "RAID_CLOSE", silent = silentFlag })
+                    elseif CDZ.GM_ApplyAndBroadcast then
+                        CDZ.GM_ApplyAndBroadcast(a.name, a.delta)
+                    end
+                end
+            end
+            CDZ.AddHistorySession(total, per, selected)
+            totalInput:SetText("")
+            if ns.RefreshAll then ns.RefreshAll() end
+        end
+
         dlg:SetButtons({
-            {
-                text = "Notifier les joueurs", default = true,
-                onClick = function()
-                    for _, n in ipairs(selected) do
-                        if CDZ.GM_ApplyAndBroadcastEx then
-                            CDZ.GM_ApplyAndBroadcastEx(n, -per, { reason = "RAID_CLOSE" })
-                        else
-                            CDZ.GM_ApplyAndBroadcast(n, -per)
-                        end
-                    end
-                    CDZ.AddHistorySession(total, per, selected)
-                    totalInput:SetText("")
-                    if ns.RefreshAll then ns.RefreshAll() end
-                end,
-            },
-            {
-                text = "Valider",
-                onClick = function()
-                    for _, n in ipairs(selected) do
-                        if CDZ.GM_ApplyAndBroadcastEx then
-                            CDZ.GM_ApplyAndBroadcastEx(n, -per, { reason = "RAID_CLOSE", silent = true })
-                        else
-                            CDZ.GM_ApplyAndBroadcast(n, -per)
-                        end
-                    end
-                    CDZ.AddHistorySession(total, per, selected)
-                    totalInput:SetText("")
-                    if ns.RefreshAll then ns.RefreshAll() end
-                    if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end
-                end,
-            },
-            {
-                text = "Annuler", variant = "ghost",
-                onClick = function() end,
-            },
+            { text = "Notifier les joueurs", default = true, onClick = function() sendBatch(false) end },
+            { text = "Valider", onClick = function() sendBatch(true); if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end end },
+            { text = "Annuler", variant = "ghost" },
         })
 
         dlg:Show()

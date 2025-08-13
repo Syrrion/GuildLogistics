@@ -199,11 +199,16 @@ function CDZ.RefundSession(idx)
     local s = ChroniquesDuZephyrDB.history[idx]
     if not s or s.refunded then return false end
     local per = tonumber(s.perHead) or 0
-    for _, name in ipairs(s.participants or {}) do
-        if ChroniquesDuZephyrDB.players[name] then
-            CDZ.Credit(name, per)
-        end
+    local parts = s.participants or {}
+
+    if CDZ.IsMaster and CDZ.IsMaster() and CDZ.GM_BroadcastBatch then
+        local adjusts = {}
+        for _, name in ipairs(parts) do adjusts[#adjusts+1] = { name = name, delta = per } end
+        CDZ.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
+    else
+        for _, name in ipairs(parts) do if ChroniquesDuZephyrDB.players[name] then CDZ.Credit(name, per) end end
     end
+
     s.refunded = true
     return true
 end
@@ -213,14 +218,20 @@ function CDZ.UnrefundSession(idx)
     local s = ChroniquesDuZephyrDB.history[idx]
     if not s or not s.refunded then return false end
     local per = tonumber(s.perHead) or 0
-    for _, name in ipairs(s.participants or {}) do
-        if ChroniquesDuZephyrDB.players[name] then
-            CDZ.Debit(name, per)
-        end
+    local parts = s.participants or {}
+
+    if CDZ.IsMaster and CDZ.IsMaster() and CDZ.GM_BroadcastBatch then
+        local adjusts = {}
+        for _, name in ipairs(parts) do adjusts[#adjusts+1] = { name = name, delta = -per } end
+        CDZ.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
+    else
+        for _, name in ipairs(parts) do if ChroniquesDuZephyrDB.players[name] then CDZ.Debit(name, per) end end
     end
+
     s.refunded = false
     return true
 end
+
 
 function CDZ.DeleteHistory(idx)
     EnsureDB()

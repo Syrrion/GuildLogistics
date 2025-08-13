@@ -5,23 +5,24 @@ local CDZ, UI = ns.CDZ, ns.UI
 
 -- ===== Constantes / Etat =====
 local PREFIX = "CDZ1"
-local MAX_PAY = 240
+local MAX_PAY = 200
 local Seq = 0
 
-local Inbox = {} -- réassemblage
+local Inbox = {}
 local Q, QBusy = {}, false
 local QCounter = 0
 
 -- ===== Utils =====
 local function now() return (time and time()) or 0 end
 local function safenum(v, d) v = tonumber(v); if v==nil then return d or 0 end; return v end
+local function truthy(v) v = tostring(v or ""); return (v=="1" or v=="true" or v=="TRUE") end
 
 local function refreshActive()
     if ns.RefreshActive then ns.RefreshActive()
     elseif ns.RefreshAll then ns.RefreshAll() end
 end
 
--- Debug log (avec paquet brut)
+-- Debug log
 local function pushLog(dir, msgType, sz, channel, target, seq, part, total, raw)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     ChroniquesDuZephyrDB.debug = ChroniquesDuZephyrDB.debug or {}
@@ -34,7 +35,6 @@ function CDZ.GetDebugLogs()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     return ChroniquesDuZephyrDB.debug or {}
 end
--- Vide l’historique des messages
 function CDZ.ClearDebugLogs()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     ChroniquesDuZephyrDB.debug = {}
@@ -93,7 +93,6 @@ function CDZ.IsMaster()
     if m and m ~= "" then
         return normalizeStr(m) == normalizeStr(playerFullName())
     end
-    -- Fallback : si aucun "maître" défini, seul le chef de guilde est GM.
     if IsInGuild and IsInGuild() then
         local guildName, rankName, rankIndex = GetGuildInfo("player")
         if guildName and rankIndex == 0 then
@@ -177,7 +176,6 @@ local function enqueueComplete(sender, msgType, kv)
     })
     processNext()
 end
-
 
 -- UID
 function CDZ.GetUID(name) local m=ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.ids; return m and m.byName and m.byName[name] end
@@ -265,26 +263,48 @@ function CDZ._HandleFull(sender, msgType, kv)
         meta.lastModified = ts
         refreshActive()
 
-        -- Popup uniquement pour la personne concernée par une clôture de raid non silencieuse
         if kv.reason == "RAID_CLOSE" and not kv.silent and delta < 0 then
-            local me = UnitName("player")
-            if me and nm and CDZ.NormName(me) == CDZ.NormName(nm) then
-                local after = CDZ.GetSolde and CDZ.GetSolde(nm) or 0
-                if ns.UI and ns.UI.PopupRaidDebit then ns.UI.PopupRaidDebit(nm, -delta, after) end
+            local my = UnitName("player")
+            local targetName = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nm
+            if my and targetName and CDZ.NormName and CDZ.NormName(my) == CDZ.NormName(targetName) then
+                local after = (CDZ.GetSolde and CDZ.GetSolde(targetName)) or 0
+                if ns.UI and ns.UI.PopupRaidDebit then ns.UI.PopupRaidDebit(targetName, -delta, after) end
             end
         end
 
-        -- Popup "Bon raid !" uniquement pour la personne concernée par une clôture de raid
-        if kv.reason == "RAID_CLOSE" and delta < 0 then
-            local my = UnitName("player")
-            local targetName = CDZ.GetNameByUID(uid) or nm
-            if my and targetName and CDZ.NormName and CDZ.NormName(my) == CDZ.NormName(targetName) then
-                local after = (CDZ.GetSolde and CDZ.GetSolde(targetName)) or 0
-                if ns.UI and ns.UI.PopupRaidDebit then
-                    ns.UI.PopupRaidDebit(targetName, -delta, after)
+    elseif msgType == "TX_BATCH" then
+        if not shouldApply() then return end
+        local U = kv.U or {}
+        local D = kv.D or {}
+        local N = kv.N or {}
+        local reason = kv.R
+        local isSilent = truthy(kv.S)
+        local by = kv.by or sender
+        local ts = (lm>=0) and lm or now()
+
+        for i = 1, #U do
+            local uid = U[i]
+            local delta = safenum(D[i], 0)
+            local nm = N[i]
+            if uid then
+                if nm and CDZ.MapUID then CDZ.MapUID(uid, nm) end
+                local mappedName = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nm
+                if mappedName and CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(mappedName) end
+                if CDZ.ApplyApprovedAdjust then CDZ.ApplyApprovedAdjust(uid, delta, ts, by) end
+
+                if reason == "RAID_CLOSE" and not isSilent and delta < 0 then
+                    local my = UnitName("player")
+                    if my and mappedName and CDZ.NormName and CDZ.NormName(my) == CDZ.NormName(mappedName) then
+                        local after = (CDZ.GetSolde and CDZ.GetSolde(mappedName)) or 0
+                        if ns.UI and ns.UI.PopupRaidDebit then ns.UI.PopupRaidDebit(mappedName, -delta, after) end
+                    end
                 end
             end
         end
+
+        meta.rev = (rv>=0) and rv or myrv
+        meta.lastModified = ts
+        refreshActive()
 
     elseif msgType == "TX_REFUSED" then
         UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Demande refusée : "..(kv.reason or "Refusé"), 1, 0.4, 0.4)
@@ -307,7 +327,7 @@ function CDZ._HandleFull(sender, msgType, kv)
     end
 end
 
--- ===== Réception (réassemblage) =====
+-- ===== Réception =====
 local function onAddonMsg(prefix, message, channel, sender)
     if prefix ~= PREFIX then return end
     local t,s,p,n = message:match("v=1|t=([^|]+)|s=(%d+)|p=(%d+)|n=(%d+)|")
@@ -318,13 +338,30 @@ local function onAddonMsg(prefix, message, channel, sender)
     local payload = message:match("|n=%d+|(.*)$") or ""
     local key = sender.."#"..tostring(seq)
     local box = Inbox[key]
-    if not box then box = { total=total, got=0, parts={} }; Inbox[key]=box end
-    box.parts[part]=payload; box.got=box.got+1
-    if box.got >= box.total then
-        Inbox[key]=nil
-        local full = table.concat(box.parts, "")
-        local kv = decode(full)
-        enqueueComplete(sender, t, kv)
+    if not box then
+        box = { total=total, got=0, parts={}, ts=now() }
+        Inbox[key]=box
+    else
+        box.total = math.max(box.total or total, total)
+        box.ts = now()
+    end
+
+    if not box.parts[part] then
+        box.parts[part] = payload
+        box.got = box.got + 1
+    end
+
+    if box.got == box.total then
+        local chunks = {}
+        for i=1, box.total do
+            if not box.parts[i] then chunks=nil break else chunks[#chunks+1]=box.parts[i] end
+        end
+        if chunks then
+            Inbox[key]=nil
+            local full = table.concat(chunks, "")
+            local kv = decode(full)
+            enqueueComplete(sender, t, kv)
+        end
     end
 end
 
@@ -370,7 +407,32 @@ function CDZ.GM_ApplyAndBroadcastByUID(uid, delta)
     CDZ.Comm_Broadcast("TX_APPLIED", { uid = uid, delta = delta, rv = rv, lm = lm, by = playerFullName() })
 end
 
--- Application locale d'un ajustement approuvé
+-- Nouveau : envoi groupé
+function CDZ.GM_BroadcastBatch(adjusts, extra)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    adjusts = adjusts or {}
+    local U, D, N = {}, {}, {}
+    for _, a in ipairs(adjusts) do
+        local nm = a.name
+        local uid = a.uid or (nm and CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(nm))
+        if uid then
+            U[#U+1] = uid
+            D[#D+1] = tostring(math.floor(tonumber(a.delta) or 0))
+            local mapped = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nm
+            N[#N+1] = mapped or ""
+        end
+    end
+    if #U == 0 then return end
+    local rv = incRev(); local lm = now()
+    local p = { U=U, D=D, N=N, rv=rv, lm=lm, by=playerFullName() }
+    if extra and type(extra)=="table" then
+        if extra.reason ~= nil then p.R = extra.reason end
+        if extra.silent ~= nil then p.S = extra.silent and "1" or "0" end
+    end
+    CDZ.Comm_Broadcast("TX_BATCH", p)
+end
+
+-- Application locale approuvée
 function CDZ.ApplyApprovedAdjust(uid, delta, ts, by)
     local name = CDZ.GetNameByUID(uid); if not name or name=="" then return end
     if CDZ.AdjustSolde then CDZ.AdjustSolde(name, safenum(delta,0)) end
@@ -399,7 +461,6 @@ function CDZ.AddIncomingRequest(uid, delta, requester, ts)
     local reqId = string.format("%d.%03d", time(), math.random(0,999))
     table.insert(ChroniquesDuZephyrDB.requests, { id=reqId, uid=uid, delta=safenum(delta,0), requester=requester, ts=ts or now() })
     if ns.UI and ns.UI.PopupRequest then
-        -- Nom d'affichage : mapping connu, sinon on tombe sur le demandeur (requester)
         local displayName = CDZ.GetNameByUID(uid) or requester or "?"
         ns.UI.PopupRequest(displayName, delta,
             function() CDZ.GM_ApplyAndBroadcastByUID(uid, safenum(delta,0)); CDZ.ResolveRequest(reqId, true) end,
@@ -484,12 +545,23 @@ function CDZ.Comm_Init()
         local m=ChroniquesDuZephyrDB.meta.master; local n,r=m:match("^(.-)%-(.+)$")
         if n and r then ChroniquesDuZephyrDB.meta.master = n.."-"..r:gsub("%s+",""):gsub("'","") end
     end
+    
     if not CDZ._commFrame then
         local f=CreateFrame("Frame")
         f:RegisterEvent("CHAT_MSG_ADDON")
         f:SetScript("OnEvent", function(_,_,prefix,msg,channel,sender) onAddonMsg(prefix,msg,channel,sender) end)
         CDZ._commFrame=f
     end
+
+    if not CDZ._inboxCleaner then
+        CDZ._inboxCleaner = C_Timer.NewTicker(10, function()
+            local cutoff = now() - 30
+            for k,box in pairs(Inbox) do
+                if (box.ts or 0) < cutoff then Inbox[k]=nil end
+            end
+        end)
+    end
+
     
     C_Timer.After(5, function()
         if not IsInGuild or not IsInGuild() then return end
@@ -508,7 +580,6 @@ function CDZ.Comm_Init()
     C_Timer.After(3, function() if IsInGuild() then CDZ.Sync_RequestHello() end end)
 end
 
--- Slashes
 SLASH_CDZMASTER1="/cdzmaster"
 SlashCmdList.CDZMASTER=function()
     ChroniquesDuZephyrDB=ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta=ChroniquesDuZephyrDB.meta or {}
