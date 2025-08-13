@@ -69,9 +69,9 @@ Scanner:SetScript("OnEvent", function(self, ev)
             or 0
 
     for i = 1, n do
-        local name, _, _, _, _, _, note, _, online = GetGuildRosterInfo(i)
-        local classFileName = select(11, GetGuildRosterInfo(i))
+        local name, _, _, _, _, _, note, _, online, _, classFileName, _, _, isMobile = GetGuildRosterInfo(i)
         local y, m, d, h = nil, nil, nil, nil
+        local retCount = 0
         if GetGuildRosterLastOnline then
             y, m, d, h = GetGuildRosterLastOnline(i)
             retCount = select("#", GetGuildRosterLastOnline(i))
@@ -111,7 +111,6 @@ Scanner:SetScript("OnEvent", function(self, ev)
     end
 
     local agg, mainsClass = aggregateRows(rows)
-    local agg, mainsClass = aggregateRows(rows)
     CDZ._guildCache.rows       = rows
     CDZ._guildCache.mains      = agg
     CDZ._guildCache.mainsClass = mainsClass or {}
@@ -132,9 +131,6 @@ Scanner:SetScript("OnEvent", function(self, ev)
     end
 
     CDZ._guildCache.ts = time()
-
-
-    CDZ._guildCache.ts    = time()
 
     local cbs = self.callbacks
     self.callbacks = {}

@@ -16,7 +16,6 @@ UI.FONT_YELLOW = UI.FONT_YELLOW or {1, 0.82, 0}
 UI.WHITE       = UI.WHITE       or {1,1,1}
 UI.ACCENT      = UI.ACCENT      or {0.22,0.55,0.95}
 
-
 -- === Colonnes: w/min/flex
 function UI.ResolveColumns(totalWidth, cols, opts)
     opts = opts or {}
@@ -213,7 +212,6 @@ function UI.CreateNameTag(parent)
     return f
 end
 
-
 function UI.SetNameTag(tag, name)
     if not tag then return end
     local class, r, g, b, coords = nil, 1,1,1,nil
@@ -243,3 +241,128 @@ function UI.RaiseCloseButton(btn, owner)
     btn:SetFrameLevel((f and f:GetFrameLevel() or 1) + 10)
 end
 
+-- ========== UTIL: Format (ex-Format.lua) ==========
+ns.Format = ns.Format or {}
+do
+    local F = ns.Format
+
+    function F.DateTime(ts, fmt)
+        local n = tonumber(ts) or 0
+        if n > 0 then return date(fmt or "le %H:%M à %d/%m/%Y", n) end
+        return tostring(ts or "")
+    end
+
+    function F.Date(ts, fmt)
+        local n = tonumber(ts) or 0
+        if n > 0 then return date(fmt or "le %d/%m/%Y", n) end
+        return tostring(ts or "")
+    end
+
+    function F.RelativeFromSeconds(sec)
+        local n = tonumber(sec); if not n then return "" end
+        local s = math.abs(n)
+        local d = math.floor(s/86400); s = s%86400
+        local h = math.floor(s/3600);  s = s%3600
+        local m = math.floor(s/60)
+        if d > 0 then return (d.."j "..h.."h") end
+        if h > 0 then return (h.."h "..m.."m") end
+        return (m.."m")
+    end
+
+    function F.LastSeen(days, hours)
+        local d = tonumber(days)
+        local h = tonumber(hours)
+
+        if d and d <= 0 then
+            if h and h > 0 then return h .. " h" else return "≤ 1 h" end
+        end
+
+        d = d or 9999
+        if d < 1 then
+            if h and h > 0 then return h .. " h" else return "≤ 1 h" end
+        elseif d < 30 then
+            return d .. " j"
+        elseif d < 365 then
+            return (math.floor(d/30)) .. " mois"
+        else
+            return (math.floor(d/365)) .. " ans"
+        end
+    end
+end
+-- (Fin ex-Format.lua)  :contentReference[oaicite:4]{index=4}
+
+-- ========== MINIMAP (ex-Minimap.lua) ==========
+function CDZ.Minimap_Init()
+    if CDZ._EnsureDB then CDZ._EnsureDB() end
+    ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
+    ChroniquesDuZephyrUI.minimap = ChroniquesDuZephyrUI.minimap or { hide=false, angle=215 }
+    if ChroniquesDuZephyrUI.minimap.angle == nil then
+        ChroniquesDuZephyrUI.minimap.angle = 215
+    end
+    if ChroniquesDuZephyrUI.minimap.hide then return end
+
+    if _G.CDZ_MinimapButton then
+        local r = (Minimap:GetWidth() / 2) - 5
+        local rad = math.rad(ChroniquesDuZephyrUI.minimap.angle or 215)
+        _G.CDZ_MinimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
+        return
+    end
+
+    local b = CreateFrame("Button", "CDZ_MinimapButton", Minimap)
+    b:SetSize(32, 32)
+    b:SetFrameStrata("MEDIUM")
+    b:SetMovable(true)
+    b:RegisterForDrag("LeftButton")
+    b:RegisterForClicks("AnyUp")
+
+    local border = b:CreateTexture(nil, "BACKGROUND")
+    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    border:SetSize(56, 56)
+    border:SetPoint("TOPLEFT", b, "TOPLEFT", -7, 6)
+
+    local icon = b:CreateTexture(nil, "ARTWORK")
+    icon:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon:SetSize(20, 20)
+    icon:SetPoint("CENTER", b, "CENTER", 0, 0)
+
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+    hl:SetBlendMode("ADD")
+    hl:SetAllPoints(b)
+
+    -- Tooltip
+    b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:SetText("Chroniques du Zéphyr")
+        GameTooltip:AddLine("Clic gauche : Ouvrir / fermer la fenêtre", 1,1,1)
+        GameTooltip:AddLine("Glisser : déplacer l’icône autour de la minimap", 1,1,1)
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Drag (déplacement)
+    b:SetScript("OnDragStart", function(self)
+        self:SetScript("OnUpdate", function(btn)
+            local mx, my = Minimap:GetCenter()
+            local scale = Minimap:GetEffectiveScale()
+            local cx, cy = GetCursorPosition()
+            local dx, dy = (cx/scale - mx), (cy/scale - my)
+            local angle = math.deg(math.atan2(dy, dx))
+            if angle < 0 then angle = angle + 360 end
+            ChroniquesDuZephyrUI.minimap.angle = angle
+            local r = (Minimap:GetWidth() / 2) - 5
+            local rad = math.rad(angle or 215)
+            btn:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
+        end)
+    end)
+    b:SetScript("OnDragStop",  function(self) self:SetScript("OnUpdate", nil) end)
+
+    -- Clic : toggle UI
+    b:SetScript("OnClick", function() if ns.ToggleUI then ns.ToggleUI() end end)
+
+    local r = (Minimap:GetWidth() / 2) - 5
+    local rad = math.rad(ChroniquesDuZephyrUI.minimap.angle or 215)
+    b:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
+end
+-- (Fin ex-Minimap.lua)  :contentReference[oaicite:5]{index=5}
