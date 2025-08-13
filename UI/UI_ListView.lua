@@ -17,6 +17,36 @@ function UI.ListView(parent, cols, opts)
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
 
+    -- Overlay d'état vide (grisé + texte centré)
+    function lv:_EnsureEmptyOverlay()
+        if self._empty then return end
+        local ov = CreateFrame("Frame", nil, self.parent)
+        ov:SetIgnoreParentAlpha(false)
+        ov:EnableMouse(false)
+        ov:Hide()
+
+        ov.bg = ov:CreateTexture(nil, "ARTWORK")
+        ov.bg:SetAllPoints(ov)
+        ov.bg:SetColorTexture(0, 0, 0, 0.12) -- léger grisage
+
+        ov.fs = ov:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+        ov.fs:SetText(self.opts.emptyText or "Aucune données...")
+        ov.fs:SetJustifyH("CENTER"); ov.fs:SetJustifyV("MIDDLE")
+        ov.fs:SetPoint("CENTER", ov, "CENTER", 0, 0)
+
+        self._empty = ov
+    end
+
+    function lv:_SetEmptyShown(show)
+        self:_EnsureEmptyOverlay()
+        if show then
+            -- positionné/level ajustés par Layout()
+            self._empty:Show()
+        else
+            self._empty:Hide()
+        end
+    end
+
     -- Z-order : même strata que le parent (popup/panel), niveau au-dessus du scroll
     local pStrata = parent:GetFrameStrata() or "MEDIUM"
     lv.header:SetFrameStrata(pStrata)
@@ -112,6 +142,17 @@ function UI.ListView(parent, cols, opts)
         if self.scroll:GetFrameLevel() >= self.header:GetFrameLevel() then
             self.header:SetFrameLevel(self.scroll:GetFrameLevel() + 5)
         end
+
+        -- Positionne l'overlay "liste vide" pour qu'il recouvre la zone scroll (pas le header)
+        if self._empty then
+            self._empty:ClearAllPoints()
+            self._empty:SetPoint("TOPLEFT",     self.scroll, "TOPLEFT",     0, 0)
+            self._empty:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
+            -- au-dessus des lignes mais sous le header
+            local base = self.scroll:GetFrameLevel() or 0
+            self._empty:SetFrameStrata(self.scroll:GetFrameStrata() or "MEDIUM")
+            self._empty:SetFrameLevel(base + 3)
+        end
     end
 
     -- Données
@@ -128,11 +169,13 @@ function UI.ListView(parent, cols, opts)
         end
 
         -- Alimente les lignes et cache le surplus
+        local shown = 0
         for i = 1, #self.rows do
             local r  = self.rows[i]
             local it = data[i]
             if it then
                 r:Show()
+                shown = shown + 1
                 if self.opts.updateRow then self.opts.updateRow(i, r, r._fields, it) end
             else
                 r:Hide()
@@ -140,7 +183,10 @@ function UI.ListView(parent, cols, opts)
         end
 
         self:Layout()
+        -- Affiche le “empty state” si aucune ligne
+        self:_SetEmptyShown(shown == 0)
     end
+
 
     -- Relayout public
     function lv:Refresh()
