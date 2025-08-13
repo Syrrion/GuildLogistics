@@ -12,13 +12,29 @@ local cols = {
     { key="after", title="Après", w=160, justify="LEFT"  },
 }
 
+-- Compte robuste : seulement les joueurs encore présents dans la DB
+local function SelectedCount()
+    local players = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players) or {}
+    local n = 0
+    for name in pairs(players) do
+        if includes[name] then n = n + 1 end
+    end
+    return n
+end
+
 local function ComputePerHead()
     local total = tonumber(totalInput:GetText() or "0") or 0
-    local count = 0
-    for _, v in pairs(includes) do if v then count = count + 1 end end
-    if count == 0 then return 0 end
-    return math.floor(total / count)
+    local selected = SelectedCount()
+    return (selected > 0) and math.floor(total / selected) or 0
 end
+
+-- Au build (ou juste après), on écoute la suppression roster pour purger includes
+ns.On("roster:removed", function(name)
+    if includes[name] then
+        includes[name] = nil
+        if lv and lv.Refresh then lv:Refresh() end
+    end
+end)
 
 local function BuildRow(r)
     local f = {}

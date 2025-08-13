@@ -128,21 +128,39 @@ function CDZ.RemoveGold(name, amount)
     return CDZ.AdjustSolde(name, -math.floor(tonumber(amount) or 0))
 end
 
--- Insertion locale (côté client) d'un joueur reçu via ROSTER_UPSERT
+-- === Bus d’événements minimal ===
+ns._ev = ns._ev or {}
+function ns.On(evt, fn)
+    if not evt or type(fn)~="function" then return end
+    ns._ev[evt] = ns._ev[evt] or {}
+    table.insert(ns._ev[evt], fn)
+end
+function ns.Emit(evt, ...)
+    local t = ns._ev and ns._ev[evt]
+    if not t then return end
+    for i=1,#t do
+        local ok,err = pcall(t[i], ...)
+        if not ok then geterrorhandler()(err) end
+    end
+end
+
 function CDZ.EnsureRosterLocal(name)
     if not name or name == "" then return end
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    local created = false
     if not ChroniquesDuZephyrDB.players[name] then
         ChroniquesDuZephyrDB.players[name] = { credit = 0, debit = 0 }
+        created = true
     end
+    if created then ns.Emit("roster:upsert", name) end
 end
 
--- Suppression locale silencieuse (sans vérif de droits, sans broadcast)
 function CDZ.RemovePlayerLocal(name, silent)
     if not name or name=="" then return false end
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     local p = ChroniquesDuZephyrDB.players or {}
+    local existed = not not p[name]
     if p[name] then p[name] = nil end
     if ChroniquesDuZephyrDB.ids and ChroniquesDuZephyrDB.ids.byName then
         local uid = ChroniquesDuZephyrDB.ids.byName[name]
@@ -151,9 +169,11 @@ function CDZ.RemovePlayerLocal(name, silent)
             if ChroniquesDuZephyrDB.ids.byId then ChroniquesDuZephyrDB.ids.byId[uid] = nil end
         end
     end
+    if existed then ns.Emit("roster:removed", name) end
     if not silent and ns.RefreshAll then ns.RefreshAll() end
     return true
 end
+
 
 -- Suppression orchestrée : réservée au GM + broadcast
 -- Remplace la version précédente de RemovePlayer si déjà présente
