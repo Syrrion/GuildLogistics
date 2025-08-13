@@ -75,15 +75,28 @@ local function playerFullName()
     local n=UnitName("player"); local rn=(GetNormalizedRealmName and GetNormalizedRealmName()) or GetRealmName()
     return NormalizeFull(n, rn)
 end
+
 local function normalizeStr(s) return (s or ""):gsub("%s+",""):gsub("'","") end
 local function masterName()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     return ChroniquesDuZephyrDB.meta.master
 end
+
 function CDZ.IsMaster()
-    local m = masterName(); if not m or m=="" then return true end
-    return normalizeStr(m) == normalizeStr(playerFullName())
+    local m = masterName()
+    if m and m ~= "" then
+        return normalizeStr(m) == normalizeStr(playerFullName())
+    end
+    -- Fallback : si aucun "maître" défini, seul le chef de guilde est GM.
+    if IsInGuild and IsInGuild() then
+        local guildName, rankName, rankIndex = GetGuildInfo("player")
+        if guildName and rankIndex == 0 then
+            return true
+        end
+    end
+    return false
 end
+
 local function setMasterOnce(name)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     if not ChroniquesDuZephyrDB.meta.master or ChroniquesDuZephyrDB.meta.master=="" then
@@ -398,6 +411,21 @@ function CDZ.Comm_Init()
         f:SetScript("OnEvent", function(_,_,prefix,msg,channel,sender) onAddonMsg(prefix,msg,channel,sender) end)
         CDZ._commFrame=f
     end
+    
+    C_Timer.After(5, function()
+        if not IsInGuild or not IsInGuild() then return end
+        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+        ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+        local m = ChroniquesDuZephyrDB.meta.master
+        if not m or m == "" then
+            local g, rn, ri = GetGuildInfo("player")
+            if g and ri == 0 then
+                ChroniquesDuZephyrDB.meta.master = playerFullName()
+                if ns.RefreshAll then ns.RefreshAll() end
+            end
+        end
+    end)
+
     C_Timer.After(3, function() if IsInGuild() then CDZ.Sync_RequestHello() end end)
 end
 
