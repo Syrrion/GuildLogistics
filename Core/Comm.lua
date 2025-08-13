@@ -33,6 +33,11 @@ function CDZ.GetDebugLogs()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     return ChroniquesDuZephyrDB.debug or {}
 end
+-- Vide l’historique des messages
+function CDZ.ClearDebugLogs()
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.debug = {}
+end
 
 -- kv encode/decode
 local function esc(s) s=tostring(s or ""); s=s:gsub("\\","\\\\"):gsub("|","\\p"):gsub("\n","\\n"); return s end

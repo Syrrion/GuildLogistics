@@ -9,6 +9,9 @@ f:SetScript("OnEvent", function(self, event, name)
         if name ~= ADDON then return end
         if CDZ._EnsureDB then CDZ._EnsureDB() end
 
+        -- purge auto de l’historique des messages
+        if CDZ.ClearDebugLogs then CDZ.ClearDebugLogs() end
+
         -- Slash /cdz
         SLASH_CDZ1 = "/cdz"
         SlashCmdList.CDZ = function()
