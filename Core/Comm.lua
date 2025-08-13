@@ -223,6 +223,14 @@ function CDZ._HandleFull(sender, msgType, kv)
         local uid = kv.uid; local delta = safenum(kv.delta,0)
         local ts = (lm>=0) and lm or now()
         local by = kv.by or sender
+        local nm = kv.name
+
+        -- Si un nom est fourni, on (re)crée le mapping et le roster local
+        if uid and nm then
+            if CDZ.MapUID then CDZ.MapUID(uid, nm) end
+            if CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(nm) end
+        end
+
         if CDZ.ApplyApprovedAdjust then CDZ.ApplyApprovedAdjust(uid, delta, ts, by) end
         meta.rev = (rv>=0) and rv or myrv
         meta.lastModified = ts
@@ -291,7 +299,16 @@ function CDZ.GM_ApplyAndBroadcast(name, delta)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     local uid = CDZ.GetOrAssignUID(name); if not uid then return end
     local rv = incRev(); local lm = now()
-    CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, delta=delta, rv=rv, lm=lm, by=playerFullName() })
+    local nm = CDZ.GetNameByUID(uid) or name
+    CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=lm, by=playerFullName() })
+end
+
+
+function CDZ.GM_ApplyAndBroadcastByUID(uid, delta)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    if not uid or uid == "" then return end
+    local rv = incRev(); local lm = now()
+    CDZ.Comm_Broadcast("TX_APPLIED", { uid = uid, delta = delta, rv = rv, lm = lm, by = playerFullName() })
 end
 
 -- Application locale d'un ajustement approuvé
@@ -323,16 +340,19 @@ function CDZ.AddIncomingRequest(uid, delta, requester, ts)
     local reqId = string.format("%d.%03d", time(), math.random(0,999))
     table.insert(ChroniquesDuZephyrDB.requests, { id=reqId, uid=uid, delta=safenum(delta,0), requester=requester, ts=ts or now() })
     if ns.UI and ns.UI.PopupRequest then
-        local name = CDZ.GetNameByUID(uid) or "?"
-        ns.UI.PopupRequest(name, delta,
-            function() CDZ.GM_ApplyAndBroadcast(name, safenum(delta,0)); CDZ.ResolveRequest(reqId, true) end,
+        -- Nom d'affichage : mapping connu, sinon on tombe sur le demandeur (requester)
+        local displayName = CDZ.GetNameByUID(uid) or requester or "?"
+        ns.UI.PopupRequest(displayName, delta,
+            function() CDZ.GM_ApplyAndBroadcastByUID(uid, safenum(delta,0)); CDZ.ResolveRequest(reqId, true) end,
             function() CDZ.ResolveRequest(reqId, false, "Refus par le GM") end)
     end
     refreshActive()
 end
+
 function CDZ.GetRequests()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; return ChroniquesDuZephyrDB.requests or {}
 end
+
 function CDZ.ResolveRequest(reqId, approved, reason)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
     local list = ChroniquesDuZephyrDB.requests; local idx=nil

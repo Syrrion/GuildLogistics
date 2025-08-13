@@ -33,7 +33,7 @@ local function UpdateRow(i, r, f, it)
 
     r.btnApprove:SetOnClick(function()
         if not CDZ.IsMaster or not CDZ.IsMaster() then return end
-        if CDZ.GM_ApplyAndBroadcast then CDZ.GM_ApplyAndBroadcast(it.name, tonumber(it.delta) or 0) end
+        if CDZ.GM_ApplyAndBroadcastByUID then CDZ.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0) end
         if CDZ.ResolveRequest then CDZ.ResolveRequest(it.id, true) end
     end)
 
@@ -52,8 +52,8 @@ local function Refresh()
         lv:SetData({}) ; return
     end
     for _, r in ipairs(CDZ.GetRequests()) do
-        local name = CDZ.GetNameByUID and CDZ.GetNameByUID(r.uid) or "?"
-        rows[#rows+1] = { id=r.id, ts=r.ts, name=name, delta=r.delta }
+        local display = (CDZ.GetNameByUID and CDZ.GetNameByUID(r.uid)) or r.requester or "?"
+        rows[#rows+1] = { id=r.id, ts=r.ts, uid=r.uid, name=display, delta=r.delta }
     end
     lv:SetData(rows)
     lv:Layout()
