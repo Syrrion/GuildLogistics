@@ -203,7 +203,7 @@ local function Build(container)
                 end
             end
 
-                        -- Politique popups :
+            -- Politique popups :
             -- - Notifier (non silencieux) : essayer le réseau, sinon fallback local après un court délai.
             -- - Valider (silencieux)     : popup locale immédiate (aucun envoi réseau).
             local myShort = UnitName("player")  -- nom court
@@ -241,11 +241,20 @@ local function Build(container)
             end
 
             -- Marque les lots comme consommés + journalise
+            local ids = {}
+            for id,_ in pairs(chosenLots) do ids[#ids+1] = id end
+            table.sort(ids)
+
             if CDZ.Lots_ConsumeMany then
-                local ids = {}
-                for id,_ in pairs(chosenLots) do ids[#ids+1] = id end
-                table.sort(ids); CDZ.Lots_ConsumeMany(ids)
+                CDZ.Lots_ConsumeMany(ids)   -- consommation locale
+            else
+                -- fallback très ancien Core
+                if CDZ.Lot_Consume then for _, id in ipairs(ids) do CDZ.Lot_Consume(id) end end
             end
+
+            -- Synchronisation réseau explicite de l’utilisation des lots
+            if CDZ.BroadcastLotsConsume then CDZ.BroadcastLotsConsume(ids) end
+
             local Hctx = {}
             for id,_ in pairs(chosenLots) do
                 local l = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
@@ -253,6 +262,7 @@ local function Build(container)
             end
             CDZ.AddHistorySession(total, per, selected, { lots = Hctx })
             chosenLots = {}
+
         end
 
         local dlg = UI.CreatePopup({ title = "Clôturer les participations", width = 520, height = 220 })
