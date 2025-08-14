@@ -255,42 +255,90 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         return it.itemName or ""
     end
 
+    -- On construit du contenu interactif (icônes + tooltips), plus de SetMessage ici
+    -- Header "Bon raid" + montants
+    local header = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    header:SetJustifyH("LEFT")
+    header:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 0, 0)
+    header:SetText(("Bon raid !\n\n|cffffd200Montant déduit :|r %s\n|cffffd200Solde restant :|r %s")
+        :format(UI.MoneyText(math.floor(tonumber(deducted) or 0)),
+                UI.MoneyText(math.floor(tonumber(after) or 0))))
+
     local L = ctx and (ctx.L or ctx.lots) or nil
     if type(L) == "table" and #L > 0 then
-        lines[#lines+1] = "|cffffd200Lots utilisés :|r"
+        local label = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        label:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10)
+        label:SetText("|cffffd200Lots utilisés (détails) :|r")
+
+        local cols = UI.NormalizeColumns({
+            { key="lot",  title="Lot",   min=160, flex=1 },
+            { key="qty",  title="Qté",   w=60, justify="RIGHT" },
+            { key="item", title="Objet", min=280, flex=1 },
+        })
+        local lv = UI.ListView(dlg.content, cols, {
+            buildRow = function(r)
+                local f = {}
+                f.lot = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                f.qty = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+
+                f.itemFrame = CreateFrame("Frame", nil, r); f.itemFrame:SetHeight(UI.ROW_H)
+                f.icon  = f.itemFrame:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(20,20); f.icon:SetPoint("LEFT", f.itemFrame, "LEFT", 0, 0)
+                f.btn   = CreateFrame("Button", nil, f.itemFrame); f.btn:SetPoint("LEFT", f.icon, "RIGHT", 6, 0); f.btn:SetSize(260, UI.ROW_H)
+                f.text  = f.btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                f.text:SetJustifyH("LEFT"); f.text:SetPoint("LEFT", f.btn, "LEFT", 0, 0)
+
+                f.btn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+                    if self._itemID and self._itemID > 0 then
+                        GameTooltip:SetItemByID(self._itemID)
+                    elseif self._link and self._link ~= "" then
+                        GameTooltip:SetHyperlink(self._link)
+                    else
+                        GameTooltip:Hide()
+                    end
+                end)
+                f.btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                f.item = f.itemFrame
+                return f
+            end,
+            updateRow = function(_, _, f, row)
+                f.lot:SetText(row.lot or "")
+                f.qty:SetText(tostring(row.qty or 1))
+                f.text:SetText(row.name or "Objet inconnu")
+                f.icon:SetTexture(row.icon or "Interface\\ICONS\\INV_Misc_QuestionMark")
+                f.btn._itemID = row.itemID
+                f.btn._link   = row.link
+            end,
+            topOffset = 52,
+        })
+
+        local rows = {}
         for i=1,#L do
             local li = L[i]
-            local nm = li.name or li.n or ("Lot "..tostring(li.id or i))
-            local k  = tonumber(li.k or 0) or 0
-            local N  = tonumber(li.N or 1) or 1
-            local g  = tonumber(li.gold or li.g or 0) or 0
-            local part = (N>1) and ("("..tostring(k).."/"..tostring(N)..")") or ""
-            lines[#lines+1] = (" - %s %s : %s"):format(nm, part, UI.MoneyText(math.floor(g)))
-
-            -- Détail des composants du lot (quantités divisées quand c'est exactement divisible par N)
-            if ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.GetExpenseById then
-                local lot = ns.CDZ.Lot_GetById(li.id)
-                if lot and type(lot.itemIds) == "table" then
-                    for _, eid in ipairs(lot.itemIds) do
-                        local _, it = ns.CDZ.GetExpenseById(eid)
-                        if it then
-                            local qty = tonumber(it.qty or 1) or 1
-                            local showQty = qty
-                            if N > 1 and qty % N == 0 then
-                                showQty = qty / N
-                            end
-                            lines[#lines+1] = ("    • %s × %s"):format(_itemName(it), tostring(showQty))
-                        end
+            local lot = ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.Lot_GetById(li.id)
+            local nm  = li.name or li.n or (lot and lot.name) or ("Lot "..tostring(li.id or i))
+            local N   = tonumber(li.N or 1) or 1
+            if lot and ns.CDZ and ns.CDZ.GetExpenseById then
+                for _, eid in ipairs(lot.itemIds or {}) do
+                    local _, it = ns.CDZ.GetExpenseById(eid)
+                    if it then
+                        local itemID = tonumber(it.itemID or 0) or 0
+                        local link   = (itemID > 0) and (select(2, GetItemInfo(itemID))) or it.itemLink
+                        local name   = (link and link:match("%[(.-)%]")) or (GetItemInfo(itemID)) or it.itemName or "Objet inconnu"
+                        local icon   = (itemID > 0) and (select(5, GetItemInfoInstant(itemID))) or "Interface\\ICONS\\INV_Misc_QuestionMark"
+                        local qty    = tonumber(it.qty or 1) or 1
+                        if N > 1 and qty % N == 0 then qty = qty / N end
+                        rows[#rows+1] = { lot = nm, qty = qty, itemID = itemID, link = link, name = name, icon = icon }
                     end
                 end
             end
         end
-        lines[#lines+1] = ""
+        lv:SetData(rows)
+        dlg._lv = lv  -- déclenche le relayout automatique de la popup
+        lv:Layout()   -- calcule immédiatement la mise en page initiale
+
     end
 
-    lines[#lines+1] = ("|cffffd200Montant déduit :|r %s"):format(UI.MoneyText(math.floor(tonumber(deducted) or 0)))
-    lines[#lines+1] = ("|cffffd200Solde restant :|r %s"):format(UI.MoneyText(math.floor(tonumber(after) or 0)))
-    dlg:SetMessage(table.concat(lines, "\n"))
     dlg:SetButtons({ { text = "Fermer", default = true } })
     dlg:Show()
     return dlg

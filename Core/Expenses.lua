@@ -42,15 +42,37 @@ function CDZ.LogExpense(source, itemLink, itemName, qty, copper)
     e.nextId = e.nextId or 1
     local nid = e.nextId; e.nextId = nid + 1
 
+    -- ➕ résolution d'ID d'objet fiable (1er retour de GetItemInfoInstant)
+    local iid = nil
+    if itemLink and itemLink ~= "" and GetItemInfoInstant then
+        local id = select(1, GetItemInfoInstant(itemLink))
+        iid = tonumber(id)
+    end
+    -- si pas de lien mais on a l'id (cas commodities), on normalise un lien minimal
+    local normalizedLink = itemLink
+    if (not normalizedLink or normalizedLink == "") and iid and iid > 0 then
+        normalizedLink = "item:" .. tostring(iid)
+    end
+
     table.insert(e.list, {
         id = nid,
         ts = time(),
-        source = source,           -- "Boutique" | "HdV"
-        itemLink = itemLink,       -- peut être nil
-        itemName = itemName,       -- fallback
+        source = source,                 -- "Boutique" | "HdV"
+        itemID = iid,                    -- ➕ ID WoW de l'objet
+        itemLink = normalizedLink,       -- lien minimal si besoin
+        itemName = itemName,             -- fallback UI
         qty = tonumber(qty) or 1,
         copper = amount,
     })
+
+    -- ➕ diffusion aux joueurs (le GM seul diffuse)
+    if CDZ.BroadcastExpenseAdd and CDZ.IsMaster and CDZ.IsMaster() then
+        CDZ.BroadcastExpenseAdd({
+            id = nid, s = source, i = iid or 0,
+            q = tonumber(qty) or 1, c = amount
+        })
+    end
+
     if ns and ns.RefreshAll then ns.RefreshAll() end
 end
 
@@ -131,13 +153,14 @@ function CDZ.Expenses_InstallHooks()
                 local p = CDZ._pendingAH.items[auctionID]
                 if p then
                     local spent = tonumber(p.total)
-                               or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
+                            or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
-                        CDZ.LogExpense("HdV", p.link, p.name or "Achat HdV", p.qty or 1, spent)
+                        -- Privilégie l’itemID si connu
+                        CDZ.LogExpense("HdV", p.itemID or p.link, p.name or "Achat HdV", p.qty or 1, spent)
                     end
                     CDZ._pendingAH.items[auctionID] = nil
                 else
-                    -- Fallback robuste pour la toute première ligne d'achat
+                    -- Fallback robuste si l’entrée Start/Confirm n’a pas été vue
                     if C_AuctionHouse and C_AuctionHouse.GetAuctionInfoByID then
                         local info = C_AuctionHouse.GetAuctionInfoByID(auctionID)
                         if info then
@@ -145,27 +168,27 @@ function CDZ.Expenses_InstallHooks()
                             if amount and amount > 0 then
                                 local link = info.itemLink
                                 local name = (link and link:match("%[(.-)%]")) or info.itemName or "Achat HdV"
-                                CDZ.LogExpense("HdV", link, name, 1, amount)
+                                local iid  = (info.itemKey and info.itemKey.itemID)
+                                        or (link and GetItemInfoInstant and select(1, GetItemInfoInstant(link)))
+                                CDZ.LogExpense("HdV", iid or link, name, 1, amount)
                             end
                         end
                     end
                 end
 
             elseif event == "COMMODITY_PURCHASE_SUCCEEDED" then
-                -- on consomme l’entrée la plus ancienne
                 local p = table.remove(CDZ._pendingAH.commodities, 1)
                 if p then
                     local spent = tonumber(p.total)
-                               or tonumber(CDZ._pendingAH.lastTotalPrice)
-                               or ((CDZ._pendingAH.lastUnitPrice and p.qty) and (CDZ._pendingAH.lastUnitPrice * p.qty))
-                               or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
+                            or tonumber(CDZ._pendingAH.lastTotalPrice)
+                            or ((CDZ._pendingAH.lastUnitPrice and p.qty) and (CDZ._pendingAH.lastUnitPrice * p.qty))
+                            or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
-                        CDZ.LogExpense("HdV", p.link, p.name or "Achat HdV", p.qty or 1, spent)
+                        CDZ.LogExpense("HdV", p.itemID or p.link, p.name or "Achat HdV", p.qty or 1, spent)
                     end
                 end
 
             elseif event == "COMMODITY_PURCHASE_FAILED" then
-                -- l’achat n’a pas abouti -> on retire l’entrée la plus ancienne
                 table.remove(CDZ._pendingAH.commodities, 1)
 
             elseif event == "COMMODITY_PRICE_UPDATED" then
@@ -189,8 +212,9 @@ function CDZ.Expenses_InstallHooks()
                 p.preMoney = p.preMoney or (GetMoney() or 0)
                 local info = C_AuctionHouse.GetAuctionInfoByID and C_AuctionHouse.GetAuctionInfoByID(auctionID)
                 if info then
-                    p.link = info.itemLink
-                    p.name = info.itemName or (info.itemLink and info.itemLink:match("%[(.-)%]")) or p.name
+                    p.link   = info.itemLink
+                    p.name   = info.itemName or (info.itemLink and info.itemLink:match("%[(.-)%]")) or p.name
+                    p.itemID = p.itemID or (info.itemKey and info.itemKey.itemID) or (info.itemLink and GetItemInfoInstant and select(1, GetItemInfoInstant(info.itemLink)))
                 end
                 CDZ._pendingAH.items[auctionID] = p
             end)
@@ -202,11 +226,12 @@ function CDZ.Expenses_InstallHooks()
                 local p = CDZ._pendingAH.items[auctionID] or { qty = 1 }
                 p.preMoney = p.preMoney or (GetMoney() or 0)
                 p.total = tonumber(expectedPrice) or p.total
-                if (not p.link) or (not p.name) then
+                if (not p.link) or (not p.name) or (not p.itemID) then
                     local info = C_AuctionHouse.GetAuctionInfoByID and C_AuctionHouse.GetAuctionInfoByID(auctionID)
                     if info then
-                        p.link = p.link or info.itemLink
-                        p.name = p.name or info.itemName or (info.itemLink and info.itemLink:match("%[(.-)%]"))
+                        p.link   = p.link   or info.itemLink
+                        p.name   = p.name   or info.itemName or (info.itemLink and info.itemLink:match("%[(.-)%]"))
+                        p.itemID = p.itemID or (info.itemKey and info.itemKey.itemID) or (info.itemLink and GetItemInfoInstant and select(1, GetItemInfoInstant(info.itemLink)))
                     end
                 end
                 CDZ._pendingAH.items[auctionID] = p

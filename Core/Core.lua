@@ -279,13 +279,36 @@ end
 
 
 function CDZ.WipeAllData()
-    ChroniquesDuZephyrDB = { players = {}, history = {}, expenses = { recording=false, list={} } }
+    -- Conserver la version et le maître (utile pour le GM)
+    local keepRev    = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev or 0
+    local keepMaster = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master or nil
+    ChroniquesDuZephyrDB = {
+        players  = {},
+        history  = {},
+        expenses = { recording = false, list = {}, nextId = 1 },
+        lots     = { nextId = 1, list = {} },
+        ids      = { counter=0, byName={}, byId={} },
+        meta     = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
+        requests = {},
+        debug    = {},
+    }
 end
 
 -- Purge complète : DB + préférences UI
 function CDZ.WipeAllSaved()
-    ChroniquesDuZephyrDB = { players = {}, history = {}, expenses = { recording=false, list={} } }
-    ChroniquesDuZephyrUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680 }
+    local keepRev    = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev or 0
+    local keepMaster = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master or nil
+    ChroniquesDuZephyrDB = {
+        players  = {},
+        history  = {},
+        expenses = { recording = false, list = {}, nextId = 1 },
+        lots     = { nextId = 1, list = {} },
+        ids      = { counter=0, byName={}, byId={} },
+        meta     = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
+        requests = {},
+        debug    = {},
+    }
+    ChroniquesDuZephyrUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680, minimap = { hide=false, angle=215 } }
 end
 
 function CDZ.GetRev()
@@ -348,68 +371,48 @@ end
 
 -- Création : fige le contenu depuis une liste d'index ABSOLUS de ChroniquesDuZephyrDB.expenses.list
 -- isMulti = true/false ; sessions = N si multi (>=1)
-function CDZ.Lot_Create(name, isMulti, sessions, expenseAbsIndexes)
+function CDZ.Lot_Create(name, isMulti, sessions, absIdxs)
     _ensureLots()
+    name = name or "Lot"
+    local e = ChroniquesDuZephyrDB.expenses
     local L = ChroniquesDuZephyrDB.lots
-    local E = ChroniquesDuZephyrDB.expenses
-
-    local nm = (name and name ~= "") and name or ("Lot "..tostring(L.nextId or 1))
-    local N  = (isMulti and tonumber(sessions) or 1) or 1
-    if N < 1 then N = 1 end
-
     local id = L.nextId or 1
-    L.nextId = id + 1
 
     local itemIds, total = {}, 0
-    for _, absIndex in ipairs(expenseAbsIndexes or {}) do
-        local it = (E.list or {})[absIndex]
+    for _, abs in ipairs(absIdxs or {}) do
+        local it = e.list[abs]
         if it and not it.lotId then
-            -- Assure un id stable par dépense
-            if not it.id then
-                local nid = E.nextId or 1; E.nextId = nid + 1; it.id = nid
-            end
-            it.lotId = id
-            table.insert(itemIds, it.id)
+            table.insert(itemIds, it.id or 0)
             total = total + (tonumber(it.copper) or 0)
+            it.lotId = id
         end
     end
 
-    local lot = {
-        id = id,
-        name = nm,
-        sessions = N,
-        used = 0,
-        itemIds = itemIds,    -- ids stables d'Expenses
-        totalCopper = total,
-    }
-    table.insert(L.list, 1, lot)
-    if ns.RefreshAll then ns.RefreshAll() end
+    local l = { id = id, name = name, sessions = isMulti and (tonumber(sessions) or 2) or 1, used = 0, totalCopper = total, itemIds = itemIds }
+    table.insert(L.list, l); L.nextId = id + 1
     if ns.Emit then ns.Emit("lots:changed") end
-    return id
+
+    -- ➕ Diffusion GM
+    if CDZ.BroadcastLotCreate and CDZ.IsMaster and CDZ.IsMaster() then CDZ.BroadcastLotCreate(l) end
+    return l
 end
 
 -- Suppression possible uniquement si jamais utilisé (rend les ressources libres)
 function CDZ.Lot_Delete(id)
     _ensureLots()
     local L = ChroniquesDuZephyrDB.lots
-    local E = ChroniquesDuZephyrDB.expenses
-    for idx, lot in ipairs(L.list or {}) do
-        if lot.id == id then
-            if tonumber(lot.used or 0) > 0 then return false end
-            for _, eid in ipairs(lot.itemIds or {}) do
-                for _, it in ipairs(E.list or {}) do
-                    if it.id == eid then it.lotId = nil end
-                end
-            end
-            table.remove(L.list, idx)
-            if ns.RefreshAll then ns.RefreshAll() end
-            if ns.Emit then ns.Emit("lots:changed") end
-            return true
-        end
-
-    end
-    return false
+    local list = L.list or {}
+    local idx = nil
+    for i, l in ipairs(list) do if l.id == id then idx = i break end end
+    if not idx then return false end
+    table.remove(list, idx)
+    for _, it in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do if it.lotId == id then it.lotId = nil end end
+    if ns.Emit then ns.Emit("lots:changed") end
+    -- ➕ Diffusion GM
+    if CDZ.BroadcastLotDelete and CDZ.IsMaster and CDZ.IsMaster() then CDZ.BroadcastLotDelete(id) end
+    return true
 end
+
 
 function CDZ.Lot_ListSelectable()
     _ensureLots()
@@ -429,8 +432,14 @@ function CDZ.Lot_Consume(id)
 end
 
 function CDZ.Lots_ConsumeMany(ids)
-    for _, id in ipairs(ids or {}) do CDZ.Lot_Consume(id) end
+    _ensureLots()
+    local L = ChroniquesDuZephyrDB.lots
+    for _, id in ipairs(ids or {}) do
+        for _, l in ipairs(L.list or {}) do if l.id == id then l.used = (tonumber(l.used or 0) or 0) + 1 end end
+    end
     if ns.Emit then ns.Emit("lots:changed") end
+    -- ➕ Diffusion GM
+    if CDZ.BroadcastLotsConsume and CDZ.IsMaster and CDZ.IsMaster() then CDZ.BroadcastLotsConsume(ids) end
 end
 
 function CDZ.Lots_ComputeGoldTotal(ids)

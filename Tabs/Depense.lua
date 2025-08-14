@@ -17,13 +17,13 @@ local selected = {} -- sélection : clés = index absolu dans expenses.list
 -- Colonnes Ressources libres
 local colsFree = UI.NormalizeColumns({
     { key="sel",    title="",        w=34  },
-    { key="date",   title="Date",    w=200 },
     { key="qty",    title="Qté",     w=60  },
     { key="item",   title="Objet",   min=260, flex=1 },
     { key="source", title="Source",  w=120 },
     { key="amount", title="Montant", w=160 },
     { key="act",    title="Actions", w=120 },
 })
+
 
 -- Colonnes Lots
 local colsLots = UI.NormalizeColumns({
@@ -37,16 +37,34 @@ local colsLots = UI.NormalizeColumns({
 
 -- ===== Utilitaires =====
 local function resolveItemName(it)
+    -- 1) Priorité à l’itemID (résolution paresseuse via cache WoW)
+    if it.itemID then
+        local name = GetItemInfo and select(1, GetItemInfo(it.itemID))
+        if name and name ~= "" then return name end
+    end
+
+    -- 2) Fallback sur le lien si présent
     if it.itemLink and it.itemLink ~= "" then
         local name = GetItemInfo and select(1, GetItemInfo(it.itemLink))
         if name and name ~= "" then return name end
         local bracket = it.itemLink:match("%[(.-)%]"); if bracket and bracket ~= "" then return bracket end
     end
+
+    -- 3) Fallback legacy : nom stocké
     if it.itemName and it.itemName ~= "" then return it.itemName end
+
+    -- 4) Dernier recours : placeholder à partir de l’ID
+    if it.itemID then return "Objet #"..tostring(it.itemID) end
     return ""
 end
 
 local function resolveItemIcon(it)
+    -- 1) Priorité à l’itemID
+    if it.itemID then
+        if GetItemIcon then local tex = GetItemIcon(it.itemID); if tex then return tex end end
+        if GetItemInfoInstant then local _,_,_,_,icon = GetItemInfoInstant(it.itemID); if icon then return icon end end
+    end
+    -- 2) Fallback sur le lien
     if it.itemLink and it.itemLink ~= "" then
         if GetItemIcon then local tex = GetItemIcon(it.itemLink); if tex then return tex end end
         if GetItemInfoInstant then local _,_,_,_,icon = GetItemInfoInstant(it.itemLink); if icon then return icon end end
@@ -58,7 +76,7 @@ end
 local function BuildRowFree(r)
     local f = {}
     f.sel    = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
-    f.date   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    -- (plus de champ date)
     f.qty    = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.source = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.amount = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -95,11 +113,23 @@ local function UpdateRowFree(i, r, f, it)
     f.qty:SetText(tostring(d.qty or 1))
     f.source:SetText(tostring(d.source or ""))
     f.amount:SetText(UI.MoneyFromCopper(tonumber(d.copper) or 0))
-    f.date:SetText(d.ts and date("%d/%m/%Y %H:%M", tonumber(d.ts) or time()) or "")
+    -- date supprimée (ts non utilisé)
+    if f.date then f.date:SetText("") end
 
-    f.itemText:SetText(resolveItemName(d))
-    f.item._link = d.itemLink
-    f.icon:SetTexture(resolveItemIcon(d))
+    -- Résolution stricte depuis l’itemID (réduit la taille des données transportées)
+    local itemID = tonumber(d.itemID or 0) or 0
+    local link = (itemID > 0) and (select(2, GetItemInfo(itemID))) or d.itemLink
+    local name = (link and link:match("%[(.-)%]")) or (GetItemInfo(itemID)) or d.itemName or "Objet inconnu"
+    local icon = (itemID > 0) and (select(5, GetItemInfoInstant(itemID))) or resolveItemIcon(d)
+
+    f.itemText:SetText(name or "")
+    f.icon:SetTexture(icon or "Interface\\ICONS\\INV_Misc_QuestionMark")
+
+    -- pour le tooltip de la cellule “Objet”
+    if f.item then
+        f.item._itemID = itemID
+        f.item._link   = link
+    end
 
     r.btnDelete:SetEnabled(not d.lotId)
     r.btnDelete:SetOnClick(function()
@@ -139,36 +169,67 @@ local function UpdateRowLots(i, r, f, it)
     f.status:SetText((st=="EPU" and "Épuisé") or (st=="EN_COURS" and (used.."/"..N)) or "À utiliser")
     f.count:SetText(tostring(#(lot.itemIds or {})))
     f.total:SetText(UI.MoneyText(totalGold))
-
-    r.btnView:SetOnClick(function()
-        local dlg = UI.CreatePopup({ title = "Contenu du lot : "..(lot.name or ("Lot "..tostring(lot.id))), width = 560, height = 420 })
+    
+        r.btnView:SetOnClick(function()
+        local dlg = UI.CreatePopup({ title = "Contenu du lot : " .. (lot.name or ("Lot " .. tostring(lot.id))), width = 580, height = 440 })
         local cols = UI.NormalizeColumns({
-            { key="qty",  title="Qté", w=60 },
-            { key="item", title="Objet", min=260, flex=1 },
-            { key="src",  title="Source", w=140 },
-            { key="amt",  title="Montant", w=140 },
+            { key="qty",  title="Qté",   w=60,  justify="RIGHT" },
+            { key="item", title="Objet", min=320, flex=1 },
+            { key="src",  title="Source", w=120 },
+            { key="amt",  title="Montant", w=120, justify="RIGHT" },
         })
+
         local lv = UI.ListView(dlg.content, cols, {
             buildRow = function(r2)
                 local ff = {}
                 ff.qty   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                 ff.src   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                 ff.amt   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                ff.item  = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); ff.item:SetJustifyH("LEFT")
+
+                -- cellule “Objet” avec icône + bouton tooltip
+                ff.itemFrame = CreateFrame("Frame", nil, r2); ff.itemFrame:SetHeight(UI.ROW_H)
+                ff.icon  = ff.itemFrame:CreateTexture(nil, "ARTWORK"); ff.icon:SetSize(20,20); ff.icon:SetPoint("LEFT", ff.itemFrame, "LEFT", 0, 0)
+                ff.btn   = CreateFrame("Button", nil, ff.itemFrame); ff.btn:SetPoint("LEFT", ff.icon, "RIGHT", 6, 0); ff.btn:SetSize(240, UI.ROW_H)
+                ff.text  = ff.btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); ff.text:SetJustifyH("LEFT"); ff.text:SetPoint("LEFT", ff.btn, "LEFT", 0, 0)
+
+                ff.btn:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
+                    if self._itemID and self._itemID > 0 then
+                        GameTooltip:SetItemByID(self._itemID)
+                    elseif self._link and self._link ~= "" then
+                        GameTooltip:SetHyperlink(self._link)
+                    else
+                        GameTooltip:Hide()
+                    end
+                end)
+                ff.btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                -- pour LayoutRow
+                ff.item = ff.itemFrame
                 return ff
             end,
             updateRow = function(i2, r2, ff, item)
+                local itemID = tonumber(item.itemID or 0) or 0
+                local link   = (itemID > 0) and (select(2, GetItemInfo(itemID))) or item.itemLink
+                local name   = (link and link:match("%[(.-)%]")) or (GetItemInfo(itemID)) or item.itemName or "Objet inconnu"
+                local icon   = (itemID > 0) and (select(5, GetItemInfoInstant(itemID))) or "Interface\\ICONS\\INV_Misc_QuestionMark"
+
                 ff.qty:SetText(tostring(item.qty or 1))
                 ff.src:SetText(tostring(item.source or ""))
                 ff.amt:SetText(UI.MoneyFromCopper(tonumber(item.copper) or 0))
-                ff.item:SetText(resolveItemName(item))
+
+                ff.text:SetText(name or "")
+                ff.icon:SetTexture(icon or "Interface\\ICONS\\INV_Misc_QuestionMark")
+                ff.btn._itemID = itemID
+                ff.btn._link   = link
             end,
             topOffset = 0,
         })
+
         local rows = {}
         if CDZ.GetExpenseById then
             for _, eid in ipairs(lot.itemIds or {}) do
-                local _, it = CDZ.GetExpenseById(eid); if it then table.insert(rows, it) end
+                local _, it = CDZ.GetExpenseById(eid)
+                if it then table.insert(rows, it) end
             end
         end
         lv:SetData(rows)
