@@ -139,4 +139,4 @@ local function Build(container)
     totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
 end
 
-UI.RegisterTab("Dépense", Build, Refresh, Layout)
+UI.RegisterTab("Ressources", Build, Refresh, Layout)

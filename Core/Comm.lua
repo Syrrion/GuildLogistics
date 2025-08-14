@@ -432,8 +432,27 @@ function CDZ.GM_BroadcastBatch(adjusts, extra)
     CDZ.Comm_Broadcast("TX_BATCH", p)
 end
 
+-- ➕ Forcer la version du GM : incrémente la rev puis diffuse un snapshot complet
+function CDZ.GM_ForceVersionBroadcast()
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local rv = (function()
+        -- incRev() est la source de vérité pour la révision
+        return (function()
+            -- inline incRev delegator (utilise déjà CDZ.IncRev si présent)
+            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+            if CDZ.IncRev then return CDZ.IncRev() end
+            ChroniquesDuZephyrDB.meta.rev = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+            return ChroniquesDuZephyrDB.meta.rev
+        end)()
+    end)()
+    local snap = CDZ._SnapshotExport()
+    CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    return rv
+end
+
 -- Application locale approuvée
 function CDZ.ApplyApprovedAdjust(uid, delta, ts, by)
+
     local name = CDZ.GetNameByUID(uid); if not name or name=="" then return end
     if CDZ.AdjustSolde then CDZ.AdjustSolde(name, safenum(delta,0)) end
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}

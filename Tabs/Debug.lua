@@ -2,7 +2,7 @@ local ADDON, ns = ...
 local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 
-local panel, lv, purgeDBBtn, purgeAllBtn
+local panel, lv, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer
 
 local cols = UI.NormalizeColumns({
     { key="time",  title="Heure",     w=110 },
@@ -69,14 +69,23 @@ local function UpdateRow(i, r, f, it)
 end
 
 local function Layout()
+    local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+    if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end
+
     if UI.AttachButtonsRight then
-        UI.AttachButtonsRight(panel, { purgeDBBtn, purgeAllBtn }, 8, -PAD, -12)
+        -- ➕ Aligner [Forcer version][Purger DB][Purge totale] à droite
+        local buttons = isMaster and { forceSyncBtn, purgeDBBtn, purgeAllBtn } or { purgeDBBtn, purgeAllBtn }
+        UI.AttachButtonsRight(panel, buttons, 8, -PAD, -12)
     else
         purgeAllBtn:ClearAllPoints(); purgeAllBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
         purgeDBBtn:ClearAllPoints();  purgeDBBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
+        if isMaster and forceSyncBtn then
+            forceSyncBtn:ClearAllPoints(); forceSyncBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
+        end
     end
     if lv and lv.Layout then lv:Layout() end
 end
+
 
 -- Regroupe les fragments et décode rv/lm
 local function groupLogs(raw)
@@ -161,7 +170,7 @@ local function Build(container)
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 
-    purgeAllBtn = UI.Button(panel, "Purge totale (DB+UI)", { size="sm", variant="danger", minWidth=180 })
+        purgeAllBtn = UI.Button(panel, "Purge totale (DB+UI)", { size="sm", variant="danger", minWidth=180 })
     purgeAllBtn:SetConfirm("Purger la DB + réinitialiser l’UI puis recharger ?", function()
         if CDZ.WipeAllSaved then
             CDZ.WipeAllSaved()
@@ -172,7 +181,45 @@ local function Build(container)
         ReloadUI()
     end)
 
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 38 })
+    -- Footer dédié aux actions (inclut le bouton GM)
+    footer = UI.CreateFooter(panel)
+
+    -- Reparenter les boutons de purge dans le footer
+    purgeDBBtn:SetParent(footer)
+    purgeAllBtn:SetParent(footer)
+
+    -- Bouton GM : Forcer la version (incrémente rev + diffuse un snapshot complet)
+    forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200, tooltip="Incrémente la version et diffuse un snapshot complet" })
+    forceSyncBtn:SetConfirm("Diffuser et FORCER la version du GM (incrémenter la version) ?", function()
+        if CDZ.GM_ForceVersionBroadcast then
+            local newrv = CDZ.GM_ForceVersionBroadcast()
+            if UIErrorsFrame and newrv then
+                UIErrorsFrame:AddMessage("|cff40ff40[CDZ]|r Version envoyée (rv="..tostring(newrv)..")", 0.4, 1, 0.4)
+            end
+        end
+    end)
+
+    -- Liste : réserver l’espace du footer
+    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 38, bottomAnchor = footer })
+
+
 end
 
-UI.RegisterTab("Debug", Build, Refresh, function() if lv and lv.Layout then lv:Layout() end end)
+-- Mise en page : affiche le bouton GM uniquement si maître, et aligne tout dans le footer
+local function Layout()
+    local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+    if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end
+
+    local buttons = { purgeDBBtn, purgeAllBtn }
+    if isMaster and forceSyncBtn then
+        table.insert(buttons, 1, forceSyncBtn)
+    end
+    if footer and UI.AttachButtonsFooterRight then
+        UI.AttachButtonsFooterRight(footer, buttons, 8, nil)
+    end
+
+    if lv and lv.Layout then lv:Layout() end
+end
+
+UI.RegisterTab("Debug", Build, Refresh, Layout)
+
