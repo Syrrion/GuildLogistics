@@ -37,7 +37,13 @@ function CDZ.LogExpense(source, itemLink, itemName, qty, copper)
     if not (e and e.recording) then return end
     local amount = tonumber(copper) or 0
     if amount <= 0 then return end
+
+    -- ➕ identifiant stable
+    e.nextId = e.nextId or 1
+    local nid = e.nextId; e.nextId = nid + 1
+
     table.insert(e.list, {
+        id = nid,
         ts = time(),
         source = source,           -- "Boutique" | "HdV"
         itemLink = itemLink,       -- peut être nil
@@ -47,6 +53,7 @@ function CDZ.LogExpense(source, itemLink, itemName, qty, copper)
     })
     if ns and ns.RefreshAll then ns.RefreshAll() end
 end
+
 
 function CDZ.GetExpenses()
     EnsureDB()
@@ -63,6 +70,10 @@ function CDZ.DeleteExpense(index)
     if not (e and e.list) then return false end
     local i = tonumber(index)
     if not i or i < 1 or i > #e.list then return false end
+    if e.list[i] and e.list[i].lotId then
+        if UIErrorsFrame then UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Ressource rattachée à un lot : suppression impossible.", 1,0.4,0.4) end
+        return false
+    end
     table.remove(e.list, i)
     if ns and ns.RefreshAll then ns.RefreshAll() end
     return true
@@ -72,9 +83,22 @@ function CDZ.ClearExpenses()
     EnsureDB()
     local e = ChroniquesDuZephyrDB.expenses
     if not e then return false end
-    e.list = {}
+    local keep = {}
+    for _, it in ipairs(e.list or {}) do
+        if it.lotId then table.insert(keep, it) end
+    end
+    e.list = keep
     if ns and ns.RefreshAll then ns.RefreshAll() end
     return true
+end
+
+-- Récupérer une dépense par id stable (retourne l'index courant et l'entrée)
+function CDZ.GetExpenseById(id)
+    EnsureDB()
+    local e = ChroniquesDuZephyrDB.expenses
+    for idx, it in ipairs(e.list or {}) do
+        if it.id == id then return idx, it end
+    end
 end
 
 -- ====== Hooks (Boutique / HdV) ======

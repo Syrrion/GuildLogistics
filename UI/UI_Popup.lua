@@ -239,12 +239,58 @@ function UI.PopupText(title, text)
     return dlg
 end
 
-function UI.PopupRaidDebit(name, deducted, after)
-    local dlg = UI.CreatePopup({ title = "Participation clôturée", width = 520, height = 220 })
-    local body = ("Bon raid !\n\n|cffffd200Montant déduit :|r %s\n|cffffd200Solde restant :|r %s")
-        :format(UI.MoneyText(math.floor(tonumber(deducted) or 0)),
-                UI.MoneyText(math.floor(tonumber(after) or 0)))
-    dlg:SetMessage(body)
+function UI.PopupRaidDebit(name, deducted, after, ctx)
+    -- Hauteur augmentée pour accueillir le détail des composants
+    local dlg = UI.CreatePopup({ title = "Participation clôturée", width = 560, height = 400 })
+    local lines = {}
+    lines[#lines+1] = "Bon raid !\n"
+
+    -- Petit utilitaire local pour nom d'objet
+    local function _itemName(it)
+        if not it then return "" end
+        if it.itemLink and it.itemLink ~= "" then
+            local bracket = it.itemLink:match("%[(.-)%]")
+            if bracket and bracket ~= "" then return bracket end
+        end
+        return it.itemName or ""
+    end
+
+    local L = ctx and (ctx.L or ctx.lots) or nil
+    if type(L) == "table" and #L > 0 then
+        lines[#lines+1] = "|cffffd200Lots utilisés :|r"
+        for i=1,#L do
+            local li = L[i]
+            local nm = li.name or li.n or ("Lot "..tostring(li.id or i))
+            local k  = tonumber(li.k or 0) or 0
+            local N  = tonumber(li.N or 1) or 1
+            local g  = tonumber(li.gold or li.g or 0) or 0
+            local part = (N>1) and ("("..tostring(k).."/"..tostring(N)..")") or ""
+            lines[#lines+1] = (" - %s %s : %s"):format(nm, part, UI.MoneyText(math.floor(g)))
+
+            -- Détail des composants du lot (quantités divisées quand c'est exactement divisible par N)
+            if ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.GetExpenseById then
+                local lot = ns.CDZ.Lot_GetById(li.id)
+                if lot and type(lot.itemIds) == "table" then
+                    for _, eid in ipairs(lot.itemIds) do
+                        local _, it = ns.CDZ.GetExpenseById(eid)
+                        if it then
+                            local qty = tonumber(it.qty or 1) or 1
+                            local showQty = qty
+                            if N > 1 and qty % N == 0 then
+                                showQty = qty / N
+                            end
+                            lines[#lines+1] = ("    • %s × %s"):format(_itemName(it), tostring(showQty))
+                        end
+                    end
+                end
+            end
+        end
+        lines[#lines+1] = ""
+    end
+
+    lines[#lines+1] = ("|cffffd200Montant déduit :|r %s"):format(UI.MoneyText(math.floor(tonumber(deducted) or 0)))
+    lines[#lines+1] = ("|cffffd200Solde restant :|r %s"):format(UI.MoneyText(math.floor(tonumber(after) or 0)))
+    dlg:SetMessage(table.concat(lines, "\n"))
     dlg:SetButtons({ { text = "Fermer", default = true } })
     dlg:Show()
     return dlg

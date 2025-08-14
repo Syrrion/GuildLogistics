@@ -140,6 +140,15 @@ end
 function CDZ.Comm_Broadcast(msgType, tbl) send("GUILD", nil, msgType, encode(tbl or {})) end
 function CDZ.Comm_Whisper(target, msgType, tbl) send("WHISPER", target, msgType, encode(tbl or {})) end
 
+-- ➕ Forcer la version du GM : incrémente la revision puis diffuse un snapshot complet
+function CDZ.GM_ForceVersionBroadcast()
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local newrv = (CDZ.IncRev and CDZ.IncRev()) or 0
+    local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
+    CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    return newrv
+end
+
 -- File séquentielle triée : lm ↑ puis rv ↑ puis ordre d'arrivée
 local function sortQueue()
     table.sort(Q, function(a, b)
@@ -263,12 +272,20 @@ function CDZ._HandleFull(sender, msgType, kv)
         meta.lastModified = ts
         refreshActive()
 
-        if kv.reason == "RAID_CLOSE" and not kv.silent and delta < 0 then
-            local my = UnitName("player")
-            local targetName = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nm
-            if my and targetName and CDZ.NormName and CDZ.NormName(my) == CDZ.NormName(targetName) then
-                local after = (CDZ.GetSolde and CDZ.GetSolde(targetName)) or 0
-                if ns.UI and ns.UI.PopupRaidDebit then ns.UI.PopupRaidDebit(targetName, -delta, after) end
+        -- Décode correctement le mode silencieux (S="1" | silent=true/1/"1")
+        local isSilent = (kv and (
+            kv.S == "1" or kv.silent == true or kv.silent == 1 or kv.silent == "1"
+        )) and true or false
+
+        if kv.reason == "RAID_CLOSE" and not isSilent and delta < 0 then
+            local myShort = UnitName("player")
+            local who = (CDZ.ShortName and CDZ.ShortName(mappedName)) or mappedName
+            if myShort and who and ((CDZ.SamePlayer and CDZ.SamePlayer(myShort, who)) or myShort == who) then
+                local after = (CDZ.GetSolde and CDZ.GetSolde(who)) or 0
+                if ns.UI and ns.UI.PopupRaidDebit then
+                    ns.UI.PopupRaidDebit(who, -delta, after, { L = kv.L })
+                    if ns.Emit then ns.Emit("raid:popup-shown", who) end
+                end
             end
         end
 
@@ -292,11 +309,17 @@ function CDZ._HandleFull(sender, msgType, kv)
                 if mappedName and CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(mappedName) end
                 if CDZ.ApplyApprovedAdjust then CDZ.ApplyApprovedAdjust(uid, delta, ts, by) end
 
+                -- Ici 'isSilent' existe déjà dans le flux d'origine ; on le garde,
+                -- mais on s'assure qu'il est cohérent si la source a envoyé S/silent.
                 if reason == "RAID_CLOSE" and not isSilent and delta < 0 then
-                    local my = UnitName("player")
-                    if my and mappedName and CDZ.NormName and CDZ.NormName(my) == CDZ.NormName(mappedName) then
-                        local after = (CDZ.GetSolde and CDZ.GetSolde(mappedName)) or 0
-                        if ns.UI and ns.UI.PopupRaidDebit then ns.UI.PopupRaidDebit(mappedName, -delta, after) end
+                    local myShort = UnitName("player")
+                    local who = (CDZ.ShortName and CDZ.ShortName(mappedName)) or mappedName
+                    if myShort and who and ((CDZ.SamePlayer and CDZ.SamePlayer(myShort, who)) or myShort == who) then
+                        local after = (CDZ.GetSolde and CDZ.GetSolde(who)) or 0
+                        if ns.UI and ns.UI.PopupRaidDebit then
+                            ns.UI.PopupRaidDebit(who, -delta, after, { L = kv.L })
+                            if ns.Emit then ns.Emit("raid:popup-shown", who) end
+                        end
                     end
                 end
             end
@@ -428,6 +451,7 @@ function CDZ.GM_BroadcastBatch(adjusts, extra)
     if extra and type(extra)=="table" then
         if extra.reason ~= nil then p.R = extra.reason end
         if extra.silent ~= nil then p.S = extra.silent and "1" or "0" end
+        if extra.L      ~= nil then p.L = extra.L end -- ➕ contexte lots compact
     end
     CDZ.Comm_Broadcast("TX_BATCH", p)
 end

@@ -2,9 +2,21 @@ local ADDON, ns = ...
 local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lv, btnToggle, totalFS, btnClearAll, footer
+-- =========================
+-- ======   RESSOURCES  ====
+-- =========================
+-- Vue combinée : Ressources libres (dépenses non rattachées) + Lots (consommables)
 
-local cols = UI.NormalizeColumns({
+local panel, footer
+local topPane, bottomPane
+local lvFree, lvLots
+local btnToggle, totalFS, btnClearAll, btnCreateLot
+
+local selected = {} -- sélection : clés = index absolu dans expenses.list
+
+-- Colonnes Ressources libres
+local colsFree = UI.NormalizeColumns({
+    { key="sel",    title="",        w=34  },
     { key="date",   title="Date",    w=200 },
     { key="qty",    title="Qté",     w=60  },
     { key="item",   title="Objet",   min=260, flex=1 },
@@ -13,12 +25,22 @@ local cols = UI.NormalizeColumns({
     { key="act",    title="Actions", w=120 },
 })
 
+-- Colonnes Lots
+local colsLots = UI.NormalizeColumns({
+    { key="name",   title="Lot",        min=220, flex=1 },
+    { key="type",   title="Type",       w=110 },
+    { key="status", title="Statut",     w=110 },
+    { key="count",  title="#",          w=40  },
+    { key="total",  title="Total",      w=120 },
+    { key="act",    title="Actions",    w=160 },
+})
+
+-- ===== Utilitaires =====
 local function resolveItemName(it)
     if it.itemLink and it.itemLink ~= "" then
-        local name = GetItemInfo(it.itemLink)
+        local name = GetItemInfo and select(1, GetItemInfo(it.itemLink))
         if name and name ~= "" then return name end
-        local bracket = it.itemLink:match("%[(.-)%]")
-        if bracket and bracket ~= "" then return bracket end
+        local bracket = it.itemLink:match("%[(.-)%]"); if bracket and bracket ~= "" then return bracket end
     end
     if it.itemName and it.itemName ~= "" then return it.itemName end
     return ""
@@ -26,19 +48,16 @@ end
 
 local function resolveItemIcon(it)
     if it.itemLink and it.itemLink ~= "" then
-        if GetItemIcon then
-            local tex = GetItemIcon(it.itemLink); if tex then return tex end
-        end
-        if GetItemInfoInstant then
-            local _,_,_,_,iconFileID = GetItemInfoInstant(it.itemLink)
-            if iconFileID then return iconFileID end
-        end
+        if GetItemIcon then local tex = GetItemIcon(it.itemLink); if tex then return tex end end
+        if GetItemInfoInstant then local _,_,_,_,icon = GetItemInfoInstant(it.itemLink); if icon then return icon end end
     end
-    return nil
+    return 134400 -- sac par défaut
 end
 
-local function BuildRow(r)
+-- ====== Ressources libres (ListView) ======
+local function BuildRowFree(r)
     local f = {}
+    f.sel    = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
     f.date   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.qty    = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.source = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -48,14 +67,12 @@ local function BuildRow(r)
     f.itemText = f.item:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.icon     = f.item:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(16, 16)
     f.icon:SetPoint("LEFT", f.item, "LEFT", 0, 0)
-    f.itemText:ClearAllPoints()
-    f.itemText:SetPoint("LEFT",  f.icon, "RIGHT", 3, 0) -- même padding que le NameTag
+    f.itemText:SetPoint("LEFT",  f.icon, "RIGHT", 3, 0)
     f.itemText:SetPoint("RIGHT", f.item, "RIGHT", 0, 0)
     f.itemText:SetJustifyH("LEFT")
-    if f.itemText.SetWordWrap then f.itemText:SetWordWrap(false) end
 
     f.item:SetScript("OnEnter", function(self)
-        if self._link and GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_CURSOR"); GameTooltip:SetHyperlink(self._link); GameTooltip:Show() end
+        if self._link and GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetHyperlink(self._link); GameTooltip:Show() end
     end)
     f.item:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     f.item:SetScript("OnMouseUp", function(self)
@@ -68,75 +85,230 @@ local function BuildRow(r)
     return f
 end
 
-local function UpdateRow(i, r, f, it)
+local function UpdateRowFree(i, r, f, it)
     local d = it.data or it
-    r._dataIndex = it._dbi or i
+    r._abs = it._abs or i
 
-    local nameToShow = resolveItemName(d)
-    f.date:SetText(F.DateTime(d.ts))
+    f.sel:SetChecked(selected[r._abs] or false)
+    f.sel:SetScript("OnClick", function(self) selected[r._abs] = not not self:GetChecked(); if ns.RefreshActive then ns.RefreshActive() end end)
+
+    f.qty:SetText(tostring(d.qty or 1))
+    f.source:SetText(tostring(d.source or ""))
+    f.amount:SetText(UI.MoneyFromCopper(tonumber(d.copper) or 0))
+    f.date:SetText(d.ts and date("%d/%m/%Y %H:%M", tonumber(d.ts) or time()) or "")
+
+    f.itemText:SetText(resolveItemName(d))
     f.item._link = d.itemLink
-    f.itemText:SetText(nameToShow ~= "" and nameToShow or (d.itemName or ""))
-    f.qty:SetText(tonumber(d.qty) or 1)
-    f.source:SetText(d.source or "")
-    f.amount:SetText(UI.MoneyFromCopper(d.copper or 0))
-    local icon = resolveItemIcon(d)
-    if icon then f.icon:SetTexture(icon); f.icon:Show() else f.icon:SetTexture(nil); f.icon:Hide() end
+    f.icon:SetTexture(resolveItemIcon(d))
 
-    r.btnDelete:SetScript("OnClick", function()
-        local idx = r._dataIndex
-        UI.PopupConfirm("Supprimer cette ligne de dépense ?", function()
-            CDZ.DeleteExpense(idx)
-            if ns and ns.RefreshAll then ns.RefreshAll() end
+    r.btnDelete:SetEnabled(not d.lotId)
+    r.btnDelete:SetOnClick(function()
+        UI.PopupConfirm("Supprimer cette ligne de ressource ?", function()
+            CDZ.DeleteExpense(r._abs)
+            if ns.RefreshAll then ns.RefreshAll() end
         end)
     end)
 end
 
-local function Layout()
-    UI.AttachButtonsFooterRight(footer, { btnToggle, btnClearAll })
-    totalFS:ClearAllPoints()
-    totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
-    totalFS:SetWidth(600)
+-- ====== Lots (ListView) ======
+local function BuildRowLots(r)
+    local f = {}
+    f.name   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.type   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.status = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.count  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.total  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
-    lv:Layout()
+    f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
+    r.btnView   = UI.Button(f.act, "Voir", { size="sm", minWidth=70 })
+    r.btnDelete = UI.Button(f.act, "Supprimer", { size="sm", variant="danger", minWidth=90 })
+
+    UI.AttachRowRight(f.act, { r.btnDelete, r.btnView }, 8, -4, { leftPad = 8, align = "center" })
+    return f
+end
+
+local function UpdateRowLots(i, r, f, it)
+    local lot = it.data
+    local st  = CDZ.Lot_Status and CDZ.Lot_Status(lot) or "?"
+    local N   = tonumber(lot.sessions or 1) or 1
+    local used= tonumber(lot.used or 0) or 0
+    local totalGold = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(lot) or 0) * N
+
+    f.name:SetText(lot.name or ("Lot "..tostring(lot.id)))
+    f.type:SetText(N>1 and ("Multi ("..N..")") or "1 session")
+    f.status:SetText((st=="EPU" and "Épuisé") or (st=="EN_COURS" and (used.."/"..N)) or "À utiliser")
+    f.count:SetText(tostring(#(lot.itemIds or {})))
+    f.total:SetText(UI.MoneyText(totalGold))
+
+    r.btnView:SetOnClick(function()
+        local dlg = UI.CreatePopup({ title = "Contenu du lot : "..(lot.name or ("Lot "..tostring(lot.id))), width = 560, height = 420 })
+        local cols = UI.NormalizeColumns({
+            { key="qty",  title="Qté", w=60 },
+            { key="item", title="Objet", min=260, flex=1 },
+            { key="src",  title="Source", w=140 },
+            { key="amt",  title="Montant", w=140 },
+        })
+        local lv = UI.ListView(dlg.content, cols, {
+            buildRow = function(r2)
+                local ff = {}
+                ff.qty   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                ff.src   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                ff.amt   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                ff.item  = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); ff.item:SetJustifyH("LEFT")
+                return ff
+            end,
+            updateRow = function(i2, r2, ff, item)
+                ff.qty:SetText(tostring(item.qty or 1))
+                ff.src:SetText(tostring(item.source or ""))
+                ff.amt:SetText(UI.MoneyFromCopper(tonumber(item.copper) or 0))
+                ff.item:SetText(resolveItemName(item))
+            end,
+            topOffset = 0,
+        })
+        local rows = {}
+        if CDZ.GetExpenseById then
+            for _, eid in ipairs(lot.itemIds or {}) do
+                local _, it = CDZ.GetExpenseById(eid); if it then table.insert(rows, it) end
+            end
+        end
+        lv:SetData(rows)
+        dlg:SetButtons({ { text="Fermer", default=true } })
+        dlg:Show()
+    end)
+
+    local canDelete = (tonumber(lot.used or 0) or 0) == 0
+    r.btnDelete:SetEnabled(canDelete)
+    r.btnDelete:SetOnClick(function()
+        if canDelete and CDZ.Lot_Delete then CDZ.Lot_Delete(lot.id) end
+    end)
+end
+
+-- ====== Layout & Refresh ======
+local function Layout()
+    local pad = PAD
+    local W, H = panel:GetWidth(), panel:GetHeight()
+    local footerH = footer:GetHeight() + 6
+    local availH = H - footerH - (pad*2)
+    local topH   = math.floor(availH * 0.60)
+
+    -- Top (Ressources libres)
+    topPane:ClearAllPoints()
+    topPane:SetPoint("TOPLEFT",  panel, "TOPLEFT",  pad, -pad)
+    topPane:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -pad, -pad)
+    topPane:SetHeight(topH)
+
+    -- Bottom (Lots)
+    bottomPane:ClearAllPoints()
+    bottomPane:SetPoint("TOPLEFT",  topPane, "BOTTOMLEFT", 0, -6)
+    bottomPane:SetPoint("TOPRIGHT", topPane, "BOTTOMRIGHT", 0, -6)
+    bottomPane:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", pad, pad + footerH)
+    bottomPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -pad, pad + footerH)
+
+    if UI.AttachButtonsFooterRight then
+        local buttons = { btnToggle, btnClearAll }
+        if CDZ.IsMaster and CDZ.IsMaster() then table.insert(buttons, 1, btnCreateLot) end
+        UI.AttachButtonsFooterRight(footer, buttons, 8, nil)
+    end
+
+    if lvFree and lvFree.Layout then lvFree:Layout() end
+    if lvLots and lvLots.Layout then lvLots:Layout() end
 end
 
 local function Refresh()
-    local data, total = CDZ.GetExpenses()
-    local items = {}
-    for i = #data, 1, -1 do
-        items[#items+1] = { _dbi = i, data = data[i] }
+    -- Ressources libres = dépenses sans lotId
+    local e = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.expenses) or { list = {} }
+    local items, total = {}, 0
+    for idx, it in ipairs(e.list or {}) do
+        if not it.lotId then
+            total = total + (tonumber(it.copper) or 0)
+            items[#items+1] = { _abs = idx, data = it }
+        end
     end
-    lv:SetData(items)
+    lvFree:SetData(items)
+    totalFS:SetText("|cffffd200Ressources libres :|r " .. UI.MoneyFromCopper(total))
 
-    totalFS:SetText("|cffffd200Total des dépenses enregistrées :|r " .. UI.MoneyFromCopper(total))
-    btnToggle:SetText(CDZ.IsExpensesRecording() and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
+    -- Lots
+    local lots = (CDZ.GetLots and CDZ.GetLots()) or {}
+    local rows = {}; for _, l in ipairs(lots) do rows[#rows+1] = { data = l } end
+    lvLots:SetData(rows)
+
+    -- Boutons
+    btnCreateLot:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    btnClearAll:SetEnabled(true)
+    local on = CDZ.IsExpensesRecording and CDZ.IsExpensesRecording()
+    btnToggle:SetText(on and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
 
     Layout()
 end
 
-
 local function Build(container)
     panel = container
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
-    
-    footer = UI.CreateFooter(panel, 36)
 
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = footer })
+    footer   = UI.CreateFooter(panel, 36)
+    topPane  = CreateFrame("Frame", nil, panel)
+    bottomPane = CreateFrame("Frame", nil, panel)
+
+    lvFree = UI.ListView(topPane, colsFree, { buildRow = BuildRowFree, updateRow = UpdateRowFree, topOffset = 0 })
+    lvLots = UI.ListView(bottomPane, colsLots, { buildRow = BuildRowLots, updateRow = UpdateRowLots, topOffset = 0, bottomAnchor = footer })
+
+    btnCreateLot = UI.Button(footer, "Créer un lot", { size="sm", minWidth=140, tooltip="Sélectionnez des ressources pour créer un lot (contenu figé)." })
+    btnCreateLot:SetOnClick(function()
+        if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+        local idxs = {}
+        for abs, v in pairs(selected) do if v then idxs[#idxs+1] = abs end end
+        table.sort(idxs)
+        if #idxs == 0 then
+            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Aucune ressource sélectionnée.", 1,0.4,0.4)
+            return
+        end
+        local dlg = UI.CreatePopup({ title = "Créer un lot", width = 420, height = 220 })
+        local nameLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nameLabel:SetText("Nom du lot :")
+        local nameInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nameInput:SetSize(240, 28); nameInput:SetAutoFocus(true)
+        local typeLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); typeLabel:SetText("Type :")
+        local cbMulti  = CreateFrame("CheckButton", nil, dlg.content, "UICheckButtonTemplate")
+        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Sessions (si multi) :")
+        local nInput   = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(2)
+
+        nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -6)
+        nameInput:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
+        typeLabel:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -14)
+        cbMulti:SetPoint("LEFT", typeLabel, "RIGHT", 8, 0)
+        cbMulti.text = cbMulti:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); cbMulti.text:SetPoint("LEFT", cbMulti, "RIGHT", 4, 0); cbMulti.text:SetText("Multi-sessions")
+        nLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -14)
+        nInput:SetPoint("LEFT", nLabel, "RIGHT", 8, 0)
+
+        dlg:SetButtons({
+            { text = "Créer", default = true, onClick = function()
+                local nm = nameInput:GetText() or ""
+                local isMulti = cbMulti:GetChecked() and true or false
+                local N = tonumber(nInput:GetText() or "2") or 2
+                if not isMulti then N = 1 end
+                if CDZ.Lot_Create then
+                    CDZ.Lot_Create(nm, isMulti, N, idxs)
+                    selected = {}
+                    if ns.RefreshAll then ns.RefreshAll() end
+                end
+            end },
+            { text = "Annuler", variant = "ghost" },
+        })
+        dlg:Show()
+    end)
 
     btnToggle = UI.Button(footer, "Démarrer l'enregistrement des dépenses", { size="sm", minWidth=260 })
     btnToggle:SetOnClick(function()
-        local on = CDZ.ExpensesToggle()
+        local on = CDZ.ExpensesToggle and CDZ.ExpensesToggle() or CDZ.ExpensesStart()
         btnToggle:SetText(on and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 
-    btnClearAll = UI.Button(footer, "Tout vider", { size="sm", variant="danger", minWidth=140 })
-    btnClearAll:SetConfirm("Vider complètement la liste des dépenses ?", function()
-        CDZ.ClearExpenses()
+    btnClearAll = UI.Button(footer, "Tout vider (libres)", { size="sm", variant="danger", minWidth=160 })
+    btnClearAll:SetConfirm("Vider la liste des ressources libres ? (les lots ne sont pas affectés)", function()
+        if CDZ.ClearExpenses then CDZ.ClearExpenses() end
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 
-    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge"); totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 end
 
 UI.RegisterTab("Ressources", Build, Refresh, Layout)

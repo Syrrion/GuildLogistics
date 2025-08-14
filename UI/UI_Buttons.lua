@@ -103,14 +103,27 @@ function UI.IconButton(parent, iconPath, opts)
     return b
 end
 
+-- ===== Helpers d’alignement robustes (ignorent les nil) =====
+local function _sanitizeButtons(buttons)
+    local out = {}
+    if type(buttons) ~= "table" then return out end
+    for i = 1, #buttons do
+        local b = buttons[i]
+        if b and b.ClearAllPoints and b.SetPoint then
+            out[#out+1] = b
+        end
+    end
+    return out
+end
 
 -- Aligner des boutons à droite d’un anchor (ex: header)
 function UI.AttachButtonsRight(anchor, buttons, gap, dx, dy)
-    if not anchor or not buttons or #buttons==0 then return end
+    local arr = _sanitizeButtons(buttons)
+    if not anchor or #arr == 0 then return end
     gap = gap or 8; dx = dx or 0; dy = dy or 26
     local prev
-    for i = 1, #buttons do
-        local b = buttons[i]
+    for i = 1, #arr do
+        local b = arr[i]
         b:ClearAllPoints()
         if not prev then
             b:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", dx, dy)
@@ -123,13 +136,14 @@ end
 
 -- Alignement à droite pour un footer (centré verticalement)
 function UI.AttachButtonsFooterRight(anchor, buttons, gap, dx)
-    if not anchor or not buttons or #buttons==0 then return end
+    local arr = _sanitizeButtons(buttons)
+    if not anchor or #arr == 0 then return end
     gap = gap or 8
     local pad = (UI.FOOTER_RIGHT_PAD ~= nil) and UI.FOOTER_RIGHT_PAD or 8
     dx = (dx ~= nil) and dx or -pad
     local prev
-    for i = 1, #buttons do
-        local b = buttons[i]
+    for i = 1, #arr do
+        local b = arr[i]
         b:ClearAllPoints()
         if not prev then
             b:SetPoint("RIGHT", anchor, "RIGHT", dx, 0)
@@ -142,7 +156,8 @@ end
 
 -- Barre d’actions alignée à droite, avec marge interne gauche (leftPad) + largeur "naturelle"
 function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
-    if not anchor or not buttons or #buttons==0 then return end
+    local arr = _sanitizeButtons(buttons)
+    if not anchor or #arr == 0 then return end
     gap = gap or 8; dx = dx or -4; opts = opts or {}
     local minScale = opts.minScale or 0.85
     local minGap   = opts.minGap   or 4
@@ -172,8 +187,8 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
 
     local function measureContentWidth()
         local sum = 0
-        for i = 1, #buttons do
-            local b = buttons[i]
+        for i = 1, #arr do
+            local b = arr[i]
             if b.SetScale then b:SetScale(1) end
             sum = sum + (b:GetWidth() or 0)
         end
@@ -181,7 +196,7 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
     end
 
     local function measureTotalWidth(g)
-        return measureContentWidth() + math.max(0, (#buttons-1)) * g
+        return measureContentWidth() + math.max(0, (#arr-1)) * g
     end
 
     local function layoutWithGapAndScale(g, scale, packW)
@@ -191,8 +206,8 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
             pack:SetSize(packW or 1, host:GetHeight() or 1)
             pack:SetPoint("CENTER", host, "CENTER", 0, 0)
         end
-        for i = 1, #buttons do
-            local b = buttons[i]
+        for i = 1, #arr do
+            local b = arr[i]
             b:ClearAllPoints()
             if not prev then
                 if align == "center" then
@@ -218,7 +233,7 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
         -- 1) gap normal
         local total = measureTotalWidth(gap)
         if total <= aw then
-            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0,(#buttons-1))*gap) or nil
+            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0,(#arr-1))*gap) or nil
             layoutWithGapAndScale(gap, 1, packW)
             return
         end
@@ -226,16 +241,16 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
         -- 2) gap minimal
         total = measureTotalWidth(minGap)
         if total <= aw then
-            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0,(#buttons-1))*minGap) or nil
+            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0,(#arr-1))*minGap) or nil
             layoutWithGapAndScale(minGap, 1, packW)
             return
         end
 
         -- 3) scale
         local contentW = measureContentWidth()
-        local need = contentW + minGap * math.max(0, (#buttons-1))
+        local need = contentW + minGap * math.max(0, (#arr-1))
         local scale = math.max(minScale, math.min(1, (aw / math.max(1, need))))
-        local packW = (align=="center") and (contentW*scale + math.max(0,(#buttons-1))*minGap) or nil
+        local packW = (align=="center") and (contentW*scale + math.max(0,(#arr-1))*minGap) or nil
         layoutWithGapAndScale(minGap, scale, packW)
     end
 

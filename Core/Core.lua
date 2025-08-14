@@ -9,7 +9,8 @@ local function EnsureDB()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {
         players = {},
         history = {},
-        expenses = { recording = false, list = {} },
+        expenses = { recording = false, list = {}, nextId = 1 },
+        lots     = { nextId = 1, list = {} },
         ids = { counter=0, byName={}, byId={} },
         meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
         requests = {},
@@ -103,8 +104,22 @@ end
 
 function CDZ.GetSolde(name)
     local p = GetOrCreatePlayer(name)
-    return ((p and p.credit) or 0) - ((p and p.debit) or 0)
+    return (p.credit or 0) - (p.debit or 0)
 end
+
+function CDZ.ShortName(name)
+    if not name or name == "" then return name end
+    local short = name:match("^[^-]+") or name
+    return short
+end
+
+function CDZ.SamePlayer(a, b)
+    if not a or not b then return false end
+    local sa = string.lower(CDZ.ShortName(a))
+    local sb = string.lower(CDZ.ShortName(b))
+    return sa == sb
+end
+
 
 -- Ajuste directement le solde d’un joueur : delta > 0 => ajoute de l’or, delta < 0 => retire de l’or
 function CDZ.AdjustSolde(name, delta)
@@ -284,6 +299,147 @@ function CDZ.IncRev()
     ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     ChroniquesDuZephyrDB.meta.rev = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
     return ChroniquesDuZephyrDB.meta.rev
+end
+
+-- =========================
+-- ======   LOTS      ======
+-- =========================
+-- Lots consommables : 1 session (100%) ou multi-sessions (1/N par clôture).
+-- Le contenu d'un lot est figé à la création. Les éléments proviennent des
+-- "Ressources libres" (dépenses non rattachées).
+
+local function _ensureLots()
+    CDZ._EnsureDB()
+    ChroniquesDuZephyrDB.lots     = ChroniquesDuZephyrDB.lots     or { nextId = 1, list = {} }
+    ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { recording=false, list = {}, nextId = 1 }
+end
+
+function CDZ.GetLots()
+    _ensureLots()
+    return ChroniquesDuZephyrDB.lots.list
+end
+
+function CDZ.Lot_GetById(id)
+    _ensureLots()
+    for _, l in ipairs(ChroniquesDuZephyrDB.lots.list or {}) do
+        if l.id == id then return l end
+    end
+end
+
+function CDZ.Lot_Status(lot)
+    if not lot then return "?" end
+    local used = tonumber(lot.used or 0) or 0
+    local N    = tonumber(lot.sessions or 1) or 1
+    if used <= 0 then return "A_UTILISER" end
+    if used < N  then return "EN_COURS"  end
+    return "EPU"
+end
+
+function CDZ.Lot_IsSelectable(lot)
+    return lot and CDZ.Lot_Status(lot) ~= "EPU"
+end
+
+-- Part par session en OR (arrondi à l’inférieur) — pas de PA/PC.
+function CDZ.Lot_ShareGold(lot)
+    local totalC = tonumber(lot.totalCopper or lot.copper or 0) or 0
+    local N      = tonumber(lot.sessions or 1) or 1
+    return math.floor( math.floor(totalC / 10000) / N )
+end
+
+-- Création : fige le contenu depuis une liste d'index ABSOLUS de ChroniquesDuZephyrDB.expenses.list
+-- isMulti = true/false ; sessions = N si multi (>=1)
+function CDZ.Lot_Create(name, isMulti, sessions, expenseAbsIndexes)
+    _ensureLots()
+    local L = ChroniquesDuZephyrDB.lots
+    local E = ChroniquesDuZephyrDB.expenses
+
+    local nm = (name and name ~= "") and name or ("Lot "..tostring(L.nextId or 1))
+    local N  = (isMulti and tonumber(sessions) or 1) or 1
+    if N < 1 then N = 1 end
+
+    local id = L.nextId or 1
+    L.nextId = id + 1
+
+    local itemIds, total = {}, 0
+    for _, absIndex in ipairs(expenseAbsIndexes or {}) do
+        local it = (E.list or {})[absIndex]
+        if it and not it.lotId then
+            -- Assure un id stable par dépense
+            if not it.id then
+                local nid = E.nextId or 1; E.nextId = nid + 1; it.id = nid
+            end
+            it.lotId = id
+            table.insert(itemIds, it.id)
+            total = total + (tonumber(it.copper) or 0)
+        end
+    end
+
+    local lot = {
+        id = id,
+        name = nm,
+        sessions = N,
+        used = 0,
+        itemIds = itemIds,    -- ids stables d'Expenses
+        totalCopper = total,
+    }
+    table.insert(L.list, 1, lot)
+    if ns.RefreshAll then ns.RefreshAll() end
+    if ns.Emit then ns.Emit("lots:changed") end
+    return id
+end
+
+-- Suppression possible uniquement si jamais utilisé (rend les ressources libres)
+function CDZ.Lot_Delete(id)
+    _ensureLots()
+    local L = ChroniquesDuZephyrDB.lots
+    local E = ChroniquesDuZephyrDB.expenses
+    for idx, lot in ipairs(L.list or {}) do
+        if lot.id == id then
+            if tonumber(lot.used or 0) > 0 then return false end
+            for _, eid in ipairs(lot.itemIds or {}) do
+                for _, it in ipairs(E.list or {}) do
+                    if it.id == eid then it.lotId = nil end
+                end
+            end
+            table.remove(L.list, idx)
+            if ns.RefreshAll then ns.RefreshAll() end
+            if ns.Emit then ns.Emit("lots:changed") end
+            return true
+        end
+
+    end
+    return false
+end
+
+function CDZ.Lot_ListSelectable()
+    _ensureLots()
+    local out = {}
+    for _, l in ipairs(ChroniquesDuZephyrDB.lots.list or {}) do
+        if CDZ.Lot_IsSelectable(l) then out[#out+1] = l end
+    end
+    return out
+end
+
+function CDZ.Lot_Consume(id)
+    _ensureLots()
+    local l = CDZ.Lot_GetById(id); if not l then return false end
+    l.used = (tonumber(l.used) or 0) + 1
+    if ns.RefreshAll then ns.RefreshAll() end
+    return true
+end
+
+function CDZ.Lots_ConsumeMany(ids)
+    for _, id in ipairs(ids or {}) do CDZ.Lot_Consume(id) end
+    if ns.Emit then ns.Emit("lots:changed") end
+end
+
+function CDZ.Lots_ComputeGoldTotal(ids)
+    local g = 0
+    for _, id in ipairs(ids or {}) do
+        local l = CDZ.Lot_GetById(id)
+        if l and CDZ.Lot_IsSelectable(l) then g = g + CDZ.Lot_ShareGold(l) end
+    end
+    return g
 end
 
 -- =========================

@@ -2,8 +2,12 @@ local ADDON, ns = ...
 local CDZ, UI = ns.CDZ, ns.UI
 local PAD = UI.OUTER_PAD
 
+-- Split vertical : joueurs en haut, lots en bas (sélection directe)
 local panel, totalLabel, totalInput, closeBtn, lv, footer, histBtn
+local lotsPane, lotsLV
 local includes = {}
+local chosenLots = {} -- [lotId]=true
+local lotsDirty = true -- flag d’invalidation des lots
 
 local cols = {
     { key="check", title="",      w=34,  justify="LEFT"  },
@@ -12,12 +16,11 @@ local cols = {
     { key="after", title="Après", w=160, justify="LEFT"  },
 }
 
--- Compte robuste : seulement les joueurs encore présents dans la DB
+-- ===== Utilitaires =====
 local function SelectedCount()
-    local players = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players) or {}
     local n = 0
-    for name in pairs(players) do
-        if includes[name] then n = n + 1 end
+    for name, v in pairs(includes) do
+        if v and CDZ.HasPlayer and CDZ.HasPlayer(name) then n = n + 1 end
     end
     return n
 end
@@ -28,14 +31,18 @@ local function ComputePerHead()
     return (selected > 0) and math.floor(total / selected) or 0
 end
 
--- Au build (ou juste après), on écoute la suppression roster pour purger includes
-ns.On("roster:removed", function(name)
-    if includes[name] then
-        includes[name] = nil
-        if lv and lv.Refresh then lv:Refresh() end
-    end
-end)
+-- Gestion des événements : mise à jour des lots
+if ns and ns.On then
+    ns.On("lots:changed", function()
+        lotsDirty = true
+        if panel and panel:IsVisible() then
+            if ns.RefreshActive then ns.RefreshActive() else if Refresh then Refresh() end end
+        end
+    end)
+end
 
+
+-- ===== ListView Joueurs =====
 local function BuildRow(r)
     local f = {}
     f.check = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
@@ -53,31 +60,90 @@ local function UpdateRow(i, r, f, d)
     local solde = (d.credit or 0) - (d.debit or 0)
     f.solde:SetText(UI.MoneyText(solde))
     local per = ComputePerHead()
-    local after = includes[d.name] and (solde - per) or solde
+    local after = solde - per
     f.after:SetText(UI.MoneyText(after))
 end
 
-local function Layout()
-    totalLabel:ClearAllPoints()
-    totalLabel:SetPoint("LEFT", footer, "LEFT", PAD, 0)
-    totalInput:ClearAllPoints()
-    totalInput:SetPoint("LEFT", totalLabel, "RIGHT", 8, 0)
-
-    -- Boutons à droite : [Clôturer][Icône Historique]
-    if UI.AttachButtonsFooterRight then
-        UI.AttachButtonsFooterRight(footer, { closeBtn, histBtn })
-    else
-        closeBtn:ClearAllPoints()
-        closeBtn:SetPoint("RIGHT", footer, "RIGHT", -PAD, 0)
-        if histBtn then histBtn:ClearAllPoints(); histBtn:SetPoint("RIGHT", closeBtn, "LEFT", -8, 0) end
-    end
-
-    lv:Layout()
+-- ===== ListView Lots =====
+local function BuildRowLots(r)
+    local f = {}
+    f.check = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+    f.name  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.frac  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.gold  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    return f
 end
+
+local function UpdateRowLots(i, r, f, it)
+    local l = it.data
+    local used = tonumber(l.used or 0) or 0
+    local N    = tonumber(l.sessions or 1) or 1
+    local nextK = used + 1
+    local shareGold = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
+    f.name:SetText(l.name or ("Lot "..tostring(l.id)))
+    f.frac:SetText(N>1 and (nextK.."/"..N) or "1/1")
+    f.gold:SetText(UI.MoneyText(shareGold))
+    f.check:SetChecked(chosenLots[l.id] and true or false)
+    f.check:SetScript("OnClick", function(self)
+        chosenLots[l.id] = self:GetChecked() and true or nil
+        local total = 0
+        for id,_ in pairs(chosenLots) do
+            local l2 = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
+            if l2 then
+                local g = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l2)) or math.floor( (math.floor((tonumber(l2.totalCopper or 0) or 0)/10000)) / (tonumber(l2.sessions or 1) or 1) )
+                total = total + (g or 0)
+            end
+        end
+        if totalInput and totalInput.SetNumber then totalInput:SetNumber(total) end
+        if ns.RefreshActive then ns.RefreshActive() end
+    end)
+end
+
+-- ===== Layout / Refresh / Build =====
+local function Layout()
+    local pad = PAD
+    if not panel or not panel.GetWidth then return end
+    local W = panel:GetWidth() or 0
+    local H = panel:GetHeight() or 0
+    -- Si le panneau n'est pas encore dimensionné, on sort (évite les W/H=0 et les ancrages foireux)
+    if W <= 0 or H <= 0 then return end
+
+    local footerH = (footer and footer:GetHeight() or 0) + 6
+    local availH = math.max(0, H - footerH - (pad*2))
+    local topH   = math.floor(availH * 0.60)
+
+    -- NE PAS toucher à lv (wrapper). On ne positionne que la zone des lots :
+    lotsPane:ClearAllPoints()
+    lotsPane:SetPoint("TOPLEFT",  panel, "TOPLEFT",  pad, -pad - topH - 6)
+    lotsPane:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -pad, -pad - topH - 6)
+    lotsPane:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", pad, pad + footerH)
+    lotsPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -pad, pad + footerH)
+
+    -- Laisse chaque ListView recalculer sa hauteur en fonction de son anchor/bottomAnchor
+    if lotsLV and lotsLV.Layout then lotsLV:Layout() end
+    if lv and lv.Layout then lv:Layout() end
+end
+
 
 local function Refresh()
     local players = CDZ.GetPlayersArray()
     lv:SetData(players)
+
+    local selectable = (CDZ.Lot_ListSelectable and CDZ.Lot_ListSelectable()) or {}
+    local rows = {}; for _, l in ipairs(selectable) do rows[#rows+1] = { data = l } end
+    lotsLV:SetData(rows)
+
+    -- recalc montant global si des lots sont cochés
+    local total = 0
+    for id,_ in pairs(chosenLots) do
+        local l = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
+        if l then
+            local g = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / (tonumber(l.sessions or 1) or 1) )
+            total = total + (g or 0)
+        end
+    end
+    if totalInput and totalInput.SetNumber then totalInput:SetNumber(total) end
+
     Layout()
 end
 
@@ -94,8 +160,8 @@ local function Build(container)
     totalInput:SetAutoFocus(false); totalInput:SetNumeric(true); totalInput:SetSize(120, 28)
     totalInput:SetScript("OnTextChanged", function() ns.RefreshAll() end)
 
-    -- Icône Historique (ouvre la vue Historique en remplacement du contenu)
-    histBtn = UI.IconButton(footer, "Interface\\Icons\\ability_bossmagistrix_timewarp1", { size=24, tooltip="Voir l’historique des répartitions" })
+    -- Bouton textuel Historique
+    histBtn = UI.Button(footer, "Historique", { size="sm", minWidth=120, tooltip="Voir l’historique des répartitions" })
     histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique") end)
 
     closeBtn = UI.Button(footer, "Clôturer les participations", { size="sm", minWidth=220 })
@@ -104,47 +170,126 @@ local function Build(container)
         local selected = {}
         for name, v in pairs(includes) do if v then table.insert(selected, name) end end
         table.sort(selected)
-
         local per = (#selected > 0) and math.floor(total / #selected) or 0
-        if #selected == 0 then return end
-
-        local dlg = UI.CreatePopup({ title = "Clôture effectuée", width = 560, height = 220 })
-        dlg:SetMessage(("Participants : %d — Débit par joueur : %s.\nQue souhaitez-vous faire ?")
-            :format(#selected, UI.MoneyText(per)))
 
         local function sendBatch(silentFlag)
             local adjusts = {}
             for _, n in ipairs(selected) do
                 adjusts[#adjusts+1] = { name = n, delta = -per }
             end
+            -- Contexte lots compact pour la popup
+            local Lctx = {}
+            for id,_ in pairs(chosenLots) do
+                local l = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
+                if l then
+                    local used = tonumber(l.used or 0) or 0
+                    local N    = tonumber(l.sessions or 1) or 1
+                    local k    = used + 1
+                    local g    = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
+                    Lctx[#Lctx+1] = { id = id, name = l.name or ("Lot "..tostring(id)), k = k, N = N, gold = g }
+                end
+            end
+
             if CDZ.GM_BroadcastBatch then
-                CDZ.GM_BroadcastBatch(adjusts, { reason = "RAID_CLOSE", silent = silentFlag })
+                CDZ.GM_BroadcastBatch(adjusts, { reason = "RAID_CLOSE", silent = silentFlag, L = Lctx })
             else
-                -- Fallback (très vieux clients) : envoi unitaire
+                -- fallback très anciens clients
                 for _, a in ipairs(adjusts) do
                     if CDZ.GM_ApplyAndBroadcastEx then
-                        CDZ.GM_ApplyAndBroadcastEx(a.name, a.delta, { reason = "RAID_CLOSE", silent = silentFlag })
+                        CDZ.GM_ApplyAndBroadcastEx(a.name, a.delta, { reason = "RAID_CLOSE", silent = silentFlag, L = Lctx })
                     elseif CDZ.GM_ApplyAndBroadcast then
                         CDZ.GM_ApplyAndBroadcast(a.name, a.delta)
                     end
                 end
             end
-            CDZ.AddHistorySession(total, per, selected)
-            totalInput:SetText("")
-            if ns.RefreshAll then ns.RefreshAll() end
+
+                        -- Politique popups :
+            -- - Notifier (non silencieux) : essayer le réseau, sinon fallback local après un court délai.
+            -- - Valider (silencieux)     : popup locale immédiate (aucun envoi réseau).
+            local myShort = UnitName("player")  -- nom court
+            local function isMe(name)
+                if CDZ.SamePlayer then return CDZ.SamePlayer(name, myShort) end
+                return (name == myShort)
+            end
+            local amISelected = false
+            for _, n in ipairs(selected) do if isMe(n) then amISelected = true; break end end
+
+            if silentFlag then
+                -- Mode silencieux : aucune popup réseau -> montrer local si je suis débité
+                if amISelected and ns.UI and ns.UI.PopupRaidDebit then
+                    local before = (CDZ.GetSolde and CDZ.GetSolde(myShort)) or 0
+                    local after  = before - per
+                    ns.UI.PopupRaidDebit(myShort, per, after, { L = Lctx })
+                end
+            else
+                -- Mode notifié : pas de popup locale si la popup réseau arrive.
+                if amISelected and C_Timer and C_Timer.After then
+                    local seen = false
+                    if ns and ns.On then
+                        ns.On("raid:popup-shown", function(who)
+                            if isMe(who) then seen = true end
+                        end)
+                    end
+                    C_Timer.After(1.0, function()
+                        if not seen and ns.UI and ns.UI.PopupRaidDebit then
+                            local before = (CDZ.GetSolde and CDZ.GetSolde(myShort)) or 0
+                            local after  = before - per
+                            ns.UI.PopupRaidDebit(myShort, per, after, { L = Lctx })
+                        end
+                    end)
+                end
+            end
+
+            -- Marque les lots comme consommés + journalise
+            if CDZ.Lots_ConsumeMany then
+                local ids = {}
+                for id,_ in pairs(chosenLots) do ids[#ids+1] = id end
+                table.sort(ids); CDZ.Lots_ConsumeMany(ids)
+            end
+            local Hctx = {}
+            for id,_ in pairs(chosenLots) do
+                local l = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
+                if l then Hctx[#Hctx+1] = { id=id, name=l.name, k=(tonumber(l.used or 0) or 0), N=(tonumber(l.sessions or 1) or 1) } end
+            end
+            CDZ.AddHistorySession(total, per, selected, { lots = Hctx })
+            chosenLots = {}
         end
 
+        local dlg = UI.CreatePopup({ title = "Clôturer les participations", width = 520, height = 220 })
+        dlg:SetMessage(("Vous allez débiter %d joueur(s) de %s chacun.")
+            :format(#selected, UI.MoneyText(per)))
         dlg:SetButtons({
             { text = "Notifier les joueurs", default = true, onClick = function() sendBatch(false) end },
-            { text = "Valider", onClick = function() sendBatch(true); if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end end },
+            { text = "Valider", onClick = function() sendBatch(true); if UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end end },
             { text = "Annuler", variant = "ghost" },
         })
-
         dlg:Show()
     end)
 
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = footer })
-end
+    -- Panneau lots (bas)
+    lotsPane = CreateFrame("Frame", nil, panel)
 
+    -- Liste des joueurs (haut) ancrée sur lotsPane en bas
+    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = lotsPane })
+
+    -- Liste des lots (bas)
+    local colsLots = UI.NormalizeColumns({
+        { key="check", title="",   w=34 },
+        { key="name",  title="Lot", min=260, flex=1 },
+        { key="frac",  title="Part", w=80 },
+        { key="gold",  title="Montant", w=120 },
+    })
+    lotsLV = UI.ListView(lotsPane, colsLots, {
+        buildRow = BuildRowLots,
+        updateRow = UpdateRowLots,
+        topOffset = 0,
+        bottomAnchor = footer,
+    })
+
+    -- Alignement footer
+    if UI.AttachButtonsFooterRight then
+        UI.AttachButtonsFooterRight(footer, { closeBtn, histBtn })
+    end
+end
 
 UI.RegisterTab("Raid", Build, Refresh, Layout)
