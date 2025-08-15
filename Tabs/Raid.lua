@@ -230,7 +230,7 @@ local function Build(container)
                             if isMe(who) then seen = true end
                         end)
                     end
-                    C_Timer.After(1.0, function()
+                    ns.Util.After(1.0, function()
                         if not seen and ns.UI and ns.UI.PopupRaidDebit then
                             local before = (CDZ.GetSolde and CDZ.GetSolde(myShort)) or 0
                             local after  = before - per

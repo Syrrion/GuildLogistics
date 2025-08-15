@@ -11,26 +11,14 @@ local Seq      = 0     -- séquence réseau
 -- Limitation d'émission (paquets / seconde)
 local OUT_MAX_PER_SEC = 2
 
--- Utils locaux (fallbacks) pour l'élection HELLO si les versions globales ne sont pas encore définies
-local safenum        = rawget(_G, "safenum") or function(v, d) v = tonumber(v); if v == nil then return d or 0 end; return v end
-local normalizeStr   = rawget(_G, "normalizeStr") or function(s) s = tostring(s or ""):gsub("%s+",""):gsub("'", ""); return string.lower(s) end
-local now            = rawget(_G, "now") or function() return (time and time()) or 0 end
-local playerFullName = rawget(_G, "playerFullName") or function()
-    local n, r = UnitFullName and UnitFullName("player")
-    if n and r then return n.."-"..(r:gsub("%s+",""):gsub("'", "")) end
-    local short = UnitName and UnitName("player") or "?"
-    local realm = GetRealmName and GetRealmName() or ""
-    if realm ~= "" then realm = realm:gsub("%s+",""):gsub("'", ""); return short.."-"..realm end
-    return short
-end
-local masterName     = rawget(_G, "masterName") or function()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    return ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master or nil
-end
-local getRev         = rawget(_G, "getRev") or function()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    return tonumber(ChroniquesDuZephyrDB.meta.rev or 0) or 0
-end
+-- Utils communs (Helper)
+local U = ns.Util or {}
+local safenum        = U.safenum        or _G.safenum
+local normalizeStr   = U.normalizeStr   or _G.normalizeStr
+local now            = U.now            or _G.now or time
+local playerFullName = U.playerFullName or _G.playerFullName
+local masterName     = _G.masterName    or U.masterName
+local getRev         = _G.getRev        or U.getRev
 
 -- ===== Élection HELLO (révision des données) =====
 local HELLO_WAIT_SEC = 5
@@ -319,7 +307,7 @@ local function processNext()
     QBusy = true
     local ok, err = pcall(item.handler, item.sender, item.msgType, item.kv)
     if not ok then geterrorhandler()(err) end
-    C_Timer.After(0, function() QBusy = false; processNext() end)
+    ns.Util.After(0, function() QBusy = false; processNext() end)
 end
 local function enqueueComplete(sender, msgType, kv)
     QCounter = QCounter + 1
@@ -648,7 +636,7 @@ function CDZ._HandleFull(sender, msgType, kv)
             if not sess then
                 sess = { initiator = { player = from, rv = rvi }, responders = {}, startedAt = now(), decided = false }
                 HelloSessions[hid] = sess
-                C_Timer.After(HELLO_WAIT_SEC, function() electWinner(hid) end)
+                ns.Util.After(HELLO_WAIT_SEC, function() electWinner(helloId) end)
             else
                 if not (sess.initiator and sess.initiator.player) then
                     sess.initiator = { player = from, rv = rvi }

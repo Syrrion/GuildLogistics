@@ -1,26 +1,14 @@
 local ADDON, ns = ...
 local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
+local U = ns.Util
 
 local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker
 
 -- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
-local function _normalize(s)
-    s = tostring(s or ""):gsub("%s+",""):gsub("'", "")
-    return string.lower(s)
-end
-
-local function _selfFullName()
-    local name, realm = UnitFullName and UnitFullName("player")
-    if name and realm and realm ~= "" then
-        realm = realm:gsub("%s+",""):gsub("'", "")
-        return name .. "-" .. realm
-    end
-    local n = UnitName and UnitName("player") or "?"
-    local r = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
-    if r ~= "" then r = r:gsub("%s+",""):gsub("'", ""); return n .. "-" .. r end
-    return n
-end
+local _normalize    = U.normalizeStr
+local _selfFullName = U.playerFullName
+local ShortName     = U.ShortName
 
 -- Affichage : constantes & helpers
 local HELLO_WAIT_SEC = 5

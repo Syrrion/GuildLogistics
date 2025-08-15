@@ -39,13 +39,8 @@ f:SetScript("OnEvent", function(self, event, name)
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- re-check quand tout est prêt côté client
         if CDZ.RefreshGuildCache then
-            if C_Timer and C_Timer.After then
-                C_Timer.After(3.0, function() CDZ.RefreshGuildCache() end)
-            else
-                CDZ.RefreshGuildCache()
-            end
+            ns.Util.After(3.0, function() CDZ.RefreshGuildCache() end)
         end
     end
 end)

@@ -6,6 +6,7 @@
 ## SavedVariables: ChroniquesDuZephyrDB, ChroniquesDuZephyrUI
 
 Core/Core.lua
+Core/Helper.lua
 Core/Comm.lua
 Core/Guild.lua
 Core/Expenses.lua

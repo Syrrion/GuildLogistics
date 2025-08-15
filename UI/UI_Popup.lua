@@ -363,10 +363,9 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
             lv:Layout()
             if dlg.FitToContent then dlg:FitToContent() end
         end
-        if C_Timer and C_Timer.After then C_Timer.After(0, ReflowList) end
+        ns.Util.After(0, ReflowList)
         if dlg.HookScript then dlg:HookScript("OnShow", ReflowList) end
         if dlg.content and dlg.content.HookScript then dlg.content:HookScript("OnSizeChanged", ReflowList) end
-
     end
 
     dlg:SetButtons({ { text = "Fermer", default = true } })
