@@ -446,19 +446,23 @@ end
 
 function CDZ.Lots_ConsumeMany(ids)
     _ensureLots()
-    local L = ChroniquesDuZephyrDB.lots
-    for _, id in ipairs(ids or {}) do
-        for _, l in ipairs(L.list or {}) do
-            if l.id == id then
-                local N = tonumber(l.sessions or 1) or 1
-                local u = tonumber(l.used or 0) or 0
-                l.used = math.min(u + 1, N)  -- idem : -1 charge par validation
+    ids = ids or {}
+
+    local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+    if isMaster then
+        -- GM : ne pas appliquer localement pour éviter un double comptage.
+        -- La diffusion réappliquera pour tous (y compris GM) via le handler LOT_CONSUME.
+        if CDZ.BroadcastLotsConsume then CDZ.BroadcastLotsConsume(ids) end
+    else
+        -- Client : applique localement sans diffusion.
+        local L = ChroniquesDuZephyrDB.lots
+        for _, id in ipairs(ids) do
+            for _, l in ipairs(L.list or {}) do
+                if l.id == id then l.used = (tonumber(l.used or 0) or 0) + 1 end
             end
         end
+        if ns.Emit then ns.Emit("lots:changed") end
     end
-    if ns.Emit then ns.Emit("lots:changed") end
-    -- ➕ Diffusion GM
-    if CDZ.BroadcastLotsConsume and CDZ.IsMaster and CDZ.IsMaster() then CDZ.BroadcastLotsConsume(ids) end
 end
 
 function CDZ.Lots_ComputeGoldTotal(ids)

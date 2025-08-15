@@ -246,14 +246,12 @@ local function Build(container)
             table.sort(ids)
 
             if CDZ.Lots_ConsumeMany then
-                CDZ.Lots_ConsumeMany(ids)   -- consommation locale
+                CDZ.Lots_ConsumeMany(ids)   -- consommation locale (inclut la diffusion côté GM)
             else
                 -- fallback très ancien Core
                 if CDZ.Lot_Consume then for _, id in ipairs(ids) do CDZ.Lot_Consume(id) end end
             end
-
-            -- Synchronisation réseau explicite de l’utilisation des lots
-            if CDZ.BroadcastLotsConsume then CDZ.BroadcastLotsConsume(ids) end
+            -- (diffusion retirée : déjà gérée dans Lots_ConsumeMany pour le GM)
 
             local Hctx = {}
             for id,_ in pairs(chosenLots) do
