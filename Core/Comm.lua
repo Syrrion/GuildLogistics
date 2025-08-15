@@ -32,15 +32,31 @@ local getRev         = rawget(_G, "getRev") or function()
     return tonumber(ChroniquesDuZephyrDB.meta.rev or 0) or 0
 end
 
-
 -- ===== Élection HELLO (révision des données) =====
 local HELLO_WAIT_SEC = 5
 local HelloSessions = {}  -- [helloId] = { initiator={player,rv}, responders={[normName]={player,rv}}, startedAt=ts, decided=bool }
+
+-- Anti doublon FULL + suivi "HELLO" pour l'UI
+local ELECTION_COOLDOWN_SEC = 8
+local LastFullSentAt  = 0
+local LastFullSeenAt  = 0
+local LastFullSeenRv  = -1
+local HelloElect      = {} -- [helloId] = { startedAt, endsAt, winner=nil, decided=false }
 
 local function isMasterName(n)
     local m = masterName()
     if not m or m=="" or not n or n=="" then return false end
     return normalizeStr(m) == normalizeStr(n)
+end
+
+local function isElectionActive()
+    local t = now()
+    for _, sess in pairs(HelloSessions) do
+        if not sess.decided and (t - (sess.startedAt or t)) < HELLO_WAIT_SEC then
+            return true
+        end
+    end
+    return false
 end
 
 local function electWinner(helloId)
@@ -78,9 +94,25 @@ local function electWinner(helloId)
         winner = pool[1]
     end
 
+    -- Mémoriser pour l'UI (compte à rebours / élu)
+    HelloElect[helloId] = HelloElect[helloId] or {}
+    HelloElect[helloId].startedAt = HelloElect[helloId].startedAt or (sess.startedAt or now())
+    HelloElect[helloId].endsAt    = HelloElect[helloId].endsAt    or (HelloElect[helloId].startedAt + HELLO_WAIT_SEC)
+    HelloElect[helloId].winner    = winner
+    HelloElect[helloId].decided   = true
+    if ns.Emit then ns.Emit("debug:changed") end
+
+    -- Envoi FULL si je suis l'élu, avec anti-doublon/cooldown et prise en compte d'un FULL déjà vu
     if normalizeStr(playerFullName()) == normalizeStr(winner) then
-        local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
-        CDZ.Comm_Broadcast("SYNC_FULL", snap)
+        local t = now()
+        local myrv = safenum(getRev(), 0)
+        local tooSoon = (t - (LastFullSentAt or 0)) < ELECTION_COOLDOWN_SEC
+        local anotherJustSent = (LastFullSeenRv or -1) >= myrv and (t - (LastFullSeenAt or 0)) < ELECTION_COOLDOWN_SEC
+        if not (tooSoon or anotherJustSent) then
+            local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
+            CDZ.Comm_Broadcast("SYNC_FULL", snap)
+            LastFullSentAt = t
+        end
     end
 
     HelloSessions[helloId] = nil
@@ -163,6 +195,7 @@ end
 -- Exposés pour l’écran Debug
 function CDZ._decodeForDebug(s) local ok, kv = pcall(decode, s); if ok then return kv end end
 function CDZ._unsafeDecode(s)  return decode(s or "") end
+function CDZ._GetHelloElect(hid) return HelloElect and HelloElect[hid] or nil end
 
 -- ===== Identité / GM =====
 local function NormalizeFull(name, realm)
@@ -612,6 +645,15 @@ function CDZ._HandleFull(sender, msgType, kv)
                     sess.initiator = { player = from, rv = rvi }
                 end
             end
+
+            -- Pour l'UI Debug : démarrer le compte à rebours
+            HelloElect[hid] = HelloElect[hid] or {}
+            HelloElect[hid].startedAt = sess.startedAt
+            HelloElect[hid].endsAt    = (sess.startedAt or now()) + HELLO_WAIT_SEC
+            HelloElect[hid].decided   = false
+            HelloElect[hid].winner    = nil
+            if ns.Emit then ns.Emit("debug:changed") end
+
             -- Tous sauf l’initiateur répondent par HELLO_BACK avec leur révision
             if normalizeStr(from) ~= normalizeStr(playerFullName()) then
                 CDZ.Comm_Broadcast("HELLO_BACK", { helloId = hid, rv = getRev(), player = playerFullName() })
@@ -639,16 +681,22 @@ function CDZ._HandleFull(sender, msgType, kv)
             CDZ._SnapshotApply(kv)
             refreshActive()
         end
-        -- Répondre par FULL si on est plus à jour
-        local cli_rv, cli_lm = safenum(kv.rv, -1), safenum(kv.lm, -1)
-        local myrv2 = safenum(meta.rev, 0)
-        local mylm2 = safenum(meta.lastModified, 0)
-        if (cli_rv >= 0 and myrv2 > cli_rv) or (cli_rv < 0 and mylm2 > cli_lm) then
-            local snap = CDZ._SnapshotExport()
-            CDZ.Comm_Whisper(sender, "SYNC_FULL", snap)
+        -- Répondre par FULL si on est plus à jour, sauf si une élection HELLO est active
+        if not isElectionActive() then
+            local cli_rv, cli_lm = safenum(kv.rv, -1), safenum(kv.lm, -1)
+            local myrv2 = safenum(meta.rev, 0)
+            local mylm2 = safenum(meta.lastModified, 0)
+            if (cli_rv >= 0 and myrv2 > cli_rv) or (cli_rv < 0 and mylm2 > cli_lm) then
+                local snap = CDZ._SnapshotExport()
+                CDZ.Comm_Whisper(sender, "SYNC_FULL", snap)
+            end
         end
 
     elseif msgType == "SYNC_FULL" then
+        -- Toujours mémoriser la vue du FULL (anti-doublon)
+        LastFullSeenAt = now()
+        LastFullSeenRv = safenum(kv.rv, -1)
+
         if not shouldApply() then return end
         CDZ._SnapshotApply(kv)
         refreshActive()
@@ -935,6 +983,10 @@ function CDZ.Sync_RequestHello()
         startedAt  = now(),
         decided    = false,
     }
+    -- Init affichage Debug
+    HelloElect[helloId] = { startedAt = now(), endsAt = now() + HELLO_WAIT_SEC, winner = nil, decided = false }
+    if ns.Emit then ns.Emit("debug:changed") end
+
     C_Timer.After(HELLO_WAIT_SEC, function() electWinner(helloId) end)
 
     CDZ.Comm_Broadcast("HELLO", { helloId = helloId, rv = rv, player = me })

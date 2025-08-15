@@ -2,7 +2,7 @@ local ADDON, ns = ...
 local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 
-local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer
+local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker
 
 -- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
 local function _normalize(s)
@@ -22,20 +22,26 @@ local function _selfFullName()
     return n
 end
 
+-- Affichage : constantes & helpers
+local HELLO_WAIT_SEC = 5
+local function ShortName(full)
+    full = tostring(full or "")
+    local n = full:match("^(.-)%-.+$")
+    return n or full
+end
 
 local cols = UI.NormalizeColumns({
-    { key="time",  title="Heure",     w=110 },
-    { key="dir",   title="Sens",      w=70  },
-    { key="state", title="État",      w=100 },
-    { key="type",  title="Type",      w=160 },
-    { key="rv",    title="Ver.",      w=60  }, 
-    { key="size",  title="Taille",    w=80  },
-    { key="chan",  title="Canal",     w=80  },
-    { key="target",title="Cible",     min=200, flex=1 },
-    { key="frag",  title="Frag",      w=70  },
-    { key="view",  title=" ",         w=70  },
+    { key="time",  title="Heure",       w=110 },
+    { key="dir",   title="Sens",        w=70  },
+    { key="state", title="État",        w=160 },
+    { key="type",  title="Type",        w=160 },
+    { key="rv",    title="Ver.",        w=60  }, 
+    { key="size",  title="Taille",      w=80  },
+    { key="chan",  title="Canal",       w=80  },
+    { key="target",title="Émetteur",    min=200, flex=1 },
+    { key="frag",  title="Frag",        w=70  },
+    { key="view",  title=" ",           w=70  },
 })
-
 
 local function BuildRow(r)
     local f = {}
@@ -51,7 +57,6 @@ local function BuildRow(r)
     f.view   = UI.Button(r, "Voir", { size="xs", minWidth=60 })
     return f
 end
-
 
 local function UpdateRow(i, r, f, it)
     f.time:SetText(date("%H:%M:%S", it.ts or time()))
@@ -70,14 +75,34 @@ local function UpdateRow(i, r, f, it)
             f.state:SetText("|cff7dff9aTransmis|r")
         end
     else
-        f.state:SetText("") -- côté réception on laisse vide comme avant
+        -- État côté réception : HELLO => compte à rebours puis élu
+        local st = ""
+        if it.type == "HELLO" then
+            local hid = it.kv and it.kv.helloId
+            if hid and ns.CDZ and ns.CDZ._GetHelloElect then
+                local info = ns.CDZ._GetHelloElect(hid)
+                local nowt = time()
+                local started = (info and info.startedAt) or (it.tsFirst or nowt)
+                local endsAt  = (info and info.endsAt)    or (started + HELLO_WAIT_SEC)
+                if info and info.winner then
+                    st = ("Élu : %s"):format(ShortName(info.winner))
+                else
+                    local remain = math.max(0, math.ceil(endsAt - nowt))
+                    st = ("Élection : %ds"):format(remain)
+                end
+            end
+        end
+        f.state:SetText(st)
     end
 
     f.type:SetText(it.type or "")
-    f.rv:SetText(it.rv and tostring(it.rv) or "")  -- <= affiche la version
+    f.rv:SetText(it.rv and tostring(it.rv) or "")  -- <= affiche la révision
     f.size:SetText(tostring(it.size or 0))
     f.chan:SetText(it.chan or "")
-    f.target:SetText(it.target or "")
+
+    -- Colonne "Émetteur" : côté RECU = sender (sans royaume), côté ENVOI = moi (sans royaume)
+    local emitter = (it.dir == "recv") and ShortName(it.target or "") or ShortName(_selfFullName())
+    f.target:SetText(emitter)
 
     local progress = (it.dir == "send") and sent or got
     f.frag:SetText(tostring(progress) .. "/" .. tostring(total))
@@ -99,13 +124,12 @@ local function UpdateRow(i, r, f, it)
         end
         table.sort(decoded)
 
-        local head = ("type=%s  rv=%s  lm=%s  chan=%s  target=%s")
-            :format(it.type or "?", tostring(kv.rv or it.rv or "?"), tostring(kv.lm or "?"), it.chan or "", it.target or "")
+        local head = ("type=%s  rv=%s  lm=%s  chan=%s  emetteur=%s")
+            :format(it.type or "?", tostring(kv.rv or it.rv or "?"), tostring(kv.lm or "?"), it.chan or "", emitter or "")
         local body = (#decoded>0) and table.concat(decoded, "\n") or "(payload vide)"
         local raw  = it.fullRaw or it.fullPayload or "(brut indisponible)"
         ns.UI.PopupText(title, head.."\n\n"..body.."\n\n— BRUT —\n"..raw)
     end)
-
 end
 
 -- Regroupe les fragments et décode rv/lm
@@ -178,7 +202,6 @@ local function groupLogs(raw)
         out[#out+1] = g
     end
 
-
     -- Tri : par Heure (décroissant), puis par Version (décroissant), puis par Sens (RECU avant ENVOI)
     table.sort(out, function(a, b)
         local ad = tonumber(a.lm) or tonumber(a.ts) or 0
@@ -189,7 +212,7 @@ local function groupLogs(raw)
         local brv = tonumber(b.rv) or -math.huge
         if arv ~= brv then return arv > brv end
 
-        -- Sens : RECU doit précéder ENVOI (inversion de l'ordre précédent)
+        -- Sens : RECU doit précéder ENVOI
         local adir = (a.dir == "send") and 1 or 0
         local bdir = (b.dir == "send") and 1 or 0
         if adir ~= bdir then return adir < bdir end
