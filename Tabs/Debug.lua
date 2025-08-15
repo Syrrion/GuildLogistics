@@ -2,7 +2,25 @@ local ADDON, ns = ...
 local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 
-local panel, lv, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer
+local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer
+
+-- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
+local function _normalize(s)
+    s = tostring(s or ""):gsub("%s+",""):gsub("'", "")
+    return string.lower(s)
+end
+
+local function _selfFullName()
+    local name, realm = UnitFullName and UnitFullName("player")
+    if name and realm and realm ~= "" then
+        realm = realm:gsub("%s+",""):gsub("'", "")
+        return name .. "-" .. realm
+    end
+    local n = UnitName and UnitName("player") or "?"
+    local r = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    if r ~= "" then r = r:gsub("%s+",""):gsub("'", ""); return n .. "-" .. r end
+    return n
+end
 
 
 local cols = UI.NormalizeColumns({
@@ -183,12 +201,32 @@ local function groupLogs(raw)
     return out
 end
 
-local function Refresh()
-    local data = {}
-    for _, e in ipairs(CDZ.GetDebugLogs()) do data[#data+1] = e end
-    local grouped = groupLogs(data)
-    lv:SetData(grouped)
-    if lv and lv.Layout then lv:Layout() end
+function Refresh()
+    local selfNorm = _normalize(_selfFullName())
+    local recvData, sendData = {}, {}
+
+    -- Split RECU / ENVOI + filtre UI côté RECU (on garde le traitement logique inchangé ailleurs)
+    for _, e in ipairs(CDZ.GetDebugLogs()) do
+        if e.dir == "recv" then
+            if not (_normalize(e.target) == selfNorm) then
+                recvData[#recvData+1] = e
+            end
+        elseif e.dir == "send" then
+            sendData[#sendData+1] = e
+        else
+            -- sécurité : si dir inconnu, on place en haut
+            recvData[#recvData+1] = e
+        end
+    end
+
+    local groupedRecv = groupLogs(recvData)
+    local groupedSend = groupLogs(sendData)
+
+    if lvRecv then lvRecv:SetData(groupedRecv) end
+    if lvSend then lvSend:SetData(groupedSend) end
+
+    if lvRecv and lvRecv.Layout then lvRecv:Layout() end
+    if lvSend and lvSend.Layout then lvSend:Layout() end
 end
 
 local function Build(container)
@@ -229,7 +267,47 @@ local function Build(container)
     purgeDBBtn:SetParent(footer)
     purgeAllBtn:SetParent(footer)
 
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 38, bottomAnchor = footer })
+    -- === Deux zones empilées : RECU (haut) / ENVOI (bas) ===
+    recvArea = CreateFrame("Frame", nil, panel)
+    sendArea = CreateFrame("Frame", nil, panel)
+
+    -- Création des deux ListView indépendantes
+    lvRecv = UI.ListView(recvArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
+    lvSend = UI.ListView(sendArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
+
+    -- Positionnement responsive (50/50 de la hauteur utile)
+    local function PositionAreas()
+        local pH      = panel:GetHeight() or 600
+        local footerH = footer:GetHeight() or 36
+        local topOff  = 38                   -- marge supérieure commune
+        local gap     = 8                    -- espace entre les deux listes
+        local usable  = math.max(0, pH - footerH - topOff)
+        local half    = math.floor((usable - gap) / 2)
+
+        -- Zone RECU : du haut jusqu'au milieu
+        recvArea:ClearAllPoints()
+        recvArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -topOff)
+        recvArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -topOff)
+        recvArea:SetPoint("BOTTOMLEFT", panel, "TOPLEFT",  0, -(topOff + half))
+        recvArea:SetPoint("BOTTOMRIGHT", panel, "TOPRIGHT", 0, -(topOff + half))
+
+        -- Zone ENVOI : du milieu jusqu'au footer
+        sendArea:ClearAllPoints()
+        sendArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + half + gap))
+        sendArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + half + gap))
+        sendArea:SetPoint("BOTTOMLEFT", footer, "TOPLEFT",  0, 0)
+        sendArea:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 0)
+
+        -- Relayout internes
+        if lvRecv and lvRecv.Layout then lvRecv:Layout() end
+        if lvSend and lvSend.Layout then lvSend:Layout() end
+    end
+
+    -- Calcul initial + relayout sur resize du panneau
+    PositionAreas()
+    if panel and panel.HookScript then
+        panel:HookScript("OnSizeChanged", PositionAreas)
+    end
 end
 
 -- ➕ Layout avec footer et visibilité GM
@@ -247,12 +325,13 @@ end
 -- ➕ Rafraîchissement temps réel lorsque des logs arrivent / changent d'état
 if ns and ns.On then
     ns.On("debug:changed", function()
-        -- Rafraîchit toujours le tri dès qu'un nouvel élément arrive (si la liste existe)
-        if lv then
+        -- Rafraîchit toujours le tri dès qu'un nouvel élément arrive
+        if lvRecv or lvSend then
             Refresh()
         end
     end)
 end
+
 
 UI.RegisterTab("Debug", Build, Refresh, Layout)
 

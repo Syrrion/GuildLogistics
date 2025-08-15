@@ -11,6 +11,82 @@ local Seq      = 0     -- séquence réseau
 -- Limitation d'émission (paquets / seconde)
 local OUT_MAX_PER_SEC = 2
 
+-- Utils locaux (fallbacks) pour l'élection HELLO si les versions globales ne sont pas encore définies
+local safenum        = rawget(_G, "safenum") or function(v, d) v = tonumber(v); if v == nil then return d or 0 end; return v end
+local normalizeStr   = rawget(_G, "normalizeStr") or function(s) s = tostring(s or ""):gsub("%s+",""):gsub("'", ""); return string.lower(s) end
+local now            = rawget(_G, "now") or function() return (time and time()) or 0 end
+local playerFullName = rawget(_G, "playerFullName") or function()
+    local n, r = UnitFullName and UnitFullName("player")
+    if n and r then return n.."-"..(r:gsub("%s+",""):gsub("'", "")) end
+    local short = UnitName and UnitName("player") or "?"
+    local realm = GetRealmName and GetRealmName() or ""
+    if realm ~= "" then realm = realm:gsub("%s+",""):gsub("'", ""); return short.."-"..realm end
+    return short
+end
+local masterName     = rawget(_G, "masterName") or function()
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    return ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master or nil
+end
+local getRev         = rawget(_G, "getRev") or function()
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    return tonumber(ChroniquesDuZephyrDB.meta.rev or 0) or 0
+end
+
+
+-- ===== Élection HELLO (révision des données) =====
+local HELLO_WAIT_SEC = 5
+local HelloSessions = {}  -- [helloId] = { initiator={player,rv}, responders={[normName]={player,rv}}, startedAt=ts, decided=bool }
+
+local function isMasterName(n)
+    local m = masterName()
+    if not m or m=="" or not n or n=="" then return false end
+    return normalizeStr(m) == normalizeStr(n)
+end
+
+local function electWinner(helloId)
+    local sess = HelloSessions[helloId]
+    if not sess or sess.decided then return end
+    sess.decided = true
+
+    -- Ensemble des candidats = initiateur + tous les répondants
+    local candidates = {}
+    if sess.initiator and sess.initiator.player then
+        candidates[sess.initiator.player] = safenum(sess.initiator.rv, -1)
+    end
+    for _, rec in pairs(sess.responders or {}) do
+        candidates[rec.player] = safenum(rec.rv, -1)
+    end
+    -- Trouver la révision max
+    local rv_max = -1
+    for _, v in pairs(candidates) do if v > rv_max then rv_max = v end end
+    if rv_max < 0 then HelloSessions[helloId] = nil; return end
+
+    -- Pool de départ : si des répondants ont rv_max, on ne considère qu’eux ; sinon on prend tous les ex æquo (incluant l’initiateur)
+    local pool = {}
+    for _, rec in pairs(sess.responders or {}) do
+        if safenum(rec.rv, -1) == rv_max then pool[#pool+1] = rec.player end
+    end
+    if #pool == 0 then
+        for name, rv in pairs(candidates) do if rv == rv_max then pool[#pool+1] = name end end
+    end
+
+    -- Priorité au "maître" s’il est dans les ex æquo, sinon 1er par ordre alphabétique (insensible à la casse)
+    local winner = nil
+    for _, name in ipairs(pool) do if isMasterName(name) then winner = name; break end end
+    if not winner then
+        table.sort(pool, function(a,b) return normalizeStr(a) < normalizeStr(b) end)
+        winner = pool[1]
+    end
+
+    if normalizeStr(playerFullName()) == normalizeStr(winner) then
+        local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
+        CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    end
+
+    HelloSessions[helloId] = nil
+end
+
+
 -- File d'envoi temporisée
 local OutQ      = {}
 local OutTicker = nil
@@ -171,14 +247,16 @@ end
 function CDZ.Comm_Broadcast(msgType, tbl)     send("GUILD",  nil, msgType, encode(tbl or {})) end
 function CDZ.Comm_Whisper(target, msgType, t) send("WHISPER",target, msgType, encode(t or {})) end
 
--- Forcer la version du GM : incrémente la révision puis diffuse un snapshot complet
+-- Forcer la version du GM : incrémente la révision puis avertit (léger) -> sync en WHISPER si besoin
 function CDZ.GM_ForceVersionBroadcast()
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     local newrv = (CDZ.IncRev and CDZ.IncRev()) or incRev()
-    local snap  = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
-    CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    local lm = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.lastModified) or now()
+    -- message minimal : pas de P/I/E/L
+    CDZ.Comm_Broadcast("SYNC_POKE", { rv = newrv, lm = lm })
     return newrv
 end
+
 
 -- ===== File de traitement (ordre : lm ↑ puis rv ↑ puis arrivée) =====
 local function sortQueue()
@@ -519,6 +597,41 @@ function CDZ._HandleFull(sender, msgType, kv)
         refreshActive()
 
     -- ======= Handshake & Snapshots =======
+    elseif msgType == "HELLO" then
+        local hid   = kv.helloId or ""
+        local from  = kv.player or sender
+        local rvi   = safenum(kv.rv, -1)
+        if hid ~= "" then
+            local sess = HelloSessions[hid]
+            if not sess then
+                sess = { initiator = { player = from, rv = rvi }, responders = {}, startedAt = now(), decided = false }
+                HelloSessions[hid] = sess
+                C_Timer.After(HELLO_WAIT_SEC, function() electWinner(hid) end)
+            else
+                if not (sess.initiator and sess.initiator.player) then
+                    sess.initiator = { player = from, rv = rvi }
+                end
+            end
+            -- Tous sauf l’initiateur répondent par HELLO_BACK avec leur révision
+            if normalizeStr(from) ~= normalizeStr(playerFullName()) then
+                CDZ.Comm_Broadcast("HELLO_BACK", { helloId = hid, rv = getRev(), player = playerFullName() })
+            end
+        end
+
+    elseif msgType == "HELLO_BACK" then
+        local hid  = kv.helloId or ""
+        local from = kv.player or sender
+        local rvr  = safenum(kv.rv, -1)
+        if hid ~= "" and from and from ~= "" then
+            local sess = HelloSessions[hid]
+            if not sess then
+                sess = { initiator = nil, responders = {}, startedAt = now(), decided = false }
+                HelloSessions[hid] = sess
+                C_Timer.After(HELLO_WAIT_SEC, function() electWinner(hid) end)
+            end
+            sess.responders = sess.responders or {}
+            sess.responders[normalizeStr(from)] = { player = from, rv = rvr }
+        end
 
     elseif msgType == "SYNC_HELLO" then
         -- Application immédiate si plus récent (roster/ids + E/L si fournis)
@@ -811,11 +924,22 @@ end
 
 -- ===== Handshake / Init =====
 function CDZ.Sync_RequestHello()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    local snap = CDZ._SnapshotExport(); snap.who = UnitName("player")
-    local m = (ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master) or nil
-    if m and m ~= "" then CDZ.Comm_Whisper(m, "SYNC_HELLO", snap) else CDZ.Comm_Broadcast("SYNC_HELLO", snap) end
+    -- Émet un HELLO léger avec uniquement la révision des données ; l’élection décidera qui envoie un FULL
+    local helloId = string.format("%d.%03d", time(), math.random(0, 999))
+    local me      = playerFullName()
+    local rv      = getRev()
+
+    HelloSessions[helloId] = {
+        initiator  = { player = me, rv = rv },
+        responders = {},
+        startedAt  = now(),
+        decided    = false,
+    }
+    C_Timer.After(HELLO_WAIT_SEC, function() electWinner(helloId) end)
+
+    CDZ.Comm_Broadcast("HELLO", { helloId = helloId, rv = rv, player = me })
 end
+
 
 function CDZ.Comm_Init()
     C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
