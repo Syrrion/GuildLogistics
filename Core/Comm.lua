@@ -20,7 +20,7 @@ local LD do
     LD = lib or _G.LibDeflate
 end
 local COMPRESS_MIN_SIZE  = 80   -- évite de gonfler les petites trames
-local COMPRESS_LEVEL     = 9    -- 1..9
+local COMPRESS_LEVEL     = 5    -- 1..9
 
 -- ⚙️ Utilitaires (rétablis) + fallbacks sûrs si Helper n'est pas encore chargé
 local U = (ns and ns.Util) or {}
