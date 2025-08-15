@@ -362,11 +362,22 @@ function CDZ.Lot_IsSelectable(lot)
     return lot and CDZ.Lot_Status(lot) ~= "EPU"
 end
 
--- Part par session en OR (arrondi à l’inférieur) — pas de PA/PC.
-function CDZ.Lot_ShareGold(lot)
+-- Coût par utilisation (ex-ShareGold) en or entiers — pas de PA/PC.
+function CDZ.Lot_ShareGold(lot)  -- compat : on conserve le nom
     local totalC = tonumber(lot.totalCopper or lot.copper or 0) or 0
     local N      = tonumber(lot.sessions or 1) or 1
     return math.floor( math.floor(totalC / 10000) / N )
+end
+
+-- ➕ Utilitaires "charges"
+function CDZ.Lot_UseCostGold(lot)  -- alias explicite
+    return CDZ.Lot_ShareGold(lot)
+end
+
+function CDZ.Lot_Remaining(lot)   -- utilisations restantes
+    local used = tonumber(lot.used or 0) or 0
+    local N    = tonumber(lot.sessions or 1) or 1
+    return math.max(0, N - used)
 end
 
 -- Création : fige le contenu depuis une liste d'index ABSOLUS de ChroniquesDuZephyrDB.expenses.list
@@ -426,7 +437,9 @@ end
 function CDZ.Lot_Consume(id)
     _ensureLots()
     local l = CDZ.Lot_GetById(id); if not l then return false end
-    l.used = (tonumber(l.used) or 0) + 1
+    local N = tonumber(l.sessions or 1) or 1
+    local u = tonumber(l.used or 0) or 0
+    l.used = math.min(u + 1, N)  -- ne décrémente que d'1, borné au max
     if ns.RefreshAll then ns.RefreshAll() end
     return true
 end
@@ -435,7 +448,13 @@ function CDZ.Lots_ConsumeMany(ids)
     _ensureLots()
     local L = ChroniquesDuZephyrDB.lots
     for _, id in ipairs(ids or {}) do
-        for _, l in ipairs(L.list or {}) do if l.id == id then l.used = (tonumber(l.used or 0) or 0) + 1 end end
+        for _, l in ipairs(L.list or {}) do
+            if l.id == id then
+                local N = tonumber(l.sessions or 1) or 1
+                local u = tonumber(l.used or 0) or 0
+                l.used = math.min(u + 1, N)  -- idem : -1 charge par validation
+            end
+        end
     end
     if ns.Emit then ns.Emit("lots:changed") end
     -- ➕ Diffusion GM

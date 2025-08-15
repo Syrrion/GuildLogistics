@@ -335,9 +335,10 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         for i = 1, #L do
             local li = L[i]
             local id = li and li.id
-            local n  = tonumber(li.N or li.n or 1) or 1  -- nb de parts utilisées pour CE joueur
+            local n  = tonumber(li.n or 1) or 1  -- nb d'utilisations pour CE joueur (1 par lot/cohorte)
             if id then usedByLot[id] = (usedByLot[id] or 0) + n end
         end
+
 
         -- ➕ Construit les lignes (prix = part * nbPartsUtilisées)
         local rows = {}

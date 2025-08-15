@@ -24,15 +24,13 @@ local colsFree = UI.NormalizeColumns({
     { key="act",    title="Actions", w=120 },
 })
 
-
--- Colonnes Lots
 local colsLots = UI.NormalizeColumns({
-    { key="name",   title="Lot",        min=220, flex=1 },
-    { key="type",   title="Type",       w=110 },
-    { key="status", title="Statut",     w=110 },
-    { key="count",  title="#",          w=40  },
-    { key="total",  title="Total",      w=120 },
-    { key="act",    title="Actions",    w=160 },
+    { key="name",   title="Lot",                 min=220, flex=1 },
+    { key="type",   title="Utilisations",        w=110 },
+    { key="status", title="Restantes",           w=110 },
+    { key="count",  title="#",                   w=40  },
+    { key="total",  title="Valeur totale",       w=120 },
+    { key="act",    title="Actions",             w=160 },
 })
 
 -- ===== Utilitaires =====
@@ -165,8 +163,9 @@ local function UpdateRowLots(i, r, f, it)
     local totalGold = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(lot) or 0) * N
 
     f.name:SetText(lot.name or ("Lot "..tostring(lot.id)))
-    f.type:SetText(N>1 and ("Multi ("..N..")") or "1 session")
-    f.status:SetText((st=="EPU" and "Épuisé") or (st=="EN_COURS" and (used.."/"..N)) or "À utiliser")
+    f.type:SetText(N>1 and (N.." utilisations") or "1 utilisation")
+    f.status:SetText( (st=="EPU" and "Épuisé") or (CDZ.Lot_Remaining and (CDZ.Lot_Remaining(lot).." restantes")) or ((N-used).." restantes") )
+    f.total:SetText(UI.MoneyText(totalGold))
     f.count:SetText(tostring(#(lot.itemIds or {})))
     f.total:SetText(UI.MoneyText(totalGold))
     
@@ -344,14 +343,14 @@ local function Build(container)
         local nameInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nameInput:SetSize(240, 28); nameInput:SetAutoFocus(true)
         local typeLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); typeLabel:SetText("Type :")
         local cbMulti  = CreateFrame("CheckButton", nil, dlg.content, "UICheckButtonTemplate")
-        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Sessions (si multi) :")
+        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Utilisations (si multi) :")
         local nInput   = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(2)
 
         nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -6)
         nameInput:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
         typeLabel:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -14)
         cbMulti:SetPoint("LEFT", typeLabel, "RIGHT", 8, 0)
-        cbMulti.text = cbMulti:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); cbMulti.text:SetPoint("LEFT", cbMulti, "RIGHT", 4, 0); cbMulti.text:SetText("Multi-sessions")
+        cbMulti.text = cbMulti:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); cbMulti.text:SetPoint("LEFT", cbMulti, "RIGHT", 4, 0); cbMulti.text:SetText("Multi-utilisations")
         nLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -14)
         nInput:SetPoint("LEFT", nLabel, "RIGHT", 8, 0)
 

@@ -78,10 +78,10 @@ local function UpdateRowLots(i, r, f, it)
     local l = it.data
     local used = tonumber(l.used or 0) or 0
     local N    = tonumber(l.sessions or 1) or 1
-    local nextK = used + 1
+    local remaining = math.max(0, N - used)
     local shareGold = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
     f.name:SetText(l.name or ("Lot "..tostring(l.id)))
-    f.frac:SetText(N>1 and (nextK.."/"..N) or "1/1")
+    f.frac:SetText((remaining).." rest.")
     f.gold:SetText(UI.MoneyText(shareGold))
     f.check:SetChecked(chosenLots[l.id] and true or false)
     f.check:SetScript("OnClick", function(self)
@@ -186,7 +186,7 @@ local function Build(container)
                     local N    = tonumber(l.sessions or 1) or 1
                     local k    = used + 1
                     local g    = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
-                    Lctx[#Lctx+1] = { id = id, name = l.name or ("Lot "..tostring(id)), k = k, N = N, gold = g }
+                    Lctx[#Lctx+1] = { id = id, name = l.name or ("Lot " .. tostring(id)), k = k, N = N, n = 1, gold = g }
                 end
             end
 
@@ -284,10 +284,10 @@ local function Build(container)
 
     -- Liste des lots (bas)
     local colsLots = UI.NormalizeColumns({
-        { key="check", title="",   w=34 },
+        { key="check", title="",    w=34 },
         { key="name",  title="Lot", min=260, flex=1 },
-        { key="frac",  title="Part", w=80 },
-        { key="gold",  title="Montant", w=120 },
+        { key="frac",  title="Restant", w=90 },
+        { key="gold",  title="Montant",  w=120 },
     })
     lotsLV = UI.ListView(lotsPane, colsLots, {
         buildRow = BuildRowLots,
