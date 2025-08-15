@@ -102,8 +102,12 @@ local function electWinner(helloId)
     HelloElect[helloId].decided   = true
     if ns.Emit then ns.Emit("debug:changed") end
 
-    -- Envoi FULL si je suis l'élu, avec anti-doublon/cooldown et prise en compte d'un FULL déjà vu
-    if normalizeStr(playerFullName()) == normalizeStr(winner) then
+    -- Envoi FULL si je suis l'élu, uniquement s'il y a eu au moins un HELLO_BACK,
+    -- avec anti-doublon/cooldown et prise en compte d'un FULL déjà vu
+    local hasBack = false
+    for _ in pairs(sess and sess.responders or {}) do hasBack = true; break end
+
+    if hasBack and normalizeStr(playerFullName()) == normalizeStr(winner) then
         local t = now()
         local myrv = safenum(getRev(), 0)
         local tooSoon = (t - (LastFullSentAt or 0)) < ELECTION_COOLDOWN_SEC
@@ -706,6 +710,8 @@ end
 -- ===== Réception bas niveau =====
 local function onAddonMsg(prefix, message, channel, sender)
     if prefix ~= PREFIX then return end
+    -- Ignorer toute réception tant que notre HELLO n'a pas été émis
+    if not (CDZ and CDZ._helloSent) then return end
     local t, s, p, n = message:match("v=1|t=([^|]+)|s=(%d+)|p=(%d+)|n=(%d+)|")
     local seq  = safenum(s, 0)
     local part = safenum(p, 1)
@@ -1034,8 +1040,21 @@ function CDZ.Comm_Init()
         end
     end)
 
-    -- HELLO initial (léger) pour récupérer P/I/E/L
-    C_Timer.After(3, function() if IsInGuild() then CDZ.Sync_RequestHello() end end)
+    -- HELLO initial (léger) après la fin de l'écran de chargement
+    if not CDZ._helloFrame then
+        local f = CreateFrame("Frame")
+        f:RegisterEvent("LOADING_SCREEN_DISABLED")
+        f:RegisterEvent("PLAYER_ENTERING_WORLD")
+        f:SetScript("OnEvent", function(self)
+            if CDZ._helloSent then self:UnregisterAllEvents(); return end
+            if IsInGuild and IsInGuild() then
+                CDZ._helloSent = true
+                CDZ.Sync_RequestHello()
+            end
+            if CDZ._helloSent then self:UnregisterAllEvents() end
+        end)
+        CDZ._helloFrame = f
+    end
 end
 
 -- ===== Slash =====
