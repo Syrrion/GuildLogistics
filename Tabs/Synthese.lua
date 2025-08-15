@@ -21,9 +21,9 @@ local function BuildRow(r)
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
-    r.btnCredit = UI.Button(f.act, "Ajouter de l’or", { size="sm", minWidth=150 })
-    r.btnDebit  = UI.Button(f.act, "Retirer de l’or", { size="sm", variant="ghost", minWidth=150 })
     r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=28, padX=12 })
+    r.btnCredit = UI.Button(f.act, "Dépôt d’or", { size="sm", minWidth=150 })
+    r.btnDebit  = UI.Button(f.act, "Retrait d’or", { size="sm", variant="ghost", minWidth=150 })
     UI.AttachRowRight(f.act, { r.btnCredit, r.btnDebit, r.btnDelete }, 8, -4, { leftPad = 8, align = "center" })
     return f
 end
@@ -165,4 +165,4 @@ local function Build(container)
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = footer })
 end
 
-UI.RegisterTab("Synthèse", Build, Refresh, Layout)
+UI.RegisterTab("Roster", Build, Refresh, Layout)

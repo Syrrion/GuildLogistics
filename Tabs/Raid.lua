@@ -164,7 +164,7 @@ local function Build(container)
     histBtn = UI.Button(footer, "Historique", { size="sm", minWidth=120, tooltip="Voir l’historique des répartitions" })
     histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique") end)
 
-    closeBtn = UI.Button(footer, "Clôturer les participations", { size="sm", minWidth=220 })
+    closeBtn = UI.Button(footer, "Valider les participants", { size="sm", minWidth=220 })
     closeBtn:SetOnClick(function()
         local total = tonumber(totalInput:GetText() or "0") or 0
         local selected = {}
@@ -265,7 +265,7 @@ local function Build(container)
 
         end
 
-        local dlg = UI.CreatePopup({ title = "Clôturer les participations", width = 520, height = 220 })
+        local dlg = UI.CreatePopup({ title = "Valider les participants", width = 520, height = 220 })
         dlg:SetMessage(("Vous allez débiter %d joueur(s) de %s chacun.")
             :format(#selected, UI.MoneyText(per)))
         dlg:SetButtons({
@@ -302,4 +302,4 @@ local function Build(container)
     end
 end
 
-UI.RegisterTab("Raid", Build, Refresh, Layout)
+UI.RegisterTab("Démarrer un raid", Build, Refresh, Layout)

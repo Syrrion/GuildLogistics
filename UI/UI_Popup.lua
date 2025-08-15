@@ -241,7 +241,7 @@ end
 
 function UI.PopupRaidDebit(name, deducted, after, ctx)
     -- Hauteur augmentée pour accueillir le détail des composants
-    local dlg = UI.CreatePopup({ title = "Participation clôturée", width = 560, height = 400 })
+    local dlg = UI.CreatePopup({ title = "Participation au raid validée !", width = 560, height = 400 })
     local lines = {}
     lines[#lines+1] = "Bon raid !\n"
 
@@ -256,86 +256,115 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     end
 
     -- On construit du contenu interactif (icônes + tooltips), plus de SetMessage ici
-    -- Header "Bon raid" + montants
-    local header = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    header:SetJustifyH("LEFT")
-    header:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 0, 0)
-    header:SetText(("Bon raid !\n\n|cffffd200Montant déduit :|r %s\n|cffffd200Solde restant :|r %s")
-        :format(UI.MoneyText(math.floor(tonumber(deducted) or 0)),
-                UI.MoneyText(math.floor(tonumber(after) or 0))))
+    -- Header centré + titre agrandi, espacement autour des lignes de montant, puis offset dynamique anti-chevauchement
+    local titleFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    titleFS:SetJustifyH("CENTER")
+    titleFS:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  0, -12)  -- marge haute
+    titleFS:SetPoint("TOPRIGHT", dlg.content, "TOPRIGHT", 0, -12)
+    titleFS:SetText("Bon raid !")
+
+    -- Lignes séparées pour contrôler précisément les espacements
+    local dedFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    dedFS:SetJustifyH("CENTER")
+    dedFS:SetPoint("TOPLEFT",  titleFS, "BOTTOMLEFT",  0, -12)     -- espace AU-DESSUS de « Montant déduit »
+    dedFS:SetPoint("TOPRIGHT", titleFS, "BOTTOMRIGHT", 0, -12)
+    dedFS:SetText( ("|cffffd200Montant déduit :|r %s")
+        :format(UI.MoneyText(math.floor(tonumber(deducted) or 0))) )
+
+    local restFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    restFS:SetJustifyH("CENTER")
+    restFS:SetPoint("TOPLEFT",  dedFS, "BOTTOMLEFT",  0, -8)       -- espace SOUS « Montant déduit »
+    restFS:SetPoint("TOPRIGHT", dedFS, "BOTTOMRIGHT", 0, -8)
+    restFS:SetText( ("|cffffd200Solde restant :|r %s")
+        :format(UI.MoneyText(math.floor(tonumber(after) or 0))) )
+
+    -- Forcer le wrapping si la largeur est connue
+    local cw = dlg.content:GetWidth() or 0
+    if cw > 0 then
+        if titleFS.SetWidth then titleFS:SetWidth(cw) end
+        if dedFS.SetWidth   then dedFS:SetWidth(cw)   end
+        if restFS.SetWidth  then restFS:SetWidth(cw)  end
+    end
+
+    -- Séparateur après le solde (espace supplémentaire demandé)
+    local sep = dlg.content:CreateTexture(nil, "BORDER")
+    sep:SetColorTexture(1, 1, 1, 0.06)
+    sep:SetPoint("TOPLEFT",  restFS, "BOTTOMLEFT",  0, -12)        -- espace SOUS « Solde restant »
+    sep:SetPoint("TOPRIGHT", restFS, "BOTTOMRIGHT", 0, -12)
+    sep:SetHeight(1)
+
+    -- (Suppression du label "Lots utilisés (détails) :")
 
     local L = ctx and (ctx.L or ctx.lots) or nil
     if type(L) == "table" and #L > 0 then
-        local label = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        label:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -10)
-        label:SetText("|cffffd200Lots utilisés (détails) :|r")
+        -- ➖ on ne montre plus la ligne de label ni la liste d'objets
 
+        -- ➕ colonnes : Lot (flex) + Prix (droite)
         local cols = UI.NormalizeColumns({
-            { key="lot",  title="Lot",   min=160, flex=1 },
-            { key="qty",  title="Qté",   w=60, justify="RIGHT" },
-            { key="item", title="Objet", min=280, flex=1 },
+            { key="lot",   title="Lots utilisés", min=200, flex=1, justify="LEFT"  },
+            { key="price", title="Prix",          w=120,              justify="RIGHT" },
         })
+
+        -- ➕ offset dynamique depuis le bas du header texte (pour éviter tout chevauchement)
+        local function ComputeLVTopOffset()
+            local cTop      = dlg.content:GetTop() or 0
+            local anchorBtm = (header and header.GetBottom and header:GetBottom()) or 0
+            local gap       = 12
+            if cTop > 0 and anchorBtm > 0 then
+                return math.max(40, math.floor(cTop - anchorBtm + gap))
+            end
+            return 64 -- fallback sûr
+        end
+
         local lv = UI.ListView(dlg.content, cols, {
             buildRow = function(r)
                 local f = {}
-                f.lot = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                f.qty = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-
-                f.itemFrame = CreateFrame("Frame", nil, r); f.itemFrame:SetHeight(UI.ROW_H)
-                f.icon  = f.itemFrame:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(20,20); f.icon:SetPoint("LEFT", f.itemFrame, "LEFT", 0, 0)
-                f.btn   = CreateFrame("Button", nil, f.itemFrame); f.btn:SetPoint("LEFT", f.icon, "RIGHT", 6, 0); f.btn:SetSize(260, UI.ROW_H)
-                f.text  = f.btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-                f.text:SetJustifyH("LEFT"); f.text:SetPoint("LEFT", f.btn, "LEFT", 0, 0)
-
-                f.btn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
-                    if self._itemID and self._itemID > 0 then
-                        GameTooltip:SetItemByID(self._itemID)
-                    elseif self._link and self._link ~= "" then
-                        GameTooltip:SetHyperlink(self._link)
-                    else
-                        GameTooltip:Hide()
-                    end
-                end)
-                f.btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                f.item = f.itemFrame
+                f.lot   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                f.price = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                 return f
             end,
             updateRow = function(_, _, f, row)
                 f.lot:SetText(row.lot or "")
-                f.qty:SetText(tostring(row.qty or 1))
-                f.text:SetText(row.name or "Objet inconnu")
-                f.icon:SetTexture(row.icon or "Interface\\ICONS\\INV_Misc_QuestionMark")
-                f.btn._itemID = row.itemID
-                f.btn._link   = row.link
+                f.price:SetText(row.priceText or "")
             end,
-            topOffset = 52,
+            topOffset = ComputeLVTopOffset(),
         })
 
-        local rows = {}
-        for i=1,#L do
+        -- ➕ Agrégation par lot : on additionne les parts utilisées
+        local usedByLot = {}
+        for i = 1, #L do
             local li = L[i]
-            local lot = ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.Lot_GetById(li.id)
-            local nm  = li.name or li.n or (lot and lot.name) or ("Lot "..tostring(li.id or i))
-            local N   = tonumber(li.N or 1) or 1
-            if lot and ns.CDZ and ns.CDZ.GetExpenseById then
-                for _, eid in ipairs(lot.itemIds or {}) do
-                    local _, it = ns.CDZ.GetExpenseById(eid)
-                    if it then
-                        local itemID = tonumber(it.itemID or 0) or 0
-                        local link   = (itemID > 0) and (select(2, GetItemInfo(itemID))) or it.itemLink
-                        local name   = (link and link:match("%[(.-)%]")) or (GetItemInfo(itemID)) or it.itemName or "Objet inconnu"
-                        local icon   = (itemID > 0) and (select(5, GetItemInfoInstant(itemID))) or "Interface\\ICONS\\INV_Misc_QuestionMark"
-                        local qty    = tonumber(it.qty or 1) or 1
-                        if N > 1 and qty % N == 0 then qty = qty / N end
-                        rows[#rows+1] = { lot = nm, qty = qty, itemID = itemID, link = link, name = name, icon = icon }
-                    end
-                end
+            local id = li and li.id
+            local n  = tonumber(li.N or li.n or 1) or 1  -- nb de parts utilisées pour CE joueur
+            if id then usedByLot[id] = (usedByLot[id] or 0) + n end
+        end
+
+        -- ➕ Construit les lignes (prix = part * nbPartsUtilisées)
+        local rows = {}
+        for id, usedParts in pairs(usedByLot) do
+            local lot = ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.Lot_GetById(id)
+            if lot then
+                local name    = lot.name or ("Lot "..tostring(id))
+                local perGold = (ns and ns.CDZ and ns.CDZ.Lot_ShareGold and ns.CDZ.Lot_ShareGold(lot)) or 0
+                local gold    = math.max(0, perGold * (tonumber(usedParts) or 1))
+                rows[#rows+1] = { lot = name, price = gold, priceText = UI.MoneyText(gold) }
             end
         end
+        table.sort(rows, function(a, b) return (a.lot or ""):lower() < (b.lot or ""):lower() end)
+
         lv:SetData(rows)
-        dlg._lv = lv  -- déclenche le relayout automatique de la popup
-        lv:Layout()   -- calcule immédiatement la mise en page initiale
+        dlg._lv = lv
+
+        -- ➕ Reflow différé + hooks (échelle UI / resize)
+        local function ReflowList()
+            if not lv or not lv.Layout then return end
+            lv.opts.topOffset = ComputeLVTopOffset()
+            lv:Layout()
+            if dlg.FitToContent then dlg:FitToContent() end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, ReflowList) end
+        if dlg.HookScript then dlg:HookScript("OnShow", ReflowList) end
+        if dlg.content and dlg.content.HookScript then dlg.content:HookScript("OnSizeChanged", ReflowList) end
 
     end
 
