@@ -5,7 +5,7 @@ local CDZ, UI = ns.CDZ, ns.UI
 
 -- ===== Constantes / État =====
 local PREFIX   = "CDZ1"
-local MAX_PAY  = 200   -- fragmentation des messages
+local MAX_PAY  = 220   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)

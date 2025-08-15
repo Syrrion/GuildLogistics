@@ -3,7 +3,14 @@ local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 local U = ns.Util
 
-local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker
+local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker, verFS
+
+-- Rafraîchit l'étiquette de version DB dans le footer
+local function UpdateDBVersionLabel()
+    if not verFS then return end
+    local rv = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
+    verFS:SetText("DB v"..tostring(rv))
+end
 
 -- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
 local _normalize    = U.normalizeStr
@@ -286,14 +293,9 @@ local function Build(container)
     footer = UI.CreateFooter(panel, 36)
 
     -- ➕ Affichage version DB (bas gauche)
-    local verFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    verFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     verFS:SetPoint("LEFT", footer, "LEFT", 12, 0)
-    local function _updateDbRev()
-        local rv = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
-        verFS:SetText("DB v"..tostring(rv))
-    end
-    _updateDbRev()
-    if ns and ns.On then ns.On("debug:changed", _updateDbRev) end
+    if UpdateDBVersionLabel then UpdateDBVersionLabel() end
 
     -- ➕ Bouton GM : Forcer ma version (envoi direct d’un SYNC_FULL)
     forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200,
@@ -310,7 +312,6 @@ local function Build(container)
             end
         end
     end)
-
 
     -- ➕ Reparent dans le footer
     purgeDBBtn:SetParent(footer)

@@ -279,9 +279,13 @@ end
 
 
 function CDZ.WipeAllData()
-    -- Conserver la version et le maître (utile pour le GM)
-    local keepRev    = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev or 0
-    local keepMaster = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master or nil
+    -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)
+    local isMaster = (CDZ.IsMaster and CDZ.IsMaster())
+        or (IsInGuild and IsInGuild() and select(3, GetGuildInfo("player")) == 0)
+        or false
+    local oldRev     = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
+    local keepRev    = isMaster and oldRev or 0
+    local keepMaster = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master) or nil
     ChroniquesDuZephyrDB = {
         players  = {},
         history  = {},
@@ -296,8 +300,13 @@ end
 
 -- Purge complète : DB + préférences UI
 function CDZ.WipeAllSaved()
-    local keepRev    = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev or 0
-    local keepMaster = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master or nil
+    -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)
+    local isMaster = (CDZ.IsMaster and CDZ.IsMaster())
+        or (IsInGuild and IsInGuild() and select(3, GetGuildInfo("player")) == 0)
+        or false
+    local oldRev     = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
+    local keepRev    = isMaster and oldRev or 0
+    local keepMaster = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master) or nil
     ChroniquesDuZephyrDB = {
         players  = {},
         history  = {},
