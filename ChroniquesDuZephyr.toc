@@ -4,6 +4,10 @@
 ## Author: Ysendril-KirinTor
 ## Version: 0.9.0
 ## SavedVariables: ChroniquesDuZephyrDB, ChroniquesDuZephyrUI
+## OptionalDeps: LibDeflate
+
+Plugins\LibDeflate\LibStub\LibStub.lua
+Plugins\LibDeflate\lib.xml
 
 Core/Core.lua
 Core/Helper.lua

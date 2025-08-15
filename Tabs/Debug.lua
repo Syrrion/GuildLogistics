@@ -10,6 +10,21 @@ local _normalize    = U.normalizeStr
 local _selfFullName = U.playerFullName
 local ShortName     = U.ShortName
 
+-- Tentative locale de décompression d'un payload 'c=z|...' pour l'aperçu Debug
+local function TryDecompressPayload(s)
+    s = tostring(s or "")
+    if not s:find("^c=z|") then return nil end
+    local LD
+    if type(LibStub) == "table" and LibStub.GetLibrary then
+        LD = LibStub:GetLibrary("LibDeflate", true)
+    end
+    LD = LD or _G.LibDeflate
+    if not LD then return nil end
+    local decoded = LD:DecodeForWoWAddonChannel(s:sub(5)); if not decoded then return nil end
+    return LD:DecompressDeflate(decoded)
+end
+
+
 -- Affichage : constantes & helpers
 local HELLO_WAIT_SEC = 5
 local function ShortName(full)
@@ -99,9 +114,12 @@ local function UpdateRow(i, r, f, it)
         if not (ns.UI and ns.UI.PopupText) then return end
         local title = (it.dir=="send" and "Message envoyé" or "Message reçu")
 
-        -- Décodage simple k=v|k=v pour la popup
+        -- Décodage k=v|k=v avec support payload compressé 'c=z|...'
+        local preview = it.fullPayload or ""
+        local dec = TryDecompressPayload and TryDecompressPayload(preview)
+        if dec and dec ~= "" then preview = dec end
         local kv = {}
-        for pair in string.gmatch(it.fullPayload or "", "([^|]+)") do
+        for pair in string.gmatch(preview, "([^|]+)") do
             local k, v = pair:match("^(.-)=(.*)$")
             if k then kv[k] = v end
         end
@@ -178,9 +196,12 @@ local function groupLogs(raw)
         g.fullPayload = table.concat(payloads, "")
         g.fullRaw     = table.concat(raws, "\n")
 
-        -- Décodage rv/lm à partir du payload (si présent)
+        -- Décodage rv/lm (supporte payload compressé 'c=z|...')
+        local preview = g.fullPayload or ""
+        local dec = TryDecompressPayload and TryDecompressPayload(preview)
+        if dec and dec ~= "" then preview = dec end
         local kv = {}
-        for pair in string.gmatch(g.fullPayload or "", "([^|]+)") do
+        for pair in string.gmatch(preview, "([^|]+)") do
             local k, v = pair:match("^(.-)=(.*)$")
             if k then kv[k] = v end
         end
@@ -188,6 +209,7 @@ local function groupLogs(raw)
         g.rv = tonumber(kv.rv or "") or nil
         g.lm = tonumber(kv.lm or "") or nil
         out[#out+1] = g
+
     end
 
     -- Tri : par Heure (décroissant), puis par Version (décroissant), puis par Sens (RECU avant ENVOI)

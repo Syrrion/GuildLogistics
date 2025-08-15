@@ -11,9 +11,60 @@ local Seq      = 0     -- séquence réseau
 -- Limitation d'émission (paquets / seconde)
 local OUT_MAX_PER_SEC = 2
 
--- Utils communs (Helper)
-local U = ns.Util or {}
-local safenum        = U.safenum        or _G.safenum
+-- Compression (optionnelle via LibDeflate) : compresse avant fragmentation, décompresse après réassemblage
+local LD do
+    local lib = nil
+    if type(LibStub) == "table" and LibStub.GetLibrary then
+        lib = LibStub:GetLibrary("LibDeflate", true)
+    end
+    LD = lib or _G.LibDeflate
+end
+local COMPRESS_MIN_SIZE  = 80   -- évite de gonfler les petites trames
+local COMPRESS_LEVEL     = 9    -- 1..9
+
+-- ⚙️ Utilitaires (rétablis) + fallbacks sûrs si Helper n'est pas encore chargé
+local U = (ns and ns.Util) or {}
+local safenum        = (U and U.safenum)        or (_G and _G.safenum)        or function(v,d) v=tonumber(v); if v==nil then return d or 0 end; return v end
+local truthy         = (U and U.truthy)         or (_G and _G.truthy)         or function(v) v=tostring(v or ""); return (v=="1" or v:lower()=="true") end
+local now            = (U and U.now)            or (_G and _G.now)            or function() return (time and time()) or 0 end
+local normalizeStr   = (U and U.normalizeStr)   or (_G and _G.normalizeStr)   or function(s) s=tostring(s or ""):gsub("%s+",""):gsub("'",""); return s:lower() end
+local playerFullName = (U and U.playerFullName) or (_G and _G.playerFullName) or function() local n,r=UnitFullName("player"); return r and (n.."-"..r) or n end
+local masterName     = (U and U.masterName)     or (_G and _G.masterName)     or function() return nil end
+local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=_G.ChroniquesDuZephyrDB; return (db and db.meta and db.meta.rev) or 0 end
+
+local function _compressStr(s)
+
+    if not (LD and s and #s >= COMPRESS_MIN_SIZE) then return nil end
+    local ok, comp = pcall(function() return LD:CompressDeflate(s, { level = COMPRESS_LEVEL }) end)
+    if not ok or not comp then return nil end
+    return LD:EncodeForWoWAddonChannel(comp)
+end
+
+local function _decompressStr(enc)
+    if not (LD and enc and enc ~= "") then return nil end
+    local decoded = LD:DecodeForWoWAddonChannel(enc); if not decoded then return nil end
+    return LD:DecompressDeflate(decoded)
+end
+
+-- Balisage interne 'c=z|' pour signaler un payload compressé
+local function packPayloadStr(s)
+    s = tostring(s or "")
+    local enc = _compressStr(s)
+    if enc and (#enc + 4) < #s then
+        return "c=z|"..enc
+    end
+    return s
+end
+
+local function unpackPayloadStr(s)
+    s = tostring(s or "")
+    if s:find("^c=z|") then
+        local plain = _decompressStr(s:sub(5))
+        if plain and plain ~= "" then return plain end
+    end
+    return s
+end
+
 local normalizeStr   = U.normalizeStr   or _G.normalizeStr
 local now            = U.now            or _G.now or time
 local playerFullName = U.playerFullName or _G.playerFullName
@@ -234,8 +285,11 @@ end
 -- ===== Envoi (fragmenté) =====
 local function send(channel, target, msgType, payloadStr)
     -- Empilement systématique (y compris 1 seule fragmentation) + émission temporisée
+    -- Compression (si dispo) avant fragmentation
+    payloadStr = packPayloadStr(payloadStr or "")
     Seq = (Seq + 1) % 1000000
     local total = math.max(1, math.ceil(#payloadStr / MAX_PAY))
+
 
     -- Fragmentation + FIFO
     for i = 1, total do
@@ -736,11 +790,14 @@ local function onAddonMsg(prefix, message, channel, sender)
         if chunks then
             Inbox[key] = nil
             local full = table.concat(chunks, "")
+            -- Décompression éventuelle (balise 'c=z|...')
+            full = unpackPayloadStr(full)
             local kv = decode(full)
             enqueueComplete(sender, t, kv)
         end
     end
 end
+
 
 -- ===== Envoi mutations (roster & crédits) =====
 function CDZ.BroadcastRosterUpsert(name)
