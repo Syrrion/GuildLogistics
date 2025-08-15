@@ -8,6 +8,13 @@ local PREFIX   = "CDZ1"
 local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
+-- Limitation d'émission (paquets / seconde)
+local OUT_MAX_PER_SEC = 3
+
+-- File d'envoi temporisée
+local OutQ      = {}
+local OutTicker = nil
+
 -- Boîtes aux lettres (réassemblage) + file d'application ordonnée
 local Inbox    = {}
 local Q, QBusy = {}, false
@@ -24,16 +31,20 @@ local function refreshActive()
 end
 
 -- ===== Debug log =====
-local function pushLog(dir, msgType, sz, channel, target, seq, part, total, raw)
+-- state : nil | "pending" | "sent"
+local function pushLog(dir, msgType, sz, channel, target, seq, part, total, raw, state)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     ChroniquesDuZephyrDB.debug = ChroniquesDuZephyrDB.debug or {}
     local t = ChroniquesDuZephyrDB.debug
     t[#t+1] = {
         ts = now(), dir = dir, type = msgType, size = sz, chan = channel or "", target = target or "",
-        seq = seq or 0, part = part or 1, total = total or 1, raw = raw or ""
+        seq = seq or 0, part = part or 1, total = total or 1, raw = raw or "", state = state
     }
     if #t > 800 then table.remove(t, 1) end
+    -- notifier l'UI (rafraîchissement temps réel)
+    if ns and ns.Emit then ns.Emit("debug:changed") end
 end
+
 function CDZ.GetDebugLogs()  ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; return ChroniquesDuZephyrDB.debug or {} end
 function CDZ.ClearDebugLogs() ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.debug = {} end
 
@@ -121,17 +132,42 @@ end
 
 -- ===== Envoi (fragmenté) =====
 local function send(channel, target, msgType, payloadStr)
+    -- Empilement systématique (y compris 1 seule fragmentation) + émission temporisée
     Seq = (Seq + 1) % 1000000
     local total = math.max(1, math.ceil(#payloadStr / MAX_PAY))
+
+    -- Fragmentation + FIFO
     for i = 1, total do
         local off   = (i - 1) * MAX_PAY
         local chunk = payloadStr:sub(off + 1, off + MAX_PAY)
         local head  = ("v=1|t=%s|s=%d|p=%d|n=%d|"):format(msgType, Seq, i, total)
         local packet = head .. chunk
-        C_ChatInfo.SendAddonMessage(PREFIX, packet, channel, target)
-        pushLog("send", msgType, #packet, channel, target, Seq, i, total, packet)
+
+        -- Journaliser "En attente" à l'empilement
+        OutQ[#OutQ+1] = { packet = packet, channel = channel, target = target,
+                          msgType = msgType, seq = Seq, part = i, total = total }
+        pushLog("send", msgType, #packet, channel, target, Seq, i, total, packet, "pending")
+    end
+
+    -- Démarrer / maintenir le ticker (1 paquet par tick)
+    if not OutTicker then
+        local interval = 1 / math.max(1, OUT_MAX_PER_SEC or 5)
+        OutTicker = C_Timer.NewTicker(interval, function()
+            local item = table.remove(OutQ, 1)
+            if item then
+                C_ChatInfo.SendAddonMessage(PREFIX, item.packet, item.channel, item.target)
+                -- Journaliser "Transmis" au moment de l'envoi effectif
+                pushLog("send", item.msgType, #item.packet, item.channel, item.target,
+                        item.seq, item.part, item.total, item.packet, "sent")
+            else
+                if OutTicker then OutTicker:Cancel() end
+                OutTicker = nil
+            end
+        end)
     end
 end
+
+
 function CDZ.Comm_Broadcast(msgType, tbl)     send("GUILD",  nil, msgType, encode(tbl or {})) end
 function CDZ.Comm_Whisper(target, msgType, t) send("WHISPER",target, msgType, encode(t or {})) end
 

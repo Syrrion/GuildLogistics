@@ -8,6 +8,7 @@ local panel, lv, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer
 local cols = UI.NormalizeColumns({
     { key="time",  title="Heure",     w=110 },
     { key="dir",   title="Sens",      w=70  },
+    { key="state", title="État",      w=100 },
     { key="type",  title="Type",      w=160 },
     { key="rv",    title="Ver.",      w=60  }, 
     { key="size",  title="Taille",    w=80  },
@@ -22,6 +23,7 @@ local function BuildRow(r)
     local f = {}
     f.time   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.dir    = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.state  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.type   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.rv     = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.size   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -36,8 +38,19 @@ end
 local function UpdateRow(i, r, f, it)
     f.time:SetText(date("%H:%M:%S", it.ts or time()))
     f.dir:SetText(it.dir == "send" and "|cff9ecbffENVOI|r" or "|cff7dff9aRECU|r")
+    if it.dir == "send" then
+        if it.state == "pending" then
+            f.state:SetText("|cffffff00En attente|r")
+        elseif it.state == "sent" then
+            f.state:SetText("|cff7dff9aTransmis|r")
+        else
+            f.state:SetText("")
+        end
+    else
+        f.state:SetText("")
+    end
         f.type:SetText(it.type or "")
-    f.rv:SetText(it.rv and tostring(it.rv) or "")  -- <== affiche la version
+    f.rv:SetText(it.rv and tostring(it.rv) or "")  -- <= affiche la version
     f.size:SetText(tostring(it.size or 0))
     f.chan:SetText(it.chan or "")
     f.target:SetText(it.target or "")
@@ -69,25 +82,6 @@ local function UpdateRow(i, r, f, it)
 
 end
 
-local function Layout()
-    local isMaster = CDZ.IsMaster and CDZ.IsMaster()
-    if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end
-
-    if UI.AttachButtonsRight then
-        -- ➕ Aligner [Forcer version][Purger DB][Purge totale] à droite
-        local buttons = isMaster and { forceSyncBtn, purgeDBBtn, purgeAllBtn } or { purgeDBBtn, purgeAllBtn }
-        UI.AttachButtonsRight(panel, buttons, 8, -PAD, -12)
-    else
-        purgeAllBtn:ClearAllPoints(); purgeAllBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
-        purgeDBBtn:ClearAllPoints();  purgeDBBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
-        if isMaster and forceSyncBtn then
-            forceSyncBtn:ClearAllPoints(); forceSyncBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
-        end
-    end
-    if lv and lv.Layout then lv:Layout() end
-end
-
-
 -- Regroupe les fragments et décode rv/lm
 local function groupLogs(raw)
     local map = {}
@@ -99,6 +93,7 @@ local function groupLogs(raw)
                 ts = e.ts or 0,
                 dir = e.dir, type = e.type, chan = e.chan, target = e.target,
                 seq = e.seq or 0, total = e.total or 1, lastPart = e.part or 1, size = 0,
+                state = nil,
                 parts = {},
             }
             map[key] = g
@@ -108,6 +103,12 @@ local function groupLogs(raw)
         g.total = e.total or g.total
         g.lastPart = math.max(g.lastPart or 1, e.part or 1)
         g.parts[e.part or 1] = e.raw
+        -- État agrégé: "sent" prioritaire sur "pending"
+        if e.state == "sent" then
+            g.state = "sent"
+        elseif e.state == "pending" and g.state ~= "sent" then
+            g.state = "pending"
+        end
     end
 
     local out = {}
@@ -121,32 +122,36 @@ local function groupLogs(raw)
             end
         end
         g.fullPayload = table.concat(payloads, "")
-        g.fullRaw = table.concat(raws, "\n")
-        -- Décoder pour extraire rv/lm si présents
-        local decode = ns.CDZ and ns.CDZ._decodeForDebug or nil
-        local kv = decode and decode(g.fullPayload) or nil
-        if not kv and ns.CDZ and ns.CDZ._unsafeDecode then kv = ns.CDZ._unsafeDecode(g.fullPayload) end
-        if not kv then
-            -- mini-décodage local (k=v|k=v) pour debug
-            kv = {}
-            for pair in string.gmatch(g.fullPayload or "", "([^|]+)") do
-                local k, v = pair:match("^(.-)=(.*)$")
-                if k then kv[k] = v end
-            end
+        g.fullRaw     = table.concat(raws, "\n")
+
+        -- Décodage rv/lm à partir du payload (si présent)
+        local kv = {}
+        for pair in string.gmatch(g.fullPayload or "", "([^|]+)") do
+            local k, v = pair:match("^(.-)=(.*)$")
+            if k then kv[k] = v end
         end
         g.kv = kv
         g.rv = tonumber(kv.rv or "") or nil
         g.lm = tonumber(kv.lm or "") or nil
         out[#out+1] = g
     end
+
+    -- Tri : par Heure (décroissant), puis par Version (décroissant), puis par Sens (ENVOI avant RECU)
     table.sort(out, function(a, b)
-        -- priorité à lm si présent, sinon fallback ts
         local ad = tonumber(a.lm) or tonumber(a.ts) or 0
         local bd = tonumber(b.lm) or tonumber(b.ts) or 0
         if ad ~= bd then return ad > bd end
+
         local arv = tonumber(a.rv) or -math.huge
         local brv = tonumber(b.rv) or -math.huge
         if arv ~= brv then return arv > brv end
+
+        -- Sens : ENVOI (dir=="send") doit précéder RECU
+        local adir = (a.dir == "send") and 0 or 1
+        local bdir = (b.dir == "send") and 0 or 1
+        if adir ~= bdir then return adir < bdir end
+
+        -- Dernier repli : horodatage brut pour stabilité
         return (a.ts or 0) > (b.ts or 0)
     end)
 
@@ -163,30 +168,14 @@ end
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
-    purgeDBBtn = UI.Button(panel, "Purger DB", { size="sm", variant="danger", minWidth=140 })
-    purgeDBBtn:SetConfirm("Supprimer TOUTES les données (Joueurs, Historique, Dépenses) ?", function()
-        if CDZ.WipeAllData then CDZ.WipeAllData() end
-        if ns and ns.RefreshAll then ns.RefreshAll() end
-    end)
+    purgeDBBtn = UI.Button(panel, "Purger Debug", { size="sm", minWidth=120 })
+    purgeDBBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
+    purgeDBBtn:SetOnClick(function() CDZ.ClearDebugLogs(); Refresh() end)
 
-    purgeAllBtn = UI.Button(panel, "Purge totale (DB+UI)", { size="sm", variant="danger", minWidth=180 })
-    purgeAllBtn:SetConfirm("Purger la DB + réinitialiser l’UI puis recharger ?", function()
-        if CDZ.WipeAllSaved then
-            CDZ.WipeAllSaved()
-        elseif CDZ.WipeAllData then
-            CDZ.WipeAllData()
-            ChroniquesDuZephyrUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680 }
-        end
-        ReloadUI()
-    end)
-
-    -- Footer dédié aux actions (inclut le bouton GM)
-    footer = UI.CreateFooter(panel)
-
-    -- Reparenter les boutons de purge dans le footer
-        purgeAllBtn = UI.Button(panel, "Purge totale (DB+UI)", { size="sm", variant="danger", minWidth=180 })
+    purgeAllBtn = UI.Button(panel, "Purge totale", { size="sm", minWidth=120, tooltip="Wipe DB + reset UI + Reload" })
+    purgeAllBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
     purgeAllBtn:SetConfirm("Purger la DB + réinitialiser l’UI puis recharger ?", function()
         if CDZ.WipeAllSaved then
             CDZ.WipeAllSaved()
@@ -200,12 +189,8 @@ local function Build(container)
     -- ➕ Footer actions
     footer = UI.CreateFooter(panel, 36)
 
-    -- ➕ Reparent dans le footer
-    purgeDBBtn:SetParent(footer)
-    purgeAllBtn:SetParent(footer)
-
     -- ➕ Bouton GM : Forcer ma version (incrémente rev + snapshot complet)
-    forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200, tooltip="Incrémente la version et diffuse un snapshot complet" })
+    forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", {size="sm", minWidth=200, tooltip="Incrémente la version et diffuse un snapshot complet" })
     forceSyncBtn:SetConfirm("Diffuser et FORCER la version du GM (incrémenter la version) ?", function()
         if CDZ.GM_ForceVersionBroadcast then
             local rv = CDZ.GM_ForceVersionBroadcast()
@@ -214,6 +199,10 @@ local function Build(container)
             end
         end
     end)
+
+    -- ➕ Reparent dans le footer
+    purgeDBBtn:SetParent(footer)
+    purgeAllBtn:SetParent(footer)
 
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 38, bottomAnchor = footer })
 end
@@ -230,4 +219,15 @@ local function Layout()
     if lv and lv.Layout then lv:Layout() end
 end
 
+-- ➕ Rafraîchissement temps réel lorsque des logs arrivent / changent d'état
+if ns and ns.On then
+    ns.On("debug:changed", function()
+        -- On ne rafraîchit que si l’onglet est visible pour éviter du travail inutile
+        if panel and panel:IsShown() and lv then
+            Refresh()
+        end
+    end)
+end
+
 UI.RegisterTab("Debug", Build, Refresh, Layout)
+
