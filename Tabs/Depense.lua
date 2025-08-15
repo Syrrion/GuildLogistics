@@ -288,9 +288,25 @@ local function Refresh()
     lvFree:SetData(items)
     totalFS:SetText("|cffffd200Ressources libres :|r " .. UI.MoneyFromCopper(total))
 
-    -- Lots
+    -- Lots (masquer les épuisés + tri alphabétique)
     local lots = (CDZ.GetLots and CDZ.GetLots()) or {}
-    local rows = {}; for _, l in ipairs(lots) do rows[#rows+1] = { data = l } end
+
+    -- Tri par nom (alpha, insensible à la casse), puis par id pour stabiliser
+    table.sort(lots, function(a, b)
+        local an = (a and a.name or ""):lower()
+        local bn = (b and b.name or ""):lower()
+        if an == bn then return (a and a.id or 0) < (b and b.id or 0) end
+        return an < bn
+    end)
+
+    -- Filtrer : ne garder que les lots non-épuisés
+    local rows = {}
+    for _, l in ipairs(lots) do
+        if not (CDZ.Lot_Status and CDZ.Lot_Status(l) == "EPU") then
+            rows[#rows+1] = { data = l }
+        end
+    end
+
     lvLots:SetData(rows)
 
     -- Boutons
