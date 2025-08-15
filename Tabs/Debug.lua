@@ -161,7 +161,7 @@ local function groupLogs(raw)
     end
 
 
-    -- Tri : par Heure (décroissant), puis par Version (décroissant), puis par Sens (ENVOI avant RECU)
+    -- Tri : par Heure (décroissant), puis par Version (décroissant), puis par Sens (RECU avant ENVOI)
     table.sort(out, function(a, b)
         local ad = tonumber(a.lm) or tonumber(a.ts) or 0
         local bd = tonumber(b.lm) or tonumber(b.ts) or 0
@@ -171,9 +171,9 @@ local function groupLogs(raw)
         local brv = tonumber(b.rv) or -math.huge
         if arv ~= brv then return arv > brv end
 
-        -- Sens : ENVOI (dir=="send") doit précéder RECU
-        local adir = (a.dir == "send") and 0 or 1
-        local bdir = (b.dir == "send") and 0 or 1
+        -- Sens : RECU doit précéder ENVOI (inversion de l'ordre précédent)
+        local adir = (a.dir == "send") and 1 or 0
+        local bdir = (b.dir == "send") and 1 or 0
         if adir ~= bdir then return adir < bdir end
 
         -- Dernier repli : horodatage brut pour stabilité
@@ -247,8 +247,8 @@ end
 -- ➕ Rafraîchissement temps réel lorsque des logs arrivent / changent d'état
 if ns and ns.On then
     ns.On("debug:changed", function()
-        -- On ne rafraîchit que si l’onglet est visible pour éviter du travail inutile
-        if panel and panel:IsShown() and lv then
+        -- Rafraîchit toujours le tri dès qu'un nouvel élément arrive (si la liste existe)
+        if lv then
             Refresh()
         end
     end)
