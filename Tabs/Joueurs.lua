@@ -18,13 +18,13 @@ local function BuildRow(r)
 
     -- Widgets pour "data"
     f.main  = UI.CreateNameTag(r)
-    f.last  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); f.last:SetJustifyH("CENTER")
-    f.count = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-
+    f.last  = UI.Label(r, { justify = "CENTER" })
+    f.count = UI.Label(r)
+    f.inRoster = UI.Label(f.act)
+    
     -- Cellule d'actions = conteneur + bouton + libellé "dans le roster"
     f.act     = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     f.btnAdd  = UI.Button(f.act, "Ajouter au Roster", { size="sm", minWidth=160 })
-    f.inRoster = f.act:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.inRoster:SetText("Dans le roster")
     f.inRoster:SetJustifyH("CENTER")
     f.inRoster:Hide()

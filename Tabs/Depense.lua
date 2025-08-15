@@ -75,11 +75,11 @@ local function BuildRowFree(r)
     local f = {}
     f.sel    = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
     -- (plus de champ date)
-    f.qty    = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.source = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.amount = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-
+    f.qty    = UI.Label(r)
+    f.source = UI.Label(r)
+    f.amount = UI.Label(r)
     f.item     = CreateFrame("Button", nil, r); f.item:SetHeight(UI.ROW_H)
+
     f.itemText = f.item:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.icon     = f.item:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(16, 16)
     f.icon:SetPoint("LEFT", f.item, "LEFT", 0, 0)

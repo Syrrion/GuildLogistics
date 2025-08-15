@@ -25,11 +25,11 @@ end
 
 local function BuildRow(r)
     local f = {}
-    f.date  = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.total = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.per   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.count = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.state = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.date  = UI.Label(r)
+    f.total = UI.Label(r)
+    f.per   = UI.Label(r)
+    f.count = UI.Label(r)
+    f.state = UI.Label(r)
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
     r.btnPlayers = UI.Button(f.act, "Joueurs", { size="sm", minWidth=90 })
     r.btnRefund  = UI.Button(f.act, "Rendre gratuit", { size="sm", variant="ghost", minWidth=140 })

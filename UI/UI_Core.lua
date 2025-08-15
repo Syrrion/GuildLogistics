@@ -177,9 +177,24 @@ function UI.NormalizeColumns(cols)
     return out
 end
 
+-- Création standard d'un FontString (réduit le boilerplate)
+function UI.Label(parent, opts)
+    opts = opts or {}
+    local layer    = opts.layer    or "OVERLAY"
+    local template = opts.template or "GameFontHighlight"
+    local fs = parent:CreateFontString(nil, layer, template)
+    if opts.justify then fs:SetJustifyH(opts.justify) end
+    if opts.color and fs.SetTextColor then
+        local c = opts.color
+        fs:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1)
+    end
+    return fs
+end
+
 -- Footer générique attaché au bas d’un panel
 function UI.CreateFooter(parent, height)
     local f = CreateFrame("Frame", nil, parent)
+
     f:SetHeight(height or UI.FOOTER_H or 36)
     f:SetPoint("BOTTOMLEFT",  parent, "BOTTOMLEFT",  0, 0)
     f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0) -- pleine largeur
