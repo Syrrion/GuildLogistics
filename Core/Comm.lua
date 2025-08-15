@@ -284,13 +284,18 @@ end
 function CDZ.Comm_Broadcast(msgType, tbl)     send("GUILD",  nil, msgType, encode(tbl or {})) end
 function CDZ.Comm_Whisper(target, msgType, t) send("WHISPER",target, msgType, encode(t or {})) end
 
--- Forcer la version du GM : incrémente la révision puis avertit (léger) -> sync en WHISPER si besoin
 function CDZ.GM_ForceVersionBroadcast()
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    -- Incrémente la révision locale (comportement 'force')
     local newrv = (CDZ.IncRev and CDZ.IncRev()) or incRev()
-    local lm = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.lastModified) or now()
-    -- message minimal : pas de P/I/E/L
-    CDZ.Comm_Broadcast("SYNC_POKE", { rv = newrv, lm = lm })
+    -- Exporte l’instantané complet et force rv
+    local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
+    snap.rv = newrv
+    snap.lm = snap.lm or now()
+    -- Envoie direct d’un FULL (plus de poke)
+    CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    -- Anti-doublon pour l’élection, si présent
+    if LastFullSentAt then LastFullSentAt = now() end
     return newrv
 end
 

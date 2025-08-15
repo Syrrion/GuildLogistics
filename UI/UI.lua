@@ -140,9 +140,22 @@ end
 local close = CreateFrame("Button", nil, Main, "UIPanelCloseButton")
 close:SetPoint("TOPRIGHT", Main, "TOPRIGHT", 2, 2)
 
+-- ➕ Bouton Reload au même niveau que la croix (dans la barre titre)
+local reloadBtn = CreateFrame("Button", ADDON.."ReloadButton", Main, "UIPanelButtonTemplate")
+reloadBtn:SetSize(60, 20)
+reloadBtn:SetText("Reload")
+-- S'assure d'être au-dessus du contenu, comme le bouton X
+reloadBtn:SetFrameStrata(close:GetFrameStrata())
+reloadBtn:SetFrameLevel(close:GetFrameLevel())
+-- Placé juste à gauche du X
+reloadBtn:ClearAllPoints()
+reloadBtn:SetPoint("TOPRIGHT", close, "TOPLEFT", -6, 0)
+reloadBtn:SetScript("OnClick", function() ReloadUI() end)
+
 -- ===================== Tabs =====================
 local Registered, Panels, Tabs = {}, {}, {}
 UI._tabIndexByLabel = {}
+
 
 -- UI.RegisterTab(label, build, refresh, layout, opts?) ; opts.hidden pour masquer le bouton d’onglet
 function UI.RegisterTab(label, buildFunc, refreshFunc, layoutFunc, opts)
@@ -346,3 +359,15 @@ function ns.ToggleUI()
 end
 
 Main:Hide()
+
+-- ➕ Ouvre l'interface au lancement du jeu
+local _openAtLogin = CreateFrame("Frame")
+_openAtLogin:RegisterEvent("PLAYER_LOGIN")
+_openAtLogin:SetScript("OnEvent", function()
+    if not Main:IsShown() then
+        Main:Show()
+        -- Sélectionne le 1er onglet et rafraîchit
+        ShowPanel(1)
+        if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+    end
+end)

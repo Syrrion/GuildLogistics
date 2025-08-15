@@ -275,16 +275,32 @@ local function Build(container)
     -- ➕ Footer actions
     footer = UI.CreateFooter(panel, 36)
 
-    -- ➕ Bouton GM : Forcer ma version (incrémente rev + snapshot complet)
-    forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", {size="sm", minWidth=200, tooltip="Incrémente la version et diffuse un snapshot complet" })
-    forceSyncBtn:SetConfirm("Diffuser et FORCER la version du GM (incrémenter la version) ?", function()
-        if CDZ.GM_ForceVersionBroadcast then
-            local rv = CDZ.GM_ForceVersionBroadcast()
-            if UIErrorsFrame and rv then
-                UIErrorsFrame:AddMessage("|cff40ff40[CDZ]|r Version envoyée (rv="..tostring(rv)..")", 0.4, 1, 0.4)
+    -- ➕ Affichage version DB (bas gauche)
+    local verFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    verFS:SetPoint("LEFT", footer, "LEFT", 12, 0)
+    local function _updateDbRev()
+        local rv = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
+        verFS:SetText("DB v"..tostring(rv))
+    end
+    _updateDbRev()
+    if ns and ns.On then ns.On("debug:changed", _updateDbRev) end
+
+    -- ➕ Bouton GM : Forcer ma version (envoi direct d’un SYNC_FULL)
+    forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200,
+        tooltip = "Diffuse immédiatement un snapshot complet (SYNC_FULL)" })
+    forceSyncBtn:SetConfirm("Diffuser et FORCER la version du GM (SYNC_FULL) ?", function()
+        if CDZ and CDZ._SnapshotExport and CDZ.Comm_Broadcast then
+            -- Option: on garde le comportement 'force' en incrémentant la révision locale si disponible
+            local newrv = (CDZ.IncRev and CDZ.IncRev()) or nil
+            local snap = CDZ._SnapshotExport()
+            if newrv then snap.rv = newrv end
+            CDZ.Comm_Broadcast("SYNC_FULL", snap)
+            if UIErrorsFrame then
+                UIErrorsFrame:AddMessage("|cff40ff40[CDZ]|r SYNC_FULL envoyé (rv="..tostring(snap.rv)..")", 0.4, 1, 0.4)
             end
         end
     end)
+
 
     -- ➕ Reparent dans le footer
     purgeDBBtn:SetParent(footer)
@@ -352,9 +368,10 @@ if ns and ns.On then
         if lvRecv or lvSend then
             Refresh()
         end
+        -- Met à jour l'affichage de la version DB
+        if UpdateDBVersionLabel then UpdateDBVersionLabel() end
     end)
 end
-
 
 UI.RegisterTab("Debug", Build, Refresh, Layout)
 
