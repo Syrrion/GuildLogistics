@@ -38,23 +38,31 @@ end
 local function UpdateRow(i, r, f, it)
     f.time:SetText(date("%H:%M:%S", it.ts or time()))
     f.dir:SetText(it.dir == "send" and "|cff9ecbffENVOI|r" or "|cff7dff9aRECU|r")
+
+    local total = tonumber(it.total or 1) or 1
+    local sent  = tonumber(it.sentCount or 0) or 0      -- fragments effectivement transmis (ENVOI)
+    local got   = tonumber(it.gotCount  or 0) or 0      -- fragments effectivement reçus  (RECU)
+
     if it.dir == "send" then
-        if it.state == "pending" then
+        if sent <= 0 then
             f.state:SetText("|cffffff00En attente|r")
-        elseif it.state == "sent" then
-            f.state:SetText("|cff7dff9aTransmis|r")
+        elseif sent < total then
+            f.state:SetText("|cffffd200En cours|r")
         else
-            f.state:SetText("")
+            f.state:SetText("|cff7dff9aTransmis|r")
         end
     else
-        f.state:SetText("")
+        f.state:SetText("") -- côté réception on laisse vide comme avant
     end
-        f.type:SetText(it.type or "")
+
+    f.type:SetText(it.type or "")
     f.rv:SetText(it.rv and tostring(it.rv) or "")  -- <= affiche la version
     f.size:SetText(tostring(it.size or 0))
     f.chan:SetText(it.chan or "")
     f.target:SetText(it.target or "")
-    f.frag:SetText((it.lastPart or 1).."/"..(it.total or 1))
+
+    local progress = (it.dir == "send") and sent or got
+    f.frag:SetText(tostring(progress) .. "/" .. tostring(total))
 
     f.view:SetOnClick(function()
         if not (ns.UI and ns.UI.PopupText) then return end
@@ -90,29 +98,45 @@ local function groupLogs(raw)
         local g = map[key]
         if not g then
             g = {
-                ts = e.ts or 0,
+                ts = e.ts or 0,               -- affichage (sera fixé au 1er fragment)
+                tsFirst = e.ts or 0,          -- 1er fragment (heure stable)
+                tsLast  = e.ts or 0,          -- dernier fragment (info interne)
                 dir = e.dir, type = e.type, chan = e.chan, target = e.target,
                 seq = e.seq or 0, total = e.total or 1, lastPart = e.part or 1, size = 0,
                 state = nil,
+                sentCount = 0,                -- nb fragments effectivement envoyés (ENVOI)
                 parts = {},
             }
             map[key] = g
         end
-        g.ts = math.max(g.ts or 0, e.ts or 0)
-        g.size = (g.size or 0) + (tonumber(e.size) or 0)
-        g.total = e.total or g.total
-        g.lastPart = math.max(g.lastPart or 1, e.part or 1)
+        g.tsFirst = math.min(g.tsFirst or (e.ts or 0), e.ts or 0)
+        g.tsLast  = math.max(g.tsLast  or 0, e.ts or 0)
+        g.size    = (g.size or 0) + (tonumber(e.size) or 0)
+        g.total   = e.total or g.total
+        g.lastPart= math.max(g.lastPart or 1, e.part or 1)
         g.parts[e.part or 1] = e.raw
-        -- État agrégé: "sent" prioritaire sur "pending"
+
+        -- Comptage précis des fragments TRANSMIS (sans compter les "pending")
         if e.state == "sent" then
-            g.state = "sent"
-        elseif e.state == "pending" and g.state ~= "sent" then
-            g.state = "pending"
+            g._sent = g._sent or {}
+            local p = e.part or 1
+            if not g._sent[p] then
+                g._sent[p] = true
+                g.sentCount = (g.sentCount or 0) + 1
+            end
         end
     end
 
     local out = {}
     for _, g in pairs(map) do
+        -- Horodatage affiché = fixé au 1er fragment
+        g.ts = g.tsFirst or g.ts
+
+        -- Compte des fragments réellement présents (utile côté RECU)
+        local got = 0
+        for i = 1, (g.total or 1) do if g.parts[i] then got = got + 1 end end
+        g.gotCount = got
+
         local payloads, raws = {}, {}
         for i = 1, (g.total or 1) do
             local raw = g.parts[i]
@@ -135,6 +159,7 @@ local function groupLogs(raw)
         g.lm = tonumber(kv.lm or "") or nil
         out[#out+1] = g
     end
+
 
     -- Tri : par Heure (décroissant), puis par Version (décroissant), puis par Sens (ENVOI avant RECU)
     table.sort(out, function(a, b)
