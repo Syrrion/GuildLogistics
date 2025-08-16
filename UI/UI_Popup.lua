@@ -330,26 +330,33 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
             topOffset = ComputeLVTopOffset(),
         })
 
-        -- ➕ Agrégation par lot : on additionne les parts utilisées
-        local usedByLot = {}
+        -- ➕ Agrégation par lot avec méta (fallback si lot inconnu en local)
+        local usedByLot, metaByLot = {}, {}
         for i = 1, #L do
             local li = L[i]
             local id = li and li.id
-            local n  = tonumber(li.n or 1) or 1  -- nb d'utilisations pour CE joueur (1 par lot/cohorte)
-            if id then usedByLot[id] = (usedByLot[id] or 0) + n end
+            local n  = tonumber(li.n or li.k or 1) or 1  -- supporte k/n
+            if id then
+                usedByLot[id] = (usedByLot[id] or 0) + n
+                if not metaByLot[id] then metaByLot[id] = li end -- garde nom + gold côté client
+            end
         end
 
-
-        -- ➕ Construit les lignes (prix = part * nbPartsUtilisées)
+        -- ➕ Construit les lignes (prix = part * nbPartsUtilisées), avec fallback nom/prix depuis ctx.L
         local rows = {}
         for id, usedParts in pairs(usedByLot) do
             local lot = ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.Lot_GetById(id)
+            local name, perGold
             if lot then
-                local name    = lot.name or ("Lot "..tostring(id))
-                local perGold = (ns and ns.CDZ and ns.CDZ.Lot_ShareGold and ns.CDZ.Lot_ShareGold(lot)) or 0
-                local gold    = math.max(0, perGold * (tonumber(usedParts) or 1))
-                rows[#rows+1] = { lot = name, price = gold, priceText = UI.MoneyText(gold) }
+                name    = lot.name or ((metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id)))
+                perGold = (ns and ns.CDZ and ns.CDZ.Lot_ShareGold and ns.CDZ.Lot_ShareGold(lot)) or 0
+            else
+                name    = (metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id))
+                perGold = tonumber(metaByLot[id] and (metaByLot[id].gold or metaByLot[id].g)) or 0
             end
+
+            local gold = math.max(0, (tonumber(perGold) or 0) * (tonumber(usedParts) or 1))
+            rows[#rows+1] = { lot = name, price = gold, priceText = UI.MoneyText(gold) }
         end
         table.sort(rows, function(a, b) return (a.lot or ""):lower() < (b.lot or ""):lower() end)
 

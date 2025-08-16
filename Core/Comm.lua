@@ -845,7 +845,32 @@ function CDZ._HandleFull(sender, msgType, kv)
                         if d < 0 then
                             local per   = -d
                             local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
-                            ns.UI.PopupRaidDebit(meFull, per, after, { L = kv.L or {} })
+
+                            -- Parse kv.L (CSV "id,name,k,N,n,gold") → tableau d'objets
+                            local Lctx, Lraw = {}, kv and kv.L
+                            if type(Lraw) == "table" then
+                                for j = 1, #Lraw do
+                                    local s = Lraw[j]
+                                    if type(s) == "string" then
+                                        local id,name,kUse,Ns,n,g = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
+                                        if id then
+                                            Lctx[#Lctx+1] = {
+                                                id   = tonumber(id),
+                                                name = name,
+                                                k    = tonumber(kUse),
+                                                N    = tonumber(Ns),
+                                                n    = tonumber(n),
+                                                gold = tonumber(g),
+                                            }
+                                        end
+                                    elseif type(s) == "table" then
+                                        -- tolérance (anciens GM locaux)
+                                        Lctx[#Lctx+1] = s
+                                    end
+                                end
+                            end
+
+                            ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
                             if ns.Emit then ns.Emit("raid:popup-shown", meFull) end
                         end
                         break
@@ -1193,8 +1218,17 @@ function CDZ.GM_ApplyAndBroadcastByUID(uid, delta, extra)
     local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
     ChroniquesDuZephyrDB.meta.rev = rv
     ChroniquesDuZephyrDB.meta.lastModified = now()
-    local p = { uid=uid, name=(CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or "?", delta=delta, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified, by=playerFullName() }
-    if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
+    local p = {
+        uid   = uid,
+        name  = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or tostring(uid),
+        delta = delta,
+        rv    = rv,
+        lm    = ChroniquesDuZephyrDB.meta.lastModified,
+        by    = playerFullName(),
+    }
+    if type(extra) == "table" then
+        for k, v in pairs(extra) do if p[k] == nil then p[k] = v end end
+    end
     CDZ.Comm_Broadcast("TX_APPLIED", p)
 end
 
@@ -1263,8 +1297,42 @@ function CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extr
     end
 
     -- Diffusion réseau du même batch (rv/lm identiques)
-    local p = { U=uids or {}, D=deltas or {}, N=names or {}, R=reason or "", S=silent and 1 or 0, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified }
-    if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
+    local p = {
+        U  = uids or {},
+        D  = deltas or {},
+        N  = names or {},
+        R  = reason or "",               -- libellé (optionnel)
+        S  = silent and 1 or 0,          -- silencieux ? (bool → int)
+        rv = rv,
+        lm = ChroniquesDuZephyrDB.meta.lastModified,
+    }
+
+    -- Sérialise extra.L (liste des lots utilisés) en CSV "id,name,k,N,n,gold"
+    if type(extra) == "table" then
+        for k, v in pairs(extra) do
+            if k == "L" and type(v) == "table" then
+                local Ls = {}
+                for i = 1, #v do
+                    local li = v[i]
+                    if type(li) == "table" then
+                        local id   = tonumber(li.id or li.lotId) or 0
+                        local name = tostring(li.name or "")
+                        local kUse = tonumber(li.k or li.n or 1) or 1
+                        local Ns   = tonumber(li.N or 1) or 1
+                        local n    = tonumber(li.n or 1) or 1
+                        local g    = tonumber(li.gold or li.g or 0) or 0
+                        Ls[#Ls+1]  = table.concat({ id, name, kUse, Ns, n, g }, ",")
+                    else
+                        Ls[#Ls+1]  = tostring(li or "")
+                    end
+                end
+                p.L = Ls
+            elseif p[k] == nil then
+                p[k] = v
+            end
+        end
+    end
+
     CDZ.Comm_Broadcast("TX_BATCH", p)
 end
 
