@@ -812,15 +812,20 @@ function CDZ._HandleFull(sender, msgType, kv)
         refreshActive()
 
     elseif msgType == "TX_REQ" then
+        -- Seul le GM traite les demandes : les clients non-GM ignorent.
+        if not (CDZ.IsMaster and CDZ.IsMaster()) then
+            return
+        end
+
         if CDZ.AddIncomingRequest then CDZ.AddIncomingRequest(kv) end
         refreshActive()
 
-        -- Popup instantanée côté GM : utiliser ns.UI (UI_Popup.lua est chargé après Comm.lua)
+        -- Popup côté GM
         local ui = ns.UI
-        if CDZ.IsMaster and CDZ.IsMaster() and ui and ui.PopupRequest then
+        if ui and ui.PopupRequest then
             local _id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
             ui.PopupRequest(kv.who or sender, safenum(kv.delta,0),
-                function() -- Approuver
+                function()
                     if CDZ.GM_ApplyAndBroadcastByUID then
                         CDZ.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), {
                             reason = "PLAYER_REQUEST", requester = kv.who or sender
@@ -828,12 +833,11 @@ function CDZ._HandleFull(sender, msgType, kv)
                     end
                     if CDZ.ResolveRequest then CDZ.ResolveRequest(_id, true, playerFullName()) end
                 end,
-                function() -- Refuser
+                function()
                     if CDZ.ResolveRequest then CDZ.ResolveRequest(_id, false, playerFullName()) end
                 end
             )
         end
-
 
     elseif msgType == "TX_APPLIED" then
         if not shouldApply() then return end
@@ -1486,14 +1490,11 @@ function CDZ.RequestAdjust(a, b)
     local uid = CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(me)
     if not uid then return end
 
-    local master = masterName and masterName()
+    -- Envoi uniquement via GUILD (plus de WHISPER)
     local payload = { uid = uid, delta = delta, who = me, ts = now() }
-    if master and master ~= "" then
-        CDZ.Comm_Whisper(master, "TX_REQ", payload)
-    else
-        CDZ.Comm_Broadcast("TX_REQ", payload)
-    end
+    CDZ.Comm_Broadcast("TX_REQ", payload)
 end
+
 
 
 -- ===== Dépenses/Lots (émission GM) =====
