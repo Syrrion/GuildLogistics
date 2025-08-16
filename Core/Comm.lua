@@ -547,7 +547,7 @@ function CDZ._SnapshotExport()
 
     local meta = ChroniquesDuZephyrDB.meta
     local t = {
-        P = {}, I = {}, E = {}, L = {},
+        P = {}, I = {}, E = {}, L = {}, H = {},
         rv = safenum(meta.rev, 0),
         lm = safenum(meta.lastModified, now()),
         fs = safenum(meta.fullStamp, now()),
@@ -558,7 +558,6 @@ function CDZ._SnapshotExport()
     end
     local _players = ChroniquesDuZephyrDB.players or {}
     for uid, name in pairs(ChroniquesDuZephyrDB.uids) do
-        -- n'exporter que les UID qui pointent encore vers un joueur existant
         if name and _players[name] ~= nil then
             t.I[#t.I+1] = tostring(uid) .. ":" .. tostring(name)
         end
@@ -575,6 +574,14 @@ function CDZ._SnapshotExport()
         t.L[#t.L+1] = table.concat({
             safenum(l.id,0), tostring(l.name or ("Lot "..tostring(l.id))), safenum(l.sessions,1),
             safenum(l.used,0), safenum(l.totalCopper,0), table.concat(ids, ";")
+        }, ",")
+    end
+    -- ➕ Historique compact (CSV: ts,total,perHead,count,ref,participants(;))
+    for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
+        local parts = table.concat(h.participants or {}, ";")
+        t.H[#t.H+1] = table.concat({
+            safenum(h.ts,0), safenum(h.total,0), safenum(h.perHead,0),
+            safenum(h.count,0), (h.refunded and 1 or 0), parts
         }, ",")
     end
     return t
@@ -646,6 +653,26 @@ function CDZ._SnapshotApply(kv)
             end
         end
     end
+    do
+        ChroniquesDuZephyrDB.history = {}
+        for _, line in ipairs(kv.H or {}) do
+            local ts, total, per, cnt, ref, parts = line:match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+            if ts then
+                local s = {
+                    ts = safenum(ts,0),
+                    total = safenum(total,0),
+                    perHead = safenum(per,0),
+                    count = safenum(cnt,0),
+                    refunded = (safenum(ref,0) ~= 0),
+                    participants = {},
+                }
+                if parts and parts ~= "" then
+                    for p in tostring(parts):gmatch("[^;]+") do s.participants[#s.participants+1] = p end
+                end
+                table.insert(ChroniquesDuZephyrDB.history, s)
+            end
+        end
+    end
 
     for _, s in ipairs(kv.L or {}) do
         local id, name, sessions, used, totalCopper, idsCsv = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
@@ -662,6 +689,39 @@ function CDZ._SnapshotApply(kv)
             ChroniquesDuZephyrDB.lots.nextId = math.max(ChroniquesDuZephyrDB.lots.nextId or 1, id + 1)
         end
     end
+
+    -- ➕ Import Historique depuis le snapshot
+    ChroniquesDuZephyrDB.history = {}
+    for _, s in ipairs(kv.H or {}) do
+        if type(s) == "string" then
+            local hid, ts, total, per, count, refunded, rest =
+                s:match("^(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+            local names = {}
+            if rest and rest ~= "" then
+                for name in tostring(rest):gmatch("[^;]+") do names[#names+1] = name end
+            end
+            ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
+                hid = (hid ~= "" and hid or nil),
+                ts  = safenum(ts, 0),
+                total = safenum(total, 0),
+                perHead = safenum(per, 0),
+                count = safenum(count, #names),
+                participants = names,
+                refunded = (safenum(refunded, 0) == 1),
+            }
+        elseif type(s) == "table" then
+            -- tolérance (au cas où)
+            ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
+                hid = s.hid, ts = safenum(s.ts, 0),
+                total = safenum(s.total or s.t, 0),
+                perHead = safenum(s.perHead or s.per or s.p, 0),
+                count = safenum(s.count or s.c or #(s.names or s.participants or {}), 0),
+                participants = s.names or s.participants or {},
+                refunded = (s.refunded or s.r == 1) and true or false,
+            }
+        end
+    end
+    if ns and ns.Emit then ns.Emit("history:changed") end
 end
 
 -- ===== File complète → traitement ordonné =====
@@ -917,6 +977,64 @@ function CDZ._HandleFull(sender, msgType, kv)
         end
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
+        refreshActive()
+
+    -- ➕ Historique : ajout / remboursement / annulation / suppression
+    elseif msgType == "HIST_ADD" then
+        if not shouldApply() then return end
+        ChroniquesDuZephyrDB.history = ChroniquesDuZephyrDB.history or {}
+        local ts = safenum(kv.ts,0)
+        local exists = false
+        for _, h in ipairs(ChroniquesDuZephyrDB.history) do if safenum(h.ts,0) == ts then exists = true break end end
+        if not exists and ts > 0 then
+            local rec = {
+                ts = ts,
+                total = safenum(kv.total or kv.t, 0),
+                perHead = safenum(kv.per or kv.p, 0),
+                count = safenum(kv.cnt or kv.c, 0),
+                refunded = safenum(kv.r,0) ~= 0,
+                participants = {},
+            }
+            for i = 1, #(kv.P or {}) do rec.participants[i] = kv.P[i] end
+            table.insert(ChroniquesDuZephyrDB.history, 1, rec)
+            meta.rev = (rv >= 0) and rv or myrv
+            meta.lastModified = (lm >= 0) and lm or now()
+            if ns.Emit then ns.Emit("history:changed") end
+            refreshActive()
+        end
+
+    elseif msgType == "HIST_REFUND" then
+        if not shouldApply() then return end
+        local ts = safenum(kv.ts,0)
+        for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
+            if safenum(h.ts,0) == ts then h.refunded = true break end
+        end
+        meta.rev = (rv >= 0) and rv or myrv
+        meta.lastModified = (lm >= 0) and lm or now()
+        if ns.Emit then ns.Emit("history:changed") end
+        refreshActive()
+
+    elseif msgType == "HIST_UNREFUND" then
+        if not shouldApply() then return end
+        local ts = safenum(kv.ts,0)
+        for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
+            if safenum(h.ts,0) == ts then h.refunded = false break end
+        end
+        meta.rev = (rv >= 0) and rv or myrv
+        meta.lastModified = (lm >= 0) and lm or now()
+        if ns.Emit then ns.Emit("history:changed") end
+        refreshActive()
+
+    elseif msgType == "HIST_DEL" then
+        if not shouldApply() then return end
+        local ts = safenum(kv.ts,0)
+        local t = ChroniquesDuZephyrDB.history or {}
+        for i = #t, 1, -1 do
+            if safenum(t[i].ts,0) == ts then table.remove(t, i) break end
+        end
+        meta.rev = (rv >= 0) and rv or myrv
+        meta.lastModified = (lm >= 0) and lm or now()
+        if ns.Emit then ns.Emit("history:changed") end
         refreshActive()
 
     elseif msgType == "LOT_CREATE" then
@@ -1522,6 +1640,49 @@ function CDZ.GM_ConsumeLots(ids)
     ChroniquesDuZephyrDB.meta.rev = rv
     ChroniquesDuZephyrDB.meta.lastModified = now()
     CDZ.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+-- ➕ Diffusion Historique (GM uniquement)
+function CDZ.BroadcastHistoryAdd(p)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("HIST_ADD", {
+        h  = tostring(p.hid or ""),
+        ts = safenum(p.ts, now()),
+        t  = safenum(p.total or p.t, 0),
+        p  = safenum(p.per or p.p, 0),
+        c  = safenum(p.count or p.c or #(p.names or p.participants or {}), 0),
+        N  = p.names or p.participants or {},
+        r  = safenum(p.r or (p.refunded and 1 or 0), 0),
+        rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+    })
+end
+
+function CDZ.BroadcastHistoryRefund(hid, flag)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("HIST_REFUND", {
+        h = tostring(hid or ""), v = (flag and 1 or 0),
+        rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+    })
+end
+
+function CDZ.BroadcastHistoryDelete(hid)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("HIST_DELETE", {
+        h = tostring(hid or ""),
+        rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+    })
 end
 
 -- ===== Meta helpers =====

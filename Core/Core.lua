@@ -281,17 +281,34 @@ end
 -- =========================
 -- ======  HISTORY    ======
 -- =========================
-function CDZ.AddHistorySession(total, perHead, participants)
+function CDZ.AddHistorySession(total, perHead, participants, ctx)
     EnsureDB()
     local s = {
         ts = time(),
         total = math.floor(total or 0),
         perHead = math.floor(perHead or 0),
-        count = #participants,
+        count = #(participants or {}),
         participants = { unpack(participants or {}) },
         refunded = false,
     }
+    if type(ctx) == "table" and ctx.lots then
+        s.lots = ctx.lots
+    end
     table.insert(ChroniquesDuZephyrDB.history, 1, s)
+
+    -- Diffusion réseau (petit message) si GM
+    if CDZ.IsMaster and CDZ.IsMaster() and CDZ.Comm_Broadcast then
+        ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+        local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+        ChroniquesDuZephyrDB.meta.rev = rv
+        ChroniquesDuZephyrDB.meta.lastModified = time()
+        CDZ.Comm_Broadcast("HIST_ADD", {
+            ts = s.ts, total = s.total, per = s.perHead, cnt = s.count,
+            r = s.refunded and 1 or 0, P = s.participants,
+            rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+        })
+    end
+    if ns.Emit then ns.Emit("history:changed") end
 end
 
 function CDZ.GetHistory()
@@ -315,6 +332,16 @@ function CDZ.RefundSession(idx)
     end
 
     s.refunded = true
+
+    -- Diffusion du changement d'état si GM
+    if CDZ.IsMaster and CDZ.IsMaster() and CDZ.Comm_Broadcast then
+        ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+        local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+        ChroniquesDuZephyrDB.meta.rev = rv
+        ChroniquesDuZephyrDB.meta.lastModified = time()
+        CDZ.Comm_Broadcast("HIST_REFUND", { ts = s.ts, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+    end
+    if ns.Emit then ns.Emit("history:changed") end
     return true
 end
 
@@ -334,19 +361,37 @@ function CDZ.UnrefundSession(idx)
     end
 
     s.refunded = false
+
+    -- Diffusion du changement d'état si GM
+    if CDZ.IsMaster and CDZ.IsMaster() and CDZ.Comm_Broadcast then
+        ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+        local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+        ChroniquesDuZephyrDB.meta.rev = rv
+        ChroniquesDuZephyrDB.meta.lastModified = time()
+        CDZ.Comm_Broadcast("HIST_UNREFUND", { ts = s.ts, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+    end
+    if ns.Emit then ns.Emit("history:changed") end
     return true
 end
-
 
 function CDZ.DeleteHistory(idx)
     EnsureDB()
     local hist = ChroniquesDuZephyrDB.history or {}
-    if not hist[idx] then return false end
-    -- Suppression "non-compensatrice" : n'ajuste jamais les soldes.
+    local s = hist[idx]; if not s then return false end
+    local ts = s.ts
     table.remove(hist, idx)
+
+    -- Diffusion de la suppression si GM
+    if CDZ.IsMaster and CDZ.IsMaster() and CDZ.Comm_Broadcast then
+        ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+        local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+        ChroniquesDuZephyrDB.meta.rev = rv
+        ChroniquesDuZephyrDB.meta.lastModified = time()
+        CDZ.Comm_Broadcast("HIST_DEL", { ts = ts, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+    end
+    if ns.Emit then ns.Emit("history:changed") end
     return true
 end
-
 
 function CDZ.WipeAllData()
     -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)

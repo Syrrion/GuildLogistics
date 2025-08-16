@@ -125,6 +125,15 @@ local function Refresh()
     if lv then lv:SetData(histNow()) end
 end
 
+-- Gestion des événements : rafraîchir la liste si l’onglet est visible
+if ns and ns.On then
+    ns.On("history:changed", function()
+        if panel and panel:IsShown() then
+            Refresh()
+        end
+    end)
+end
+
 local function Build(container)
     panel = container
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
