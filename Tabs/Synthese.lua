@@ -195,8 +195,8 @@ local function Build(container)
     end)
 
     -- Bouton Historique (déjà demandé précédemment)
-    local histBtn = UI.Button(footer, "Historique", { size="sm", minWidth=120, tooltip="Voir l’historique des répartitions" })
-    histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique des sorties") end)
+    local histBtn = UI.Button(footer, "Historique", { size="...", minWidth=120, tooltip="Voir l’historique des répartitions" })
+    histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique") end)
 
     -- Aligner à droite : Historique | Ajouter membre guilde | + Ajouter
     if UI.AttachButtonsFooterRight then

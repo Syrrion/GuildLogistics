@@ -60,7 +60,8 @@ local function UpdateRow(i, r, f, d)
     local solde = (d.credit or 0) - (d.debit or 0)
     f.solde:SetText(UI.MoneyText(solde))
     local per = ComputePerHead()
-    local after = solde - per
+    local isIncluded = includes[d.name] and true or false
+    local after = isIncluded and (solde - per) or solde
     f.after:SetText(UI.MoneyText(after))
 end
 
