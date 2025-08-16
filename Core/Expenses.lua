@@ -68,7 +68,7 @@ function CDZ.LogExpense(source, itemLink, itemName, qty, copper)
     -- ➕ diffusion aux joueurs (le GM seul diffuse)
     if CDZ.BroadcastExpenseAdd and CDZ.IsMaster and CDZ.IsMaster() then
         CDZ.BroadcastExpenseAdd({
-            id = nid, s = source, i = iid or 0,
+            id = nid, src = source, i = iid or 0,
             q = tonumber(qty) or 1, c = amount
         })
     end
@@ -86,20 +86,41 @@ function CDZ.GetExpenses()
 end
 
 -- === Suppression / Vidage des dépenses ===
-function CDZ.DeleteExpense(index)
+function CDZ.DeleteExpense(ref)
     EnsureDB()
     local e = ChroniquesDuZephyrDB.expenses
     if not (e and e.list) then return false end
-    local i = tonumber(index)
-    if not i or i < 1 or i > #e.list then return false end
-    if e.list[i] and e.list[i].lotId then
-        if UIErrorsFrame then UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Ressource rattachée à un lot : suppression impossible.", 1,0.4,0.4) end
+
+    local i = tonumber(ref)
+    if not i then return false end
+
+    -- Résolution robuste : accepte un index absolu OU un id stable
+    local idx = nil
+    if i >= 1 and i <= #e.list then idx = i end
+    if not idx then
+        for k, it in ipairs(e.list) do
+            if tonumber(it.id or 0) == i then idx = k break end
+        end
+    end
+    if not idx then return false end
+
+    -- Interdit de supprimer une dépense rattachée à un lot
+    if e.list[idx] and e.list[idx].lotId then
+        if UIErrorsFrame then UIErrorsFrame:AddMessage("|cffff60...ce rattachée à un lot : suppression impossible.", 1,0.4,0.4) end
         return false
     end
-    table.remove(e.list, i)
+
+    local eid = e.list[idx] and e.list[idx].id
+    table.remove(e.list, idx)
     if ns and ns.RefreshAll then ns.RefreshAll() end
+
+    -- Diffusion GM : notifier les autres clients
+    if CDZ.GM_RemoveExpense and CDZ.IsMaster and CDZ.IsMaster() and tonumber(eid or 0) > 0 then
+        CDZ.GM_RemoveExpense(eid)
+    end
     return true
 end
+
 
 function CDZ.ClearExpenses()
     EnsureDB()

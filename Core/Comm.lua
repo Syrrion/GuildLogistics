@@ -1,11 +1,58 @@
--- ChroniquesDuZephyr/Comm.lua
 local ADDON, ns = ...
 ns.CDZ = ns.CDZ or {}
 local CDZ, UI = ns.CDZ, ns.UI
 
+-- ➕ Garde-fou : attache les helpers UID exposés par Helper.lua (et fallback ultime)
+CDZ.GetOrAssignUID = CDZ.GetOrAssignUID or (ns.Util and ns.Util.GetOrAssignUID)
+CDZ.GetNameByUID   = CDZ.GetNameByUID   or (ns.Util and ns.Util.GetNameByUID)
+CDZ.MapUID         = CDZ.MapUID         or (ns.Util and ns.Util.MapUID)
+CDZ.UnmapUID       = CDZ.UnmapUID       or (ns.Util and ns.Util.UnmapUID)
+CDZ.EnsureRosterLocal = CDZ.EnsureRosterLocal or (ns.Util and ns.Util.EnsureRosterLocal)
+
+if not CDZ.GetOrAssignUID then
+    -- Fallback minimal (au cas où Helper.lua n’est pas encore chargé — évite les nil)
+    local function _ensureDB()
+        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+        ChroniquesDuZephyrDB.meta    = ChroniquesDuZephyrDB.meta    or {}
+        ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+        ChroniquesDuZephyrDB.uids    = ChroniquesDuZephyrDB.uids    or {}
+        ChroniquesDuZephyrDB.meta.uidSeq = ChroniquesDuZephyrDB.meta.uidSeq or 1
+        return ChroniquesDuZephyrDB
+    end
+    function CDZ.GetOrAssignUID(name)
+        local db = _ensureDB()
+        local full = tostring(name or "")
+        for uid, stored in pairs(db.uids) do if stored == full then return uid end end
+        local uid = string.format("P%06d", db.meta.uidSeq); db.meta.uidSeq = db.meta.uidSeq + 1
+        db.uids[uid] = full
+        db.players[full] = db.players[full] or { credit = 0, debit = 0 }
+        return uid
+    end
+    function CDZ.GetNameByUID(uid)
+        local db = _ensureDB()
+        return db.uids[tostring(uid or "")]
+    end
+    function CDZ.MapUID(uid, name)
+        local db = _ensureDB()
+        db.uids[tostring(uid or "")] = tostring(name or "")
+        db.players[tostring(name or "")] = db.players[tostring(name or "")] or { credit=0, debit=0 }
+        return uid
+    end
+    function CDZ.UnmapUID(uid)
+        local db = _ensureDB()
+        db.uids[tostring(uid or "")] = nil
+    end
+    function CDZ.EnsureRosterLocal(name)
+        local db = _ensureDB()
+        local full = tostring(name or "")
+        db.players[full] = db.players[full] or { credit = 0, debit = 0 }
+        return db.players[full]
+    end
+end
+
 -- ===== Constantes / État =====
 local PREFIX   = "CDZ1"
-local MAX_PAY  = 220   -- fragmentation des messages
+local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
@@ -14,13 +61,25 @@ local OUT_MAX_PER_SEC = 2
 -- Compression (optionnelle via LibDeflate) : compresse avant fragmentation, décompresse après réassemblage
 local LD do
     local lib = nil
-    if type(LibStub) == "table" and LibStub.GetLibrary then
-        lib = LibStub:GetLibrary("LibDeflate", true)
-    end
-    LD = lib or _G.LibDeflate
+    local f = CreateFrame("Frame")
+    f:SetScript("OnEvent", function()
+        if not lib then
+            if LibStub then lib = LibStub:GetLibrary("LibDeflate", true) end
+        end
+    end)
+    f:RegisterEvent("ADDON_LOADED")
+    LD = setmetatable({}, {
+        __index = function(_, k)
+            if not lib then
+                if LibStub then lib = LibStub:GetLibrary("LibDeflate", true) end
+            end
+            return lib and lib[k]
+        end
+    })
 end
-local COMPRESS_MIN_SIZE  = 80   -- évite de gonfler les petites trames
-local COMPRESS_LEVEL     = 5    -- 1..9
+
+-- Seuil de compression : ne pas compresser les tout petits messages
+local COMPRESS_MIN_SIZE = 200
 
 -- ⚙️ Utilitaires (rétablis) + fallbacks sûrs si Helper n'est pas encore chargé
 local U = (ns and ns.Util) or {}
@@ -30,30 +89,127 @@ local now            = (U and U.now)            or (_G and _G.now)            or
 local normalizeStr   = (U and U.normalizeStr)   or (_G and _G.normalizeStr)   or function(s) s=tostring(s or ""):gsub("%s+",""):gsub("'",""); return s:lower() end
 local playerFullName = (U and U.playerFullName) or (_G and _G.playerFullName) or function() local n,r=UnitFullName("player"); return r and (n.."-"..r) or n end
 local masterName     = (U and U.masterName)     or (_G and _G.masterName)     or function() return nil end
-local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=_G.ChroniquesDuZephyrDB; return (db and db.meta and db.meta.rev) or 0 end
+local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=ChroniquesDuZephyrDB; return (db and db.meta and db.meta.rev) or 0 end
 
 local function _compressStr(s)
-
     if not (LD and s and #s >= COMPRESS_MIN_SIZE) then return nil end
-    local ok, comp = pcall(function() return LD:CompressDeflate(s, { level = COMPRESS_LEVEL }) end)
-    if not ok or not comp then return nil end
-    return LD:EncodeForWoWAddonChannel(comp)
+    if not (LD and LD.CompressDeflate) then return nil end
+    local comp = LD:CompressDeflate(s, { level = 6 })
+    return comp and LD:EncodeForWoWAddonChannel(comp) or nil
 end
 
-local function _decompressStr(enc)
-    if not (LD and enc and enc ~= "") then return nil end
-    local decoded = LD:DecodeForWoWAddonChannel(enc); if not decoded then return nil end
-    return LD:DecompressDeflate(decoded)
+local function _decompressStr(s)
+    if not (LD and s and s ~= "") then return nil end
+    if not (LD and LD.DecompressDeflate) then return nil end
+    local decoded = LD:DecodeForWoWAddonChannel(s)
+    if not decoded then return nil end
+    local ok, raw = pcall(function() return LD:DecompressDeflate(decoded) end)
+    return ok and raw or nil
 end
 
--- Balisage interne 'c=z|' pour signaler un payload compressé
-local function packPayloadStr(s)
-    s = tostring(s or "")
-    local enc = _compressStr(s)
-    if enc and (#enc + 4) < #s then
-        return "c=z|"..enc
+local function encodeKV(t, out)
+    -- ✅ Tolérance : si on nous passe déjà une chaîne encodée, renvoyer tel quel
+    if type(t) ~= "table" then
+        return tostring(t or "")
     end
-    return s
+    out = out or {}
+
+    -- échappement sûr pour les éléments de tableau (gère virgules, crochets, pipes, retours ligne)
+    local function escArrElem(s)
+        s = tostring(s or "")
+        s = s:gsub("\\", "\\\\")     -- antislash
+             :gsub("|", "||")        -- pipe
+             :gsub("\n", "\\n")      -- newline
+             :gsub(",", "\\,")       -- virgule (séparateur d'array)
+             :gsub("%]", "\\]")      -- crochet fermant d'array
+        return s
+    end
+
+    for k, v in pairs(t) do
+        local vt = type(v)
+        if vt == "table" then
+            local arr = {}
+            for i = 1, #v do
+                arr[#arr+1] = escArrElem(v[i])
+            end
+            out[#out+1] = k .. "=[" .. table.concat(arr, ",") .. "]"
+        else
+            v = tostring(v)
+            v = v:gsub("|", "||"):gsub("\n", "\\n")
+            out[#out+1] = k .. "=" .. v
+        end
+    end
+    return table.concat(out, "|")
+end
+
+local function decodeKV(s)
+    local t = {}
+    s = tostring(s or "")
+    local i = 1
+    while i <= #s do
+        local j = s:find("|", i, true) or (#s + 1)
+        local part = s:sub(i, j - 1)
+        local eq = part:find("=", 1, true)
+        if eq then
+            local k = part:sub(1, eq - 1)
+            local v = part:sub(eq + 1)
+
+            if v:match("^%[.*%]$") then
+                -- Parse d'array avec échappements (\, \], \\, ||, \n)
+                local body = v:sub(2, -2)
+                local list, buf, esc = {}, {}, false
+                for p = 1, #body do
+                    local ch = body:sub(p, p)
+                    if esc then
+                        buf[#buf+1] = ch
+                        esc = false
+                    else
+                        if ch == "\\" then
+                            esc = true
+                        elseif ch == "," then
+                            list[#list+1] = table.concat(buf); buf = {}
+                        else
+                            buf[#buf+1] = ch
+                        end
+                    end
+                end
+                list[#list+1] = table.concat(buf)
+
+                -- déséchappement final par élément
+                for idx = 1, #list do
+                    local x = list[idx]
+                    x = x:gsub("\\n", "\n")
+                         :gsub("||", "|")
+                         :gsub("\\,", ",")
+                         :gsub("\\%]", "]")
+                         :gsub("\\\\", "\\")
+                    list[idx] = x
+                end
+                t[k] = list
+            else
+                -- valeur scalaire : déséchappement simple
+                v = v:gsub("\\n", "\n"):gsub("||", "|")
+                t[k] = v
+            end
+        end
+        i = j + 1
+    end
+    return t
+end
+
+local function packPayloadStr(kv_or_str)
+    -- ✅ Si on reçoit déjà une chaîne encodée, ne pas ré-encoder (on compresse éventuellement)
+    local plain
+    if type(kv_or_str) == "table" then
+        plain = encodeKV(kv_or_str)
+    else
+        plain = tostring(kv_or_str or "")
+    end
+    local comp = _compressStr(plain)
+    if comp and #comp < #plain then
+        return "c=z|" .. comp
+    end
+    return plain
 end
 
 local function unpackPayloadStr(s)
@@ -65,392 +221,477 @@ local function unpackPayloadStr(s)
     return s
 end
 
-local normalizeStr   = U.normalizeStr   or _G.normalizeStr
-local now            = U.now            or _G.now or time
-local playerFullName = U.playerFullName or _G.playerFullName
-local masterName     = _G.masterName    or U.masterName
-local getRev         = _G.getRev        or U.getRev
+-- ===== Découverte & Sync (HELLO → OFFER → GRANT → FULL → ACK) =====
+-- Paramètres (sans broadcast, sans test de bande passante)
+local HELLO_WAIT_SEC          = 3.0        -- fenêtre collecte OFFERS
+local OFFER_BACKOFF_MS_MAX    = 600        -- étalement OFFERS (0..600ms)
+local FULL_INHIBIT_SEC        = 15         -- n'offre pas si FULL récent vu
+local OFFER_RATE_LIMIT_SEC    = 10         -- anti-spam OFFERS par initiateur
 
--- ===== Élection HELLO (révision des données) =====
-local HELLO_WAIT_SEC = 5
-local HelloSessions = {}  -- [helloId] = { initiator={player,rv}, responders={[normName]={player,rv}}, startedAt=ts, decided=bool }
+-- Suivi "FULL vu" pour UI/anti-bruit
+local LastFullSentAt  = LastFullSentAt or 0
+local LastFullSeenAt  = LastFullSeenAt or 0
+local LastFullSeenRv  = LastFullSeenRv or -1
 
--- Anti doublon FULL + suivi "HELLO" pour l'UI
-local ELECTION_COOLDOWN_SEC = 8
-local LastFullSentAt  = 0
-local LastFullSeenAt  = 0
-local LastFullSeenRv  = -1
-local HelloElect      = {} -- [helloId] = { startedAt, endsAt, winner=nil, decided=false }
+-- Suivi Debug de la découverte
+local HelloElect      = HelloElect or {}   -- [hid] = { startedAt, endsAt, decided, winner, token, offers, applied }
 
-local function isMasterName(n)
-    local m = masterName()
-    if not m or m=="" or not n or n=="" then return false end
-    return normalizeStr(m) == normalizeStr(n)
-end
+-- Sessions initiées localement
+-- [hid] = { initiator=me, rv_me, decided=false, endsAt, offers={[normName]={player,rv,est,h}}, grantedTo, token, reason }
+local Discovery = Discovery or {}
 
-local function isElectionActive()
-    local t = now()
-    for _, sess in pairs(HelloSessions) do
-        if not sess.decided and (t - (sess.startedAt or t)) < HELLO_WAIT_SEC then
-            return true
-        end
+-- Cooldown d’OFFERS par initiateur
+-- [normInitiator] = lastTs
+local OfferCooldown = OfferCooldown or {}
+
+-- Petits utilitaires
+local function _norm(s) return normalizeStr(s or "") end
+
+-- XOR compatible WoW (Lua 5.1) : utilise bit.bxor si présent, sinon fallback pur Lua
+local bxor = (bit and bit.bxor) or function(a, b)
+    a = tonumber(a) or 0; b = tonumber(b) or 0
+    local res, bitv = 0, 1
+    while a > 0 or b > 0 do
+        local abit, bbit = a % 2, b % 2
+        if (abit + bbit) == 1 then res = res + bitv end
+        a = math.floor(a / 2); b = math.floor(b / 2); bitv = bitv * 2
     end
-    return false
+    return res
 end
 
-local function electWinner(helloId)
-    local sess = HelloSessions[helloId]
+local function _hashHint(s)
+    s = tostring(s or "")
+    local h = 2166136261
+    for i = 1, #s do
+        h = (bxor(h, s:byte(i)) * 16777619) % 2^32
+    end
+    return h
+end
+
+-- Générateur hex “safe WoW” (évite les overflows de %x sur 32 bits)
+local function _randHex8()
+    -- Concatène deux mots 16 bits pour obtenir 8 hex digits sans jamais dépasser INT_MAX
+    return string.format("%04x%04x", math.random(0, 0xFFFF), math.random(0, 0xFFFF))
+end
+
+local function _estimateSnapshotSize()
+    local ok, snap = pcall(function() return (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {} end)
+    if not ok then return 0 end
+    local enc = encodeKV(snap) or ""
+    local comp = _compressStr and _compressStr(enc) or nil
+    return comp and #comp or #enc
+end
+
+local function _registerOffer(hid, player, rv, est, h)
+    Discovery[hid] = Discovery[hid] or {}
+    local sess = Discovery[hid]
+    sess.offers = sess.offers or {}
+    sess.offers[_norm(player)] = { player = player, rv = safenum(rv, -1), est = safenum(est, 0), h = safenum(h, 0) }
+    HelloElect[hid] = HelloElect[hid] or { startedAt = now(), endsAt = now() + HELLO_WAIT_SEC, decided = false, offers = 0 }
+    HelloElect[hid].offers = (HelloElect[hid].offers or 0) + 1
+    if ns.Emit then ns.Emit("debug:changed") end
+end
+
+local function _decideAndGrant(hid)
+    local sess = Discovery[hid]
     if not sess or sess.decided then return end
     sess.decided = true
 
-    -- Ensemble des candidats = initiateur + tous les répondants
-    local candidates = {}
-    if sess.initiator and sess.initiator.player then
-        candidates[sess.initiator.player] = safenum(sess.initiator.rv, -1)
-    end
-    for _, rec in pairs(sess.responders or {}) do
-        candidates[rec.player] = safenum(rec.rv, -1)
-    end
-    -- Trouver la révision max
-    local rv_max = -1
-    for _, v in pairs(candidates) do if v > rv_max then rv_max = v end end
-    if rv_max < 0 then HelloSessions[helloId] = nil; return end
-
-    -- Pool de départ : si des répondants ont rv_max, on ne considère qu’eux ; sinon on prend tous les ex æquo (incluant l’initiateur)
-    local pool = {}
-    for _, rec in pairs(sess.responders or {}) do
-        if safenum(rec.rv, -1) == rv_max then pool[#pool+1] = rec.player end
-    end
-    if #pool == 0 then
-        for name, rv in pairs(candidates) do if rv == rv_max then pool[#pool+1] = name end end
+    -- Si FULL pertinent vu pendant fenêtre → annuler
+    if (LastFullSeenRv or -1) >= safenum(sess.rv_me, 0) and (now() - (LastFullSeenAt or 0)) < HELLO_WAIT_SEC then
+        HelloElect[hid] = HelloElect[hid] or {}
+        HelloElect[hid].decided = true
+        HelloElect[hid].winner  = nil
+        if ns.Emit then ns.Emit("debug:changed") end
+        Discovery[hid] = nil
+        return
     end
 
-    -- Priorité au "maître" s’il est dans les ex æquo, sinon 1er par ordre alphabétique (insensible à la casse)
-    local winner = nil
-    for _, name in ipairs(pool) do if isMasterName(name) then winner = name; break end end
-    if not winner then
-        table.sort(pool, function(a,b) return normalizeStr(a) < normalizeStr(b) end)
-        winner = pool[1]
-    end
-
-    -- Mémoriser pour l'UI (compte à rebours / élu)
-    HelloElect[helloId] = HelloElect[helloId] or {}
-    HelloElect[helloId].startedAt = HelloElect[helloId].startedAt or (sess.startedAt or now())
-    HelloElect[helloId].endsAt    = HelloElect[helloId].endsAt    or (HelloElect[helloId].startedAt + HELLO_WAIT_SEC)
-    HelloElect[helloId].winner    = winner
-    HelloElect[helloId].decided   = true
-    if ns.Emit then ns.Emit("debug:changed") end
-
-    -- Envoi FULL si je suis l'élu, uniquement s'il y a eu au moins un HELLO_BACK,
-    -- avec anti-doublon/cooldown et prise en compte d'un FULL déjà vu
-    local hasBack = false
-    for _ in pairs(sess and sess.responders or {}) do hasBack = true; break end
-
-    if hasBack and normalizeStr(playerFullName()) == normalizeStr(winner) then
-        local t = now()
-        local myrv = safenum(getRev(), 0)
-        local tooSoon = (t - (LastFullSentAt or 0)) < ELECTION_COOLDOWN_SEC
-        local anotherJustSent = (LastFullSeenRv or -1) >= myrv and (t - (LastFullSeenAt or 0)) < ELECTION_COOLDOWN_SEC
-        if not (tooSoon or anotherJustSent) then
-            local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
-            CDZ.Comm_Broadcast("SYNC_FULL", snap)
-            LastFullSentAt = t
+    local offers = sess.offers or {}
+    local chosen = nil
+    for _, o in pairs(offers) do
+        if not chosen then chosen = o
+        else
+            if (o.rv > chosen.rv)
+            or (o.rv == chosen.rv and o.est < chosen.est)
+            or (o.rv == chosen.rv and o.est == chosen.est and o.h > chosen.h)
+            then chosen = o end
         end
     end
 
-    HelloSessions[helloId] = nil
+    if not chosen then
+        HelloElect[hid] = HelloElect[hid] or {}
+        HelloElect[hid].decided = true
+        HelloElect[hid].winner  = nil
+        if ns.Emit then ns.Emit("debug:changed") end
+        Discovery[hid] = nil
+        return
+    end
+
+    -- Token sans overflow : timestamp + 8 hex “safe”
+    local token = string.format("%d-%s", now(), _randHex8())
+    sess.token     = token
+    sess.grantedTo = chosen.player
+
+    HelloElect[hid] = HelloElect[hid] or {}
+    HelloElect[hid].winner  = chosen.player
+    HelloElect[hid].token   = token
+    HelloElect[hid].decided = true
+    if ns.Emit then ns.Emit("debug:changed") end
+
+    CDZ.Comm_Whisper(chosen.player, "SYNC_GRANT", {
+        hid   = hid,
+        token = token,
+        init  = sess.initiator,
+        m     = sess.reason or "rv_gap",
+    })
 end
 
+local function _scheduleOfferReply(hid, initiator, rv_init)
+    -- Inhibition si FULL récent ≥ mon rv
+    if (now() - (LastFullSeenAt or 0)) < FULL_INHIBIT_SEC and (LastFullSeenRv or -1) >= safenum(getRev(), 0) then
+        return
+    end
+    -- Anti-spam par initiateur
+    local k = _norm(initiator)
+    local last = OfferCooldown[k] or 0
+    if (now() - last) < OFFER_RATE_LIMIT_SEC then return end
+    OfferCooldown[k] = now()
+
+    local est = _estimateSnapshotSize()
+    local h   = _hashHint(string.format("%s|%d|%s", playerFullName(), safenum(getRev(),0), hid))
+    local delay = math.random(0, OFFER_BACKOFF_MS_MAX) / 1000.0
+
+    ns.Util.After(delay, function()
+        local rv_peer = safenum(getRev(), 0)
+        if rv_peer <= safenum(rv_init, 0) then return end
+        CDZ.Comm_Whisper(initiator, "SYNC_OFFER", {
+            hid = hid, rv = rv_peer, est = est, h = h, from = playerFullName()
+        })
+    end)
+end
 
 -- File d'envoi temporisée
 local OutQ      = {}
 local OutTicker = nil
 
--- Boîtes aux lettres (réassemblage) + file d'application ordonnée
-local Inbox    = {}
-local Q, QBusy = {}, false
-local QCounter = 0
+-- Boîtes aux lettres (réassemblage fragments)
+local Inbox     = {}
 
--- ===== Utils =====
-local function now() return (time and time()) or 0 end
-local function safenum(v, d) v = tonumber(v); if v == nil then return d or 0 end; return v end
-local function truthy(v) v = tostring(v or ""); return (v == "1" or v == "true" or v == "TRUE") end
+-- Journalisation (onglet Debug)
+local DebugLog  = DebugLog or {} -- { {dir,type,size,chan,channel,dist,target,from,sender,emitter,seq,part,total,raw,state,status,stateText} ... }
+local SendLogIndexBySeq = SendLogIndexBySeq or {}  -- index "pending" ENVOI par seq
+local RecvLogIndexBySeq = RecvLogIndexBySeq or {}  -- index RECU par seq
 
-local function refreshActive()
-    if ns.RefreshActive then ns.RefreshActive()
-    elseif ns.RefreshAll   then ns.RefreshAll() end
+-- Timestamp précis pour garantir l'ordre visuel dans l'onglet Debug
+local function _nowPrecise()
+    if type(GetTimePreciseSec) == "function" then return GetTimePreciseSec() end
+    if type(GetTime) == "function" then return GetTime() end
+    return (time and time()) or 0
 end
 
--- ===== Debug log =====
--- state : nil | "pending" | "sent"
-local function pushLog(dir, msgType, sz, channel, target, seq, part, total, raw, state)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.debug = ChroniquesDuZephyrDB.debug or {}
-    local t = ChroniquesDuZephyrDB.debug
-    t[#t+1] = {
-        ts = now(), dir = dir, type = msgType, size = sz, chan = channel or "", target = target or "",
-        seq = seq or 0, part = part or 1, total = total or 1, raw = raw or "", state = state
+local function pushLog(dir, t, size, channel, peerOrSender, seq, part, total, raw, state)
+    local isSend   = (dir == "send")
+    local emitter  = isSend and ((playerFullName and playerFullName()) or "") or (peerOrSender or "")
+    local st       = state or ((part == 0 and "pending") or (isSend and "sent") or "receiving")
+    local stText   = (st == "pending"   and "En attente")
+                  or (st == "sent"      and ((part and total and part >= total) and "Transmis" or "En cours"))
+                  or (st == "receiving" and "En cours")
+                  or (st == "received"  and "Reçu")
+                  or nil
+
+    local r = {
+        ts        = _nowPrecise(),
+        dir       = dir,
+        type      = t,
+        size      = size,
+
+        -- Canal
+        chan      = channel or "",
+        channel   = channel or "",
+        dist      = channel or "",
+
+        -- Émetteur
+        target    = emitter,
+        from      = emitter,
+        sender    = emitter,
+        emitter   = emitter,
+
+        -- Divers
+        seq       = seq,
+        part      = part,
+        total     = total,
+        raw       = raw,
+
+        -- État + alias
+        state     = st,
+        status    = st,      -- alias possible
+        stateText = stText,  -- texte prêt à afficher
     }
-    if #t > 800 then table.remove(t, 1) end
-    -- notifier l'UI (rafraîchissement temps réel)
-    if ns and ns.Emit then ns.Emit("debug:changed") end
+
+    DebugLog[#DebugLog+1] = r
+    if #DebugLog > 400 then table.remove(DebugLog, 1) end
+    if ns.Emit then ns.Emit("debug:changed") end
 end
 
-function CDZ.GetDebugLogs()  ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; return ChroniquesDuZephyrDB.debug or {} end
-function CDZ.ClearDebugLogs() ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.debug = {} end
-
--- ===== kv encode/decode =====
-local function esc(s)  s = tostring(s or ""); s = s:gsub("\\", "\\\\"):gsub("|", "\\p"):gsub("\n", "\\n"); return s end
-local function unesc(s) s = tostring(s or ""); s = s:gsub("\\n", "\n"):gsub("\\p", "|"):gsub("\\\\", "\\"); return s end
-
-local function encode(tbl)
-    local parts = {}
-    for k, v in pairs(tbl or {}) do
-        if type(v) == "table" then
-            local arr = {}; for i = 1, #v do arr[#arr+1] = esc(v[i]) end
-            parts[#parts+1] = esc(k) .. "=[" .. table.concat(arr, ",") .. "]"
-        else
-            parts[#parts+1] = esc(k) .. "=" .. esc(v)
-        end
-    end
-    return table.concat(parts, "|")
-end
-
-local function decode(s)
-    local out = {}
-    for pair in string.gmatch(s or "", "([^|]+)") do
-        local k, v = pair:match("^(.-)=(.*)$")
-        if k then
-            if v:find("^%[") and v:sub(-1) == "]" then
-                local body = v:sub(2, -2); local arr = {}
-                if body ~= "" then
-                    for item in string.gmatch(body, "([^,]+)") do arr[#arr+1] = unesc(item) end
-                end
-                out[unesc(k)] = arr
-            else
-                out[unesc(k)] = unesc(v)
+-- Met à jour la ligne d'envoi "pending" via l'index (plus robuste que la recherche)
+local function _updateSendLog(item)
+    local idx = SendLogIndexBySeq[item.seq]
+    if not idx or not DebugLog[idx] or DebugLog[idx].seq ~= item.seq then
+        -- garde-fou (fallback) : recherche en sens inverse
+        for i = #DebugLog, 1, -1 do
+            local r = DebugLog[i]
+            if r.dir == "send" and r.seq == item.seq and r.part == 0 then
+                idx = i; break
             end
         end
     end
-    return out
-end
-
--- Exposés pour l’écran Debug
-function CDZ._decodeForDebug(s) local ok, kv = pcall(decode, s); if ok then return kv end end
-function CDZ._unsafeDecode(s)  return decode(s or "") end
-function CDZ._GetHelloElect(hid) return HelloElect and HelloElect[hid] or nil end
-
--- ===== Identité / GM =====
-local function NormalizeFull(name, realm)
-    realm = realm or ""
-    realm = (realm == "" and (GetNormalizedRealmName and GetNormalizedRealmName()) or realm) or realm
-    realm = realm:gsub("%s+", ""):gsub("'", "")
-    return name .. "-" .. realm
-end
-local function playerFullName()
-    local n = UnitName("player")
-    local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or GetRealmName()
-    return NormalizeFull(n, rn)
-end
-local function normalizeStr(s) return (s or ""):gsub("%s+", ""):gsub("'", "") end
-local function masterName()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    return ChroniquesDuZephyrDB.meta.master
-end
-function CDZ.IsMaster()
-    local m = masterName()
-    if m and m ~= "" then
-        return normalizeStr(m) == normalizeStr(playerFullName())
-    end
-    if IsInGuild and IsInGuild() then
-        local _, _, rankIndex = GetGuildInfo("player")
-        if rankIndex == 0 then return true end
-    end
-    return false
-end
-
--- ===== Version helpers =====
-local function getRev()
-    if CDZ.GetRev then return CDZ.GetRev() end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    return ChroniquesDuZephyrDB.meta.rev or 0
-end
-local function incRev()
-    if CDZ.IncRev then return CDZ.IncRev() end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    ChroniquesDuZephyrDB.meta.rev = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
-    return ChroniquesDuZephyrDB.meta.rev
-end
-
--- ===== Envoi (fragmenté) =====
-local function send(channel, target, msgType, payloadStr)
-    -- Empilement systématique (y compris 1 seule fragmentation) + émission temporisée
-    -- Compression (si dispo) avant fragmentation
-    payloadStr = packPayloadStr(payloadStr or "")
-    Seq = (Seq + 1) % 1000000
-    local total = math.max(1, math.ceil(#payloadStr / MAX_PAY))
-
-
-    -- Fragmentation + FIFO
-    for i = 1, total do
-        local off   = (i - 1) * MAX_PAY
-        local chunk = payloadStr:sub(off + 1, off + MAX_PAY)
-        local head  = ("v=1|t=%s|s=%d|p=%d|n=%d|"):format(msgType, Seq, i, total)
-        local packet = head .. chunk
-
-        -- Journaliser "En attente" à l'empilement
-        OutQ[#OutQ+1] = { packet = packet, channel = channel, target = target,
-                          msgType = msgType, seq = Seq, part = i, total = total }
-        pushLog("send", msgType, #packet, channel, target, Seq, i, total, packet, "pending")
-    end
-
-    -- Démarrer / maintenir le ticker (1 paquet par tick)
-    if not OutTicker then
-        local interval = 1 / math.max(1, OUT_MAX_PER_SEC or 5)
-        OutTicker = C_Timer.NewTicker(interval, function()
-            local item = table.remove(OutQ, 1)
-            if item then
-                C_ChatInfo.SendAddonMessage(PREFIX, item.packet, item.channel, item.target)
-                -- Journaliser "Transmis" au moment de l'envoi effectif
-                pushLog("send", item.msgType, #item.packet, item.channel, item.target,
-                        item.seq, item.part, item.total, item.packet, "sent")
-            else
-                if OutTicker then OutTicker:Cancel() end
-                OutTicker = nil
-            end
-        end)
+    local ts = _nowPrecise()
+    if idx and DebugLog[idx] then
+        local r = DebugLog[idx]
+        r.ts      = ts
+        r.type    = item.type
+        r.size    = #item.payload
+        r.channel = item.channel
+        r.peer    = item.target or ""
+        r.part    = item.part
+        r.total   = item.total
+        r.raw     = item.payload
+        if ns.Emit then ns.Emit("debug:changed") end
+    else
+        -- Pas trouvé : on trace normalement pour ne pas perdre l'info
+        pushLog("send", item.type, #item.payload, item.channel, item.target or "", item.seq, item.part, item.total, item.payload)
     end
 end
 
 
-function CDZ.Comm_Broadcast(msgType, tbl)     send("GUILD",  nil, msgType, encode(tbl or {})) end
-function CDZ.Comm_Whisper(target, msgType, t) send("WHISPER",target, msgType, encode(t or {})) end
-
-function CDZ.GM_ForceVersionBroadcast()
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    -- Incrémente la révision locale (comportement 'force')
-    local newrv = (CDZ.IncRev and CDZ.IncRev()) or incRev()
-    -- Exporte l’instantané complet et force rv
-    local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
-    snap.rv = newrv
-    snap.lm = snap.lm or now()
-    -- Envoie direct d’un FULL (plus de poke)
-    CDZ.Comm_Broadcast("SYNC_FULL", snap)
-    -- Anti-doublon pour l’élection, si présent
-    if LastFullSentAt then LastFullSentAt = now() end
-    return newrv
+function CDZ.GetDebugLogs() return DebugLog end
+function CDZ.PurgeDebug()
+    wipe(DebugLog)
+    if ns.Emit then ns.Emit("debug:changed") end
+end
+-- ➕ Alias attendu par Tabs/Debug.lua
+function CDZ.ClearDebugLogs()
+    wipe(DebugLog)
+    if ns.Emit then ns.Emit("debug:changed") end
 end
 
+local function _ensureTicker()
+    if OutTicker then return end
+    local last = 0
+    OutTicker = C_Timer.NewTicker(0.1, function()
+        local t = now()
+        if (t - last) < (1.0 / OUT_MAX_PER_SEC) then return end
+        last = t
+        local item = table.remove(OutQ, 1)
+        if not item then return end
 
--- ===== File de traitement (ordre : lm ↑ puis rv ↑ puis arrivée) =====
-local function sortQueue()
-    table.sort(Q, function(a, b)
-        local alm = tonumber(a.orderLm) or math.huge
-        local blm = tonumber(b.orderLm) or math.huge
-        if alm ~= blm then return alm < blm end
-        local arv = tonumber(a.orderRv) or math.huge
-        local brv = tonumber(b.orderRv) or math.huge
-        if arv ~= brv then return arv < brv end
-        return (a.arrival or 0) < (b.arrival or 0)
+        C_ChatInfo.SendAddonMessage(item.prefix, item.payload, item.channel, item.target)
+
+        -- Journalisation fragment envoyé (state, canal & émetteur sont gérés par pushLog)
+        pushLog("send", item.type, #item.payload, item.channel, item.target or "", item.seq, item.part, item.total, item.payload)
+
+        if item.part == item.total then
+            SendLogIndexBySeq[item.seq] = nil
+        end
     end)
 end
-local function processNext()
-    if QBusy or #Q == 0 then return end
-    sortQueue()
-    local item = table.remove(Q, 1)
-    QBusy = true
-    local ok, err = pcall(item.handler, item.sender, item.msgType, item.kv)
-    if not ok then geterrorhandler()(err) end
-    ns.Util.After(0, function() QBusy = false; processNext() end)
-end
-local function enqueueComplete(sender, msgType, kv)
-    QCounter = QCounter + 1
-    local lm = tonumber(kv and kv.lm) or nil
-    local rv = tonumber(kv and kv.rv) or nil
-    table.insert(Q, {
-        sender   = sender,
-        msgType  = msgType,
-        kv       = kv,
-        handler  = ns.CDZ._HandleFull,
-        orderLm  = lm,
-        orderRv  = rv,
-        arrival  = QCounter,
-    })
-    processNext()
-end
 
--- ===== UID =====
-function CDZ.GetUID(name)                    local m = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.ids; return m and m.byName and m.byName[name] end
-function CDZ.MapUID(uid, name)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.ids = ChroniquesDuZephyrDB.ids or { counter = 0, byName = {}, byId = {} }
-    ChroniquesDuZephyrDB.ids.byId[uid] = name
-    if name and name ~= "" then ChroniquesDuZephyrDB.ids.byName[name] = uid end
-end
-function CDZ.GetNameByUID(uid)               local m = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.ids; return m and m.byId and m.byId[uid] end
-function CDZ.GetOrAssignUID(name)
-    if not name or name == "" then return nil end
-    local uid = CDZ.GetUID(name); if uid then return uid end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.ids = ChroniquesDuZephyrDB.ids or { counter = 0, byName = {}, byId = {} }
-    local ids = ChroniquesDuZephyrDB.ids
-    ids.counter = (ids.counter or 0) + 1
-    uid = string.format("%08x", (time() % 0x7FFFFFFF)) .. "-" .. string.format("%04x", ids.counter % 0xFFFF)
-    ids.byName[name] = uid; ids.byId[uid] = name
-    return uid
-end
+local function _send(typeName, channel, target, kv)
+    kv = kv or {}
+    Seq = Seq + 1
+    kv.t = typeName
+    kv.s = Seq
 
--- ===== Diffusions (mutations temps réel) =====
--- Dépenses (achats) : ajout
-function CDZ.BroadcastExpenseAdd(recOrPayload, itemId)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local p
-    if type(recOrPayload) == "table" and recOrPayload.id and (recOrPayload.q or recOrPayload.qty) then
-        -- format compact déjà fourni
-        p = {
-            id = recOrPayload.id,
-            s  = recOrPayload.s or recOrPayload.source or "Autre",
-            i  = tonumber(recOrPayload.i or recOrPayload.itemID or itemId or 0) or 0,
-            q  = tonumber(recOrPayload.q or recOrPayload.qty) or 1,
-            c  = tonumber(recOrPayload.c or recOrPayload.copper) or 0,
-        }
-    else
-        return
+    local payload = packPayloadStr(kv)
+    local parts = {}
+    local i = 1
+    while i <= #payload do
+        parts[#parts+1] = payload:sub(i, i + MAX_PAY - 1)
+        i = i + MAX_PAY
     end
-    local rv = incRev(); local lm = now()
-    p.rv = rv; p.lm = lm
-    CDZ.Comm_Broadcast("EXP_ADD", p)
+
+    -- Trace "pending" (part=0), puis mémorise l'index pour mises à jour suivantes
+    pushLog("send", typeName, #payload, channel, target or "", Seq, 0, #parts, "<queued>")
+    -- garde-fou : s'assurer que l'index existe
+    SendLogIndexBySeq = SendLogIndexBySeq or {}
+    SendLogIndexBySeq[Seq] = #DebugLog
+
+    for idx, chunk in ipairs(parts) do
+        local header = string.format("v=1|t=%s|s=%d|p=%d|n=%d|", typeName, Seq, idx, #parts)
+        local msg = header .. chunk
+        OutQ[#OutQ+1] = {
+            prefix = PREFIX, payload = msg, channel = channel, target = target,
+            type = typeName, seq = Seq, part = idx, total = #parts
+        }
+    end
+    _ensureTicker()
 end
 
--- Lots (création / suppression / consommation) — réservé GM
-function CDZ.BroadcastLotCreate(l)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    if not l or not l.id then return end
-    local rv = incRev(); local lm = now()
-    local p = {
-        id = l.id, n = l.name or "", N = tonumber(l.sessions or 1) or 1,
-        u = tonumber(l.used or 0) or 0,
-        t = tonumber(l.totalCopper or l.copper or 0) or 0,
-        I = l.itemIds or {},
-        rv = rv, lm = lm
+function CDZ.Comm_Broadcast(typeName, kv)
+    _send(typeName, "GUILD", nil, kv)
+end
+
+function CDZ.Comm_Whisper(target, typeName, kv)
+    _send(typeName, "WHISPER", target, kv)
+end
+
+-- ===== Application snapshot (import/export compact) =====
+function CDZ._SnapshotExport()
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    ChroniquesDuZephyrDB.uids = ChroniquesDuZephyrDB.uids or {}
+    ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+    ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+
+    local meta = ChroniquesDuZephyrDB.meta
+    local t = {
+        P = {}, I = {}, E = {}, L = {},
+        rv = safenum(meta.rev, 0),
+        lm = safenum(meta.lastModified, now()),
+        fs = safenum(meta.fullStamp, now()),
     }
-    CDZ.Comm_Broadcast("LOT_CREATE", p)
+
+    for name, rec in pairs(ChroniquesDuZephyrDB.players) do
+        t.P[#t.P+1] = table.concat({ name, safenum(rec.credit, 0), safenum(rec.debit, 0) }, ":")
+    end
+    local _players = ChroniquesDuZephyrDB.players or {}
+    for uid, name in pairs(ChroniquesDuZephyrDB.uids) do
+        -- n'exporter que les UID qui pointent encore vers un joueur existant
+        if name and _players[name] ~= nil then
+            t.I[#t.I+1] = tostring(uid) .. ":" .. tostring(name)
+        end
+    end
+    for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list) do
+        t.E[#t.E+1] = table.concat({
+            safenum(e.id,0), safenum(e.qty,0), safenum(e.copper,0),
+            tostring(e.source or ""), safenum(e.lotId,0), safenum(e.itemID,0)
+        }, ",")
+    end
+    for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
+        local ids = {}
+        for _, id in ipairs(l.itemIds or {}) do ids[#ids+1] = tostring(id) end
+        t.L[#t.L+1] = table.concat({
+            safenum(l.id,0), tostring(l.name or ("Lot "..tostring(l.id))), safenum(l.sessions,1),
+            safenum(l.used,0), safenum(l.totalCopper,0), table.concat(ids, ";")
+        }, ",")
+    end
+    return t
 end
-function CDZ.BroadcastLotDelete(id)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    if not id then return end
-    local rv = incRev(); local lm = now()
-    CDZ.Comm_Broadcast("LOT_DELETE", { id = id, rv = rv, lm = lm })
+
+function CDZ._SnapshotApply(kv)
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    ChroniquesDuZephyrDB.players = {}
+    ChroniquesDuZephyrDB.uids = {}
+    ChroniquesDuZephyrDB.expenses = { list = {}, nextId = 1 }
+    ChroniquesDuZephyrDB.lots = { list = {}, nextId = 1 }
+
+    local meta = ChroniquesDuZephyrDB.meta
+    meta.rev = safenum(kv.rv, 0)
+    meta.lastModified = safenum(kv.lm, now())
+    meta.fullStamp = safenum(kv.fs, now())
+
+    for _, s in ipairs(kv.P or {}) do
+        local name, credit, debit = s:match("^(.-):(%-?%d+):(%-?%d+)$")
+        if name then
+            ChroniquesDuZephyrDB.players[name] = { credit = safenum(credit,0), debit = safenum(debit,0) }
+        end
+    end
+    for _, s in ipairs(kv.I or {}) do
+        local uid, name = s:match("^(.-):(.-)$")
+        if uid and name then ChroniquesDuZephyrDB.uids[uid] = name end
+    end
+    do
+        local listE = kv.E or {}
+
+        -- Détecte si E est "agrégé" (1 élément = 1 ligne CSV) ou "aplati" (chaque champ séparé)
+        local aggregated = false
+        for _, s in ipairs(listE) do
+            if type(s) == "string" and s:find(",", 1, true) then aggregated = true; break end
+        end
+
+        local function addRecord(id, qty, copper, src, lotId, itemId)
+            id = safenum(id,0); if id <= 0 then return end
+            -- Normalise lotId: 0 => nil (sinon les “libres” disparaissent de l’UI)
+            local _lot = safenum(lotId,0); if _lot == 0 then _lot = nil end
+            ChroniquesDuZephyrDB.expenses.list[#ChroniquesDuZephyrDB.expenses.list+1] = {
+                id = id,
+                qty = safenum(qty,0),
+                copper = safenum(copper,0),
+                source = src,
+                lotId = _lot,
+                itemID = safenum(itemId,0), -- ✅ normalisation clé attendue par l’UI
+            }
+            ChroniquesDuZephyrDB.expenses.nextId = math.max(ChroniquesDuZephyrDB.expenses.nextId or 1, id + 1)
+        end
+
+        if aggregated then
+            -- Format historique : chaque élément est "id,qty,copper,src,lotId,itemId"
+            for _, s in ipairs(listE) do
+                local id, qty, copper, src, lotId, itemId =
+                    s:match("^(%-?%d+),(%-?%d+),(%-?%d+),(.+),(%-?%d+),(%-?%d+)$")
+                if id then addRecord(id, qty, copper, src, lotId, itemId) end
+            end
+        else
+            -- Format aplati : reconstitue par paquets de 6 champs
+            local buf = {}
+            for _, tok in ipairs(listE) do
+                buf[#buf+1] = tok
+                if #buf == 6 then
+                    addRecord(buf[1], buf[2], buf[3], buf[4], buf[5], buf[6])
+                    buf = {}
+                end
+            end
+        end
+    end
+
+    for _, s in ipairs(kv.L or {}) do
+        local id, name, sessions, used, totalCopper, idsCsv = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+        id = safenum(id,0); if id > 0 then
+            local l = {
+                id = id, name = name,
+                sessions = safenum(sessions,1), used = safenum(used,0), totalCopper = safenum(totalCopper,0),
+                itemIds = {},
+            }
+            if idsCsv and idsCsv ~= "" then
+                for v in tostring(idsCsv):gmatch("[^;]+") do l.itemIds[#l.itemIds+1] = safenum(v,0) end
+            end
+            ChroniquesDuZephyrDB.lots.list[#ChroniquesDuZephyrDB.lots.list+1] = l
+            ChroniquesDuZephyrDB.lots.nextId = math.max(ChroniquesDuZephyrDB.lots.nextId or 1, id + 1)
+        end
+    end
 end
-function CDZ.BroadcastLotsConsume(ids)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ids = ids or {}; if #ids == 0 then return end
-    local rv = incRev(); local lm = now()
-    CDZ.Comm_Broadcast("LOT_CONSUME", { ids = ids, rv = rv, lm = lm })
+
+-- ===== File complète → traitement ordonné =====
+local CompleteQ = {}
+local function enqueueComplete(sender, t, kv)
+    -- Tri d’application : lm ↑, puis rv ↑, puis ordre d’arrivée
+    kv._sender = sender
+    kv._t = t
+    kv._lm = safenum(kv.lm, now())
+    kv._rv = safenum(kv.rv, -1)
+    CompleteQ[#CompleteQ+1] = kv
+    table.sort(CompleteQ, function(a,b)
+        if a._lm ~= b._lm then return a._lm < b._lm end
+        if a._rv ~= b._rv then return a._rv < b._rv end
+        return false
+    end)
+    while true do
+        local item = table.remove(CompleteQ, 1)
+        if not item then break end
+        CDZ._HandleFull(item._sender, item._t, item)
+    end
+end
+
+local function refreshActive()
+    if ns and ns.UI and ns.UI.RefreshActive then ns.UI.RefreshActive() end
 end
 
 -- ===== Handler principal =====
 function CDZ._HandleFull(sender, msgType, kv)
+    msgType = tostring(msgType or ""):upper()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     local meta = ChroniquesDuZephyrDB.meta
 
@@ -465,158 +706,201 @@ function CDZ._HandleFull(sender, msgType, kv)
         return false
     end
 
+    -- ======= Mutations cœur =======
     if msgType == "ROSTER_UPSERT" then
         if not shouldApply() then return end
         local uid, name = kv.uid, kv.name
         if uid and name then
-            if CDZ.MapUID then CDZ.MapUID(uid, name) end
-            if CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(name) end
+            local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+            local full = nf(name)
+            if CDZ.MapUID then CDZ.MapUID(uid, full) end
+            if CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(full) end
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = safenum(kv.lm, now())
             refreshActive()
         end
 
     elseif msgType == "ROSTER_REMOVE" then
+        -- Tolère les anciens messages (sans rv/lm) : on applique quand même.
+        local hasVersioning = (kv.rv ~= nil) or (kv.lm ~= nil)
+        if hasVersioning and not shouldApply() then return end
+
+        local uid  = kv.uid
+        -- Récupérer le nom AVANT de défaire le mapping UID -> name.
+        local name = (uid and CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or kv.name
+
+        if uid and CDZ.UnmapUID then CDZ.UnmapUID(uid) end
+
+        -- Purge du roster local (nom complet si possible)
+        if name and name ~= "" then
+            if CDZ.RemovePlayerLocal then
+                CDZ.RemovePlayerLocal(name, true)
+            else
+                ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+                ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+                ChroniquesDuZephyrDB.players[name] = nil
+            end
+        end
+
+        if hasVersioning then
+            meta.rev = (rv >= 0) and rv or myrv
+            meta.lastModified = safenum(kv.lm, now())
+        else
+            -- Pas de versioning transmis : on marque juste une modif locale.
+            meta.lastModified = now()
+        end
+        refreshActive()
+
+    elseif msgType == "TX_REQ" then
+        if CDZ.AddIncomingRequest then CDZ.AddIncomingRequest(kv) end
+        refreshActive()
+
+        -- Popup instantanée côté GM : utiliser ns.UI (UI_Popup.lua est chargé après Comm.lua)
+        local ui = ns.UI
+        if CDZ.IsMaster and CDZ.IsMaster() and ui and ui.PopupRequest then
+            local _id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
+            ui.PopupRequest(kv.who or sender, safenum(kv.delta,0),
+                function() -- Approuver
+                    if CDZ.GM_ApplyAndBroadcastByUID then
+                        CDZ.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), {
+                            reason = "PLAYER_REQUEST", requester = kv.who or sender
+                        })
+                    end
+                    if CDZ.ResolveRequest then CDZ.ResolveRequest(_id, true, playerFullName()) end
+                end,
+                function() -- Refuser
+                    if CDZ.ResolveRequest then CDZ.ResolveRequest(_id, false, playerFullName()) end
+                end
+            )
+        end
+
+
+    elseif msgType == "TX_APPLIED" then
         if not shouldApply() then return end
-        local uid, name = kv.uid, kv.name
-        if uid and name and CDZ.RemoveRosterLocal then
-            CDZ.RemoveRosterLocal(name, uid)
+        local applied = false
+        if CDZ.ApplyDeltaByName and kv.name and kv.delta then
+            CDZ.ApplyDeltaByName(kv.name, safenum(kv.delta,0), kv.by or sender)
+            applied = true
+        else
+            -- ➕ Fallback : appliquer localement si l’API n’est pas disponible
+            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+            local full = nf(kv.name or "")
+            local rec = ChroniquesDuZephyrDB.players[full] or { credit = 0, debit = 0 }
+            local d = safenum(kv.delta, 0)
+            if d >= 0 then
+                rec.credit = safenum(rec.credit,0) + d
+            else
+                rec.debit  = safenum(rec.debit,0)  + (-d)
+            end
+            ChroniquesDuZephyrDB.players[full] = rec
+            applied = true
+        end
+        if applied then
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = safenum(kv.lm, now())
             refreshActive()
         end
 
-    elseif msgType == "TX_REQ" then
-        -- Demande côté GM
-        if CDZ.IsMaster and CDZ.IsMaster() then
-            local uid = kv.uid
-            local delta = safenum(kv.delta, 0)
-            local requester = kv.requester or sender
-            local ts = safenum(kv.ts, now())
-            if CDZ.AddIncomingRequest then CDZ.AddIncomingRequest(uid, delta, requester, ts) end
-            if ns.UI and ns.UI.UpdateRequestsBadge then ns.UI.UpdateRequestsBadge() end
-        end
-
-    elseif msgType == "TX_APPLIED" then
-        if not shouldApply() then return end
-        local uid = kv.uid
-        local delta = safenum(kv.delta, 0)
-        local ts = safenum(kv.lm, now())
-        local by = kv.by or sender
-        local isSilent = truthy(kv.S or kv.silent)
-
-        if uid then
-            local nm = CDZ.GetNameByUID and CDZ.GetNameByUID(uid) or kv.name or "?"
-            if nm and CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(nm) end
-            if CDZ.ApplyApprovedAdjust then CDZ.ApplyApprovedAdjust(uid, delta, ts, by) end
-
-            -- Popup de clôture côté participant (si on est la cible)
-            if (kv.reason == "RAID_CLOSE" or kv.R == "RAID_CLOSE") and not isSilent and delta < 0 then
-                local myShort = UnitName("player")
-                local who = (CDZ.ShortName and CDZ.ShortName(nm)) or nm
-                if myShort and who and ((CDZ.SamePlayer and CDZ.SamePlayer(myShort, who)) or myShort == who) then
-                    local after = (CDZ.GetSolde and CDZ.GetSolde(who)) or 0
-                    if ns.UI and ns.UI.PopupRaidDebit then
-                        ns.UI.PopupRaidDebit(who, -delta, after, { L = kv.L })
-                        if ns.Emit then ns.Emit("raid:popup-shown", who) end
-                    end
-                end
-            end
-        end
-
-        meta.rev = (rv >= 0) and rv or myrv
-        meta.lastModified = ts
-        refreshActive()
-
     elseif msgType == "TX_BATCH" then
         if not shouldApply() then return end
-        local U = kv.U or {}
-        local D = kv.D or {}
-        local N = kv.N or {}
-        local ts = safenum(kv.lm, now())
-        local by = kv.by or sender
-        local reason = kv.R or kv.reason
-        local isSilent = truthy(kv.S or kv.silent)
+        local done = false
+        if CDZ.ApplyBatch then
+            CDZ.ApplyBatch(kv)
+            done = true
+        else
+            -- ➕ Fallback : boucle sur les éléments du batch
+            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            local U, D, N = kv.U or {}, kv.D or {}, kv.N or {}
+            local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+            for i = 1, math.max(#U, #D, #N) do
+                local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or "?"
+                local full = nf(name)
+                local d = safenum(D[i], 0)
+                local rec = ChroniquesDuZephyrDB.players[full] or { credit = 0, debit = 0 }
+                if d >= 0 then
+                    rec.credit = safenum(rec.credit,0) + d
+                else
+                    rec.debit  = safenum(rec.debit,0)  + (-d)
+                end
+                ChroniquesDuZephyrDB.players[full] = rec
+            end
+            done = true
+        end
+        if done then
+            meta.rev = (rv >= 0) and rv or myrv
+            meta.lastModified = safenum(kv.lm, now())
+            refreshActive()
 
-        for i = 1, math.min(#U, #D) do
-            local uid   = U[i]
-            local delta = safenum(D[i], 0)
-            local nm    = N[i]
-            if uid then
-                if nm and nm ~= "" and CDZ.MapUID then CDZ.MapUID(uid, nm) end
-                local mappedName = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nm
-                if mappedName and CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(mappedName) end
-                if CDZ.ApplyApprovedAdjust then CDZ.ApplyApprovedAdjust(uid, delta, ts, by) end
-
-                if reason == "RAID_CLOSE" and not isSilent and delta < 0 then
-                    local myShort = UnitName("player")
-                    local who = (CDZ.ShortName and CDZ.ShortName(mappedName)) or mappedName
-                    if myShort and who and ((CDZ.SamePlayer and CDZ.SamePlayer(myShort, who)) or myShort == who) then
-                        local after = (CDZ.GetSolde and CDZ.GetSolde(who)) or 0
-                        if ns.UI and ns.UI.PopupRaidDebit then
-                            ns.UI.PopupRaidDebit(who, -delta, after, { L = kv.L })
-                            if ns.Emit then ns.Emit("raid:popup-shown", who) end
+            -- ➕ Popup réseau pour les joueurs impactés (si non silencieux)
+            if not truthy(kv.S) and ns and ns.UI and ns.UI.PopupRaidDebit then
+                local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+                local meFull = (playerFullName and playerFullName()) or UnitName("player")
+                local meK = nf(meFull)
+                local U, D, N = kv.U or {}, kv.D or {}, kv.N or {}
+                for i = 1, math.max(#U, #D, #N) do
+                    local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or "?"
+                    if nf(name) == meK then
+                        local d = safenum(D[i], 0)
+                        if d < 0 then
+                            local per   = -d
+                            local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
+                            ns.UI.PopupRaidDebit(meFull, per, after, { L = kv.L or {} })
+                            if ns.Emit then ns.Emit("raid:popup-shown", meFull) end
                         end
+                        break
                     end
                 end
             end
         end
 
-        meta.rev = (rv >= 0) and rv or myrv
-        meta.lastModified = ts
-        refreshActive()
-
-    -- ======= Synchronisation objets / lots =======
-
-    -- Ajout d'une dépense (EXP_ADD) : { id, s=source, i=itemID, q=qty, c=copper, rv, lm }
     elseif msgType == "EXP_ADD" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { recording=false, list={}, nextId=1 }
-        local e = ChroniquesDuZephyrDB.expenses
+        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+        local id = safenum(kv.id, 0); if id <= 0 then return end
+        for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list) do if safenum(e.id,0) == id then return end end
 
-        local id  = tonumber(kv.id)
-        if not id or id <= 0 then return end
-        -- dédoublonnage
-        for _, it in ipairs(e.list or {}) do if tonumber(it.id) == id then return end end
+        -- Normalisations : clé 'src' pour la source, et lotId 0 -> nil
+        local _src = kv.src or kv.s
+        local _lot = safenum(kv.l, 0); if _lot == 0 then _lot = nil end
 
-        local src = kv.s or kv.source or "Autre"
-        if src == "A" then src = "HdV" elseif src == "B" then src = "Boutique" end
-        local iid = tonumber(kv.i or 0) or 0
-        local qty = safenum(kv.q, 1)
-        local cop = safenum(kv.c, 0)
-        local link = (iid > 0) and ("item:" .. tostring(iid)) or nil
-
-        table.insert(e.list, {
+        local e = {
             id = id,
-            source = src,
-            itemID = (iid > 0) and iid or nil,
-            itemLink = link,
-            qty = qty,
-            copper = cop,
-        })
-        e.nextId = math.max(e.nextId or 1, id + 1)
-
-        -- prime de cache item pour accélérer l'affichage
-        if iid > 0 then
-            if C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(iid) end
-            if GetItemInfo then GetItemInfo(iid) end
-        end
-
+            qty = safenum(kv.q,0),
+            copper = safenum(kv.c,0),
+            source = _src,
+            lotId  = _lot,
+            itemID = safenum(kv.i,0),
+        }
+        table.insert(ChroniquesDuZephyrDB.expenses.list, e)
+        ChroniquesDuZephyrDB.expenses.nextId = math.max(ChroniquesDuZephyrDB.expenses.nextId or 1, id + 1)
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
         refreshActive()
 
-    -- Création lot (avec rattachements d'IDs d'objets)
+    -- ➕ Suppression d'une dépense (diffusée par le GM)
+    elseif msgType == "EXP_REMOVE" then
+        if not shouldApply() then return end
+        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+        local id = safenum(kv.id, 0); if id <= 0 then return end
+        local list = ChroniquesDuZephyrDB.expenses.list
+        for i = #list, 1, -1 do
+            if safenum(list[i].id, 0) == id then
+                table.remove(list, i)
+                break
+            end
+        end
+        meta.rev = (rv >= 0) and rv or myrv
+        meta.lastModified = (lm >= 0) and lm or now()
+        refreshActive()
+
     elseif msgType == "LOT_CREATE" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { nextId = 1, list = {} }
-        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { recording=false, list = {}, nextId = 1 }
+        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
 
         local id = safenum(kv.id, 0); if id <= 0 then return end
-        -- déjà présent ?
-        for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do if safenum(l.id,0) == id then return end end
+        for _, l0 in ipairs(ChroniquesDuZephyrDB.lots.list) do if safenum(l0.id,0) == id then return end end
 
         local l = {
             id = id,
@@ -627,15 +911,33 @@ function CDZ._HandleFull(sender, msgType, kv)
             itemIds = {},
         }
         for _, v in ipairs(kv.I or {}) do l.itemIds[#l.itemIds+1] = safenum(v, 0) end
-        table.insert(ChroniquesDuZephyrDB.lots.list, l)
-        ChroniquesDuZephyrDB.lots.nextId = math.max(ChroniquesDuZephyrDB.lots.nextId or 1, id + 1)
 
-        -- lier les dépenses
-        for _, eid in ipairs(l.itemIds) do
-            for _, it in ipairs(ChroniquesDuZephyrDB.expenses.list) do
-                if safenum(it.id, 0) == safenum(eid, 0) then it.lotId = id; break end
+        -- ➕ Sécurités de cohérence côté client
+        -- 1) Recalcule le total si absent/invalide
+        if not l.totalCopper or l.totalCopper <= 0 then
+            local sum = 0
+            for _, eid in ipairs(l.itemIds or {}) do
+                for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do
+                    if safenum(e.id, -1) == safenum(eid, -2) then
+                        sum = sum + safenum(e.copper, 0)
+                        break
+                    end
+                end
+            end
+            l.totalCopper = sum
+        end
+
+        -- 2) Marque les dépenses rattachées au lot (sans toucher à `source`)
+        if #l.itemIds > 0 then
+            local set = {}
+            for _, eid in ipairs(l.itemIds) do set[safenum(eid, -1)] = true end
+            for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do
+                if set[safenum(e.id, -2)] then e.lotId = id end
             end
         end
+
+        table.insert(ChroniquesDuZephyrDB.lots.list, l)
+        ChroniquesDuZephyrDB.lots.nextId = math.max(ChroniquesDuZephyrDB.lots.nextId or 1, id + 1)
 
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
@@ -644,21 +946,14 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "LOT_DELETE" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { nextId = 1, list = {} }
-        local id = safenum(kv.id, 0); if id <= 0 then return end
-
-        local list = ChroniquesDuZephyrDB.lots.list
-        local idx  = nil
-        for i, l in ipairs(list) do if safenum(l.id, 0) == id then idx = i; break end end
-        if idx then table.remove(list, idx) end
-
-        if ChroniquesDuZephyrDB.expenses and ChroniquesDuZephyrDB.expenses.list then
-            for _, it in ipairs(ChroniquesDuZephyrDB.expenses.list) do
-                if safenum(it.lotId, 0) == id then it.lotId = nil end
-            end
+        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+        local id = safenum(kv.id, 0)
+        local kept = {}
+        for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
+            if safenum(l.id, -1) ~= id then kept[#kept+1] = l end
         end
-
+        ChroniquesDuZephyrDB.lots.list = kept
+        for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do if safenum(e.lotId,0) == id then e.lotId = nil end end
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
         if ns.Emit then ns.Emit("lots:changed") end
@@ -666,15 +961,14 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "LOT_CONSUME" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { nextId = 1, list = {} }
-
-        local set = {}
-        for _, v in ipairs(kv.ids or {}) do set[safenum(v, -1)] = true end
+        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+        local set = {}; for _, v in ipairs(kv.ids or {}) do set[safenum(v, -2)] = true end
         for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
-            if set[safenum(l.id, -2)] then l.used = safenum(l.used, 0) + 1 end
+            if set[safenum(l.id, -2)] then
+                l.__pendingConsume = nil -- ✅ fin d’attente locale (optimistic UI)
+                l.used = safenum(l.used, 0) + 1
+            end
         end
-
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
         if ns.Emit then ns.Emit("lots:changed") end
@@ -682,88 +976,111 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     -- ======= Handshake & Snapshots =======
     elseif msgType == "HELLO" then
-        local hid   = kv.helloId or ""
-        local from  = kv.player or sender
+        -- Côté pair : répondre par une OFFER uniquement si rv_peer > rv_initiateur
+        local hid   = kv.hid or kv.helloId or ""
+        local from  = kv.player or kv.from or sender
         local rvi   = safenum(kv.rv, -1)
-        if hid ~= "" then
-            local sess = HelloSessions[hid]
-            if not sess then
-                sess = { initiator = { player = from, rv = rvi }, responders = {}, startedAt = now(), decided = false }
-                HelloSessions[hid] = sess
-                ns.Util.After(HELLO_WAIT_SEC, function() electWinner(helloId) end)
-            else
-                if not (sess.initiator and sess.initiator.player) then
-                    sess.initiator = { player = from, rv = rvi }
-                end
-            end
-
-            -- Pour l'UI Debug : démarrer le compte à rebours
-            HelloElect[hid] = HelloElect[hid] or {}
-            HelloElect[hid].startedAt = sess.startedAt
-            HelloElect[hid].endsAt    = (sess.startedAt or now()) + HELLO_WAIT_SEC
-            HelloElect[hid].decided   = false
-            HelloElect[hid].winner    = nil
-            if ns.Emit then ns.Emit("debug:changed") end
-
-            -- Tous sauf l’initiateur répondent par HELLO_BACK avec leur révision
-            if normalizeStr(from) ~= normalizeStr(playerFullName()) then
-                CDZ.Comm_Broadcast("HELLO_BACK", { helloId = hid, rv = getRev(), player = playerFullName() })
-            end
-        end
-
-    elseif msgType == "HELLO_BACK" then
-        local hid  = kv.helloId or ""
-        local from = kv.player or sender
-        local rvr  = safenum(kv.rv, -1)
         if hid ~= "" and from and from ~= "" then
-            local sess = HelloSessions[hid]
-            if not sess then
-                sess = { initiator = nil, responders = {}, startedAt = now(), decided = false }
-                HelloSessions[hid] = sess
-                C_Timer.After(HELLO_WAIT_SEC, function() electWinner(hid) end)
-            end
-            sess.responders = sess.responders or {}
-            sess.responders[normalizeStr(from)] = { player = from, rv = rvr }
+            _scheduleOfferReply(hid, from, rvi)
         end
 
-    elseif msgType == "SYNC_HELLO" then
-        -- Application immédiate si plus récent (roster/ids + E/L si fournis)
-        if shouldApply() and (kv.P and kv.I) then
-            CDZ._SnapshotApply(kv)
-            refreshActive()
+    elseif msgType == "SYNC_OFFER" then
+        -- Côté initiateur : collecter les OFFERS pendant HELLO_WAIT
+        local hid = kv.hid or ""
+        local sess = Discovery[hid]
+        if hid ~= "" and sess and _norm(sess.initiator) == _norm(playerFullName()) then
+            _registerOffer(hid, kv.from or sender, kv.rv, kv.est, kv.h)
         end
-        -- Répondre par FULL si on est plus à jour, sauf si une élection HELLO est active
-        if not isElectionActive() then
-            local cli_rv, cli_lm = safenum(kv.rv, -1), safenum(kv.lm, -1)
-            local myrv2 = safenum(meta.rev, 0)
-            local mylm2 = safenum(meta.lastModified, 0)
-            if (cli_rv >= 0 and myrv2 > cli_rv) or (cli_rv < 0 and mylm2 > cli_lm) then
-                local snap = CDZ._SnapshotExport()
-                CDZ.Comm_Whisper(sender, "SYNC_FULL", snap)
-            end
+
+    elseif msgType == "SYNC_GRANT" then
+        -- Reçu par le gagnant : envoyer un FULL ciblé avec token
+        local hid   = kv.hid or ""
+        local token = kv.token or ""
+        local init  = kv.init or sender
+        if hid ~= "" and token ~= "" and init and init ~= "" then
+            local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
+            snap.hid   = hid
+            snap.token = token
+            CDZ.Comm_Whisper(init, "SYNC_FULL", snap)
         end
 
     elseif msgType == "SYNC_FULL" then
-        -- Toujours mémoriser la vue du FULL (anti-doublon)
+        -- Mémoriser la vue du FULL (anti-doublon & inhibitions)
         LastFullSeenAt = now()
         LastFullSeenRv = safenum(kv.rv, -1)
+
+        -- Vérifier jeton si une découverte locale est active
+        local hid   = kv.hid or ""
+        local token = kv.token or ""
+        local okByToken = true
+        local sess = Discovery[hid]
+        if hid ~= "" and sess then
+            okByToken = (token ~= "" and token == sess.token)
+        end
+        if not okByToken then return end
 
         if not shouldApply() then return end
         CDZ._SnapshotApply(kv)
         refreshActive()
+
+        -- ACK vers l'émetteur si token présent
+        if hid ~= "" and token ~= "" then
+            CDZ.Comm_Whisper(sender, "SYNC_ACK", { hid = hid, rv = safenum(meta.rev,0) })
+            HelloElect[hid] = HelloElect[hid] or {}
+            HelloElect[hid].applied = true
+            if ns.Emit then ns.Emit("debug:changed") end
+            Discovery[hid] = nil
+        end
+
+    elseif msgType == "SYNC_ACK" then
+        -- Reçu par l'émetteur du FULL : fin de transfert (place à des métriques éventuelles)
+        local hid = kv.hid or ""
+        if hid ~= "" then
+            -- no-op
+        end
     end
 end
 
 -- ===== Réception bas niveau =====
 local function onAddonMsg(prefix, message, channel, sender)
     if prefix ~= PREFIX then return end
-    -- Ignorer toute réception tant que notre HELLO n'a pas été émis
-    if not (CDZ and CDZ._helloSent) then return end
+    -- Ignorer toute réception tant que notre HELLO n'a pas été émis (sauf HELLO lui-même)
+    local peekType = message:match("v=1|t=([^|]+)|")
+    if not (CDZ and CDZ._helloSent) and peekType ~= "HELLO" then return end
+
     local t, s, p, n = message:match("v=1|t=([^|]+)|s=(%d+)|p=(%d+)|n=(%d+)|")
     local seq  = safenum(s, 0)
     local part = safenum(p, 1)
     local total= safenum(n, 1)
-    pushLog("recv", t or "?", #message, channel, sender, seq, part, total, message)
+
+    -- ➜ Registre/MAJ d'une ligne unique par séquence pour l'UI
+    local idx = RecvLogIndexBySeq[seq]
+    if idx and DebugLog[idx] then
+        local r = DebugLog[idx]
+        r.ts      = _nowPrecise()
+        r.type    = t or r.type
+        r.size    = #message
+        r.chan    = channel or r.chan
+        r.channel = channel or r.channel
+        r.dist    = channel or r.dist
+        r.target  = sender or r.target
+        r.from    = sender or r.from
+        r.sender  = sender or r.sender
+        r.emitter = sender or r.emitter
+        r.seq     = seq
+        r.part    = part
+        r.total   = total
+        r.raw     = message
+        r.state   = (part >= total) and "received" or "receiving"
+        r.status  = r.state
+        r.stateText = (r.state == "received") and "Reçu" or "En cours"
+        if ns.Emit then ns.Emit("debug:changed") end
+    else
+        -- première trace pour cette séquence
+        pushLog("recv", t or "?", #message, channel, sender, seq, part, total, message, (part >= total) and "received" or "receiving")
+        RecvLogIndexBySeq[seq] = #DebugLog
+    end
+
     if not t then return end
 
     local payload = message:match("|n=%d+|(.*)$") or ""
@@ -774,8 +1091,8 @@ local function onAddonMsg(prefix, message, channel, sender)
         Inbox[key] = box
     else
         box.total = math.max(box.total or total, total)
-        box.ts = now()
     end
+    box.ts = now()
 
     if not box.parts[part] then
         box.parts[part] = payload
@@ -788,264 +1105,392 @@ local function onAddonMsg(prefix, message, channel, sender)
             if not box.parts[i] then chunks = nil; break else chunks[#chunks+1] = box.parts[i] end
         end
         if chunks then
+            -- ✅ Fin de réception : marquer l'état "Reçu" et libérer l'index
+            local i = RecvLogIndexBySeq[seq]
+            if i and DebugLog[i] then
+                DebugLog[i].ts        = _nowPrecise()
+                DebugLog[i].state     = "received"
+                DebugLog[i].status    = "received"
+                DebugLog[i].stateText = "Reçu"
+                DebugLog[i].part      = total
+                DebugLog[i].total     = total
+                if ns.Emit then ns.Emit("debug:changed") end
+            end
+            RecvLogIndexBySeq[seq] = nil
+
             Inbox[key] = nil
             local full = table.concat(chunks, "")
             -- Décompression éventuelle (balise 'c=z|...')
             full = unpackPayloadStr(full)
-            local kv = decode(full)
+            local kv = decodeKV(full)
             enqueueComplete(sender, t, kv)
         end
     end
 end
-
 
 -- ===== Envoi mutations (roster & crédits) =====
 function CDZ.BroadcastRosterUpsert(name)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     if not name or name=="" then return end
     local uid = CDZ.GetOrAssignUID(name)
-    local rv = incRev(); local lm = now()
-    CDZ.Comm_Broadcast("ROSTER_UPSERT", { uid=uid, name=name, rv=rv, lm=lm })
+    if not uid then return end
+    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("ROSTER_UPSERT", { uid = uid, name = name, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
 end
-function CDZ.BroadcastRosterRemove(name)
+
+function CDZ.BroadcastRosterRemove(idOrName)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    if not name or name=="" then return end
-    local uid = CDZ.GetUID and CDZ.GetUID(name) or nil
-    local rv = incRev(); local lm = now()
-    CDZ.Comm_Broadcast("ROSTER_REMOVE", { uid=uid, name=name, rv=rv, lm=lm })
+    if not idOrName or idOrName=="" then return end
+
+    local uid, name = nil, nil
+    local s = tostring(idOrName or "")
+
+    -- Si on reçoit un UID (ex: P000123), on garde tel quel ; sinon on considère que c’est un nom
+    if s:match("^P%d+$") then
+        uid  = s
+        name = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nil
+    else
+        name = s
+        uid  = (CDZ.FindUIDByName and CDZ.FindUIDByName(name)) or (CDZ.GetUID and CDZ.GetUID(name)) or nil
+        -- Surtout ne pas créer un nouvel UID lors d’une suppression : on accepte uid=nil, mais on envoie le nom
+    end
+
+    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+
+    -- On diffuse toujours les deux champs (uid + name) si disponibles pour une réception robuste
+    CDZ.Comm_Broadcast("ROSTER_REMOVE", {
+        uid = uid, name = name, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified
+    })
 end
+
 function CDZ.GM_ApplyAndBroadcast(name, delta)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     local uid = CDZ.GetOrAssignUID(name); if not uid then return end
-    local rv = incRev(); local lm = now()
+    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
     local nm = CDZ.GetNameByUID(uid) or name
-    CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=lm, by=playerFullName() })
+    CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified, by=playerFullName() })
 end
 function CDZ.GM_ApplyAndBroadcastEx(name, delta, extra)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     local uid = CDZ.GetOrAssignUID(name); if not uid then return end
-    local rv = incRev(); local lm = now()
+    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
     local nm = CDZ.GetNameByUID(uid) or name
-    local p = { uid=uid, name=nm, delta=delta, rv=rv, lm=lm, by=playerFullName() }
+    local p = { uid=uid, name=nm, delta=delta, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified, by=playerFullName() }
     if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
     CDZ.Comm_Broadcast("TX_APPLIED", p)
 end
-function CDZ.GM_ApplyAndBroadcastByUID(uid, delta)
+
+function CDZ.GM_ApplyAndBroadcastByUID(uid, delta, extra)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    if not uid or uid=="" then return end
-    local rv = incRev(); local lm = now()
-    CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, delta=delta, rv=rv, lm=lm, by=playerFullName() })
+    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    local p = { uid=uid, name=(CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or "?", delta=delta, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified, by=playerFullName() }
+    if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
+    CDZ.Comm_Broadcast("TX_APPLIED", p)
 end
-function CDZ.GM_BroadcastBatch(adjusts, extra)
+
+-- ➕ Envoi batch compact (1 seul TX_BATCH au lieu d'une rafale de TX_APPLIED)
+function CDZ.GM_BroadcastBatch(adjusts, opts)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     adjusts = adjusts or {}
-    local U, D, N = {}, {}, {}
+    opts    = opts or {}
+
+    local uids, deltas, names = {}, {}, {}
     for _, a in ipairs(adjusts) do
-        local nm  = a.name
-        local uid = a.uid or (nm and CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(nm))
-        if uid then
-            U[#U+1] = uid
-            D[#D+1] = tostring(math.floor(tonumber(a.delta) or 0))
-            local mapped = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nm
-            N[#N+1] = mapped or ""
+        local nm = a and a.name
+        if nm and nm ~= "" then
+            local uid = (CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(nm)) or nil
+            names[#names+1]   = nm
+            uids[#uids+1]    = uid or ""
+            deltas[#deltas+1] = math.floor(tonumber(a.delta) or 0)
         end
     end
-    if #U == 0 then return end
-    local rv = incRev(); local lm = now()
-    local p = { U=U, D=D, N=N, rv=rv, lm=lm, by=playerFullName() }
-    if extra and type(extra)=="table" then
-        if extra.reason ~= nil then p.R = extra.reason end
-        if extra.silent ~= nil then p.S = extra.silent and "1" or "0" end
-        if extra.L      ~= nil then p.L = extra.L end
+
+    local reason = opts.reason or opts.R
+    local silent = not not (opts.silent or opts.S)
+
+    -- On passe les autres champs (ex: L = contexte lots) dans 'extra'
+    local extra = {}
+    for k, v in pairs(opts) do
+        if k ~= "reason" and k ~= "R" and k ~= "silent" and k ~= "S" then
+            extra[k] = v
+        end
     end
+
+    CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
+end
+
+function CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+
+    -- Versionnage unique partagé avec le broadcast
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+
+    -- ✅ Application LOCALE côté GM (on n'attend pas notre propre message réseau)
+    do
+        local U, D, N = uids or {}, deltas or {}, names or {}
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        for i = 1, math.max(#U, #D, #N) do
+            local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or nil
+            local delta = safenum(D[i], 0)
+            if name and delta ~= 0 then
+                if CDZ.ApplyDeltaByName then
+                    CDZ.ApplyDeltaByName(name, delta, playerFullName())
+                else
+                    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+                    local full = nf(name)
+                    local rec = ChroniquesDuZephyrDB.players[full] or { credit = 0, debit = 0 }
+                    if delta >= 0 then rec.credit = safenum(rec.credit,0) + delta
+                    else               rec.debit  = safenum(rec.debit,0)  + (-delta) end
+                    ChroniquesDuZephyrDB.players[full] = rec
+                end
+            end
+        end
+        if ns.RefreshAll then ns.RefreshAll() end
+    end
+
+    -- Diffusion réseau du même batch (rv/lm identiques)
+    local p = { U=uids or {}, D=deltas or {}, N=names or {}, R=reason or "", S=silent and 1 or 0, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified }
+    if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
     CDZ.Comm_Broadcast("TX_BATCH", p)
 end
 
--- ===== Application locale approuvée & Demandes =====
-function CDZ.ApplyApprovedAdjust(uid, delta, ts, by)
-    local name = CDZ.GetNameByUID(uid); if not name or name=="" then return end
-    if CDZ.AdjustSolde then CDZ.AdjustSolde(name, safenum(delta, 0)) end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    ChroniquesDuZephyrDB.meta.lastModified = safenum(ts, now())
-end
-function CDZ.RequestAdjust(name, delta)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then
-        local selfName = UnitName("player")
-        if name ~= selfName then
-            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Action réservée à votre personnage.", 1, 0.4, 0.4)
-            return
-        end
-    end
-    local uid = CDZ.GetOrAssignUID(name) or CDZ.GetUID(name); if not uid then return end
-    local payload = { uid=uid, delta=safenum(delta, 0), requester=playerFullName(), ts=now() }
-    local m = masterName()
-    if m and m ~= "" then CDZ.Comm_Whisper(m, "TX_REQ", payload) else CDZ.Comm_Broadcast("TX_REQ", payload) end
-end
-function CDZ.AddIncomingRequest(uid, delta, requester, ts)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
-    local reqId = string.format("%d.%03d", time(), math.random(0, 999))
-    table.insert(ChroniquesDuZephyrDB.requests, { id=reqId, uid=uid, delta=safenum(delta, 0), requester=requester, ts=ts or now() })
-    if ns.UI and ns.UI.PopupRequest then
-        local displayName = CDZ.GetNameByUID(uid) or requester or "?"
-        ns.UI.PopupRequest(displayName, delta,
-            function() CDZ.GM_ApplyAndBroadcastByUID(uid, safenum(delta, 0)); CDZ.ResolveRequest(reqId, true) end,
-            function() CDZ.ResolveRequest(reqId, false, "Refus par le GM") end)
-    end
-    refreshActive()
-end
-function CDZ.GetRequests() ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; return ChroniquesDuZephyrDB.requests or {} end
-function CDZ.ResolveRequest(reqId, approved, reason)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
-    local list = ChroniquesDuZephyrDB.requests; local idx = nil
-    for i, r in ipairs(list) do if r.id == reqId then idx = i; break end end
-    if not idx then return end
-    local r = list[idx]; table.remove(list, idx)
-    if not approved then
-        local target = r.requester; if target and target ~= "" then
-            CDZ.Comm_Whisper(target, "TX_REFUSED", { reqId = reqId, reason = reason or "Refusé" })
-        end
-    end
-    refreshActive()
-end
-
--- ===== Snapshots (HELLO / FULL) =====
--- Export compact : joueurs (P), mapping ids (I), dépenses (E), lots (L)
-function CDZ._SnapshotExport()
+function CDZ.AddIncomingRequest(kv)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    local players = ChroniquesDuZephyrDB.players or {}
-    local ids     = (ChroniquesDuZephyrDB.ids and ChroniquesDuZephyrDB.ids.byId) or {}
-
-    -- P, I
-    local P, I = {}, {}
-    for name, v in pairs(players) do
-        local c = safenum(v.credit, 0); local d = safenum(v.debit, 0)
-        P[#P+1] = string.format("%s:%d:%d", name, c, d)
+    ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
+    local list = ChroniquesDuZephyrDB.requests
+    local id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
+    list[#list+1] = {
+        id = id, uid = kv.uid, delta = safenum(kv.delta,0),
+        who = kv.who or kv.requester or "?", ts = safenum(kv.ts, now()),
+    }
+    if ns.Emit then ns.Emit("requests:changed") end
+end
+function CDZ.ResolveRequest(id, accepted, by)
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    local list = ChroniquesDuZephyrDB.requests or {}
+    local kept = {}
+    for _, r in ipairs(list) do if r.id ~= id then kept[#kept+1] = r end end
+    ChroniquesDuZephyrDB.requests = kept
+    if accepted and CDZ and CDZ.GM_ApplyAndBroadcastByUID then
+        -- L’appelant a déjà appliqué la mutation
     end
-    for uid, name in pairs(ids) do I[#I+1] = string.format("%s:%s", uid, name) end
-
-    -- E (dépenses) : "id:qty:copper:src(A/B/O):lotId:itemID"
-    local E = {}
-    local exp = (ChroniquesDuZephyrDB.expenses and ChroniquesDuZephyrDB.expenses.list) or {}
-    for _, it in ipairs(exp) do
-        local iid = 0
-        if it.itemID then iid = safenum(it.itemID, 0)
-        elseif it.itemLink and it.itemLink ~= "" and GetItemInfoInstant then
-            local id = select(1, GetItemInfoInstant(it.itemLink)); iid = safenum(id, 0)
-        end
-        local src = (it.source == "HdV") and "A" or ((it.source == "Boutique") and "B" or "O")
-        local lot = safenum(it.lotId, 0)
-        E[#E+1] = string.format("%d:%d:%d:%s:%d:%d", safenum(it.id, 0), safenum(it.qty, 1), safenum(it.copper, 0), src, lot, iid)
-    end
-
-    -- L (lots) : "id:name:sessions:used:total:itemIdsCsv"
-    local L = {}
-    local lots = (ChroniquesDuZephyrDB.lots and ChroniquesDuZephyrDB.lots.list) or {}
-    for _, l in ipairs(lots) do
-        local idsCsv = ""
-        if l.itemIds and #l.itemIds > 0 then idsCsv = table.concat(l.itemIds, ",") end
-        local nm = tostring(l.name or ""):gsub(":", "‖")
-        L[#L+1] = string.format("%d:%s:%d:%d:%d:%s", safenum(l.id, 0), nm, safenum(l.sessions, 1), safenum(l.used, 0), safenum(l.totalCopper or l.copper, 0), idsCsv)
-    end
-
-    local lm = safenum(ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.lastModified, 0)
-    local rv = safenum(ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev, getRev())
-    local fs = now()
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}; ChroniquesDuZephyrDB.meta.fullStamp = fs
-    return { lm = lm, fs = fs, rv = rv, P = P, I = I, E = E, L = L }
+    if ns.Emit then ns.Emit("requests:changed") end
 end
 
-function CDZ._SnapshotApply(kv)
+function CDZ.RequestAdjust(a, b)
+    -- Compat : UI appelle (name, delta) ; ancienne forme : (delta)
+    local delta = (b ~= nil) and safenum(b, 0) or safenum(a, 0)
+    if delta == 0 then return end
+
+    local me = playerFullName()
+    local uid = CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(me)
+    if not uid then return end
+
+    local master = masterName and masterName()
+    local payload = { uid = uid, delta = delta, who = me, ts = now() }
+    if master and master ~= "" then
+        CDZ.Comm_Whisper(master, "TX_REQ", payload)
+    else
+        CDZ.Comm_Broadcast("TX_REQ", payload)
+    end
+end
+
+
+-- ===== Dépenses/Lots (émission GM) =====
+-- Diffuse une dépense (appelé par Expenses.lua quand le GM achète quelque chose)
+-- ===== Dépenses/Lots (émission GM) =====
+
+-- Diffusion : création d’un lot (utilisé par Core.Lot_Create)
+function CDZ.BroadcastLotCreate(l)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+
+    local payload = {
+        id = safenum(l.id, 0),
+        n  = l.name or ("Lot " .. tostring(l.id or "")),
+        N  = safenum(l.sessions, 1),
+        u  = safenum(l.used, 0),
+        t  = safenum(l.totalCopper, 0),
+        I  = {},
+        rv = rv,
+        lm = ChroniquesDuZephyrDB.meta.lastModified,
+    }
+    for _, eid in ipairs(l.itemIds or {}) do payload.I[#payload.I+1] = safenum(eid, 0) end
+    CDZ.Comm_Broadcast("LOT_CREATE", payload)
+end
+
+-- Diffusion : suppression d’un lot (utilisé par Core.Lot_Delete)
+function CDZ.BroadcastLotDelete(id)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("LOT_DELETE", { id = safenum(id,0), rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+-- Diffusion : consommation de plusieurs lots (utilisé par Core.Lots_ConsumeMany)
+function CDZ.BroadcastLotsConsume(ids)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+-- Conserve l'id alloué par le logger et versionne correctement.
+function CDZ.BroadcastExpenseAdd(p)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta     = ChroniquesDuZephyrDB.meta     or {}
+    ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+
+    local id = safenum(p.id, 0)
+    if id <= 0 then
+        id = safenum(ChroniquesDuZephyrDB.expenses.nextId, 1)
+        ChroniquesDuZephyrDB.expenses.nextId = id + 1
+    else
+        -- S’assure que la séquence locale reste > id
+        local nextId = safenum(ChroniquesDuZephyrDB.expenses.nextId, 1)
+        if (id + 1) > nextId then ChroniquesDuZephyrDB.expenses.nextId = id + 1 end
+    end
+
+    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+
+    CDZ.Comm_Broadcast("EXP_ADD", {
+        id = id,
+        i   = safenum(p.i, 0),
+        q   = safenum(p.q, 1),
+        c   = safenum(p.c, 0),
+        src = p.src or p.s, -- la source voyage désormais sous 'src'
+        l   = safenum(p.l, 0),
+        rv  = rv,
+        lm  = ChroniquesDuZephyrDB.meta.lastModified,
+    })
+end
+
+-- ➕ Diffusion GM : suppression d'une dépense
+function CDZ.GM_RemoveExpense(id)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev),0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("EXP_REMOVE", { id = safenum(id,0), rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+function CDZ.GM_CreateLot(name, sessions, totalCopper, itemIds)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+
+    local id = safenum(ChroniquesDuZephyrDB.lots.nextId, 1)
+    ChroniquesDuZephyrDB.lots.nextId = id + 1
+
+    -- Versionnage
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+
+    -- Calcul du total fiable côté GM si non fourni (ou incohérent)
+    local total = 0
+    if itemIds and #itemIds > 0 then
+        for _, eid in ipairs(itemIds) do
+            if CDZ.GetExpenseById then
+                local _, it = CDZ.GetExpenseById(eid)
+                if it then total = total + safenum(it.copper, 0) end
+            end
+        end
+    end
+    if safenum(totalCopper, 0) > 0 then total = safenum(totalCopper, 0) end
+
+    -- Diffusion stricte : id, n, N, u, t, I (et méta)
+    CDZ.Comm_Broadcast("LOT_CREATE", {
+        id = id,
+        n  = name,
+        N  = safenum(sessions, 1),
+        u  = 0,
+        t  = safenum(total, 0),
+        I  = itemIds or {},
+        rv = rv,
+        lm = ChroniquesDuZephyrDB.meta.lastModified,
+    })
+end
+
+function CDZ.GM_DeleteLot(id)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev),0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("LOT_DELETE", { id=safenum(id,0), rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+function CDZ.GM_ConsumeLots(ids)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev),0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    CDZ.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+-- ===== Meta helpers =====
+local function incRev()
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local meta = ChroniquesDuZephyrDB.meta
-    local rv   = safenum(kv.rv, -1); local myrv = safenum(meta.rev, 0)
-    local lm   = safenum(kv.lm, -1); local mylm = safenum(meta.lastModified, 0)
-
-    if rv >= 0 then if rv < myrv then return end else if lm >= 0 and lm < mylm then return end end
-
-    -- P/I
-    local P, I = kv.P or {}, kv.I or {}
-    ChroniquesDuZephyrDB.players = {}
-    for i = 1, #P do
-        local name, c, d = string.match(P[i], "^(.-):(-?%d+):(-?%d+)$")
-        if name then ChroniquesDuZephyrDB.players[name] = { credit = safenum(c, 0), debit = safenum(d, 0) } end
-    end
-    ChroniquesDuZephyrDB.ids = { counter = 0, byName = {}, byId = {} }
-    for i = 1, #I do
-        local uid, name = string.match(I[i], "^(.-):(.*)$")
-        if uid and name then ChroniquesDuZephyrDB.ids.byId[uid] = name; ChroniquesDuZephyrDB.ids.byName[name] = uid end
-    end
-
-    -- E (dépenses)
-    ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { recording=false, list = {}, nextId = 1 }
-    local E = kv.E or {}
-    local newList, maxId = {}, 0
-    for i = 1, #E do
-        local id,q,c,src,lot,iid = string.match(E[i], "^(%d+):(%d+):(%d+):([ABO]):(%d+):(%d+)$")
-        if id then
-            local rec = {
-                id     = safenum(id, 0),
-                qty    = safenum(q, 1),
-                copper = safenum(c, 0),
-                source = (src == "A") and "HdV" or ((src == "B") and "Boutique" or "Autre"),
-            }
-            local lotId = safenum(lot, 0); if lotId > 0 then rec.lotId = lotId end
-            local itemId = safenum(iid, 0)
-            if itemId > 0 then rec.itemID = itemId; rec.itemLink = "item:" .. tostring(itemId) end
-            newList[#newList+1] = rec
-            maxId = math.max(maxId, rec.id)
-        end
-    end
-    ChroniquesDuZephyrDB.expenses.list   = newList
-    ChroniquesDuZephyrDB.expenses.nextId = (maxId > 0) and (maxId + 1) or 1
-
-    -- L (lots)
-    ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { nextId = 1, list = {} }
-    local L = kv.L or {}
-    local lotList, maxLot = {}, 0
-    for i = 1, #L do
-        local id, nm, ses, used, tot, csv = string.match(L[i], "^(%d+):(.-):(%d+):(%d+):(%d+):(.*)$")
-        if id then
-            nm = (nm or ""):gsub("‖", ":")
-            local l = {
-                id = safenum(id, 0),
-                name = nm,
-                sessions = safenum(ses, 1),
-                used = safenum(used, 0),
-                totalCopper = safenum(tot, 0),
-                itemIds = {},
-            }
-            for v in tostring(csv or ""):gmatch("(%-?%d+)") do l.itemIds[#l.itemIds+1] = safenum(v, 0) end
-            lotList[#lotList+1] = l; maxLot = math.max(maxLot, l.id)
-        end
-    end
-    ChroniquesDuZephyrDB.lots.list   = lotList
-    ChroniquesDuZephyrDB.lots.nextId = (maxLot > 0) and (maxLot + 1) or 1
-
-    meta.rev = (rv >= 0) and rv or myrv
-    meta.lastModified = (lm >= 0) and lm or now()
-    meta.fullStamp = safenum(kv.fs, now())
+    ChroniquesDuZephyrDB.meta.rev = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
+    ChroniquesDuZephyrDB.meta.lastModified = now()
+    return ChroniquesDuZephyrDB.meta.rev
 end
 
 -- ===== Handshake / Init =====
 function CDZ.Sync_RequestHello()
-    -- Émet un HELLO léger avec uniquement la révision des données ; l’élection décidera qui envoie un FULL
-    local helloId = string.format("%d.%03d", time(), math.random(0, 999))
-    local me      = playerFullName()
-    local rv      = getRev()
+    -- Émet un HELLO léger (avec caps) et collecte les OFFERS pendant HELLO_WAIT,
+    -- puis choisit un gagnant et envoie un GRANT (token) en WHISPER.
+    local hid   = string.format("%d.%03d", time(), math.random(0, 999))
+    local me    = playerFullName()
+    local rv_me = safenum(getRev(), 0)
 
-    HelloSessions[helloId] = {
-        initiator  = { player = me, rv = rv },
-        responders = {},
-        startedAt  = now(),
-        decided    = false,
+    Discovery[hid] = {
+        initiator = me,
+        rv_me     = rv_me,
+        decided   = false,
+        endsAt    = now() + HELLO_WAIT_SEC,
+        offers    = {},
+        reason    = "rv_gap",
     }
-    -- Init affichage Debug
-    HelloElect[helloId] = { startedAt = now(), endsAt = now() + HELLO_WAIT_SEC, winner = nil, decided = false }
+
+    HelloElect[hid] = { startedAt = now(), endsAt = now() + HELLO_WAIT_SEC, decided = false, offers = 0 }
     if ns.Emit then ns.Emit("debug:changed") end
 
-    C_Timer.After(HELLO_WAIT_SEC, function() electWinner(helloId) end)
+    C_Timer.After(HELLO_WAIT_SEC, function() _decideAndGrant(hid) end)
 
-    CDZ.Comm_Broadcast("HELLO", { helloId = helloId, rv = rv, player = me })
+    -- ✅ Marqueur d’amorçage : on autorise la réception de réponses dès maintenant
+    CDZ._helloSent  = true
+    CDZ._lastHelloHid = hid
+
+    CDZ.Comm_Broadcast("HELLO", { hid = hid, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
 end
 
 
@@ -1056,10 +1501,12 @@ function CDZ.Comm_Init()
     if ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master then
         local m = ChroniquesDuZephyrDB.meta.master
         local n, r = m:match("^(.-)%-(.+)$")
-        if n and r then ChroniquesDuZephyrDB.meta.master = n .. "-" .. r:gsub("%s+", ""):gsub("'", "") end
+        if not r then
+            local _, realm = UnitFullName("player")
+            ChroniquesDuZephyrDB.meta.master = m .. "-" .. (realm or "")
+        end
     end
 
-    -- Listener CHAT_MSG_ADDON
     if not CDZ._commFrame then
         local f = CreateFrame("Frame")
         f:RegisterEvent("CHAT_MSG_ADDON")
@@ -1075,49 +1522,61 @@ function CDZ.Comm_Init()
         end)
     end
 
+    -- ✅ Démarrage automatique : envoie un HELLO pour ouvrir la découverte
+    if not CDZ._helloAutoStarted then
+        CDZ._helloAutoStarted = true
+        C_Timer.After(1.0, function()
+            if IsInGuild and IsInGuild() then
+                CDZ.Sync_RequestHello()
+            end
+        end)
+    end
+
     -- Auto-définition du master si GM et non défini
     C_Timer.After(5, function()
         if not IsInGuild or not IsInGuild() then return end
-        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+        if not (CDZ.IsGM and CDZ.IsGM()) then return end
+        if not ChroniquesDuZephyrDB then ChroniquesDuZephyrDB = {} end
         ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-        local m = ChroniquesDuZephyrDB.meta.master
-        if not m or m == "" then
-            local _, _, ri = GetGuildInfo("player")
-            if ri == 0 then
-                ChroniquesDuZephyrDB.meta.master = playerFullName()
-                if ns.RefreshAll then ns.RefreshAll() end
-            end
+        if not ChroniquesDuZephyrDB.meta.master or ChroniquesDuZephyrDB.meta.master == "" then
+            ChroniquesDuZephyrDB.meta.master = playerFullName()
+            if ns.Emit then ns.Emit("meta:changed") end
         end
     end)
-
-    -- HELLO initial (léger) après la fin de l'écran de chargement
-    if not CDZ._helloFrame then
-        local f = CreateFrame("Frame")
-        f:RegisterEvent("LOADING_SCREEN_DISABLED")
-        f:RegisterEvent("PLAYER_ENTERING_WORLD")
-        f:SetScript("OnEvent", function(self)
-            if CDZ._helloSent then self:UnregisterAllEvents(); return end
-            if IsInGuild and IsInGuild() then
-                CDZ._helloSent = true
-                CDZ.Sync_RequestHello()
-            end
-            if CDZ._helloSent then self:UnregisterAllEvents() end
-        end)
-        CDZ._helloFrame = f
-    end
 end
 
--- ===== Slash =====
-SLASH_CDZMASTER1 = "/cdzmaster"
-SlashCmdList.CDZMASTER = function()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    ChroniquesDuZephyrDB.meta.master = playerFullName()
-    print("|cff9ecbff[CDZ]|r Vous êtes maintenant maître:", ChroniquesDuZephyrDB.meta.master)
-    if ns.RefreshAll then ns.RefreshAll() end
+-- ===== API publique Debug =====
+function CDZ.GetHelloElect() return HelloElect end
+-- ➕ Accès ciblé par hid (utilisé par certains onglets Debug)
+function CDZ._GetHelloElect(hid)
+    return HelloElect and HelloElect[hid]
 end
 
-SLASH_CDZSYNC1 = "/cdzsync"
-SlashCmdList.CDZSYNC = function()
-    CDZ.Sync_RequestHello()
-    print("|cff9ecbff[CDZ]|r Sync demandée (HELLO)")
+function CDZ.ForceMyVersion()
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+    local rv = incRev()
+    local snap = CDZ._SnapshotExport()
+    snap.rv = rv
+    CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    LastFullSentAt = now()
+end
+
+-- ===== Décodage =====
+function decode(s) return decodeKV(s) end
+function encode(s) return encodeKV(s) end
+
+-- ✅ Bootstrap de secours : s’assure que Comm_Init est bien appelé
+if not CDZ._autoBootstrap then
+    local boot = CreateFrame("Frame")
+    boot:RegisterEvent("ADDON_LOADED")
+    boot:RegisterEvent("PLAYER_LOGIN")
+    boot:SetScript("OnEvent", function(_, ev, name)
+        if ev == "ADDON_LOADED" and name and name ~= ADDON then return end
+        if CDZ._commReady then return end
+        CDZ._commReady = true
+        if type(CDZ.Comm_Init) == "function" then
+            CDZ.Comm_Init()
+        end
+    end)
+    CDZ._autoBootstrap = true
 end

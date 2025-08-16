@@ -131,8 +131,12 @@ local function UpdateRowFree(i, r, f, it)
 
     r.btnDelete:SetEnabled(not d.lotId)
     r.btnDelete:SetOnClick(function()
+        -- Snapshot : on capture l'id stable et l'index absolu au moment du clic
+        local abs = r._abs
+        local eid = tonumber(d.id or 0) or 0
         UI.PopupConfirm("Supprimer cette ligne de ressource ?", function()
-            CDZ.DeleteExpense(r._abs)
+            -- On privilégie l'id stable (robuste même si la liste se réordonne)
+            CDZ.DeleteExpense((eid > 0) and eid or abs)
             if ns.RefreshAll then ns.RefreshAll() end
         end)
     end)
@@ -279,11 +283,12 @@ local function Refresh()
     local e = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.expenses) or { list = {} }
     local items, total = {}, 0
     for idx, it in ipairs(e.list or {}) do
-        if not it.lotId then
+        if (not it.lotId) or (it.lotId == 0) then
             total = total + (tonumber(it.copper) or 0)
             items[#items+1] = { _abs = idx, data = it }
         end
     end
+
     lvFree:SetData(items)
     totalFS:SetText("|cffffd200Ressources libres :|r " .. UI.MoneyFromCopper(total))
 
@@ -298,10 +303,11 @@ local function Refresh()
         return an < bn
     end)
 
-    -- Filtrer : ne garder que les lots non-épuisés
+    -- Filtrer : ne garder que les lots visibles (non-épuisés et non en attente locale)
     local rows = {}
     for _, l in ipairs(lots) do
-        if not (CDZ.Lot_Status and CDZ.Lot_Status(l) == "EPU") then
+        local pending = (l.__pendingConsume or l.__pendingDelete)
+        if (not pending) and not (CDZ.Lot_Status and CDZ.Lot_Status(l) == "EPU") then
             rows[#rows+1] = { data = l }
         end
     end

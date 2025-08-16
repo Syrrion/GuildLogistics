@@ -107,19 +107,55 @@ function CDZ.GetSolde(name)
     return (p.credit or 0) - (p.debit or 0)
 end
 
-function CDZ.ShortName(name)
-    if not name or name == "" then return name end
-    local short = name:match("^[^-]+") or name
-    return short
-end
-
 function CDZ.SamePlayer(a, b)
     if not a or not b then return false end
-    local sa = string.lower(CDZ.ShortName(a))
-    local sb = string.lower(CDZ.ShortName(b))
-    return sa == sb
+    -- Comparaison stricte sur le nom complet (insensible à la casse)
+    return string.lower(tostring(a)) == string.lower(tostring(b))
 end
 
+
+-- ➕ Normalisation des clés joueurs (merge "Nom" et "Nom-Realm", dédoublonne les realms répétés)
+function CDZ.NormalizePlayerKeys()
+    if not ChroniquesDuZephyrDB then return end
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    ChroniquesDuZephyrDB.uids    = ChroniquesDuZephyrDB.uids    or {}
+
+    local function dedupRealm(full)
+        full = tostring(full or "")
+        local base, realm = full:match("^(.-)%-(.+)$")
+        if not realm then
+            -- si pas de realm : on rajoute celui du perso courant si disponible
+            local rn = select(2, UnitFullName("player"))
+            return (rn and rn ~= "" and (full.."-"..rn)) or full
+        end
+        -- garde uniquement le 1er segment de realm (évite A-B-C lors d’insertions successives)
+        realm = realm:match("^([^%-]+)") or realm
+        return string.format("%s-%s", base, realm)
+    end
+
+    -- 1) Rebuild players avec clés normalisées + fusion des soldes
+    local rebuilt = {}
+    for name, rec in pairs(ChroniquesDuZephyrDB.players) do
+        local norm = (NormalizeFull and NormalizeFull(name)) or name
+        norm = dedupRealm(norm)
+        local dst = rebuilt[norm]
+        if not dst then
+            rebuilt[norm] = { credit = tonumber(rec.credit) or 0, debit = tonumber(rec.debit) or 0 }
+        else
+            dst.credit = (dst.credit or 0) + (tonumber(rec.credit) or 0)
+            dst.debit  = (dst.debit  or 0) + (tonumber(rec.debit)  or 0)
+        end
+    end
+    ChroniquesDuZephyrDB.players = rebuilt
+
+    -- 2) Normalise aussi la table des UIDs -> noms
+    local newUIDs = {}
+    for uid, n in pairs(ChroniquesDuZephyrDB.uids) do
+        local norm = (NormalizeFull and NormalizeFull(n)) or n
+        newUIDs[tostring(uid)] = dedupRealm(norm)
+    end
+    ChroniquesDuZephyrDB.uids = newUIDs
+end
 
 -- Ajuste directement le solde d’un joueur : delta > 0 => ajoute de l’or, delta < 0 => retire de l’or
 function CDZ.AdjustSolde(name, delta)
@@ -177,18 +213,34 @@ function CDZ.RemovePlayerLocal(name, silent)
     local p = ChroniquesDuZephyrDB.players or {}
     local existed = not not p[name]
     if p[name] then p[name] = nil end
+
+    -- ancien mapping (legacy)
     if ChroniquesDuZephyrDB.ids and ChroniquesDuZephyrDB.ids.byName then
-        local uid = ChroniquesDuZephyrDB.ids.byName[name]
-        if uid then
+        local _uid = ChroniquesDuZephyrDB.ids.byName[name]
+        if _uid then
             ChroniquesDuZephyrDB.ids.byName[name] = nil
-            if ChroniquesDuZephyrDB.ids.byId then ChroniquesDuZephyrDB.ids.byId[uid] = nil end
+            if ChroniquesDuZephyrDB.ids.byId then ChroniquesDuZephyrDB.ids.byId[_uid] = nil end
         end
     end
+
+    -- purge aussi la table des UID actifs
+    if ChroniquesDuZephyrDB.uids then
+        local uid = nil
+        if CDZ.FindUIDByName then
+            uid = CDZ.FindUIDByName(name)
+        elseif ns and ns.Util and ns.Util.FindUIDByName then
+            uid = ns.Util.FindUIDByName(name)
+        end
+        if not uid then
+            for k,v in pairs(ChroniquesDuZephyrDB.uids) do if v == name then uid = k break end end
+        end
+        if uid then ChroniquesDuZephyrDB.uids[uid] = nil end
+    end
+
     if existed then ns.Emit("roster:removed", name) end
     if not silent and ns.RefreshAll then ns.RefreshAll() end
     return true
 end
-
 
 -- Suppression orchestrée : réservée au GM + broadcast
 -- Remplace la version précédente de RemovePlayer si déjà présente
@@ -198,15 +250,33 @@ function CDZ.RemovePlayer(name)
         return false
     end
     if not name or name=="" then return false end
+
     local uid = CDZ.GetUID and CDZ.GetUID(name) or nil
+
+    -- Applique localement (GM)
     CDZ.RemovePlayerLocal(name, true)
-    -- Diffuse la suppression à toute la guilde
+
+    -- Incrémente la révision et horodate pour les clients qui filtrent sur rv/lm
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = time()
+
+    -- Diffuse la suppression à toute la guilde avec rv/lm
     if CDZ.Comm_Broadcast then
-        CDZ.Comm_Broadcast("ROSTER_REMOVE", { uid = uid, name = name })
+        CDZ.Comm_Broadcast("ROSTER_REMOVE", {
+            uid = uid,
+            name = name,
+            rv  = rv,
+            lm  = ChroniquesDuZephyrDB.meta.lastModified,
+        })
     end
+
     if ns.RefreshAll then ns.RefreshAll() end
     return true
 end
+
 
 -- =========================
 -- ======  HISTORY    ======
@@ -368,8 +438,9 @@ function CDZ.Lot_Status(lot)
 end
 
 function CDZ.Lot_IsSelectable(lot)
-    return lot and CDZ.Lot_Status(lot) ~= "EPU"
+    return lot and (not lot.__pendingConsume) and CDZ.Lot_Status(lot) ~= "EPU"
 end
+
 
 -- Coût par utilisation (ex-ShareGold) en or entiers — pas de PA/PC.
 function CDZ.Lot_ShareGold(lot)  -- compat : on conserve le nom
@@ -428,11 +499,12 @@ function CDZ.Lot_Delete(id)
     table.remove(list, idx)
     for _, it in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do if it.lotId == id then it.lotId = nil end end
     if ns.Emit then ns.Emit("lots:changed") end
+    if ns.RefreshActive then ns.RefreshActive() end -- ✅ disparition immédiate à l’écran
+
     -- ➕ Diffusion GM
     if CDZ.BroadcastLotDelete and CDZ.IsMaster and CDZ.IsMaster() then CDZ.BroadcastLotDelete(id) end
     return true
 end
-
 
 function CDZ.Lot_ListSelectable()
     _ensureLots()
@@ -459,7 +531,16 @@ function CDZ.Lots_ConsumeMany(ids)
 
     local isMaster = CDZ.IsMaster and CDZ.IsMaster()
     if isMaster then
-        -- GM : ne pas appliquer localement pour éviter un double comptage.
+        -- Optimistic UI : marquer les lots comme "en attente" pour les masquer immédiatement.
+        local L = ChroniquesDuZephyrDB.lots
+        for _, id in ipairs(ids) do
+            for _, l in ipairs(L.list or {}) do
+                if l.id == id then l.__pendingConsume = true end
+            end
+        end
+        if ns.Emit then ns.Emit("lots:changed") end
+        if ns.RefreshActive then ns.RefreshActive() end
+
         -- La diffusion réappliquera pour tous (y compris GM) via le handler LOT_CONSUME.
         if CDZ.BroadcastLotsConsume then CDZ.BroadcastLotsConsume(ids) end
     else
@@ -492,3 +573,20 @@ function CDZ.SaveWindow(point, relTo, relPoint, x, y, w, h)
         point = point, relTo = relTo, relPoint = relPoint, x = x, y = y, width = w, height = h,
     }
 end
+
+-- =========================
+-- ==== Demandes (GM) ======
+-- =========================
+function CDZ.GetRequests()
+    EnsureDB()
+    ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
+    return ChroniquesDuZephyrDB.requests
+end
+
+-- Expose les demandes pour l’UI (badge/onglet)
+function CDZ.GetRequests()
+    EnsureDB()
+    ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
+    return ChroniquesDuZephyrDB.requests
+end
+

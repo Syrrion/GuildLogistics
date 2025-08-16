@@ -372,3 +372,41 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     dlg:Show()
     return dlg
 end
+
+-- Prompt texte générique (saisie libre)
+function UI.PopupPromptText(title, label, onAccept, opts)
+    local dlg = UI.CreatePopup({
+        title  = title or "Saisie",
+        width  = math.floor(((opts and opts.width)  or 460) * 1.10),
+        height = math.floor(((opts and opts.height) or 220) * 1.20),
+    })
+
+    local stack = CreateFrame("Frame", nil, dlg.content)
+    stack:SetSize(260, 60)
+    stack:SetPoint("CENTER")
+
+    local l = stack:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    l:SetText(label or "")
+    l:SetPoint("TOP", stack, "TOP", 0, 0)
+
+    local eb = CreateFrame("EditBox", nil, stack, "InputBoxTemplate")
+    eb:SetAutoFocus(true); eb:SetSize(260, 28)
+    eb:SetPoint("TOP", l, "BOTTOM", 0, -8)
+
+    eb:SetScript("OnEnterPressed", function(self)
+        local v = tostring(self:GetText() or "")
+        if onAccept then onAccept(v) end
+        dlg:Hide()
+    end)
+
+    dlg:SetButtons({
+        { text = OKAY,   default = true, onClick = function()
+            local v = tostring(eb:GetText() or "")
+            if onAccept then onAccept(v) end
+        end },
+        { text = CANCEL, variant = "ghost" },
+    })
+    dlg:Show()
+    return dlg
+end
+

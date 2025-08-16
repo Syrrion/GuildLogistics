@@ -2,7 +2,7 @@ local ADDON, ns = ...
 local CDZ, UI = ns.CDZ, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, input, addBtn, lv, footer
+local panel, addBtn, lv, footer
 
 local cols = UI.NormalizeColumns({
     { key="name",   title="Nom",    min=240, flex=1 },
@@ -29,7 +29,45 @@ local function BuildRow(r)
 end
 
 local function UpdateRow(i, r, f, data)
+    -- Affiche désormais le nom complet (Nom-Royaume)
     UI.SetNameTag(f.name, data.name or "")
+
+    -- ✅ Autorisations : GM partout ; sinon uniquement sa propre ligne (comparaison Nom-Royaume)
+    local isGM   = (ns and ns.Util and ns.Util.IsGM and ns.Util.IsGM()) or (ns and ns.CDZ and ns.CDZ.IsGM and ns.CDZ.IsGM()) or false
+
+    -- Nom complet normalisé du joueur local (ex: Syrrions-KirinTor)
+    local meFull = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+    if (not meFull or meFull == "") and UnitFullName then
+        local n, r = UnitFullName("player")
+        local rn   = (GetNormalizedRealmName and GetNormalizedRealmName()) or r
+        meFull     = (n and rn and rn ~= "") and (n.."-"..rn) or (n or UnitName("player"))
+    end
+
+    local isSelf = false
+    if ns and ns.Util and ns.Util.SamePlayer then
+        isSelf = ns.Util.SamePlayer(data.name, meFull)
+    else
+        -- Fallback : compare les noms complets (insensible à la casse)
+        local a = tostring(data.name or "")
+        local b = tostring(meFull or "")
+        isSelf = string.lower(a) == string.lower(b)
+    end
+    local canClick = isGM or isSelf
+
+    -- Active/désactive proprement les deux boutons (noms possibles selon ta factory)
+    local withdraw = f.btnWithdraw or f.withdraw
+    local deposit  = f.btnDeposit  or f.deposit
+    if withdraw then
+        withdraw:EnableMouse(true)
+        if canClick then withdraw:Enable() else withdraw:Disable() end
+        withdraw:SetAlpha(canClick and 1 or 0.5)
+    end
+    if deposit then
+        deposit:EnableMouse(true)
+        if canClick then deposit:Enable() else deposit:Disable() end
+        deposit:SetAlpha(canClick and 1 or 0.5)
+    end
+
 
     -- Solde : utilise data.solde si fourni, sinon calcule depuis credit/debit
     local solde = data.solde
@@ -41,8 +79,15 @@ local function UpdateRow(i, r, f, data)
     f.solde:SetText(money(solde))
 
     local isMaster = CDZ.IsMaster and CDZ.IsMaster()
-    local selfName = UnitName("player")
-    local isSelf   = (data.name == selfName)
+
+    -- Compare sur Nom-Royaume normalisé
+    local selfFull = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+    if (not selfFull or selfFull == "") and UnitFullName then
+        local n, r = UnitFullName("player")
+        local rn   = (GetNormalizedRealmName and GetNormalizedRealmName()) or r
+        selfFull   = (n and rn and rn ~= "") and (n.."-"..rn) or (n or UnitName("player"))
+    end
+    local isSelf = string.lower(tostring(data.name or "")) == string.lower(tostring(selfFull or ""))
 
     -- Droits : non-GM ne peut agir que sur lui-même ; suppression réservée GM
     r.btnDelete:SetShown(isMaster)
@@ -90,24 +135,23 @@ local function UpdateRow(i, r, f, data)
 
     r.btnDelete:SetScript("OnClick", function()
         if not isMaster then
-            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Suppression du roster réservée au GM.", 1, 0.4, 0.4)
+            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Suppression d'un membre du roster réservée au GM.", 1, 0.4, 0.4)
             return
         end
-        UI.PopupConfirm("Supprimer "..(data.name or "").." de la liste ?", function()
-            if CDZ.RemovePlayer then CDZ.RemovePlayer(data.name) end
-            -- La version RemovePlayer côté Core diffuse déjà si patch appliqué ; sinon :
-            if CDZ.BroadcastRosterRemove then CDZ.BroadcastRosterRemove(data.name) end
+        UI.PopupConfirm("Supprimer "..(data.name or "").." du roster ?", function()
+            if CDZ.RemovePlayer then
+                CDZ.RemovePlayer(data.name)  -- diffuse déjà ROSTER_REMOVE avec uid+name
+            elseif CDZ.BroadcastRosterRemove then
+                local uid = (CDZ.GetUID and CDZ.GetUID(data.name)) or nil
+                CDZ.BroadcastRosterRemove(uid or data.name)
+            end
             if ns.RefreshAll then ns.RefreshAll() end
         end)
     end)
 end
 
 local function Layout()
-    -- Footer : input + bouton
-    input:ClearAllPoints()
-    input:SetPoint("LEFT", footer, "LEFT", PAD, 0)
-    addBtn:ClearAllPoints()
-    addBtn:SetPoint("LEFT", input, "RIGHT", 8, 0)
+    -- Footer : tous les boutons sont gérés par AttachButtonsFooterRight
     if lv and lv.Layout then lv:Layout() end
 end
 
@@ -123,25 +167,25 @@ local function Build(container)
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
 
     footer = UI.CreateFooter(panel, 36)
-    input = CreateFrame("EditBox", nil, footer, "InputBoxTemplate")
-    input:SetAutoFocus(false); input:SetHeight(28); input:SetWidth(320)
 
-    addBtn = UI.Button(footer, "+ Ajouter", { size="sm", variant="primary", minWidth=120 })
+    -- Bouton Ajouter un joueur
+    addBtn = UI.Button(footer, "Ajouter un joueur", { size="sm", variant="primary", minWidth=120 })
     addBtn:SetOnClick(function()
-        local name = (input:GetText() or ""):gsub("^%s+",""):gsub("%s+$","")
-        if name == "" then return end
         if not (CDZ.IsMaster and CDZ.IsMaster()) then
             UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Ajout au roster réservé au GM.", 1, 0.4, 0.4)
             return
         end
-        if CDZ.AddPlayer and CDZ.AddPlayer(name) then
-            input:SetText("")
-            if ns.RefreshAll then ns.RefreshAll() end
-        end
+        UI.PopupPromptText("Ajouter un joueur", "Nom du joueur externe à inclure dans le roster", function(name)
+            name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+            if name == "" then return end
+            if CDZ.AddPlayer and CDZ.AddPlayer(name) then
+                if ns.RefreshAll then ns.RefreshAll() end
+            end
+        end, { width = 460 })
     end)
 
     -- Bouton footer (droite) : popup d’ajout depuis la guilde
-    local btnGuild = UI.Button(footer, "Ajouter membre de la guilde", { size="sm", minWidth=220 })
+    local btnGuild = UI.Button(footer, "Ajouter un membre de la guilde", { size="sm", minWidth=220 })
     btnGuild:SetOnClick(function()
         if not (CDZ.IsMaster and CDZ.IsMaster()) then
             UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Ajout au roster réservé au GM.", 1, 0.4, 0.4)
@@ -149,17 +193,26 @@ local function Build(container)
         end
         if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
     end)
+
+    -- Bouton Historique (déjà demandé précédemment)
+    local histBtn = UI.Button(footer, "Historique", { size="sm", minWidth=120, tooltip="Voir l’historique des répartitions" })
+    histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique des sorties") end)
+
+    -- Aligner à droite : Historique | Ajouter membre guilde | + Ajouter
     if UI.AttachButtonsFooterRight then
-        UI.AttachButtonsFooterRight(footer, { btnGuild })
+        UI.AttachButtonsFooterRight(footer, { histBtn, btnGuild, addBtn })
     else
+        addBtn:ClearAllPoints()
+        addBtn:SetPoint("RIGHT", footer, "RIGHT", 0, 0)
         btnGuild:ClearAllPoints()
-        btnGuild:SetPoint("RIGHT", footer, "RIGHT", 0, 0)
+        btnGuild:SetPoint("RIGHT", addBtn, "LEFT", -8, 0)
+        histBtn:ClearAllPoints()
+        histBtn:SetPoint("RIGHT", btnGuild, "LEFT", -8, 0)
     end
 
-    -- Masquer le bouton + désactiver l’input pour les non-GM
+    -- Visibilité : bouton + réservé au GM
     if not (CDZ.IsMaster and CDZ.IsMaster()) then
         addBtn:Hide()
-        if input.Disable then input:Disable() else input:ClearFocus(); input:EnableMouse(false) end
     end
 
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = footer })

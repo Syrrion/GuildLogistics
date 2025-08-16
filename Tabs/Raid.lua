@@ -160,10 +160,6 @@ local function Build(container)
     totalInput:SetAutoFocus(false); totalInput:SetNumeric(true); totalInput:SetSize(120, 28)
     totalInput:SetScript("OnTextChanged", function() ns.RefreshAll() end)
 
-    -- Bouton textuel Historique
-    histBtn = UI.Button(footer, "Historique", { size="sm", minWidth=120, tooltip="Voir l’historique des répartitions" })
-    histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique") end)
-
     closeBtn = UI.Button(footer, "Valider les participants", { size="sm", minWidth=220 })
     closeBtn:SetOnClick(function()
         local total = tonumber(totalInput:GetText() or "0") or 0
@@ -206,20 +202,21 @@ local function Build(container)
             -- Politique popups :
             -- - Notifier (non silencieux) : essayer le réseau, sinon fallback local après un court délai.
             -- - Valider (silencieux)     : popup locale immédiate (aucun envoi réseau).
-            local myShort = UnitName("player")  -- nom court
+            local meFull = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or UnitName("player")
+            local myShort = (meFull and meFull:match("^(.-)%-.+$")) or (UnitName and UnitName("player")) or meFull
             local function isMe(name)
-                if CDZ.SamePlayer then return CDZ.SamePlayer(name, myShort) end
-                return (name == myShort)
+                if CDZ.SamePlayer then return CDZ.SamePlayer(name, meFull) end
+                return string.lower(tostring(name or "")) == string.lower(tostring(meFull or ""))
             end
             local amISelected = false
             for _, n in ipairs(selected) do if isMe(n) then amISelected = true; break end end
-
+            
             if silentFlag then
                 -- Mode silencieux : aucune popup réseau -> montrer local si je suis débité
                 if amISelected and ns.UI and ns.UI.PopupRaidDebit then
-                    local before = (CDZ.GetSolde and CDZ.GetSolde(myShort)) or 0
-                    local after  = before - per
-                    ns.UI.PopupRaidDebit(myShort, per, after, { L = Lctx })
+                    -- ✅ GM : le batch est déjà appliqué localement → on lit le solde actuel
+                    local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
+                    ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
                 end
             else
                 -- Mode notifié : pas de popup locale si la popup réseau arrive.
@@ -232,9 +229,9 @@ local function Build(container)
                     end
                     ns.Util.After(1.0, function()
                         if not seen and ns.UI and ns.UI.PopupRaidDebit then
-                            local before = (CDZ.GetSolde and CDZ.GetSolde(myShort)) or 0
-                            local after  = before - per
-                            ns.UI.PopupRaidDebit(myShort, per, after, { L = Lctx })
+                            -- ✅ Fallback GM : lit le solde réellement en DB (pas de re-soustraction)
+                            local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
+                            ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
                         end
                     end)
                 end
@@ -296,7 +293,7 @@ local function Build(container)
 
     -- Alignement footer
     if UI.AttachButtonsFooterRight then
-        UI.AttachButtonsFooterRight(footer, { closeBtn, histBtn })
+        UI.AttachButtonsFooterRight(footer, { closeBtn })
     end
 end
 

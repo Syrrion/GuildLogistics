@@ -34,11 +34,6 @@ end
 
 -- Affichage : constantes & helpers
 local HELLO_WAIT_SEC = 5
-local function ShortName(full)
-    full = tostring(full or "")
-    local n = full:match("^(.-)%-.+$")
-    return n or full
-end
 
 local cols = UI.NormalizeColumns({
     { key="time",  title="Heure",       w=110 },
@@ -93,15 +88,26 @@ local function UpdateRow(i, r, f, it)
                 local info = ns.CDZ._GetHelloElect(hid)
                 local nowt = time()
                 local started = (info and info.startedAt) or (it.tsFirst or nowt)
-                local endsAt  = (info and info.endsAt)    or (started + HELLO_WAIT_SEC)
-                if info and info.winner then
-                    st = ("Élu : %s"):format(ShortName(info.winner))
-                else
-                    local remain = math.max(0, math.ceil(endsAt - nowt))
-                    st = ("Élection : %ds"):format(remain)
+                local endsAt  = (info and info.endsAt) or (started + HELLO_WAIT_SEC)
+                if nowt < endsAt then
+                    st = "Découverte… " .. tostring(math.max(0, endsAt - nowt)) .. "s"
+                elseif info and info.decided then
+                    st = "Élu : " .. (info.winner or "?")
                 end
             end
         end
+
+        -- ➕ État générique côté réception si pas un HELLO (ou si HELLO non résolu)
+        if st == "" then
+            if got <= 0 then
+                st = "|cffffff00En attente|r"
+            elseif got < total then
+                st = ("|cffffd200Assemblage|r %d/%d"):format(got, total)
+            else
+                st = "|cff7dff9aReçu|r"
+            end
+        end
+
         f.state:SetText(st)
     end
 
@@ -111,8 +117,9 @@ local function UpdateRow(i, r, f, it)
     f.chan:SetText(it.chan or "")
 
     -- Colonne "Émetteur" : côté RECU = sender (sans royaume), côté ENVOI = moi (sans royaume)
-    local emitter = (it.dir == "recv") and ShortName(it.target or "") or ShortName(_selfFullName())
-    f.target:SetText(emitter)
+    -- Côté affichage : on conserve toujours le nom complet
+    local emitter = (it.dir == "recv") and (it.target or "") or _selfFullName()
+    f.target:SetText(emitter or "")
 
     local progress = (it.dir == "send") and sent or got
     f.frag:SetText(tostring(progress) .. "/" .. tostring(total))

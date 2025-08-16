@@ -20,12 +20,13 @@ local function BuildRow(r)
     f.main  = UI.CreateNameTag(r)
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.count = UI.Label(r)
-    f.inRoster = UI.Label(f.act)
-    
+
     -- Cellule d'actions = conteneur + bouton + libellé "dans le roster"
     f.act     = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
+    f.inRoster = UI.Label(f.act)
     f.btnAdd  = UI.Button(f.act, "Ajouter au Roster", { size="sm", minWidth=160 })
     f.inRoster:SetText("Dans le roster")
+
     f.inRoster:SetJustifyH("CENTER")
     f.inRoster:Hide()
 
@@ -101,9 +102,37 @@ local function UpdateRow(i, r, f, it)
     if f.act and f.act._applyRowActionsLayout then f.act._applyRowActionsLayout() end
 end
 
+-- Construit un nom complet "Nom-Realm" pour l'affichage/ajout roster
+local function EnsureFullMain(e)
+    local m = tostring((e and e.main) or "")
+    if m:find("-", 1, true) then return m end
+
+    -- Cherche le royaume à partir des lignes scannées de la guilde
+    local rows = (CDZ and CDZ.GetGuildRowsCached and CDZ.GetGuildRowsCached()) or {}
+    for _, r in ipairs(rows) do
+        local amb = r.name_amb or r.name_raw
+        if amb and CDZ.NormName and CDZ.NormName(amb) == e.key then
+            local raw = r.name_raw or amb
+            local realm = tostring(raw or ""):match("^[^-]+%-(.+)$")
+            if realm and realm ~= "" then
+                return m .. "-" .. realm
+            end
+        end
+    end
+
+    -- Secours : royaume du joueur local
+    if UnitFullName then
+        local _, myRealm = UnitFullName("player")
+        if myRealm and myRealm ~= "" then
+            return m .. "-" .. myRealm
+        end
+    end
+    return m
+end
 
 -- Génère la liste (avec séparateurs)
 local function buildItemsFromAgg(agg)
+
     local actives, olds = {}, {}
     for _, e in ipairs(agg or {}) do
         local d = tonumber(e.days) or 999999
@@ -115,11 +144,11 @@ local function buildItemsFromAgg(agg)
     local items = {}
     if #actives > 0 then
         table.insert(items, {kind="sep", label="Connectés < 1 mois (perso le + récent)"} )
-        for _, e in ipairs(actives) do table.insert(items, {kind="data", main=e.main, days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
+        for _, e in ipairs(actives) do table.insert(items, {kind="data", main=EnsureFullMain(e), days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
     end
     if #olds > 0 then
         table.insert(items, {kind="sep", label="Dernière connexion ≥ 1 mois"} )
-        for _, e in ipairs(olds) do table.insert(items, {kind="data", main=e.main, days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
+        for _, e in ipairs(olds) do table.insert(items, {kind="data", main=EnsureFullMain(e), days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
     end
     if #items == 0 then table.insert(items, {kind="sep", label="Aucun joueur trouvé (Remarque = pseudo du main)."}) end
     return items
