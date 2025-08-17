@@ -1026,37 +1026,35 @@ function CDZ._HandleFull(sender, msgType, kv)
                     local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or "?"
                     if nf(name) == meK then
                         local d = safenum(D[i], 0)
-                        if d < 0 then
-                            local per   = -d
-                            local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
+                        local per   = -d
+                        local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
 
-                            -- Parse kv.L (CSV "id,name,k,N,n,gold") → tableau d'objets
-                            local Lctx, Lraw = {}, kv and kv.L
-                            if type(Lraw) == "table" then
-                                for j = 1, #Lraw do
-                                    local s = Lraw[j]
-                                    if type(s) == "string" then
-                                        local id,name,kUse,Ns,n,g = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
-                                        if id then
-                                            Lctx[#Lctx+1] = {
-                                                id   = tonumber(id),
-                                                name = name,
-                                                k    = tonumber(kUse),
-                                                N    = tonumber(Ns),
-                                                n    = tonumber(n),
-                                                gold = tonumber(g),
-                                            }
-                                        end
-                                    elseif type(s) == "table" then
-                                        -- tolérance (anciens GM locaux)
-                                        Lctx[#Lctx+1] = s
+                        -- Parse kv.L (CSV "id,name,k,N,n,gold") → tableau d'objets
+                        local Lctx, Lraw = {}, kv and kv.L
+                        if type(Lraw) == "table" then
+                            for j = 1, #Lraw do
+                                local s = Lraw[j]
+                                if type(s) == "string" then
+                                    local id,name,kUse,Ns,n,g = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
+                                    if id then
+                                        Lctx[#Lctx+1] = {
+                                            id   = tonumber(id),
+                                            name = name,
+                                            k    = tonumber(kUse),
+                                            N    = tonumber(Ns),
+                                            n    = tonumber(n),
+                                            gold = tonumber(g),
+                                        }
                                     end
+                                elseif type(s) == "table" then
+                                    -- tolérance (anciens GM locaux)
+                                    Lctx[#Lctx+1] = s
                                 end
                             end
-
-                            ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
-                            if ns.Emit then ns.Emit("raid:popup-shown", meFull) end
                         end
+
+                        ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
+                        if ns.Emit then ns.Emit("raid:popup-shown", meFull) end
                         break
                     end
                 end
