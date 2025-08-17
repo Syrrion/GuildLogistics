@@ -1131,6 +1131,35 @@ function CDZ._HandleFull(sender, msgType, kv)
             _scheduleOfferReply(hid, from, rvi)
         end
 
+        -- ✏️ Flush TX_REQ si le HELLO vient du GM effectif (tolérant au roster pas encore prêt)
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+        local fromNF = nf(from)
+
+        if gmName and fromNF == nf(gmName) then
+            if CDZ.Pending_FlushToMaster then CDZ.Pending_FlushToMaster(gmName) end
+        else
+            -- Roster possiblement pas prêt : on retente quelques fois (délais 1s)
+            CDZ._awaitHelloFrom = fromNF
+            CDZ._awaitHelloRetry = 0
+            local function _tryFlushLater()
+                if not CDZ._awaitHelloFrom then return end
+                local gm = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+                if gm and CDZ._awaitHelloFrom == nf(gm) then
+                    if CDZ.Pending_FlushToMaster then CDZ.Pending_FlushToMaster(gm) end
+                    CDZ._awaitHelloFrom = nil
+                    return
+                end
+                CDZ._awaitHelloRetry = (CDZ._awaitHelloRetry or 0) + 1
+                if CDZ._awaitHelloRetry < 5 then
+                    if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
+                else
+                    CDZ._awaitHelloFrom = nil
+                end
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
+        end
+
     elseif msgType == "SYNC_OFFER" then
         -- Côté initiateur : collecter les OFFERS pendant HELLO_WAIT
         local hid = kv.hid or ""
@@ -1490,17 +1519,83 @@ function CDZ.RequestAdjust(a, b)
     local uid = CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(me)
     if not uid then return end
 
-    -- Envoi uniquement via GUILD (plus de WHISPER)
-    local payload = { uid = uid, delta = delta, who = me, ts = now() }
-    CDZ.Comm_Broadcast("TX_REQ", payload)
+    local payload = { uid = uid, delta = delta, who = me, ts = now(), reason = "CLIENT_REQ" }
+
+    -- ✏️ Cible = GM effectif (rang 0 du roster)
+    local gmName, gmRow = CDZ.GetGuildMasterCached and CDZ.GetGuildMasterCached() or nil, nil
+    if type(gmName) == "table" and not gmRow then gmName, gmRow = gmName[1], gmName[2] end
+    if not gmRow and CDZ.GetGuildMasterCached then gmName, gmRow = CDZ.GetGuildMasterCached() end
+
+    if gmName and gmRow and gmRow.online then
+        -- GM en ligne : envoi direct (WHISPER)
+        CDZ.Comm_Whisper(gmName, "TX_REQ", payload)
+    else
+        -- GM hors-ligne : on persiste localement → flush auto sur HELLO du GM
+        if CDZ.Pending_AddTXREQ then CDZ.Pending_AddTXREQ(payload) end
+        if UIErrorsFrame and UIErrorsFrame.AddMessage then
+            UIErrorsFrame:AddMessage("|cffffff80[CDZ]|r GM hors-ligne : demande mise en file d’attente.", 1, 0.9, 0.4)
+        end
+        if ns.Emit then ns.Emit("debug:changed") end
+    end
 end
 
+-- ===== File d'attente persistante des TX_REQ (client) =====
+function CDZ.Pending_AddTXREQ(kv)
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.pending = ChroniquesDuZephyrDB.pending or {}
+    local P = ChroniquesDuZephyrDB.pending
+    P.txreq = P.txreq or {}
+    kv = kv or {}
+    kv.id = kv.id or (tostring(now()) .. "-" .. tostring(math.random(1000,9999)))
+    table.insert(P.txreq, kv)
+    if ns.Emit then ns.Emit("debug:changed") end
+    return kv.id
+end
 
+function CDZ.Pending_ListTXREQ()
+    local P = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.pending or {}
+    return (P and P.txreq) or {}
+end
+
+function CDZ.Pending_FlushToMaster(master)
+    local P = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.pending or {}
+    if not P or not P.txreq or #P.txreq == 0 then return 0 end
+
+    -- Destinataire par défaut : GM effectif (rang 0)
+    if not master or master == "" then
+        if CDZ.GetGuildMasterCached then master = select(1, CDZ.GetGuildMasterCached()) end
+    end
+    if not master or master == "" then return 0 end
+
+    local sent = 0
+    for i = 1, #P.txreq do
+        local kv = P.txreq[i]
+        if kv then
+            CDZ.Comm_Whisper(master, "TX_REQ", kv)
+            sent = sent + 1
+        end
+    end
+    P.txreq = {}
+    if ns.Emit then ns.Emit("debug:changed") end
+    return sent
+end
+
+-- (Optionnel pour l’UI Debug — si tu veux alimenter une 3e liste)
+function CDZ.GetPendingOutbox()
+    local t = {}
+    for _, kv in ipairs(CDZ.Pending_ListTXREQ() or {}) do
+        t[#t+1] = {
+            ts   = safenum(kv.ts, 0),
+            type = "TX_REQ",
+            info = string.format("%s : %+dg", tostring(kv.who or "?"), safenum(kv.delta,0)),
+            id   = tostring(kv.id or ""),
+        }
+    end
+    table.sort(t, function(a,b) return safenum(a.ts,0) > safenum(b.ts,0) end)
+    return t
+end
 
 -- ===== Dépenses/Lots (émission GM) =====
--- Diffuse une dépense (appelé par Expenses.lua quand le GM achète quelque chose)
--- ===== Dépenses/Lots (émission GM) =====
-
 -- Diffusion : création d’un lot (utilisé par Core.Lot_Create)
 function CDZ.BroadcastLotCreate(l)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
@@ -1762,17 +1857,20 @@ function CDZ.Comm_Init()
         end)
     end
 
-    -- Auto-définition du master si GM et non défini
+    -- ✏️ Ne JAMAIS s’auto-désigner GM : on prend le roster (rang 0) si dispo
     C_Timer.After(5, function()
         if not IsInGuild or not IsInGuild() then return end
-        if not (CDZ.IsGM and CDZ.IsGM()) then return end
         if not ChroniquesDuZephyrDB then ChroniquesDuZephyrDB = {} end
         ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+
         if not ChroniquesDuZephyrDB.meta.master or ChroniquesDuZephyrDB.meta.master == "" then
-            ChroniquesDuZephyrDB.meta.master = playerFullName()
+            local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached()) or ""
+            ChroniquesDuZephyrDB.meta.master = gmName or ""
             if ns.Emit then ns.Emit("meta:changed") end
         end
     end)
+
+
 end
 
 -- ===== API publique Debug =====

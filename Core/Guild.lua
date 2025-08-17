@@ -69,7 +69,8 @@ Scanner:SetScript("OnEvent", function(self, ev)
             or 0
 
     for i = 1, n do
-        local name, _, _, _, _, _, note, _, online, _, classFileName, _, _, isMobile = GetGuildRosterInfo(i)
+        -- On récupère aussi le rang (rankName, rankIndex)
+        local name, rankName, rankIndex, _, _, _, note, officerNote, online, _, classFileName, _, _, isMobile = GetGuildRosterInfo(i)
         local y, m, d, h = nil, nil, nil, nil
         local retCount = 0
         if GetGuildRosterLastOnline then
@@ -102,12 +103,13 @@ Scanner:SetScript("OnEvent", function(self, ev)
             online = onlineChar,
             remark = note,
             class = classFileName or nil,
+            rankIndex = rankIndex,
+            rank = rankName,
             last_y = y, last_m = m, last_d = d, last_h = h,
             retCount = retCount,
             daysDerived = daysDerived,
             hoursDerived = hoursDerived,
         })
-
     end
 
     local agg, mainsClass = aggregateRows(rows)
@@ -160,7 +162,14 @@ function CDZ.GetGuildMainsAggregatedCached()
 end
 
 function CDZ.GetGuildRowsCached()
-    return (CDZ._guildCache and CDZ._guildCache.rows) or {}
+    return CDZ._guildCache and CDZ._guildCache.rows or {}
+end
+
+-- ✏️ Est-ce que le GM effectif (rang 0) est en ligne ?
+function CDZ.IsMasterOnline()
+    if not CDZ.GetGuildMasterCached then return false end
+    local gmName, gmRow = CDZ.GetGuildMasterCached()
+    return gmRow and gmRow.online and true or false
 end
 
 function CDZ.IsGuildCacheReady()
@@ -202,4 +211,28 @@ function CDZ.GetNameStyle(name)
     local col = (RAID_CLASS_COLORS and class and RAID_CLASS_COLORS[class]) or {r=1,g=1,b=1}
     local coords = CLASS_ICON_TCOORDS and class and CLASS_ICON_TCOORDS[class] or nil
     return class, col.r, col.g, col.b, coords
+end
+
+-- ➕ Qui est le GM (rang 0) dans le roster ?
+function CDZ.GetGuildMasterCached()
+    for _, r in ipairs(CDZ.GetGuildRowsCached() or {}) do
+        if tonumber(r.rankIndex or 99) == 0 then
+            return r.name_amb or r.name_raw, r
+        end
+    end
+    return nil, nil
+end
+
+-- ➕ Le GM effectif est-il en ligne ?
+function CDZ.IsMasterOnline()
+    local gmName, gmRow = CDZ.GetGuildMasterCached()
+    return gmRow and gmRow.online and true or false
+end
+
+-- ✏️ Teste si un nom (any realm) est le GM (tolérant aux formats court/complet)
+function CDZ.IsNameGuildMaster(name)
+    if not name or name == "" then return false end
+    local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+    if not gmName or gmName == "" then return false end
+    return CDZ.NormName(name) == CDZ.NormName(gmName)
 end

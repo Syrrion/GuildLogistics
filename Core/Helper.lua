@@ -17,9 +17,15 @@ local function normalizeStr(s) s = tostring(s or ""):gsub("%s+",""):gsub("'","")
 -- =========================
 local function NormalizeFull(name, realm)
     name  = tostring(name or "?")
-    realm = realm or (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
-    realm = tostring(realm):gsub("%s+",""):gsub("'","")
-    if realm ~= "" then return name.."-"..realm end
+    -- Si déjà "Nom-Royaume", ne pas doubler
+    if name:find("%-") then return name end
+
+    local nrm = realm
+    if not nrm or nrm == "" then
+        nrm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    end
+    nrm = tostring(nrm):gsub("%s+",""):gsub("'","")
+    if nrm ~= "" then return name.."-"..nrm end
     return name
 end
 
@@ -42,9 +48,16 @@ end
 -- ===  Accès DB / ver.  ===
 -- =========================
 local function masterName()
+    -- ⚠️ Source de vérité = roster (GM = rang index 0)
+    if CDZ and CDZ.GetGuildMasterCached then
+        local gm = CDZ.GetGuildMasterCached()
+        if gm and gm ~= "" then return gm end
+    end
+    -- Fallback minimal si roster indisponible
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     return ChroniquesDuZephyrDB.meta.master
 end
+
 -- Chef de guilde = override toujours vrai
 -- Master désigné = strict si défini
 -- Sinon (pas de master), autorise les grades avec vraies permissions officiers
@@ -114,12 +127,6 @@ U.now            = now
 U.NormalizeFull  = NormalizeFull
 U.playerFullName = playerFullName
 U.SamePlayer     = SamePlayer
-
-do
-    function U.NormalizeFull(name)
-        return tostring(name or "")
-    end
-end
 
 -- -- Journal/Debug : stub sûr pour éviter les nil avant le chargement de Comm.lua
 ns.CDZ = ns.CDZ or {}

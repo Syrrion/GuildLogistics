@@ -3,13 +3,33 @@ local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 local U = ns.Util
 
-local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker, verFS
+-- ✏️ ajout gmFS
+local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker, verFS, gmFS
 
 -- Rafraîchit l'étiquette de version DB dans le footer
 local function UpdateDBVersionLabel()
     if not verFS then return end
     local rv = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
     verFS:SetText("DB v"..tostring(rv))
+end
+
+-- ➕ Affiche "GM: Nom-Royaume" (rang 0 du roster)
+local function UpdateMasterLabel()
+    if not gmFS then return end
+    local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+    local txt = "GM: " .. (gmName and Ambiguate(gmName, "none") or "—")
+    gmFS:SetText(txt)
+end
+
+-- ➕ Affiche "GM: <Name>" basé sur le roster (rang 0)
+local function UpdateMasterLabel()
+    if not gmFS then return end
+    local gmName, gmRow = nil, nil
+    if CDZ and CDZ.GetGuildMasterCached then
+        gmName, gmRow = CDZ.GetGuildMasterCached()
+    end
+    local txt = gmName and ("GM: " .. Ambiguate(gmName, "short")) or "GM: —"
+    gmFS:SetText(txt)
 end
 
 -- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
@@ -272,8 +292,15 @@ function Refresh()
     if lvRecv then lvRecv:SetData(groupedRecv) end
     if lvSend then lvSend:SetData(groupedSend) end
 
+    -- ➕ Alimente la file d'attente (pending TX_REQ)
+    if lvPending and CDZ.GetPendingOutbox then
+        local pending = CDZ.GetPendingOutbox() or {}
+        lvPending:SetData(pending)
+    end
+
     if lvRecv and lvRecv.Layout then lvRecv:Layout() end
     if lvSend and lvSend.Layout then lvSend:Layout() end
+    if lvPending and lvPending.Layout then lvPending:Layout() end
 end
 
 local function Build(container)
@@ -304,6 +331,11 @@ local function Build(container)
     verFS:SetPoint("LEFT", footer, "LEFT", 12, 0)
     if UpdateDBVersionLabel then UpdateDBVersionLabel() end
 
+    -- ➕ Affichage GM (à droite de la version)
+    gmFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    gmFS:SetPoint("LEFT", verFS, "RIGHT", 16, 0)
+    if UpdateMasterLabel then UpdateMasterLabel() end
+
     -- ➕ Bouton GM : Forcer ma version (envoi direct d’un SYNC_FULL)
     forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200,
         tooltip = "Diffuse immédiatement un snapshot complet (SYNC_FULL)" })
@@ -324,41 +356,72 @@ local function Build(container)
     purgeDBBtn:SetParent(footer)
     purgeAllBtn:SetParent(footer)
 
-    -- === Deux zones empilées : RECU (haut) / ENVOI (bas) ===
-    recvArea = CreateFrame("Frame", nil, panel)
-    sendArea = CreateFrame("Frame", nil, panel)
+    -- === Trois zones empilées : RECU (40%) / ENVOI (40%) / FILE (20%) ===
+    recvArea    = CreateFrame("Frame", nil, panel)
+    sendArea    = CreateFrame("Frame", nil, panel)
+    pendingArea = CreateFrame("Frame", nil, panel)
 
-    -- Création des deux ListView indépendantes
-    lvRecv = UI.ListView(recvArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
-    lvSend = UI.ListView(sendArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
+    -- Création des ListView
+    lvRecv    = UI.ListView(recvArea,    cols,       { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
+    lvSend    = UI.ListView(sendArea,    cols,       { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
 
-    -- Positionnement responsive (50/50 de la hauteur utile)
+    -- Colonnes simplifiées pour la file d'attente (heure / type / info)
+    local colsQueue = UI.NormalizeColumns({
+        { key="time", title="Heure", w=110 },
+        { key="type", title="Type",  w=100 },
+        { key="info", title="Demande", min=240, flex=1 },
+    })
+    local function BuildRowQueue(r)
+        local f = {}
+        f.time = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        f.type = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        f.info = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        return f
+    end
+    local function UpdateRowQueue(i, r, f, it)
+        local d = it.data or it
+        local dt = date and date("%H:%M:%S", tonumber(d.ts or 0)) or tostring(d.ts or "")
+        f.time:SetText(dt)
+        f.type:SetText(d.type or "")
+        f.info:SetText(d.info or ("ID " .. tostring(d.id or "")))
+    end
+    lvPending = UI.ListView(pendingArea, colsQueue, { buildRow = BuildRowQueue, updateRow = UpdateRowQueue, topOffset = 0 })
+
+    -- Positionnement responsive (40/40/20 de la hauteur utile)
     local function PositionAreas()
         local pH      = panel:GetHeight() or 600
         local footerH = footer:GetHeight() or 36
-        local topOff  = 38                   -- marge supérieure commune
-        local gap     = 8                    -- espace entre les deux listes
+        local topOff  = 38
+        local gap     = 8
         local usable  = math.max(0, pH - footerH - topOff)
-        local half    = math.floor((usable - gap) / 2)
+        local hRecv   = math.floor((usable) * 0.40)
+        local hSend   = math.floor((usable) * 0.40)
+        local hPend   = math.max(0, usable - hRecv - hSend - (gap*2))
 
-        -- Zone RECU : du haut jusqu'au milieu
+        -- RECU
         recvArea:ClearAllPoints()
         recvArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -topOff)
         recvArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -topOff)
-        recvArea:SetPoint("BOTTOMLEFT", panel, "TOPLEFT",  0, -(topOff + half))
-        recvArea:SetPoint("BOTTOMRIGHT", panel, "TOPRIGHT", 0, -(topOff + half))
+        recvArea:SetHeight(hRecv)
 
-        -- Zone ENVOI : du milieu jusqu'au footer
+        -- ENVOI
         sendArea:ClearAllPoints()
-        sendArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + half + gap))
-        sendArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + half + gap))
-        sendArea:SetPoint("BOTTOMLEFT", footer, "TOPLEFT",  0, 0)
-        sendArea:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 0)
+        sendArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + hRecv + gap))
+        sendArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + hRecv + gap))
+        sendArea:SetHeight(hSend)
 
-        -- Relayout internes
+        -- FILE d'attente
+        pendingArea:ClearAllPoints()
+        pendingArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + hRecv + gap + hSend + gap))
+        pendingArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + hRecv + gap + hSend + gap))
+        pendingArea:SetPoint("BOTTOMLEFT", footer, "TOPLEFT",  0, 0)
+        pendingArea:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 0)
+
         if lvRecv and lvRecv.Layout then lvRecv:Layout() end
         if lvSend and lvSend.Layout then lvSend:Layout() end
+        if lvPending and lvPending.Layout then lvPending:Layout() end
     end
+
 
     -- Calcul initial + relayout sur resize du panneau
     PositionAreas()
@@ -382,14 +445,20 @@ end
 -- ➕ Rafraîchissement temps réel lorsque des logs arrivent / changent d'état
 if ns and ns.On then
     ns.On("debug:changed", function()
-        -- Rafraîchit toujours le tri dès qu'un nouvel élément arrive
         if lvRecv or lvSend then
             Refresh()
         end
-        -- Met à jour l'affichage de la version DB
+        -- Met à jour bas-gauche
         if UpdateDBVersionLabel then UpdateDBVersionLabel() end
+        if UpdateMasterLabel   then UpdateMasterLabel()   end
     end)
+
+    -- Quand la guilde change ou la méta bouge, on rafraîchit aussi le GM
+    if ns.On then
+        ns.On("roster:upsert", function() if UpdateMasterLabel then UpdateMasterLabel() end end)
+        ns.On("roster:removed", function() if UpdateMasterLabel then UpdateMasterLabel() end end)
+        ns.On("meta:changed",  function() if UpdateMasterLabel then UpdateMasterLabel() end end)
+    end
 end
 
 UI.RegisterTab("Debug", Build, Refresh, Layout)
-
