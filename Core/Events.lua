@@ -59,6 +59,19 @@ f:SetScript("OnEvent", function(self, event, name)
             ns.Util.After(3.0, function() CDZ.RefreshGuildCache() end)
         end
     elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
+        -- ➕ Demande une mise à jour du roster côté serveur
+        if C_GuildInfo and C_GuildInfo.GuildRoster then
+            C_GuildInfo.GuildRoster()
+        elseif GuildRoster then
+            GuildRoster()
+        end
+
+        -- ➕ Recharge notre cache local
+        if CDZ.RefreshGuildCache then
+            CDZ.RefreshGuildCache()
+        end
+
         _ScheduleActiveTabRefresh()
     end
+
 end)

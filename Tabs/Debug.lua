@@ -158,9 +158,19 @@ local function UpdateRow(i, r, f, it)
             if k then kv[k] = v end
         end
 
+        local function PrettyVal(v)
+            if type(v) ~= "table" then return tostring(v) end
+            -- v est un array (issu de decodeKV "[a,b,c]") -> joignons les 10 premiers
+            local out = {}
+            local n = #v
+            for i = 1, math.min(n, 10) do out[#out+1] = tostring(v[i]) end
+            if n > 10 then out[#out+1] = ("…(%d items)"):format(n) end
+            return "[" .. table.concat(out, ", ") .. "]"
+        end
+
         local decoded = {}
         for k,v in pairs(kv) do
-            decoded[#decoded+1] = k.." = "..tostring(v)
+            decoded[#decoded+1] = k .. " = " .. PrettyVal(v)
         end
         table.sort(decoded)
 
@@ -504,6 +514,34 @@ if ns and ns.On then
     end
 end
 
+-- Affichage lisible d’une (sous-)table pour le debug réseau (évite "table: 0x...")
+function CDZ.Debug_TinyDump(v, depth)
+    depth = depth or 2
+    local t = type(v)
+    if t ~= "table" then return tostring(v) end
+    if depth <= 0 then return "{...}" end
+    local out, n = {}, 0
+    local isArray = true
+    local maxk = 0
+    for k,_ in pairs(v) do
+        if type(k) ~= "number" then isArray = false break end
+        if k > maxk then maxk = k end
+    end
+    if isArray then
+        for i=1, math.min(maxk, 5) do
+            out[#out+1] = CDZ.Debug_TinyDump(v[i], depth-1)
+        end
+        if maxk > 5 then out[#out+1] = ("…(%d items)"):format(maxk) end
+        return "["..table.concat(out,", ").."]"
+    else
+        for k,val in pairs(v) do
+            n = n + 1
+            if n > 5 then out[#out+1] = "…"; break end
+            out[#out+1] = tostring(k)..":"..CDZ.Debug_TinyDump(val, depth-1)
+        end
+        return "{"..table.concat(out,", ").."}"
+    end
+end
 
 -- =================== Onglet OPTIONS ===================
 local optPanel

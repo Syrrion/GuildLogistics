@@ -550,11 +550,12 @@ function CDZ._SnapshotExport()
 
     local meta = ChroniquesDuZephyrDB.meta
     local t = {
-        P = {}, I = {}, E = {}, L = {}, H = {},
+        P = {}, I = {}, E = {}, L = {}, H = {}, HL = {},
         rv = safenum(meta.rev, 0),
         lm = safenum(meta.lastModified, now()),
         fs = safenum(meta.fullStamp, now()),
     }
+
 
     for name, rec in pairs(ChroniquesDuZephyrDB.players) do
         local res = (rec and rec.reserved) and 1 or 0
@@ -581,16 +582,35 @@ function CDZ._SnapshotExport()
             safenum(l.used,0), safenum(l.totalCopper,0), table.concat(ids, ";")
         }, ",")
     end
-    -- ➕ Historique compact (CSV: ts,total,perHead,count,ref,participants(;))
+    -- Historique compact (CSV: ts,total,perHead,count,ref,participants(;))
+    -- + ➕ tableau de correspondance HL : "ts|id,name,k,N,n,g;id,name,k,N,n,g"
     for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
         local parts = table.concat(h.participants or {}, ";")
         t.H[#t.H+1] = table.concat({
             safenum(h.ts,0), safenum(h.total,0), safenum(h.perHead,0),
             safenum(h.count,0), (h.refunded and 1 or 0), parts
         }, ",")
+
+        local Lctx = {}
+        for _, li in ipairs(h.lots or {}) do
+            if type(li) == "table" then
+                local id   = tonumber(li.id or 0) or 0
+                local name = tostring(li.name or ("Lot " .. tostring(id)))
+                local k    = tonumber(li.k or 0) or 0
+                local N    = tonumber(li.N or 1) or 1
+                local n    = tonumber(li.n or 1) or 1
+                local g    = tonumber(li.gold or li.c or 0) or 0
+                Lctx[#Lctx+1] = table.concat({ id, name, k, N, n, g }, ",")
+            end
+        end
+        if #Lctx > 0 then
+            t.HL[#t.HL+1] = tostring(safenum(h.ts,0)) .. "|" .. table.concat(Lctx, ";")
+        end
     end
     return t
 end
+
+
 
 function CDZ._SnapshotApply(kv)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
@@ -677,23 +697,6 @@ function CDZ._SnapshotApply(kv)
     end
     do
         ChroniquesDuZephyrDB.history = {}
-        for _, line in ipairs(kv.H or {}) do
-            local ts, total, per, cnt, ref, parts = line:match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
-            if ts then
-                local s = {
-                    ts = safenum(ts,0),
-                    total = safenum(total,0),
-                    perHead = safenum(per,0),
-                    count = safenum(cnt,0),
-                    refunded = (safenum(ref,0) ~= 0),
-                    participants = {},
-                }
-                if parts and parts ~= "" then
-                    for p in tostring(parts):gmatch("[^;]+") do s.participants[#s.participants+1] = p end
-                end
-                table.insert(ChroniquesDuZephyrDB.history, s)
-            end
-        end
     end
 
     for _, s in ipairs(kv.L or {}) do
@@ -712,17 +715,49 @@ function CDZ._SnapshotApply(kv)
         end
     end
 
-    -- ➕ Import Historique depuis le snapshot (robuste 6/7 champs + filtres)
+
+    -- ➕ Import Historique (compat CSV) + rattachement lots via HL et/ou s.L
     ChroniquesDuZephyrDB.history = {}
+
+    -- 1) Prépare un dictionnaire ts -> lots à partir de HL
+    local HLmap = {}
+    local HLsrc = kv.HL
+
+    -- normalise : si HL est une string, mets-la dans une table
+    if type(HLsrc) == "string" then
+        HLsrc = { HLsrc }
+    elseif type(HLsrc) ~= "table" then
+        HLsrc = {}
+    end
+
+    for _, m in ipairs(HLsrc) do
+        if type(m) == "string" then
+            local tsStr, rest = m:match("^(%-?%d+)|(.+)$")
+            local ts = safenum(tsStr, 0)
+            if ts > 0 and rest and rest ~= "" then
+                local Lctx = {}
+                for chunk in tostring(rest):gmatch("[^;]+") do
+                    local id,name,kUse,Ns,n,g = chunk:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
+                    if id then
+                        Lctx[#Lctx+1] = {
+                            id = tonumber(id), name = name,
+                            k = tonumber(kUse), N = tonumber(Ns),
+                            n = tonumber(n),   gold = tonumber(g),
+                        }
+                    end
+                end
+                if #Lctx > 0 then HLmap[ts] = Lctx end
+            end
+        end
+    end
+
+    -- 2) Construit l'historique (CSV ou “table riche”) et attache les lots
     for _, s in ipairs(kv.H or {}) do
+        local rec
         if type(s) == "string" then
             local hid, ts, total, per, count, refunded, rest
-
-            -- Format export actuel (6 champs) : ts,total,perHead,count,ref,participants
             ts, total, per, count, refunded, rest =
                 s:match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
-
-            -- Ancien format toléré (7 champs) : hid,ts,total,per,count,ref,rest
             if not ts then
                 hid, ts, total, per, count, refunded, rest =
                     s:match("^(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
@@ -733,41 +768,61 @@ function CDZ._SnapshotApply(kv)
                 for name in tostring(rest):gmatch("[^;]+") do names[#names+1] = name end
             end
 
-            -- Filtre anti-lignes fantômes : ts valide ET au moins un champ non nul
-            local _ts      = safenum(ts, 0)
-            local _total   = safenum(total, 0)
-            local _per     = safenum(per, 0)
-            local _count   = safenum(count, #names)
-            local _ref     = (safenum(refunded, 0) == 1)
+            local _ts    = safenum(ts, 0)
+            local _total = safenum(total, 0)
+            local _per   = safenum(per, 0)
+            local _count = safenum(count, #names)
+            local _ref   = (safenum(refunded, 0) == 1)
 
             if _ts > 0 and (_total ~= 0 or _per ~= 0 or _count > 0) then
-                ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
+                rec = {
                     hid = (hid ~= "" and hid or nil),
-                    ts  = _ts,
-                    total = _total,
-                    perHead = _per,
-                    count = _count,
-                    participants = names,
-                    refunded = _ref,
+                    ts  = _ts, total = _total, perHead = _per,
+                    count = _count, participants = names, refunded = _ref,
                 }
             end
-
         elseif type(s) == "table" then
-            -- tolérance (au cas où)
-            local _ts    = safenum(s.ts, 0)
-            local _total = safenum(s.total or s.t, 0)
+            local _ts    = safenum(s.ts or s.t, 0)
+            local _total = safenum(s.total or s.tot, 0)
             local _per   = safenum(s.perHead or s.per or s.p, 0)
-            local _parts = s.names or s.participants or {}
-            local _count = safenum(s.count or s.c or #_parts, 0)
+            local _parts = s.names or s.participants or s.P or {}
+            local _count = safenum(s.count or s.cnt or s.c or #(_parts or {}), 0)
             if _ts > 0 and (_total ~= 0 or _per ~= 0 or _count > 0) then
-                ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
+                rec = {
                     hid = s.hid, ts = _ts, total = _total, perHead = _per,
                     count = _count, participants = _parts,
                     refunded = (s.refunded or s.r == 1) and true or false,
                 }
+                -- Si la ligne “riche” porte déjà L, on la parse
+                local Lctx = {}
+                for j = 1, #(s.L or {}) do
+                    local v = s.L[j]
+                    if type(v) == "string" then
+                        local id,name,kUse,Ns,n,g = v:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
+                        if id then
+                            Lctx[#Lctx+1] = {
+                                id = tonumber(id), name = name,
+                                k = tonumber(kUse), N = tonumber(Ns),
+                                n = tonumber(n),   gold = tonumber(g),
+                            }
+                        end
+                    elseif type(v) == "table" then
+                        Lctx[#Lctx+1] = v
+                    end
+                end
+                if #Lctx > 0 then rec.lots = Lctx end
             end
         end
+
+        if rec then
+            -- Attache les lots depuis HL si pas déjà fournis sur la ligne
+            if not rec.lots and HLmap[rec.ts] and #HLmap[rec.ts] > 0 then
+                rec.lots = HLmap[rec.ts]
+            end
+            ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = rec
+        end
     end
+
     if ns and ns.Emit then ns.Emit("history:changed") end
 end
 
@@ -1052,7 +1107,7 @@ function CDZ._HandleFull(sender, msgType, kv)
     elseif msgType == "HIST_ADD" then
         if not shouldApply() then return end
         ChroniquesDuZephyrDB.history = ChroniquesDuZephyrDB.history or {}
-        local ts = safenum(kv.ts,0)
+        local ts  = safenum(kv.ts,0)
         local exists = false
         for _, h in ipairs(ChroniquesDuZephyrDB.history) do if safenum(h.ts,0) == ts then exists = true break end end
         if not exists and ts > 0 then
@@ -1065,6 +1120,26 @@ function CDZ._HandleFull(sender, msgType, kv)
                 participants = {},
             }
             for i = 1, #(kv.P or {}) do rec.participants[i] = kv.P[i] end
+
+            -- ➕ parse L (lots) envoyé dans l'add (compat: L peut être liste de CSV)
+            local Lctx = {}
+            for j = 1, #(kv.L or {}) do
+                local s = kv.L[j]
+                if type(s) == "string" then
+                    local id,name,kUse,Ns,n,g = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
+                    if id then
+                        Lctx[#Lctx+1] = {
+                            id = tonumber(id), name = name,
+                            k = tonumber(kUse), N = tonumber(Ns),
+                            n = tonumber(n),   gold = tonumber(g),
+                        }
+                    end
+                elseif type(s) == "table" then
+                    Lctx[#Lctx+1] = s
+                end
+            end
+            if #Lctx > 0 then rec.lots = Lctx end
+
             table.insert(ChroniquesDuZephyrDB.history, 1, rec)
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = (lm >= 0) and lm or now()
@@ -1074,20 +1149,13 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "HIST_REFUND" then
         if not shouldApply() then return end
-        local ts = safenum(kv.ts,0)
+        local ts   = safenum(kv.ts,0)
+        local flag = safenum(kv.r,1) ~= 0  -- ✅ applique r=1 ou r=0
         for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
-            if safenum(h.ts,0) == ts then h.refunded = true break end
-        end
-        meta.rev = (rv >= 0) and rv or myrv
-        meta.lastModified = (lm >= 0) and lm or now()
-        if ns.Emit then ns.Emit("history:changed") end
-        refreshActive()
-
-    elseif msgType == "HIST_UNREFUND" then
-        if not shouldApply() then return end
-        local ts = safenum(kv.ts,0)
-        for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
-            if safenum(h.ts,0) == ts then h.refunded = false break end
+            if safenum(h.ts,0) == ts then
+                h.refunded = flag
+                break
+            end
         end
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
@@ -1096,11 +1164,18 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "HIST_DEL" then
         if not shouldApply() then return end
-        local ts = safenum(kv.ts,0)
+        local ts  = safenum(kv.ts,0)
+        local hid = safenum(kv.h,0)
         local t = ChroniquesDuZephyrDB.history or {}
         for i = #t, 1, -1 do
-            if safenum(t[i].ts,0) == ts then table.remove(t, i) break end
+            local rec = t[i]
+            local match = (hid > 0 and safenum(rec.hid,0) == hid) or (hid == 0 and safenum(rec.ts,0) == ts)
+            if match then
+                table.remove(t, i)
+                break
+            end
         end
+
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
         if ns.Emit then ns.Emit("history:changed") end
@@ -1871,7 +1946,7 @@ function CDZ.BroadcastHistoryAdd(p)
     ChroniquesDuZephyrDB.meta.rev = rv
     ChroniquesDuZephyrDB.meta.lastModified = now()
     CDZ.Comm_Broadcast("HIST_ADD", {
-        h  = tostring(p.hid or ""),
+        h  = safenum(p.hid,0),
         ts = safenum(p.ts, now()),
         t  = safenum(p.total or p.t, 0),
         p  = safenum(p.per or p.p, 0),
@@ -1882,15 +1957,18 @@ function CDZ.BroadcastHistoryAdd(p)
     })
 end
 
-function CDZ.BroadcastHistoryRefund(hid, flag)
+function CDZ.BroadcastHistoryRefund(hid, ts, flag)
     if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
     ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
     ChroniquesDuZephyrDB.meta.rev = rv
     ChroniquesDuZephyrDB.meta.lastModified = now()
     CDZ.Comm_Broadcast("HIST_REFUND", {
-        h = tostring(hid or ""), v = (flag and 1 or 0),
-        rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+        h  = safenum(hid, 0),
+        ts = safenum(ts, 0),
+        r  = flag and 1 or 0,
+        rv = rv,
+        lm = ChroniquesDuZephyrDB.meta.lastModified,
     })
 end
 
@@ -1900,7 +1978,7 @@ function CDZ.BroadcastHistoryDelete(hid)
     local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
     ChroniquesDuZephyrDB.meta.rev = rv
     ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("HIST_DELETE", {
+    CDZ.Comm_Broadcast("HIST_DEL", {
         h = tostring(hid or ""),
         rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
     })

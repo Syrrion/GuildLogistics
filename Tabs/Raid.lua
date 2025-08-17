@@ -264,11 +264,18 @@ local function Build(container)
             local Hctx = {}
             for id,_ in pairs(chosenLots) do
                 local l = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
-                if l then Hctx[#Hctx+1] = { id=id, name=l.name, k=(tonumber(l.used or 0) or 0), N=(tonumber(l.sessions or 1) or 1) } end
+                if l then
+                    Hctx[#Hctx+1] = {
+                        id = id,
+                        name = l.name,
+                        k = (tonumber(l.used or 0) or 0),
+                        N = (tonumber(l.sessions or 1) or 1),
+                        n = 1, -- ➕ 1 charge consommée lors de cette clôture
+                    }
+                end
             end
             CDZ.AddHistorySession(total, per, selected, { lots = Hctx })
             chosenLots = {}
-
         end
 
         local dlg = UI.CreatePopup({ title = "Valider les participants", width = 520, height = 220 })

@@ -14,6 +14,7 @@ local function EnsureDB()
         ids = { counter=0, byName={}, byId={} },
         meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
         requests = {},
+        historyNextId = 1,  -- ➕ compteur HID
         debug = {},
     }
     ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {
@@ -402,6 +403,8 @@ end
 -- =========================
 function CDZ.AddHistorySession(total, perHead, participants, ctx)
     EnsureDB()
+    ChroniquesDuZephyrDB.historyNextId = ChroniquesDuZephyrDB.historyNextId or 1
+
     local s = {
         ts = time(),
         total = math.floor(total or 0),
@@ -409,7 +412,10 @@ function CDZ.AddHistorySession(total, perHead, participants, ctx)
         count = #(participants or {}),
         participants = { unpack(participants or {}) },
         refunded = false,
+        hid = ChroniquesDuZephyrDB.historyNextId, -- ➕ ID unique
     }
+    ChroniquesDuZephyrDB.historyNextId = ChroniquesDuZephyrDB.historyNextId + 1
+
     if type(ctx) == "table" and ctx.lots then
         s.lots = ctx.lots
     end
@@ -421,9 +427,24 @@ function CDZ.AddHistorySession(total, perHead, participants, ctx)
         local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
         ChroniquesDuZephyrDB.meta.rev = rv
         ChroniquesDuZephyrDB.meta.lastModified = time()
+
+        -- ➕ sérialise les lots pour l'ajout (liste de CSV "id,name,k,N,n,g")
+        local Lraw = {}
+        for _, li in ipairs(s.lots or {}) do
+            if type(li) == "table" then
+                local id   = tonumber(li.id or 0) or 0
+                local name = tostring(li.name or ("Lot " .. tostring(id)))
+                local k    = tonumber(li.k or 0) or 0
+                local N    = tonumber(li.N or 1) or 1
+                local n    = tonumber(li.n or 1) or 1
+                local g    = tonumber(li.gold or 0) or 0
+                Lraw[#Lraw+1] = table.concat({ id, name, k, N, n, g }, ",")
+            end
+        end
+
         CDZ.Comm_Broadcast("HIST_ADD", {
             ts = s.ts, total = s.total, per = s.perHead, cnt = s.count,
-            r = s.refunded and 1 or 0, P = s.participants,
+            r = s.refunded and 1 or 0, P = s.participants, L = Lraw, -- ➕
             rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
         })
     end
@@ -458,7 +479,7 @@ function CDZ.RefundSession(idx)
         local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
         ChroniquesDuZephyrDB.meta.rev = rv
         ChroniquesDuZephyrDB.meta.lastModified = time()
-        CDZ.Comm_Broadcast("HIST_REFUND", { ts = s.ts, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+        CDZ.Comm_Broadcast("HIST_REFUND", { ts = s.ts, h = s.hid, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true
@@ -487,7 +508,7 @@ function CDZ.UnrefundSession(idx)
         local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
         ChroniquesDuZephyrDB.meta.rev = rv
         ChroniquesDuZephyrDB.meta.lastModified = time()
-        CDZ.Comm_Broadcast("HIST_UNREFUND", { ts = s.ts, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+        CDZ.Comm_Broadcast("HIST_REFUND", { ts = s.ts, h = s.hid, r = 0, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true
@@ -506,7 +527,7 @@ function CDZ.DeleteHistory(idx)
         local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
         ChroniquesDuZephyrDB.meta.rev = rv
         ChroniquesDuZephyrDB.meta.lastModified = time()
-        CDZ.Comm_Broadcast("HIST_DEL", { ts = ts, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+        CDZ.Comm_Broadcast("HIST_DEL", { ts = ts, h = s.hid, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true

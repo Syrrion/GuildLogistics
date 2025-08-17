@@ -6,7 +6,8 @@ local panel, addBtn, lv, footer, totalFS
 
 
 local cols = UI.NormalizeColumns({
-    { key="name",   title="Nom",    min=240, flex=1 },
+    { key="name",   title="Nom",    min=150, flex=1 },
+    { key="last",   title="Dernière connexion", w=180 },
     { key="act",    title="", w=300 },
     { key="solde",  title="Solde",  w=140 },
 })
@@ -19,6 +20,7 @@ end
 local function BuildRow(r)
     local f = {}
     f.name  = UI.CreateNameTag(r)
+    f.last  = UI.Label(r, { justify = "CENTER" })
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
@@ -32,6 +34,22 @@ end
 local function UpdateRow(i, r, f, data)
     -- Affiche désormais le nom complet (Nom-Royaume)
     UI.SetNameTag(f.name, data.name or "")
+
+    -- ➕ Ajout affichage dernière connexion
+    local lastTxt = "|cffaaaaaa-|r"  -- par défaut : tiret gris
+    local guildRows = CDZ.GetGuildRowsCached and CDZ.GetGuildRowsCached() or {}
+    for _, gr in ipairs(guildRows) do
+        if CDZ.NormName and CDZ.NormName(gr.name_amb or gr.name_raw) == CDZ.NormName(data.name) then
+            if gr.online then
+                lastTxt = "|cff40ff40En ligne|r"
+            else
+                lastTxt = ns.Format.LastSeen(gr.daysDerived, gr.hoursDerived)
+            end
+            break
+        end
+    end
+    if f.last then f.last:SetText(lastTxt) end
+
 
     -- ✅ Autorisations : GM partout ; sinon uniquement sa propre ligne (comparaison Nom-Royaume)
     local isGM   = (ns and ns.Util and ns.Util.IsGM and ns.Util.IsGM()) or (ns and ns.CDZ and ns.CDZ.IsGM and ns.CDZ.IsGM()) or false
