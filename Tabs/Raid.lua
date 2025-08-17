@@ -223,12 +223,6 @@ local function Build(container)
             for _, n in ipairs(selected) do if isMe(n) then amISelected = true; break end end
             
             if silentFlag then
-                -- Mode silencieux : aucune popup réseau -> montrer local si je suis débité
-                if amISelected and ns.UI and ns.UI.PopupRaidDebit then
-                    -- ✅ GM : le batch est déjà appliqué localement → on lit le solde actuel
-                    local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
-                    ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
-                end
             else
                 -- Mode notifié : pas de popup locale si la popup réseau arrive.
                 if amISelected and C_Timer and C_Timer.After then
