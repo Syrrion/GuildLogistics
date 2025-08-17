@@ -33,18 +33,19 @@ local function UpdateRow(i, r, f, it)
 
     r.btnApprove:SetOnClick(function()
         if not CDZ.IsMaster or not CDZ.IsMaster() then return end
-        -- Anti double-clic : désactiver + masquer la ligne tout de suite
-        if r.btnApprove.SetEnabled then r.btnApprove:SetEnabled(false) end
-        if r.btnRefuse.SetEnabled  then r.btnRefuse:SetEnabled(false)  end
+        -- Anti double-clic : masquer la ligne tout de suite
         if r and r.Hide then r:Hide() end
         if lv and lv.Layout then lv:Layout() end
-        if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
 
         -- Traitement : appliquer et retirer de la file
         if CDZ.GM_ApplyAndBroadcastByUID then
             CDZ.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
         end
         if CDZ.ResolveRequest then CDZ.ResolveRequest(it.id, true, "Approuvé via la liste") end
+
+        -- Rafraîchit la liste et met à jour le badge/onglet
+        if Refresh then Refresh() end
+        if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
     end)
 
     r.btnRefuse:SetOnClick(function()
@@ -53,10 +54,14 @@ local function UpdateRow(i, r, f, it)
         if r.btnRefuse.SetEnabled  then r.btnRefuse:SetEnabled(false)  end
         if r and r.Hide then r:Hide() end
         if lv and lv.Layout then lv:Layout() end
-        if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
 
         -- Traitement : retirer de la file
         if CDZ.ResolveRequest then CDZ.ResolveRequest(it.id, false, "Refusé via la liste") end
+
+        -- Rafraîchit la liste et met à jour le badge/onglet
+        if Refresh then Refresh() end
+        if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
+
     end)
 
 end

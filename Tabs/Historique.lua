@@ -39,11 +39,17 @@ local function BuildRow(r)
     f.state = UI.Label(r)
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
     r.btnLots   = UI.Button(f.act, "Lots", { size="sm", minWidth=80 })
+
+    -- Boutons réservés GM
     r.btnRefund = UI.Button(f.act, "Rendre gratuit", { size="sm", variant="ghost", minWidth=140 })
     r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=26, padX=12 })
+    local isGM = (CDZ.IsMaster and CDZ.IsMaster()) or false
+    r.btnRefund:SetShown(isGM)
+    r.btnDelete:SetShown(isGM)
 
-    -- Réorganisation : Lots / Refund / Delete
-    UI.AttachRowRight(f.act, { r.btnDelete, r.btnRefund, r.btnLots }, 8, -6, { leftPad = 10, align = "center" })
+    -- Réorganisation : Lots toujours visible, autres seulement si GM
+    UI.AttachRowRight(f.act, isGM and { r.btnDelete, r.btnRefund, r.btnLots } or { r.btnLots }, 8, -6, { leftPad = 10, align = "center" })
+
 
 
     return f

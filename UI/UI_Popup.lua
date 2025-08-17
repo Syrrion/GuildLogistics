@@ -191,9 +191,18 @@ function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
         :format(playerName or "?", op, amt))
 
     dlg:SetButtons({
-        { text = "Approuver", default = true, onClick = function() if onApprove then onApprove() end end },
-        { text = "Refuser", variant = "ghost", onClick = function() if onRefuse then onRefuse() end end },
+        { text = "Approuver", default = true, onClick = function()
+            if onApprove then onApprove() end
+            if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
+            if ns and ns.RefreshAll then ns.RefreshAll() end
+        end },
+        { text = "Refuser", variant = "ghost", onClick = function()
+            if onRefuse then onRefuse() end
+            if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
+            if ns and ns.RefreshAll then ns.RefreshAll() end
+        end },
     })
+
     dlg:Show()
     return dlg
 end
