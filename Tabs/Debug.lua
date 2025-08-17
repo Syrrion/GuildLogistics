@@ -269,8 +269,20 @@ local function groupLogs(raw)
 end
 
 function Refresh()
+    -- ➕ Si le débug est désactivé : listes vides et mise en page safe
+    if CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then
+        if lvRecv    then lvRecv:SetData({})    end
+        if lvSend    then lvSend:SetData({})    end
+        if lvPending then lvPending:SetData({}) end
+        if lvRecv and lvRecv.Layout       then lvRecv:Layout()       end
+        if lvSend and lvSend.Layout       then lvSend:Layout()       end
+        if lvPending and lvPending.Layout then lvPending:Layout()    end
+        return
+    end
+
     local selfNorm = _normalize(_selfFullName())
     local recvData, sendData = {}, {}
+
 
     -- Split RECU / ENVOI + filtre UI côté RECU (on garde le traitement logique inchangé ailleurs)
     for _, e in ipairs(CDZ.GetDebugLogs()) do
@@ -475,6 +487,14 @@ local function _SetRadioGroupChecked(group, key)
     for k, b in pairs(group) do b:SetChecked(k == key) end
 end
 
+-- (déclarations)
+local optPanel
+local themeRadios, autoRadios, debugRadios = {}, {}, {}
+
+local function _SetRadioGroupChecked(group, key)
+    for k, b in pairs(group) do b:SetChecked(k == key) end
+end
+
 local function BuildOptions(panel)
     optPanel = panel
     local PAD = UI.OUTER_PAD or 16
@@ -505,12 +525,22 @@ local function BuildOptions(panel)
         b:SetScript("OnClick", function(self)
             _SetRadioGroupChecked(group, key)
             ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
+
             if group == themeRadios then
+                -- Thème
                 ChroniquesDuZephyrUI.theme = key
                 if UI.SetTheme then UI.SetTheme(key) end
-            else
+
+            elseif group == autoRadios then
+                -- Ouverture auto
                 ChroniquesDuZephyrUI.autoOpen = (key == "YES")
+
+            elseif group == debugRadios then
+                -- Activer le débug
+                ChroniquesDuZephyrUI.debugEnabled = (key == "YES")
+                if UI.SetDebugEnabled then UI.SetDebugEnabled(ChroniquesDuZephyrUI.debugEnabled) end
             end
+
         end)
 
         group[key] = b
@@ -531,13 +561,23 @@ local function BuildOptions(panel)
     makeRadioV(autoRadios, "YES", "Oui")
     makeRadioV(autoRadios, "NO",  "Non")
 
+    -- === Section 3 : Activer le débug ===
+    local headerH3 = UI.SectionHeader(content, "Activer le débug", { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    y = y + headerH3 + 8
+
+    makeRadioV(debugRadios, "YES", "Oui")
+    makeRadioV(debugRadios, "NO",  "Non")
+
     -- Valeurs initiales
     local saved = CDZ.GetSavedWindow and CDZ.GetSavedWindow() or {}
     local theme = (saved and saved.theme) or "AUTO"
     local auto  = (saved and saved.autoOpen) and "YES" or "NO"
+    local dbg   = ((saved and saved.debugEnabled) ~= false) and "YES" or "NO"  -- Oui par défaut
+
     _SetRadioGroupChecked(themeRadios, theme)
-    _SetRadioGroupChecked(autoRadios, auto)
+    _SetRadioGroupChecked(autoRadios,  auto)
+    _SetRadioGroupChecked(debugRadios, dbg)
 end
 
 UI.RegisterTab("Options", BuildOptions, RefreshOptions)
-UI.RegisterTab("Debug", Build, Refresh, Layout)
+UI.RegisterTab("Debug", Build, Refresh, Layout, { hidden = true })

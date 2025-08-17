@@ -391,6 +391,9 @@ local function _nowPrecise()
 end
 
 local function pushLog(dir, t, size, channel, peerOrSender, seq, part, total, raw, state)
+    -- ➕ Inhibition complète de la journalisation si le débug est désactivé
+    if CDZ and CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then return end
+
     local isSend   = (dir == "send")
     local emitter  = isSend and ((playerFullName and playerFullName()) or "") or (peerOrSender or "")
     local st       = state or ((part == 0 and "pending") or (isSend and "sent") or "receiving")

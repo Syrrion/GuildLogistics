@@ -128,7 +128,7 @@ Main.Content:SetClipsChildren(true)
 
 -- Titre centré sur la barre de titre
 Main.title = Main:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-Main.title:SetText("Chroniques du Zéphyr - Comptabilité")
+Main.title:SetText("Les Chroniques du Zéphyr")
 Main.title:SetTextColor(0.98, 0.95, 0.80)
 do
     local _, _, TOP = skin:GetInsets()
@@ -152,10 +152,29 @@ reloadBtn:ClearAllPoints()
 reloadBtn:SetPoint("TOPRIGHT", close, "TOPLEFT", -6, 0)
 reloadBtn:SetScript("OnClick", function() ReloadUI() end)
 
+-- ➕ Bouton Debug à droite (collé au bouton Reload)
+local debugBtn = CreateFrame("Button", ADDON.."DebugButton", Main, "UIPanelButtonTemplate")
+debugBtn:SetText("Debug")
+-- Même taille/strata/niveau que Reload
+local rw, rh = reloadBtn:GetSize()
+if rw and rh then debugBtn:SetSize(rw, rh) else debugBtn:SetSize(60, 20) end
+debugBtn:SetFrameStrata(reloadBtn:GetFrameStrata())
+debugBtn:SetFrameLevel(reloadBtn:GetFrameLevel())
+-- Position : juste à gauche de Reload (même marge que Reload vs Close)
+debugBtn:ClearAllPoints()
+debugBtn:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -6, 0)
+-- Action : ouvre directement l'onglet Debug
+debugBtn:SetScript("OnClick", function()
+    if UI.ShowTabByLabel then UI.ShowTabByLabel("Debug") end
+end)
+
+-- ➕ Expose des références globales pour contrôle de visibilité
+UI.ReloadButton = reloadBtn
+UI.DebugButton  = debugBtn
+
 -- ===================== Tabs =====================
 local Registered, Panels, Tabs = {}, {}, {}
 UI._tabIndexByLabel = {}
-
 
 -- UI.RegisterTab(label, build, refresh, layout, opts?) ; opts.hidden pour masquer le bouton d’onglet
 function UI.RegisterTab(label, buildFunc, refreshFunc, layoutFunc, opts)
@@ -309,6 +328,28 @@ function UI.SetTabVisible(label, shown)
     UI.RelayoutTabs()
 end
 
+-- ➕ Bascule « débug » centralisée (persistance + visibilité)
+function UI.SetDebugEnabled(enabled)
+    ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
+    ChroniquesDuZephyrUI.debugEnabled = (enabled ~= false)
+
+    -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
+    if UI.SetTabVisible then
+        UI.SetTabVisible("Debug", ChroniquesDuZephyrUI.debugEnabled)
+    end
+
+    -- ➕ Affiche/masque les boutons d’en-tête
+    if UI.DebugButton and UI.DebugButton.SetShown then
+        UI.DebugButton:SetShown(ChroniquesDuZephyrUI.debugEnabled)
+    end
+    if UI.ReloadButton and UI.ReloadButton.SetShown then
+        UI.ReloadButton:SetShown(ChroniquesDuZephyrUI.debugEnabled)
+    end
+
+    -- Rafraîchit l'UI courante pour refléter le changement
+    if UI.RefreshAll then UI.RefreshAll() end
+end
+
 -- ➕ Pastille sur un onglet
 function UI.SetTabBadge(label, count)
     local b = UI.GetTabButton(label)
@@ -365,7 +406,7 @@ end
 
 Main:Hide()
 
--- Ouvrir à l'ouverture du jeu + appliquer le thème sauvegardé
+-- Ouvrir à l'ouverture du jeu + appliquer le thème et l'état de debug sauvegardés
 local _openAtLogin = CreateFrame("Frame")
 _openAtLogin:RegisterEvent("PLAYER_LOGIN")
 _openAtLogin:SetScript("OnEvent", function()
@@ -373,6 +414,10 @@ _openAtLogin:SetScript("OnEvent", function()
 
     -- Applique le thème stocké (défaut: AUTO) et re-skin global
     if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
+
+    -- ➕ Applique l'état de debug (défaut : true → boutons visibles)
+    local debugOn = not (saved and saved.debugEnabled == false)
+    if UI.SetDebugEnabled then UI.SetDebugEnabled(debugOn) end
 
     -- Ouverture auto uniquement si activée par l'utilisateur
     if not (saved and saved.autoOpen) then return end

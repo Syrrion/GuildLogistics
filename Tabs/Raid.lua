@@ -4,7 +4,8 @@ local PAD = UI.OUTER_PAD
 
 -- Split vertical : joueurs en haut, lots en bas (sélection directe)
 local panel, totalLabel, totalInput, closeBtn, lv, footer, histBtn
-local lotsPane, lotsLV
+local topPane, lotsPane, lotsLV
+
 local includes = {}
 local chosenLots = {} -- [lotId]=true
 local lotsDirty = true -- flag d’invalidation des lots
@@ -113,12 +114,20 @@ local function Layout()
     local availH = math.max(0, H - footerH - (pad*2))
     local topH   = math.floor(availH * 0.60)
 
-    -- NE PAS toucher à lv (wrapper). On ne positionne que la zone des lots :
+    -- Zone lots (bas)
     lotsPane:ClearAllPoints()
     lotsPane:SetPoint("TOPLEFT",  panel, "TOPLEFT",  pad, -pad - topH - 6)
     lotsPane:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -pad, -pad - topH - 6)
     lotsPane:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", pad, pad + footerH)
     lotsPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -pad, pad + footerH)
+
+    -- Zone joueurs (haut) : bornée entre le haut du panel et le haut de lotsPane
+    topPane:ClearAllPoints()
+    topPane:SetPoint("TOPLEFT",  panel,   "TOPLEFT",  pad, -pad)
+    topPane:SetPoint("TOPRIGHT", panel,   "TOPRIGHT", -pad, -pad)
+    topPane:SetPoint("BOTTOMLEFT", lotsPane, "TOPLEFT",  0,  6)
+    topPane:SetPoint("BOTTOMRIGHT", lotsPane, "TOPRIGHT", 0,  6)
+
 
     -- Laisse chaque ListView recalculer sa hauteur en fonction de son anchor/bottomAnchor
     if lotsLV and lotsLV.Layout then lotsLV:Layout() end
@@ -272,12 +281,31 @@ local function Build(container)
         dlg:Show()
     end)
 
+    -- Panneau supérieur (joueurs) avec padding identique à Ressources
+    topPane = CreateFrame("Frame", nil, panel)
+
     -- Panneau lots (bas)
     lotsPane = CreateFrame("Frame", nil, panel)
 
-    -- Titre + trait : joueurs participants
-    UI.SectionHeader(panel, "Joueurs participants")
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = lotsPane })
+    -- Titre + trait : joueurs participants (dans le conteneur paddé)
+    UI.SectionHeader(topPane, "Joueurs participants")
+
+    -- Liste des joueurs (haut), enfant de topPane
+    lv = UI.ListView(topPane, cols, {
+        buildRow   = BuildRow,
+        updateRow  = UpdateRow,
+        topOffset  = (UI.SECTION_HEADER_H or 26),
+        bottomAnchor = lotsPane,  -- ✅ bornée juste au-dessus du panneau des lots
+    })
+
+    -- Header + liste des lots
+    UI.SectionHeader(lotsPane, "Lots utilisables")
+    lotsLV = UI.ListView(lotsPane, colsLots, {
+        buildRow = BuildRowLots,
+        updateRow = UpdateRowLots,
+        topOffset = (UI.SECTION_HEADER_H or 26),
+        bottomAnchor = footer,    -- ✅ bornée au-dessus du footer
+    })
 
     -- Titre + trait : lots utilisables
     local colsLots = UI.NormalizeColumns({
@@ -285,13 +313,6 @@ local function Build(container)
         { key="name",  title="Lot", min=260, flex=1 },
         { key="frac",  title="Restant", w=90 },
         { key="gold",  title="Montant",  w=120 },
-    })
-    UI.SectionHeader(lotsPane, "Lots utilisables")
-    lotsLV = UI.ListView(lotsPane, colsLots, {
-        buildRow = BuildRowLots,
-        updateRow = UpdateRowLots,
-        topOffset = UI.SECTION_HEADER_H or 26,
-        bottomAnchor = footer,
     })
 
     -- Alignement footer

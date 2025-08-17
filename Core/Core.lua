@@ -22,9 +22,18 @@ local function EnsureDB()
     }
     ChroniquesDuZephyrUI.minimap = ChroniquesDuZephyrUI.minimap or { hide=false, angle=215 }
     if ChroniquesDuZephyrUI.minimap.angle == nil then ChroniquesDuZephyrUI.minimap.angle = 215 end
+
+    -- ➕ Par défaut : débug actif (Oui)
+    if ChroniquesDuZephyrUI.debugEnabled == nil then ChroniquesDuZephyrUI.debugEnabled = true end
 end
 
 CDZ._EnsureDB = EnsureDB
+
+-- ➕ API : état du débug
+function CDZ.IsDebugEnabled()
+    EnsureDB()
+    return ChroniquesDuZephyrUI.debugEnabled ~= false
+end
 
 -- =========================
 -- ======  PLAYERS    ======

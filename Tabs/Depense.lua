@@ -355,7 +355,7 @@ local function Build(container)
 
     -- Titre + trait pour chaque liste
     UI.SectionHeader(topPane,    "Réserve d'objets")
-    lvFree = UI.ListView(topPane, colsFree, { buildRow = BuildRowFree, updateRow = UpdateRowFree, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvFree = UI.ListView(topPane, colsFree, { buildRow = BuildRowFree, updateRow = UpdateRowFree, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = lotsPane  })
 
     UI.SectionHeader(bottomPane, "Lots utilisables pour les raids")
     lvLots = UI.ListView(bottomPane, colsLots, { buildRow = BuildRowLots, updateRow = UpdateRowLots, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = footer })
