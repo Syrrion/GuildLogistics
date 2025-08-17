@@ -1174,6 +1174,10 @@ function CDZ._HandleFull(sender, msgType, kv)
     elseif msgType == "LOT_CONSUME" then
         if not shouldApply() then return end
         ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+
+        -- ✅ de-dup rv/lot : n’applique qu’UNE fois par lot et par révision
+        CDZ._lastConsumeRv = CDZ._lastConsumeRv or {}
+
         local set = {}; for _, v in ipairs(kv.ids or {}) do set[safenum(v, -2)] = true end
         for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
             if set[safenum(l.id, -2)] then
@@ -1186,7 +1190,7 @@ function CDZ._HandleFull(sender, msgType, kv)
         if ns.Emit then ns.Emit("lots:changed") end
         refreshActive()
 
-    -- ======= Handshake & Snapshots =======
+        -- ======= Handshake & Snapshots =======
     elseif msgType == "HELLO" then
         -- Côté pair : répondre par une OFFER uniquement si rv_peer > rv_initiateur
         local hid   = kv.hid or kv.helloId or ""

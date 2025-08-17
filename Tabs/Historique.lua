@@ -5,13 +5,12 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 local panel, lv, footer, backBtn
 local cols = UI.NormalizeColumns({
     { key="date",  title="Date",         w=140 },
-    { key="total", title="Total",        w=140 },
-    { key="per",   title="Individuel",   w=160 },
-    { key="count", title="Participants", w=80 },
+    { key="total", title="Total",        w=100 },
+    { key="per",   title="Individuel",   w=100 },
+    { key="count", title="Participants", w=100 },
     { key="state", title="État",         min=180, flex=1 },
     { key="act",   title="Actions",      w=300 },
 })
-
 
 local function histNow()
     return (CDZ.GetHistory and CDZ.GetHistory()) or ((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.history) or {})
@@ -112,11 +111,33 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 return
             end
 
-            local dlg = UI.CreatePopup({ title = "Lots utilisés", width = 600, height = 460 })
+            -- Calcule les charges utilisées et max
+            local used, maxSessions = 0, 0
+            for _, lot in ipairs(lots) do
+                local l = CDZ.Lot_GetById and CDZ.Lot_GetById(lot.id)
+                if l then
+                    used       = used + (tonumber(l.used or 0) or 0)
+                    maxSessions= maxSessions + (tonumber(l.sessions or 1) or 1)
+                end
+            end
+
+            local dlg = UI.CreatePopup({ 
+                title  = "Lots utilisés", 
+                width  = 600, 
+                height = 460 
+            })
+
+            -- Ajoute la ligne de précision sous le titre
+            if dlg.title then
+                local fs = dlg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                fs:SetText(string.format("Charges utilisées : %d / %d", used, maxSessions))
+                fs:SetPoint("TOP", dlg.title, "BOTTOM", 0, -4)
+            end
+
             local cols = UI.NormalizeColumns({
-                { key="lot",  title="Lot",    min=160 },
+                { key="lot",  title="Lot",    min=120 },
                 { key="qty",  title="Qté",    w=60, justify="RIGHT" },
-                { key="item", title="Objet",  min=240, flex=1 },
+                { key="item", title="Objet",  min=140, flex=1 },
                 { key="amt",  title="Valeur", w=120, justify="RIGHT" },
             })
 
@@ -134,13 +155,23 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                     local exp  = row.item
 
                     f2.lot:SetText(lot.name or ("Lot "..tostring(lot.id)))
-                    f2.qty:SetText(exp.qty or 1)
-                    f2.amt:SetText(UI.MoneyFromCopper(exp.copper or 0))
+
+                    -- ✅ Qté/Valeur AU PRORATA des charges utilisées pour CE raid
+                    local qtyText = row.qtyText
+                    local amtText = row.amtText
+                    if not qtyText then
+                        local q = tonumber(row.qtyP or (exp and exp.qty)) or 0
+                        if math.abs(q - math.floor(q)) < 0.001 then
+                            qtyText = tostring(math.floor(q + 0.0001))
+                        else
+                            qtyText = string.format("%.1f", q)
+                        end
+                    end
+                    f2.qty:SetText(qtyText or "")
+                    f2.amt:SetText(amtText or UI.MoneyFromCopper(math.floor(tonumber(row.amtP or (exp and exp.copper) or 0))))
 
                     UI.SetItemCell(f2.item, exp)
                 end,
-
-
             })
 
             -- Reconstruit les lignes depuis la DB
@@ -159,7 +190,28 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                     -- Cherche toutes les dépenses liées à ce lot
                     for _, e in ipairs(dbExp) do
                         if e.lotId == lot.id then
-                            table.insert(rows, { lot = lot, item = e })
+                            -- ✅ PRORATA : (n charges utilisées pour CE raid) / (N charges max du lot)
+                            local N = tonumber(lotRef.N or lot.sessions or 1) or 1
+                            if N <= 0 then N = 1 end
+                            local nUsed = tonumber(lotRef.n or 1) or 1
+                            if nUsed < 0 then nUsed = 0 end
+                            if nUsed > N then nUsed = N end
+                            local frac       = nUsed / N
+
+                            local baseQty    = tonumber(e.qty or 0) or 0
+                            local baseCopper = tonumber(e.copper or 0) or 0
+                            local qtyP = baseQty * frac
+                            local amtP = math.floor(baseCopper * frac + 0.5)
+
+                            local qtyText
+                            if math.abs(qtyP - math.floor(qtyP)) < 0.001 then
+                                qtyText = tostring(math.floor(qtyP + 0.0001))
+                            else
+                                qtyText = string.format("%.1f", qtyP)
+                            end
+                            local amtText = UI.MoneyFromCopper(amtP)
+
+                            table.insert(rows, { lot = lot, item = e, qtyP = qtyP, amtP = amtP, qtyText = qtyText, amtText = amtText })
                         end
                     end
                 end

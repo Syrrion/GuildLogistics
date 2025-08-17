@@ -605,7 +605,6 @@ function CDZ.Lot_IsSelectable(lot)
     return lot and (not lot.__pendingConsume) and CDZ.Lot_Status(lot) ~= "EPU"
 end
 
-
 -- Coût par utilisation (ex-ShareGold) en or entiers — pas de PA/PC.
 function CDZ.Lot_ShareGold(lot)  -- compat : on conserve le nom
     local totalC = tonumber(lot.totalCopper or lot.copper or 0) or 0
@@ -695,28 +694,39 @@ function CDZ.Lots_ConsumeMany(ids)
 
     local isMaster = CDZ.IsMaster and CDZ.IsMaster()
     if isMaster then
-        -- Optimistic UI : marquer les lots comme "en attente" pour les masquer immédiatement.
+        -- GM : applique directement la consommation (évite le blocage __pendingConsume)
         local L = ChroniquesDuZephyrDB.lots
         for _, id in ipairs(ids) do
             for _, l in ipairs(L.list or {}) do
-                if l.id == id then l.__pendingConsume = true end
+                if l.id == id then
+                    local u = tonumber(l.used or 0) or 0
+                    local N = tonumber(l.sessions or 1) or 1
+                    l.used = math.min(u + 1, N) -- ✅ bornage sécurité
+                end
             end
         end
         if ns.Emit then ns.Emit("lots:changed") end
         if ns.RefreshActive then ns.RefreshActive() end
 
-        -- La diffusion réappliquera pour tous (y compris GM) via le handler LOT_CONSUME.
+        -- Diffusion : les autres clients (et GM aussi) recevront LOT_CONSUME,
+        -- mais côté GM on a déjà appliqué => aucun lot bloqué en "pending".
         if CDZ.BroadcastLotsConsume then CDZ.BroadcastLotsConsume(ids) end
+
     else
-        -- Client : applique localement sans diffusion.
+        -- Client : applique localement sans diffusion (borné).
         local L = ChroniquesDuZephyrDB.lots
         for _, id in ipairs(ids) do
             for _, l in ipairs(L.list or {}) do
-                if l.id == id then l.used = (tonumber(l.used or 0) or 0) + 1 end
+                if l.id == id then
+                    local u = tonumber(l.used or 0) or 0
+                    local N = tonumber(l.sessions or 1) or 1
+                    l.used = math.min(u + 1, N) -- ✅ bornage sécurité
+                end
             end
         end
         if ns.Emit then ns.Emit("lots:changed") end
     end
+
 end
 
 function CDZ.Lots_ComputeGoldTotal(ids)
