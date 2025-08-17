@@ -557,8 +557,10 @@ function CDZ._SnapshotExport()
     }
 
     for name, rec in pairs(ChroniquesDuZephyrDB.players) do
-        t.P[#t.P+1] = table.concat({ name, safenum(rec.credit, 0), safenum(rec.debit, 0) }, ":")
+        local res = (rec and rec.reserved) and 1 or 0
+        t.P[#t.P+1] = table.concat({ name, safenum(rec.credit, 0), safenum(rec.debit, 0), res }, ":")
     end
+
     local _players = ChroniquesDuZephyrDB.players or {}
     for uid, name in pairs(ChroniquesDuZephyrDB.uids) do
         if name and _players[name] ~= nil then
@@ -603,12 +605,29 @@ function CDZ._SnapshotApply(kv)
     meta.lastModified = safenum(kv.lm, now())
     meta.fullStamp = safenum(kv.fs, now())
 
+    -- (dans function CDZ._SnapshotApply(kv))
     for _, s in ipairs(kv.P or {}) do
-        local name, credit, debit = s:match("^(.-):(%-?%d+):(%-?%d+)$")
+        -- Nouveau format (4 champs) : name:credit:debit:reserved
+        local name, credit, debit, res = s:match("^(.-):(%-?%d+):(%-?%d+):(%-?%d+)$")
         if name then
-            ChroniquesDuZephyrDB.players[name] = { credit = safenum(credit,0), debit = safenum(debit,0) }
+            ChroniquesDuZephyrDB.players[name] = {
+                credit   = safenum(credit,0),
+                debit    = safenum(debit,0),
+                reserved = safenum(res,0) ~= 0
+            }
+        else
+            -- Compat anciens snapshots (3 champs) : name:credit:debit
+            local n2, c2, d2 = s:match("^(.-):(%-?%d+):(%-?%d+)$")
+            if n2 then
+                ChroniquesDuZephyrDB.players[n2] = {
+                    credit   = safenum(c2,0),
+                    debit    = safenum(d2,0),
+                    reserved = false
+                }
+            end
         end
     end
+
     for _, s in ipairs(kv.I or {}) do
         local uid, name = s:match("^(.-):(.-)$")
         if uid and name then ChroniquesDuZephyrDB.uids[uid] = name end
@@ -839,6 +858,24 @@ function CDZ._HandleFull(sender, msgType, kv)
         end
         refreshActive()
 
+    elseif msgType == "ROSTER_RESERVE" then
+        if not shouldApply() then return end
+        ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+        local uid, name = kv.uid, kv.name
+        -- récupérer le nom complet via l’UID si besoin
+        if (not name or name == "") and uid and CDZ.GetNameByUID then
+            name = CDZ.GetNameByUID(uid)
+        end
+        if name and name ~= "" then
+            local p = ChroniquesDuZephyrDB.players[name] or { credit=0, debit=0, reserved=false }
+            p.reserved = (tonumber(kv.res) or 0) ~= 0
+            ChroniquesDuZephyrDB.players[name] = p
+            meta.rev = (rv >= 0) and rv or myrv
+            meta.lastModified = safenum(kv.lm, now())
+            if ns.Emit then ns.Emit("roster:reserve", name, p.reserved) end
+            refreshActive()
+        end
+        
     elseif msgType == "TX_REQ" then
         -- Seul le GM traite les demandes : les clients non-GM ignorent.
         if not (CDZ.IsMaster and CDZ.IsMaster()) then

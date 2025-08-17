@@ -6,8 +6,8 @@ local panel, addBtn, lv, footer
 
 local cols = UI.NormalizeColumns({
     { key="name",   title="Nom",    min=240, flex=1 },
+    { key="act",    title="", w=300 },
     { key="solde",  title="Solde",  w=140 },
-    { key="act",    title="Actions",w=300 },
 })
 
 local function money(v)
@@ -21,9 +21,9 @@ local function BuildRow(r)
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
+    r.btnCredit = UI.Button(f.act, "Dépôt d’or", { size="sm", minWidth=90 })
+    r.btnDebit  = UI.Button(f.act, "Retrait d’or", { size="sm", variant="ghost", minWidth=90 })
     r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=28, padX=12 })
-    r.btnCredit = UI.Button(f.act, "Dépôt d’or", { size="sm", minWidth=150 })
-    r.btnDebit  = UI.Button(f.act, "Retrait d’or", { size="sm", variant="ghost", minWidth=150 })
     UI.AttachRowRight(f.act, { r.btnCredit, r.btnDebit, r.btnDelete }, 8, -4, { leftPad = 8, align = "center" })
     return f
 end
@@ -150,21 +150,102 @@ local function UpdateRow(i, r, f, data)
     end)
 end
 
+-- Deux ListViews
+local lvActive, lvReserve, activeArea, reserveArea
+
 local function Layout()
-    -- Footer : tous les boutons sont gérés par AttachButtonsFooterRight
-    if lv and lv.Layout then lv:Layout() end
+    if not (activeArea and reserveArea) then return end
+    local panelH = panel:GetHeight()
+    local footerH = (UI.FOOTER_H or 36)
+    local gap = 10
+
+    -- Répartition inspirée de "Démarrer un raid" : ~60% / 40%
+    local usableH = panelH - footerH - (gap * 3)
+    local hTop = math.floor(usableH * 0.60)
+    local hBot = usableH - hTop
+
+    activeArea:ClearAllPoints()
+    activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
+    activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
+    activeArea:SetHeight(hTop)
+
+    reserveArea:ClearAllPoints()
+    reserveArea:SetPoint("TOPLEFT",  activeArea, "BOTTOMLEFT", 0, -gap)
+    reserveArea:SetPoint("TOPRIGHT", activeArea, "BOTTOMRIGHT", 0, -gap)
+    reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, (UI.FOOTER_H or 36) + gap)
+    reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, (UI.FOOTER_H or 36) + gap)
+
+    if lvActive  and lvActive.Layout  then lvActive:Layout()  end
+    if lvReserve and lvReserve.Layout then lvReserve:Layout() end
+    if lv and footer and lv.SetBottomAnchor then lv:SetBottomAnchor(footer) end
 end
 
 local function Refresh()
-    local players = CDZ.GetPlayersArray and CDZ.GetPlayersArray() or {}
-    -- Attendu : { {name=, credit=, debit=, solde=?}, ... }
-    lv:SetData(players)
-    Layout()
+    local active  = (CDZ.GetPlayersArrayActive  and CDZ.GetPlayersArrayActive())  or {}
+    local reserve = (CDZ.GetPlayersArrayReserve and CDZ.GetPlayersArrayReserve()) or {}
+    if lvActive  then lvActive:SetData(active)   end
+    if lvReserve then
+        -- tag pour UpdateRow (savoir de quelle liste provient l’item)
+        local wrapped = {}
+        for i, it in ipairs(reserve) do wrapped[i] = { data = it, fromReserve = true } end
+        lvReserve:SetData(wrapped)
+    end
+    if lvActive  and lvActive.Layout  then lvActive:Layout()  end
+    if lvReserve and lvReserve.Layout then lvReserve:Layout() end
 end
+
+
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
+
+    -- ➕ Deux zones analogues à "Démarrer un raid"
+    activeArea  = CreateFrame("Frame", nil, panel)
+    reserveArea = CreateFrame("Frame", nil, panel)
+
+    UI.SectionHeader(activeArea,  "Roster actif",      { topPad = 2 })
+    UI.SectionHeader(reserveArea, "Joueurs en réserve",{ topPad = 2 })
+
+    -- colonnes héritées de la liste existante (nom / solde / actions)
+    local cols = cols or nil  -- on réutilise la définition existante du fichier
+
+    -- Listes (topOffset = hauteur de l’entête de section)
+    lvActive  = UI.ListView(activeArea,  cols, { buildRow = BuildRow,  updateRow = function(i, r, f, it)
+        -- sur la liste "active", it = donnée brute
+        UpdateRow(i, r, f, it)  -- logique existante pour crédit/débit/supp.
+        -- ➕ bouton "Mettre en réserve" (GM uniquement)
+        if not r.btnReserve then
+            r.btnReserve = UI.Button(r, "Mettre en réserve", { size="sm", minWidth=120, tooltip="Basculer ce joueur en Réserve" })
+            if r.btnDelete then r.btnReserve:SetPoint("RIGHT", r.btnDelete, "LEFT", -6, 0) end
+        end
+        local isMaster = (CDZ.IsMaster and CDZ.IsMaster()) or false
+        r.btnReserve:SetShown(isMaster)
+        if isMaster then
+            r.btnReserve:SetOnClick(function()
+                if CDZ.GM_SetReserved then CDZ.GM_SetReserved(it.name, true) end
+            end)
+        end
+    end, topOffset = UI.SECTION_HEADER_H or 26 })
+
+    lvReserve = UI.ListView(reserveArea, cols, { buildRow = BuildRow, updateRow = function(i, r, f, it)
+        -- sur la liste "réserve", it = { data=..., fromReserve=true }
+        local data = it.data or it
+        UpdateRow(i, r, f, data)
+        -- ➕ bouton "Intégrer au roster" (GM uniquement)
+        if not r.btnReserve then
+            r.btnReserve = UI.Button(r, "Intégrer au roster", { size="sm", minWidth=120, tooltip="Renvoyer ce joueur dans le Roster actif" })
+            if r.btnDelete then r.btnReserve:SetPoint("RIGHT", r.btnDelete, "LEFT", -6, 0) end
+        end
+        local isMaster = (CDZ.IsMaster and CDZ.IsMaster()) or false
+        r.btnReserve:SetShown(isMaster)
+        if isMaster then
+            r.btnReserve:SetText("Intégrer au roster")
+            r.btnReserve:SetOnClick(function()
+                if CDZ.GM_SetReserved then CDZ.GM_SetReserved(data.name, false) end
+            end)
+        end
+    end, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = footer })
 
     footer = UI.CreateFooter(panel, 36)
 
@@ -194,7 +275,7 @@ local function Build(container)
     end)
 
     -- Bouton Historique (déjà demandé précédemment)
-    local histBtn = UI.Button(footer, "Historique", { size="...", minWidth=120, tooltip="Voir l’historique des répartitions" })
+    local histBtn = UI.Button(footer, "Historique des raids", { size="...", minWidth=120, tooltip="Voir l’historique des raids" })
     histBtn:SetOnClick(function() UI.ShowTabByLabel("Historique") end)
 
     -- Aligner à droite : Historique | Ajouter membre guilde | + Ajouter
@@ -214,7 +295,7 @@ local function Build(container)
         addBtn:Hide()
     end
 
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = footer })
+
 end
 
 UI.RegisterTab("Roster", Build, Refresh, Layout)

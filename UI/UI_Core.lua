@@ -249,11 +249,21 @@ function UI.CreateFooter(parent, height)
     f:SetPoint("BOTTOMLEFT",  parent, "BOTTOMLEFT",  0, 0)
     f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0) -- pleine largeur
 
+    -- ✅ Toujours au-dessus du contenu (z-order)
+    if f.SetFrameStrata then
+        local pstrata = (parent.GetFrameStrata and parent:GetFrameStrata()) or "MEDIUM"
+        f:SetFrameStrata(pstrata)
+    end
+    if f.SetFrameLevel and parent.GetFrameLevel then
+        pcall(f.SetFrameLevel, f, (parent:GetFrameLevel() or 0) + 20)
+    end
+
     -- Fond sombre (zone d'action)
     local bg = f:CreateTexture(nil, "BACKGROUND")
     local c  = UI.FOOTER_BG or {0, 0, 0, 0.22}
     bg:SetColorTexture(c[1], c[2], c[3], c[4])
     bg:SetAllPoints(f)
+
 
     -- Léger dégradé vertical pour du relief
     local grad = f:CreateTexture(nil, "BACKGROUND")

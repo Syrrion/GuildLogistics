@@ -77,12 +77,14 @@ local function UpdateRow(i, r, f, it)
     end
 
     local inRoster = (ns.CDZ.HasPlayer and ns.CDZ.HasPlayer(it.main)) or false
+    local isReserve = (ns.CDZ.IsReserved and ns.CDZ.IsReserved(it.main)) or false
     local canAdd = (ns.CDZ.IsMaster and ns.CDZ.IsMaster()) and true or false
 
     if inRoster then
         if f.btnAdd then f.btnAdd:Hide() end
         if f.inRoster then
-            f.inRoster:SetText("Dans le roster")
+            -- Montre explicitement le statut de réserve si applicable
+            f.inRoster:SetText(isReserve and "En réserve" or "Dans le roster")
             f.inRoster:Show()
             f.inRoster:ClearAllPoints()
             f.inRoster:SetPoint("CENTER", f.act, "CENTER", 0, 0)

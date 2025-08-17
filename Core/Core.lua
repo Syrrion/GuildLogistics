@@ -40,14 +40,34 @@ end
 -- =========================
 local function GetOrCreatePlayer(name)
     EnsureDB()
-    if not name or name == "" then return { credit=0, debit=0 } end
+    if not name or name == "" then return { credit=0, debit=0, reserved=false } end
     local p = ChroniquesDuZephyrDB.players[name]
     if not p then
-        p = { credit = 0, debit = 0 }
+        p = { credit = 0, debit = 0, reserved = false }  -- ➕ flag de réserve par défaut
         ChroniquesDuZephyrDB.players[name] = p
+    else
+        if p.reserved == nil then p.reserved = false end -- compat données anciennes
     end
     return p
 end
+
+-- ➕ Statut « en réserve » (tolérant plusieurs clés héritées)
+function CDZ.IsReserved(name)
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    local p = ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[name]
+    if not p then return false end
+    -- Tolère reserved / reserve / bench, ou un status textuel
+    local v = p.reserved
+           or p.reserve
+           or p.bench
+           or ((type(p.status)=="string") and (p.status:upper()=="RESERVE" or p.status:upper()=="RESERVED"))
+    if type(v) == "boolean" then return v end
+    if type(v) == "number"  then return v ~= 0 end
+    if type(v) == "string"  then return v:lower() ~= "false" and v ~= "" end
+    return false
+end
+-- Alias rétro-compatible si jamais du code appelle IsReserve()
+CDZ.IsReserve = CDZ.IsReserved
 
 function CDZ.GetPlayersArray()
     EnsureDB()
@@ -56,6 +76,31 @@ function CDZ.GetPlayersArray()
         local credit = tonumber(p.credit) or 0
         local debit  = tonumber(p.debit) or 0
         table.insert(out, { name=name, credit=credit, debit=debit, solde=credit-debit })
+    end
+    table.sort(out, function(a,b) return a.name:lower() < b.name:lower() end)
+    return out
+end
+
+-- ➕ Sous-ensembles utiles à l’UI (actif / réserve)
+function CDZ.GetPlayersArrayActive()
+    local src = CDZ.GetPlayersArray()
+    local out = {}
+    for _, r in ipairs(src) do if not r.reserved then out[#out+1] = r end end
+    return out
+end
+
+function CDZ.GetPlayersArrayReserve()
+    EnsureDB()
+    local out = {}
+    for name, p in pairs(ChroniquesDuZephyrDB.players) do
+        if p.reserved then
+            local credit = tonumber(p.credit) or 0
+            local debit  = tonumber(p.debit) or 0
+            out[#out+1] = {
+                name = name, credit = credit, debit = debit,
+                solde = credit - debit, reserved = true
+            }
+        end
     end
     table.sort(out, function(a,b) return a.name:lower() < b.name:lower() end)
     return out
@@ -97,6 +142,14 @@ function CDZ.HasPlayer(name)
     EnsureDB()
     if not name or name == "" then return false end
     return ChroniquesDuZephyrDB.players[name] ~= nil
+end
+
+-- ➕ Statut "en réserve" (alias bench pris en charge)
+function CDZ.IsReserve(name)
+    EnsureDB()
+    if not name or name == "" then return false end
+    local p = ChroniquesDuZephyrDB.players[name]
+    return (p and ((p.reserve == true) or (p.bench == true))) or false
 end
 
 function CDZ.Credit(name, amount)
@@ -210,8 +263,12 @@ function CDZ.EnsureRosterLocal(name)
     ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
     local created = false
     if not ChroniquesDuZephyrDB.players[name] then
-        ChroniquesDuZephyrDB.players[name] = { credit = 0, debit = 0 }
+        ChroniquesDuZephyrDB.players[name] = { credit = 0, debit = 0, reserved = false }
         created = true
+    else
+        if ChroniquesDuZephyrDB.players[name].reserved == nil then
+            ChroniquesDuZephyrDB.players[name].reserved = false
+        end
     end
     if created then ns.Emit("roster:upsert", name) end
 end
@@ -286,6 +343,46 @@ function CDZ.RemovePlayer(name)
     return true
 end
 
+-- ➕ API réserve : lecture + application locale + commande GM + broadcast
+function CDZ.IsReserved(name)
+    EnsureDB()
+    local p = name and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[name]
+    return (p and p.reserved) and true or false
+end
+
+local function _SetReservedLocal(name, flag)
+    local p = GetOrCreatePlayer(name)
+    local prev = not not p.reserved
+    p.reserved = not not flag
+    if prev ~= p.reserved and ns.Emit then ns.Emit("roster:reserve", name, p.reserved) end
+end
+
+function CDZ.GM_SetReserved(name, flag)
+    if not (CDZ.IsMaster and CDZ.IsMaster()) then
+        if UIErrorsFrame then
+            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Changement d’attribution réservé au GM.", 1, .4, .4)
+        end
+        return false
+    end
+    if not name or name=="" then return false end
+
+    _SetReservedLocal(name, flag)
+
+    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+    local rv = (ChroniquesDuZephyrDB.meta.rev or 0) + 1
+    ChroniquesDuZephyrDB.meta.rev = rv
+    ChroniquesDuZephyrDB.meta.lastModified = time()
+
+    local uid = (CDZ.GetUID and CDZ.GetUID(name)) or (CDZ.FindUIDByName and CDZ.FindUIDByName(name)) or nil
+    if CDZ.Comm_Broadcast then
+        CDZ.Comm_Broadcast("ROSTER_RESERVE", {
+            uid = uid, name = name, res = flag and 1 or 0,
+            rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified
+        })
+    end
+    if ns.RefreshAll then ns.RefreshAll() end
+    return true
+end
 
 -- =========================
 -- ======  HISTORY    ======
