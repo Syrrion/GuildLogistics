@@ -1515,7 +1515,7 @@ function CDZ.RequestAdjust(a, b)
     local delta = (b ~= nil) and safenum(b, 0) or safenum(a, 0)
     if delta == 0 then return end
 
-    local me = playerFullName()
+    local me  = playerFullName()
     local uid = CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(me)
     if not uid then return end
 
@@ -1526,11 +1526,41 @@ function CDZ.RequestAdjust(a, b)
     if type(gmName) == "table" and not gmRow then gmName, gmRow = gmName[1], gmName[2] end
     if not gmRow and CDZ.GetGuildMasterCached then gmName, gmRow = CDZ.GetGuildMasterCached() end
 
-    if gmName and gmRow and gmRow.online then
-        -- GM en ligne : envoi direct (WHISPER)
+    -- ➕ Heuristique temps-réel : considérer “en ligne” si vu récemment via HELLO
+    local function _masterSeenRecently(name)
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        local target = nf(name or "")
+
+        -- 1) On a reçu un HELLO tout juste du GM et on attend le flush
+        if CDZ._awaitHelloFrom and nf(CDZ._awaitHelloFrom) == target then
+            return true
+        end
+
+        -- 2) Élection HELLO récente où le gagnant est le GM (fenêtre ~60s)
+        local nowt = now()
+        for _, sess in pairs(HelloElect or {}) do
+            if sess and sess.decided and sess.winner then
+                if nf(sess.winner) == target then
+                    local stamp = safenum(sess.endsAt or sess.startedAt or 0, 0)
+                    if (nowt - stamp) <= 60 then
+                        return true
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+    local onlineNow = false
+    if gmName then
+        onlineNow = (gmRow and gmRow.online) or _masterSeenRecently(gmName)
+    end
+
+    if gmName and onlineNow then
+        -- GM réellement disponible : envoi direct
         CDZ.Comm_Whisper(gmName, "TX_REQ", payload)
     else
-        -- GM hors-ligne : on persiste localement → flush auto sur HELLO du GM
+        -- GM hors-ligne ou inconnu : persiste → flush auto sur HELLO
         if CDZ.Pending_AddTXREQ then CDZ.Pending_AddTXREQ(payload) end
         if UIErrorsFrame and UIErrorsFrame.AddMessage then
             UIErrorsFrame:AddMessage("|cffffff80[CDZ]|r GM hors-ligne : demande mise en file d’attente.", 1, 0.9, 0.4)
