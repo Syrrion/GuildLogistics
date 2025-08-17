@@ -136,7 +136,8 @@ end
 
 
 local function Refresh()
-    local players = CDZ.GetPlayersArray()
+    -- ✅ seulement le roster ACTIF
+    local players = (CDZ.GetPlayersArrayActive and CDZ.GetPlayersArrayActive()) or CDZ.GetPlayersArray()
     lv:SetData(players)
 
     local selectable = (CDZ.Lot_ListSelectable and CDZ.Lot_ListSelectable()) or {}
@@ -148,7 +149,7 @@ local function Refresh()
     for id,_ in pairs(chosenLots) do
         local l = CDZ.Lot_GetById and CDZ.Lot_GetById(id)
         if l then
-            local g = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / (tonumber(l.sessions or 1) or 1) )
+            local g = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(l)) or 0
             total = total + (g or 0)
         end
     end
@@ -298,15 +299,6 @@ local function Build(container)
         bottomAnchor = lotsPane,  -- ✅ bornée juste au-dessus du panneau des lots
     })
 
-    -- Header + liste des lots
-    UI.SectionHeader(lotsPane, "Lots utilisables")
-    lotsLV = UI.ListView(lotsPane, colsLots, {
-        buildRow = BuildRowLots,
-        updateRow = UpdateRowLots,
-        topOffset = (UI.SECTION_HEADER_H or 26),
-        bottomAnchor = footer,    -- ✅ bornée au-dessus du footer
-    })
-
     -- Titre + trait : lots utilisables
     local colsLots = UI.NormalizeColumns({
         { key="check", title="",    w=34 },
@@ -314,6 +306,16 @@ local function Build(container)
         { key="frac",  title="Restant", w=90 },
         { key="gold",  title="Montant",  w=120 },
     })
+
+    -- Header + liste des lots
+    UI.SectionHeader(lotsPane, "Lots utilisables")
+    lotsLV = UI.ListView(lotsPane, colsLots, {
+        buildRow = BuildRowLots,
+        updateRow = UpdateRowLots,
+        topOffset = (UI.SECTION_HEADER_H or 26),
+        bottomAnchor = footer,
+    })
+
 
     -- Alignement footer
     if UI.AttachButtonsFooterRight then

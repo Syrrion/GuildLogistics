@@ -335,6 +335,32 @@ local function Build(container)
         ReloadUI()
     end)
 
+    -- ➕ GM : Purge Lots & objets épuisés
+    local purgeEpuBtn = UI.Button(panel, "Purge Lots & objets épuisés", { size="sm", minWidth=240, tooltip = "Supprime localement tous les lots épuisés et tous leurs objets." })
+    purgeEpuBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
+    purgeEpuBtn:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    purgeEpuBtn:SetConfirm("Supprimer les lots épuisés et leurs objets associés ?", function()
+        if CDZ.PurgeLotsAndItemsExhausted then
+            local l, it = CDZ.PurgeLotsAndItemsExhausted()
+            if UpdateDBVersionLabel then UpdateDBVersionLabel() end
+            if ns.RefreshAll then ns.RefreshAll() end
+            if UI.Toast then UI.Toast(("Purge effectuée : %d lot(s), %d objet(s) supprimés."):format(l or 0, it or 0)) end
+        end
+    end)
+
+    -- ➕ GM : Purger Ressources (tout effacer)
+    local purgeResBtn = UI.Button(panel, "Purger Ressources", { size="sm", minWidth=180, tooltip = "Supprime localement tous les lots et tous les objets (ressources)." })
+    purgeResBtn:SetPoint("RIGHT", purgeEpuBtn, "LEFT", -8, 0)
+    purgeResBtn:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    purgeResBtn:SetConfirm("Supprimer localement TOUS les lots et TOUS les objets ?", function()
+        if CDZ.PurgeAllResources then
+            local l, it = CDZ.PurgeAllResources()
+            if UpdateDBVersionLabel then UpdateDBVersionLabel() end
+            if ns.RefreshAll then ns.RefreshAll() end
+            if UI.Toast then UI.Toast(("Ressources purgées : %d lot(s), %d objet(s)."):format(l or 0, it or 0)) end
+        end
+    end)
+
     -- ➕ Footer actions
     footer = UI.CreateFooter(panel, 36)
 

@@ -729,8 +729,90 @@ function CDZ.Lots_ComputeGoldTotal(ids)
 end
 
 -- =========================
+-- ===== Purges (GM)  ======
+-- =========================
+
+-- Incrémente / réinitialise la révision selon le rôle
+local function _BumpRevisionLocal()
+    EnsureDB()
+    local isMaster = (CDZ.IsMaster and CDZ.IsMaster()) or false
+    local rv = tonumber(ChroniquesDuZephyrDB.meta.rev or 0) or 0
+    ChroniquesDuZephyrDB.meta.rev = isMaster and (rv + 1) or 0
+    ChroniquesDuZephyrDB.meta.lastModified = time()
+end
+
+-- Supprime tous les lots épuisés + tous leurs objets associés
+function CDZ.PurgeLotsAndItemsExhausted()
+    EnsureDB(); _ensureLots()
+    local L = ChroniquesDuZephyrDB.lots
+    local E = ChroniquesDuZephyrDB.expenses
+
+    local purgeLots   = {}
+    local purgeItems  = {}
+
+    for _, l in ipairs(L.list or {}) do
+        if (CDZ.Lot_Status and CDZ.Lot_Status(l) == "EPU") then
+            purgeLots[l.id] = true
+            for _, eid in ipairs(l.itemIds or {}) do purgeItems[eid] = true end
+        end
+    end
+
+    -- Filtre des dépenses (objets)
+    local newE, removedItems = {}, 0
+    for _, it in ipairs(E.list or {}) do
+        local id = it.id
+        local kill = (purgeItems[id] == true) or (it.lotId and purgeLots[it.lotId])
+        if kill then
+            removedItems = removedItems + 1
+        else
+            newE[#newE+1] = it
+        end
+    end
+    E.list = newE
+
+    -- Filtre des lots
+    local newL, removedLots = {}, 0
+    for _, l in ipairs(L.list or {}) do
+        if purgeLots[l.id] then
+            removedLots = removedLots + 1
+        else
+            newL[#newL+1] = l
+        end
+    end
+    L.list = newL
+
+    if ns.Emit then ns.Emit("expenses:changed") end
+    if ns.Emit then ns.Emit("lots:changed") end
+    if ns.RefreshAll then ns.RefreshAll() end
+
+    _BumpRevisionLocal()
+    return removedLots, removedItems
+end
+
+-- Supprime absolument tous les lots + tous les objets
+function CDZ.PurgeAllResources()
+    EnsureDB(); _ensureLots()
+    local L = ChroniquesDuZephyrDB.lots
+    local E = ChroniquesDuZephyrDB.expenses
+
+    local removedLots  = #(L.list or {})
+    local removedItems = #(E.list or {})
+
+    L.list, E.list = {}, {}
+    L.nextId, E.nextId = 1, 1
+
+    if ns.Emit then ns.Emit("expenses:changed") end
+    if ns.Emit then ns.Emit("lots:changed") end
+    if ns.RefreshAll then ns.RefreshAll() end
+
+    _BumpRevisionLocal()
+    return removedLots, removedItems
+end
+
+-- =========================
 -- ===== Window Save  ======
 -- =========================
+
 function CDZ.GetSavedWindow() EnsureDB(); return ChroniquesDuZephyrUI end
 function CDZ.SaveWindow(point, relTo, relPoint, x, y, w, h)
     ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}

@@ -1322,10 +1322,23 @@ local function onAddonMsg(prefix, message, channel, sender)
         RecvLogIndexBySeq[seq] = #DebugLog
     end
 
+    -- ✅ Ajout : pour chaque fragment reçu après le premier, on journalise AUSSI ce fragment
+    do
+        local idx = RecvLogIndexBySeq[seq]
+        if idx and DebugLog[idx] then
+            -- on duplique en « recv » afin que Debug.lua reconstitue got/total correctement
+            pushLog("recv", t or "?", #message, channel, sender, seq, part, total, message, (part >= total) and "received" or "receiving")
+        end
+    end
+
     if not t then return end
 
     local payload = message:match("|n=%d+|(.*)$") or ""
-    local key = sender .. "#" .. tostring(seq)
+
+    -- ✅ Clé de réassemblage robuste : séquence + émetteur NORMALISÉ (évite 'Name' vs 'Name-Royaume')
+    local senderKey = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(sender)) or tostring(sender or "")
+    local key = tostring(seq) .. "@" .. senderKey:lower()
+
     local box = Inbox[key]
     if not box then
         box = { total = total, got = 0, parts = {}, ts = now() }
@@ -1339,6 +1352,7 @@ local function onAddonMsg(prefix, message, channel, sender)
         box.parts[part] = payload
         box.got = box.got + 1
     end
+
 
     if box.got == box.total then
         local chunks = {}
