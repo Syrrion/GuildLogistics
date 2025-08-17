@@ -298,6 +298,8 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
     LayoutSide(rightC, false)
     leftC:HookScript("OnSizeChanged",  function(self) LayoutSide(self,  true) end)
     rightC:HookScript("OnSizeChanged", function(self) LayoutSide(self, false) end)
+
+    -- ➕ on référence aussi les conteneurs des côtés pour pouvoir les nettoyer au reskin
     skin.edges.left  = leftC
     skin.edges.right = rightC
 
@@ -397,9 +399,82 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
         rib:SetPoint("TOP", frame, "TOP", 0, -(INS.top - 6))
         skin.ribbon = rib
     end
-
+    
     function skin:GetInsets() return INS.left, INS.right, INS.top, INS.bottom end
+
+    -- ➕ registre weak de toutes les frames skinnées
+    UI._NEUTRAL_REG = UI._NEUTRAL_REG or setmetatable({}, { __mode = "k" })
+    UI._NEUTRAL_REG[frame] = true
 
     frame._cdzNeutral = skin
     return skin
 end
+
+-- ➕ Détruit proprement un skin existant (toutes les textures/segments)
+function UI.DestroyNeutralSkin(frame)
+    if not (frame and frame._cdzNeutral) then return end
+    local s = frame._cdzNeutral
+
+    local function hideTex(t)
+        if not t then return end
+        pcall(function() t:Hide() end)
+        if t.SetTexture then pcall(function() t:SetTexture(nil) end) end
+        if t.SetAtlas   then pcall(function() t:SetAtlas(nil)   end) end
+        pcall(function() t:ClearAllPoints() end)
+        pcall(function() t:SetParent(nil)   end)
+    end
+    local function clearSide(c)
+        if not c then return end
+        if c._segs then
+            for _, tx in ipairs(c._segs) do hideTex(tx) end
+        end
+        c._segs = nil
+        pcall(function() c:Hide() end)
+    end
+
+    -- Fond
+    hideTex(s.bg)
+
+    -- Coins
+    if s.corners then for _,t in pairs(s.corners) do hideTex(t) end end
+
+    -- Bords haut/bas + côtés
+    if s.edges then
+        hideTex(s.edges.top);  hideTex(s.edges.bottom)
+        clearSide(s.edges.left); clearSide(s.edges.right)
+    end
+
+    -- Bandeau de titre (gauche/milieu/droite)
+    if s.title then for _,t in pairs(s.title) do hideTex(t) end end
+
+    -- Header décoratif + ruban
+    hideTex(s.header)
+    hideTex(s.ribbon)
+
+    frame._cdzNeutral = nil
+end
+
+-- ➕ Re-skin propre d’une frame (détruit puis ré-applique)
+function UI.ReskinNeutral(frame, opts)
+    if not frame then return end
+    UI.DestroyNeutralSkin(frame)
+    UI.ApplyNeutralFrameSkin(frame, opts or { showRibbon = false })
+end
+
+-- ➕ Re-skin global de toutes les frames enregistrées
+function UI.ReskinAllNeutral()
+    if not UI._NEUTRAL_REG then return end
+    for f in pairs(UI._NEUTRAL_REG) do
+        if f and f.GetObjectType then
+            UI.ReskinNeutral(f, { showRibbon = false })
+        end
+    end
+    if UI._layout then UI._layout() end -- relance le layout des panneaux visibles
+end
+
+-- ➕ API publique : changer de thème et re-skin global immédiatement
+function UI.SetTheme(tag)
+    UI.FRAME_THEME = tostring(tag or "AUTO"):upper()
+    UI.ReskinAllNeutral()
+end
+

@@ -361,9 +361,15 @@ local function Build(container)
     sendArea    = CreateFrame("Frame", nil, panel)
     pendingArea = CreateFrame("Frame", nil, panel)
 
-    -- Création des ListView
-    lvRecv    = UI.ListView(recvArea,    cols,       { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
-    lvSend    = UI.ListView(sendArea,    cols,       { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0 })
+    -- Titre + trait pour chaque zone
+    UI.SectionHeader(recvArea,    "Liste des paquets entrants")
+    lvRecv    = UI.ListView(recvArea,    cols,         { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
+
+    UI.SectionHeader(sendArea,    "Liste des paquets sortants")
+    lvSend    = UI.ListView(sendArea,    cols,         { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
+
+    UI.SectionHeader(pendingArea, "Liste des paquets en file d'attente")
+    lvPending = UI.ListView(pendingArea, pendingCols,  { buildRow = BuildPendingRow, updateRow = UpdatePendingRow, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = footer })
 
     -- Colonnes simplifiées pour la file d'attente (heure / type / info)
     local colsQueue = UI.NormalizeColumns({
@@ -385,7 +391,6 @@ local function Build(container)
         f.type:SetText(d.type or "")
         f.info:SetText(d.info or ("ID " .. tostring(d.id or "")))
     end
-    lvPending = UI.ListView(pendingArea, colsQueue, { buildRow = BuildRowQueue, updateRow = UpdateRowQueue, topOffset = 0 })
 
     -- Positionnement responsive (40/40/20 de la hauteur utile)
     local function PositionAreas()
@@ -461,4 +466,78 @@ if ns and ns.On then
     end
 end
 
+
+-- =================== Onglet OPTIONS ===================
+local optPanel
+local themeRadios, autoRadios = {}, {}
+
+local function _SetRadioGroupChecked(group, key)
+    for k, b in pairs(group) do b:SetChecked(k == key) end
+end
+
+local function BuildOptions(panel)
+    optPanel = panel
+    local PAD = UI.OUTER_PAD or 16
+    local RADIO_V_SPACING = 8
+
+    -- ✅ Cadre englobant avec padding augmenté
+    local OUTER_PAD = PAD + 8      -- +8 px autour de la boîte
+    local INNER_PAD = 16           -- padding interne plus confortable
+    local box, content = UI.PaddedBox(panel, { outerPad = OUTER_PAD, pad = INNER_PAD })
+
+    -- === Section 1 : Thème de l'interface ===
+    local y = 0
+    local headerH = UI.SectionHeader(content, "Thème de l'interface", { topPad = y }) or (UI.SECTION_HEADER_H or 26)
+    y = y + headerH + 8
+
+    local function makeRadioV(group, key, text)
+        local b = CreateFrame("CheckButton", nil, content, "UIRadioButtonTemplate")
+        b:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+
+        local label = b.Text
+        if not label then
+            label = b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            label:SetPoint("LEFT", b, "RIGHT", 6, 0)
+            b.Text = label
+        end
+        label:SetText(text)
+
+        b:SetScript("OnClick", function(self)
+            _SetRadioGroupChecked(group, key)
+            ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
+            if group == themeRadios then
+                ChroniquesDuZephyrUI.theme = key
+                if UI.SetTheme then UI.SetTheme(key) end
+            else
+                ChroniquesDuZephyrUI.autoOpen = (key == "YES")
+            end
+        end)
+
+        group[key] = b
+        y = y + (b:GetHeight() or 24) + RADIO_V_SPACING
+        return b
+    end
+
+    -- Ordre demandé : Automatique, Alliance, Horde, Neutre
+    makeRadioV(themeRadios, "AUTO",     "Automatique")
+    makeRadioV(themeRadios, "ALLIANCE", "Alliance")
+    makeRadioV(themeRadios, "HORDE",    "Horde")
+    makeRadioV(themeRadios, "NEUTRAL",  "Neutre")
+
+    -- === Section 2 : Ouverture auto ===
+    local headerH2 = UI.SectionHeader(content, "Ouvrir automatiquement à l'ouverture du jeu", { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    y = y + headerH2 + 8
+
+    makeRadioV(autoRadios, "YES", "Oui")
+    makeRadioV(autoRadios, "NO",  "Non")
+
+    -- Valeurs initiales
+    local saved = CDZ.GetSavedWindow and CDZ.GetSavedWindow() or {}
+    local theme = (saved and saved.theme) or "AUTO"
+    local auto  = (saved and saved.autoOpen) and "YES" or "NO"
+    _SetRadioGroupChecked(themeRadios, theme)
+    _SetRadioGroupChecked(autoRadios, auto)
+end
+
+UI.RegisterTab("Options", BuildOptions, RefreshOptions)
 UI.RegisterTab("Debug", Build, Refresh, Layout)

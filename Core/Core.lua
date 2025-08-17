@@ -614,9 +614,14 @@ end
 -- =========================
 function CDZ.GetSavedWindow() EnsureDB(); return ChroniquesDuZephyrUI end
 function CDZ.SaveWindow(point, relTo, relPoint, x, y, w, h)
-    ChroniquesDuZephyrUI = {
-        point = point, relTo = relTo, relPoint = relPoint, x = x, y = y, width = w, height = h,
-    }
+    ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
+    ChroniquesDuZephyrUI.point    = point
+    ChroniquesDuZephyrUI.relTo    = relTo
+    ChroniquesDuZephyrUI.relPoint = relPoint
+    ChroniquesDuZephyrUI.x        = x
+    ChroniquesDuZephyrUI.y        = y
+    ChroniquesDuZephyrUI.width    = w
+    ChroniquesDuZephyrUI.height   = h
 end
 
 -- =========================

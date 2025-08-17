@@ -275,20 +275,22 @@ local function Build(container)
     -- Panneau lots (bas)
     lotsPane = CreateFrame("Frame", nil, panel)
 
-    -- Liste des joueurs (haut) ancrée sur lotsPane en bas
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = 0, bottomAnchor = lotsPane })
+    -- Titre + trait : joueurs participants
+    UI.SectionHeader(panel, "Joueurs participants")
+    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = lotsPane })
 
-    -- Liste des lots (bas)
+    -- Titre + trait : lots utilisables
     local colsLots = UI.NormalizeColumns({
         { key="check", title="",    w=34 },
         { key="name",  title="Lot", min=260, flex=1 },
         { key="frac",  title="Restant", w=90 },
         { key="gold",  title="Montant",  w=120 },
     })
+    UI.SectionHeader(lotsPane, "Lots utilisables")
     lotsLV = UI.ListView(lotsPane, colsLots, {
         buildRow = BuildRowLots,
         updateRow = UpdateRowLots,
-        topOffset = 0,
+        topOffset = UI.SECTION_HEADER_H or 26,
         bottomAnchor = footer,
     })
 

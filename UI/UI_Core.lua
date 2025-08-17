@@ -4,7 +4,7 @@ local UI = ns.UI
 local CDZ = ns.CDZ
 
 -- Thème de cadre (NEUTRAL | ALLIANCE | HORDE)
-UI.FRAME_THEME = "ALLIANCE"
+UI.FRAME_THEME = "AUTO"
 
 -- Constantes (prend celles de UI.lua si déjà définies)
 UI.OUTER_PAD       = UI.OUTER_PAD       or 16
@@ -12,6 +12,7 @@ UI.SCROLLBAR_W     = UI.SCROLLBAR_W     or 20
 UI.SCROLLBAR_INSET = UI.SCROLLBAR_INSET or 10 
 UI.GUTTER          = UI.GUTTER          or 8
 UI.ROW_H           = UI.ROW_H           or 28
+UI.SECTION_HEADER_H = UI.SECTION_HEADER_H or 26
 UI.FONT_YELLOW = UI.FONT_YELLOW or {1, 0.82, 0}
 UI.WHITE       = UI.WHITE       or {1,1,1}
 UI.ACCENT      = UI.ACCENT      or {0.22,0.55,0.95}
@@ -129,6 +130,55 @@ function UI.CreateScroll(parent)
     list:SetHeight(1)
     return scroll, list
 end
+
+function UI.SectionHeader(parent, title, opts)
+    opts = opts or {}
+    local padL  = tonumber(opts.padLeft) or 0
+    local padR  = tonumber(opts.padRight) or 0
+    local topPad= tonumber(opts.topPad) or 0
+
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    fs:SetPoint("TOPLEFT",  parent, "TOPLEFT",  padL, -(topPad + 2))
+    fs:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -padR, -(topPad + 2))
+    fs:SetJustifyH("LEFT")
+    fs:SetText(tostring(title or ""))
+
+    local sep = parent:CreateTexture(nil, "BORDER")
+    sep:SetColorTexture(1, 1, 1, 0.08)
+    sep:SetPoint("TOPLEFT",  fs, "BOTTOMLEFT",  0, -4)
+    sep:SetPoint("TOPRIGHT", fs, "BOTTOMRIGHT", 0, -4)
+    sep:SetHeight(1)
+
+    return UI.SECTION_HEADER_H
+end
+
+-- ➕ Cadre à bordure qui englobe un contenu avec padding
+function UI.PaddedBox(parent, opts)
+    opts = opts or {}
+    local outerPad = tonumber(opts.outerPad or UI.OUTER_PAD or 16)
+    local pad      = tonumber(opts.pad or 12)
+
+    -- Cadre visuel avec bordure
+    local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    box:SetPoint("TOPLEFT",     parent, "TOPLEFT",     outerPad, -outerPad)
+    box:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -outerPad,  outerPad)
+    box:SetBackdrop({
+        bgFile   = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    box:SetBackdropColor(0, 0, 0, 0.25)
+    box:SetBackdropBorderColor(0.2, 0.2, 0.2, 0.9)
+
+    -- Sous-conteneur avec padding interne
+    local content = CreateFrame("Frame", nil, box)
+    content:SetPoint("TOPLEFT",     box, "TOPLEFT",     pad, -pad)
+    content:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -pad,  pad)
+
+    return box, content
+end
+
 
 -- Cadre utile pour le contenu : respecte les insets de la skin + safe pads
 -- opts: { side = number (def 10), bottom = number (def 6), top = number (def 0) }

@@ -365,13 +365,19 @@ end
 
 Main:Hide()
 
--- ➕ Ouvre l'interface au lancement du jeu
+-- Ouvrir à l'ouverture du jeu + appliquer le thème sauvegardé
 local _openAtLogin = CreateFrame("Frame")
 _openAtLogin:RegisterEvent("PLAYER_LOGIN")
 _openAtLogin:SetScript("OnEvent", function()
+    local saved = CDZ.GetSavedWindow and CDZ.GetSavedWindow() or {}
+
+    -- Applique le thème stocké (défaut: AUTO) et re-skin global
+    if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
+
+    -- Ouverture auto uniquement si activée par l'utilisateur
+    if not (saved and saved.autoOpen) then return end
     if not Main:IsShown() then
         Main:Show()
-        -- Sélectionne le 1er onglet et rafraîchit
         ShowPanel(1)
         if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
     end

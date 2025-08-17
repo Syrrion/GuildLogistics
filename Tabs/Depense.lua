@@ -16,12 +16,12 @@ local selected = {} -- sélection : clés = index absolu dans expenses.list
 
 -- Colonnes Ressources libres
 local colsFree = UI.NormalizeColumns({
-    { key="sel",    title="",        w=34  },
+    { key="sel",    title="",        w=34  },  -- (masquée côté non-GM au niveau de la ligne)
     { key="qty",    title="Qté",     w=60  },
     { key="item",   title="Objet",   min=260, flex=1 },
     { key="source", title="Source",  w=120 },
     { key="amount", title="Montant", w=160 },
-    { key="act",    title="Actions", w=120 },
+    { key="act",    title="Actions", w=120 },  -- (Supprimer masqué côté non-GM)
 })
 
 local colsLots = UI.NormalizeColumns({
@@ -97,6 +97,7 @@ local function BuildRowFree(r)
 
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
     r.btnDelete = UI.Button(f.act, "Supprimer", { size="sm", variant="danger", minWidth=110 })
+    r.btnDelete:SetShown(CDZ.IsMaster and CDZ.IsMaster()) -- masque pour non-GM
     UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad = 8, align = "center" })
     return f
 end
@@ -105,8 +106,18 @@ local function UpdateRowFree(i, r, f, it)
     local d = it.data or it
     r._abs = it._abs or i
 
-    f.sel:SetChecked(selected[r._abs] or false)
-    f.sel:SetScript("OnClick", function(self) selected[r._abs] = not not self:GetChecked(); if ns.RefreshActive then ns.RefreshActive() end end)
+    if CDZ.IsMaster and CDZ.IsMaster() then
+        f.sel:Show()
+        f.sel:SetChecked(selected[r._abs] or false)
+        f.sel:SetScript("OnClick", function(self)
+            selected[r._abs] = self:GetChecked()
+            if ns.RefreshActive then ns.RefreshActive() end
+        end)
+    else
+        f.sel:Hide()
+        f.sel:SetScript("OnClick", nil)
+    end
+    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(CDZ.IsMaster and CDZ.IsMaster()) end
 
     f.qty:SetText(tostring(d.qty or 1))
     f.source:SetText(tostring(d.source or ""))
@@ -154,7 +165,7 @@ local function BuildRowLots(r)
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
     r.btnView   = UI.Button(f.act, "Voir", { size="sm", minWidth=70 })
     r.btnDelete = UI.Button(f.act, "Supprimer", { size="sm", variant="danger", minWidth=90 })
-
+    r.btnDelete:SetShown(CDZ.IsMaster and CDZ.IsMaster()) -- masque pour non-GM
     UI.AttachRowRight(f.act, { r.btnDelete, r.btnView }, 8, -4, { leftPad = 8, align = "center" })
     return f
 end
@@ -342,8 +353,12 @@ local function Build(container)
     topPane  = CreateFrame("Frame", nil, panel)
     bottomPane = CreateFrame("Frame", nil, panel)
 
-    lvFree = UI.ListView(topPane, colsFree, { buildRow = BuildRowFree, updateRow = UpdateRowFree, topOffset = 0 })
-    lvLots = UI.ListView(bottomPane, colsLots, { buildRow = BuildRowLots, updateRow = UpdateRowLots, topOffset = 0, bottomAnchor = footer })
+    -- Titre + trait pour chaque liste
+    UI.SectionHeader(topPane,    "Réserve d'objets")
+    lvFree = UI.ListView(topPane, colsFree, { buildRow = BuildRowFree, updateRow = UpdateRowFree, topOffset = UI.SECTION_HEADER_H or 26 })
+
+    UI.SectionHeader(bottomPane, "Lots utilisables pour les raids")
+    lvLots = UI.ListView(bottomPane, colsLots, { buildRow = BuildRowLots, updateRow = UpdateRowLots, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = footer })
 
     btnCreateLot = UI.Button(footer, "Créer un lot", { size="sm", minWidth=140, tooltip="Sélectionnez des ressources pour créer un lot (contenu figé)." })
     btnCreateLot:SetOnClick(function()
@@ -355,24 +370,27 @@ local function Build(container)
             UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Aucune ressource sélectionnée.", 1,0.4,0.4)
             return
         end
-        local dlg = UI.CreatePopup({ title = "Créer un lot", width = 420, height = 320 })
+        local dlg = UI.CreatePopup({ title = "Créer un lot", width = 420, height = 220 })
         local nameLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nameLabel:SetText("Nom du lot :")
         local nameInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nameInput:SetSize(240, 28); nameInput:SetAutoFocus(true)
-        local typeLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); typeLabel:SetText("Type :")
-        -- (Case à cocher supprimée)
-        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Utilisations (si multi) :")
+
+        -- 🗑️ (Ligne "Type :" supprimée)
+
+        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Nombre d'utilisations")
         local nInput   = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(1)
 
-        nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -6)
+        -- ➕ léger espacement haut
+        nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -14)
         nameInput:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
-        typeLabel:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -14)
-        -- (cbMulti supprimé)
-        nLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -14)
+
+        -- (typeLabel supprimé) : on accroche directement la ligne suivante
+        nLabel:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -14)
         nInput:SetPoint("LEFT", nLabel, "RIGHT", 8, 0)
 
         dlg:SetButtons({
             { text = "Créer", default = true, onClick = function()
                 local nm = nameInput:GetText() or ""
+                if nm == "" then nm = "Lot" end -- ➕ nom par défaut
                 local N  = tonumber(nInput:GetNumber() or 1) or 1
                 if N < 1 then N = 1 end
                 local isMulti = (N > 1)
@@ -381,8 +399,8 @@ local function Build(container)
                     selected = {}
                     if ns.RefreshAll then ns.RefreshAll() end
                 end
-            end },
-            { text = "Annuler", variant = "ghost" },
+                end},
+            { text = CANCEL, variant = "ghost" },
         })
         dlg:Show()
     end)
