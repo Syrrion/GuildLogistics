@@ -4,7 +4,7 @@
 ## Author: Ysendril-KirinTor
 ## Version: 0.9.0
 ## SavedVariables: ChroniquesDuZephyrDB, ChroniquesDuZephyrUI
-## OptionalDeps: LibDeflate
+## IconTexture: Interface\Icons\INV_icon_wing06a
 
 Plugins\LibDeflate\LibStub\LibStub.lua
 Plugins\LibDeflate\lib.xml

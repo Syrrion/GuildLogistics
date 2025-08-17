@@ -288,6 +288,67 @@ function UI.CreateFooter(parent, height)
     return f
 end
 
+-- ➕ Cellule standard "Objet" avec icône + texte + tooltip
+function UI.CreateItemCell(parent, opts)
+    opts = opts or {}
+    local size = opts.size or 20
+    local width = opts.width or 240
+
+    local frame = CreateFrame("Frame", nil, parent)
+    frame:SetHeight(UI.ROW_H)
+
+    local icon = frame:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(size, size)
+    icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
+
+    local btn = CreateFrame("Button", nil, frame)
+    btn:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+    btn:SetSize(width, UI.ROW_H)
+
+    local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    text:SetJustifyH("LEFT")
+    text:SetPoint("LEFT", btn, "LEFT", 0, 0)
+
+    btn:SetScript("OnEnter", function(self)
+        if self._itemID and self._itemID > 0 then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetItemByID(self._itemID)
+        elseif self._link then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink(self._link)
+        end
+    end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    frame.icon = icon
+    frame.text = text
+    frame.btn  = btn
+
+    return frame
+end
+
+-- ➕ Setter pour remplir une cellule d’objet
+function UI.SetItemCell(cell, item)
+    if not cell or not item then return end
+
+    -- Lien WoW complet (pour tooltip)
+    local link = (item.itemID and select(2, GetItemInfo(item.itemID)))
+                 or item.itemLink
+
+    -- Nom affiché = sans crochets
+    local name = (link and link:gsub("%[",""):gsub("%]",""))
+                 or item.itemName
+                 or ("Objet #"..tostring(item.itemID or "?"))
+
+    local icon = (item.itemID and GetItemIcon(item.itemID)) or "Interface/Icons/INV_Misc_QuestionMark"
+
+    cell.icon:SetTexture(icon)
+    cell.text:SetText(name or "")
+    cell.btn._itemID = item.itemID
+    cell.btn._link   = link
+end
+
+
 -- ➕ Pastille (badge) réutilisable
 UI.BADGE_BG       = UI.BADGE_BG       or {0.92, 0.22, 0.22, 1.0}  -- rouge un peu plus saturé
 UI.BADGE_TEXT     = UI.BADGE_TEXT     or "GameFontWhiteSmall"

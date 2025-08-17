@@ -78,22 +78,7 @@ local function BuildRowFree(r)
     f.qty    = UI.Label(r)
     f.source = UI.Label(r)
     f.amount = UI.Label(r)
-    f.item     = CreateFrame("Button", nil, r); f.item:SetHeight(UI.ROW_H)
-
-    f.itemText = f.item:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.icon     = f.item:CreateTexture(nil, "ARTWORK"); f.icon:SetSize(16, 16)
-    f.icon:SetPoint("LEFT", f.item, "LEFT", 0, 0)
-    f.itemText:SetPoint("LEFT",  f.icon, "RIGHT", 3, 0)
-    f.itemText:SetPoint("RIGHT", f.item, "RIGHT", 0, 0)
-    f.itemText:SetJustifyH("LEFT")
-
-    f.item:SetScript("OnEnter", function(self)
-        if self._link and GameTooltip then GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); GameTooltip:SetHyperlink(self._link); GameTooltip:Show() end
-    end)
-    f.item:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
-    f.item:SetScript("OnMouseUp", function(self)
-        if self._link and IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then ChatEdit_InsertLink(self._link) end
-    end)
+    f.item = UI.CreateItemCell(r, { size = 16, width = 220 })
 
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
     r.btnDelete = UI.Button(f.act, "Supprimer", { size="sm", variant="danger", minWidth=110 })
@@ -125,20 +110,8 @@ local function UpdateRowFree(i, r, f, it)
     -- date supprimée (ts non utilisé)
     if f.date then f.date:SetText("") end
 
-    -- Résolution stricte depuis l’itemID (réduit la taille des données transportées)
-    local itemID = tonumber(d.itemID or 0) or 0
-    local link = (itemID > 0) and (select(2, GetItemInfo(itemID))) or d.itemLink
-    local name = (link and link:match("%[(.-)%]")) or (GetItemInfo(itemID)) or d.itemName or "Objet inconnu"
-    local icon = (itemID > 0) and (select(5, GetItemInfoInstant(itemID))) or resolveItemIcon(d)
-
-    f.itemText:SetText(name or "")
-    f.icon:SetTexture(icon or "Interface\\ICONS\\INV_Misc_QuestionMark")
-
-    -- pour le tooltip de la cellule “Objet”
-    if f.item then
-        f.item._itemID = itemID
-        f.item._link   = link
-    end
+    -- Remplit la cellule objet avec la donnée
+    UI.SetItemCell(f.item, d)
 
     r.btnDelete:SetEnabled(not d.lotId)
     r.btnDelete:SetOnClick(function()
@@ -200,41 +173,18 @@ local function UpdateRowLots(i, r, f, it)
                 ff.src   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                 ff.amt   = r2:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
-                -- cellule “Objet” avec icône + bouton tooltip
-                ff.itemFrame = CreateFrame("Frame", nil, r2); ff.itemFrame:SetHeight(UI.ROW_H)
-                ff.icon  = ff.itemFrame:CreateTexture(nil, "ARTWORK"); ff.icon:SetSize(20,20); ff.icon:SetPoint("LEFT", ff.itemFrame, "LEFT", 0, 0)
-                ff.btn   = CreateFrame("Button", nil, ff.itemFrame); ff.btn:SetPoint("LEFT", ff.icon, "RIGHT", 6, 0); ff.btn:SetSize(240, UI.ROW_H)
-                ff.text  = ff.btn:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); ff.text:SetJustifyH("LEFT"); ff.text:SetPoint("LEFT", ff.btn, "LEFT", 0, 0)
+                -- cellule objet factorisée
+                ff.item = UI.CreateItemCell(r2, { size = 20, width = 240 })
 
-                ff.btn:SetScript("OnEnter", function(self)
-                    GameTooltip:SetOwner(self, "ANCHOR_CURSOR_RIGHT")
-                    if self._itemID and self._itemID > 0 then
-                        GameTooltip:SetItemByID(self._itemID)
-                    elseif self._link and self._link ~= "" then
-                        GameTooltip:SetHyperlink(self._link)
-                    else
-                        GameTooltip:Hide()
-                    end
-                end)
-                ff.btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-                -- pour LayoutRow
-                ff.item = ff.itemFrame
                 return ff
             end,
-            updateRow = function(i2, r2, ff, item)
-                local itemID = tonumber(item.itemID or 0) or 0
-                local link   = (itemID > 0) and (select(2, GetItemInfo(itemID))) or item.itemLink
-                local name   = (link and link:match("%[(.-)%]")) or (GetItemInfo(itemID)) or item.itemName or "Objet inconnu"
-                local icon   = (itemID > 0) and (select(5, GetItemInfoInstant(itemID))) or "Interface\\ICONS\\INV_Misc_QuestionMark"
+            updateRow = function(i2, r2, ff, exp)
+                ff.qty:SetText(exp.qty or 1)
+                ff.src:SetText(exp.source or "")
+                ff.amt:SetText(UI.MoneyFromCopper(exp.copper or 0))
 
-                ff.qty:SetText(tostring(item.qty or 1))
-                ff.src:SetText(tostring(item.source or ""))
-                ff.amt:SetText(UI.MoneyFromCopper(tonumber(item.copper) or 0))
-
-                ff.text:SetText(name or "")
-                ff.icon:SetTexture(icon or "Interface\\ICONS\\INV_Misc_QuestionMark")
-                ff.btn._itemID = itemID
-                ff.btn._link   = link
+                -- Remplit la cellule objet factorisée
+                UI.SetItemCell(ff.item, exp)
             end,
             topOffset = 0,
         })
@@ -407,10 +357,20 @@ local function Build(container)
 
     btnToggle = UI.Button(footer, "Démarrer l'enregistrement des dépenses", { size="sm", minWidth=260 })
     btnToggle:SetOnClick(function()
-        local on = CDZ.ExpensesToggle and CDZ.ExpensesToggle() or CDZ.ExpensesStart()
-        btnToggle:SetText(on and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
+        local isRecording = CDZ.IsExpensesRecording and CDZ.IsExpensesRecording()
+
+        if isRecording and CDZ.ExpensesStop then
+            CDZ.ExpensesStop()
+        elseif (not isRecording) and CDZ.ExpensesStart then
+            CDZ.ExpensesStart()
+        end
+
+        local nowOn = CDZ.IsExpensesRecording and CDZ.IsExpensesRecording()
+        btnToggle:SetText(nowOn and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
+
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
+
 
     btnClearAll = UI.Button(footer, "Tout vider (libres)", { size="sm", variant="danger", minWidth=160 })
     btnClearAll:SetConfirm("Vider la liste des ressources libres ? (les lots ne sont pas affectés)", function()
