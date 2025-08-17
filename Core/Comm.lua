@@ -1521,11 +1521,6 @@ function CDZ.RequestAdjust(a, b)
 
     local payload = { uid = uid, delta = delta, who = me, ts = now(), reason = "CLIENT_REQ" }
 
-    -- ✏️ Cible = GM effectif (rang 0 du roster)
-    local gmName, gmRow = CDZ.GetGuildMasterCached and CDZ.GetGuildMasterCached() or nil, nil
-    if type(gmName) == "table" and not gmRow then gmName, gmRow = gmName[1], gmName[2] end
-    if not gmRow and CDZ.GetGuildMasterCached then gmName, gmRow = CDZ.GetGuildMasterCached() end
-
     -- ➕ Heuristique temps-réel : considérer “en ligne” si vu récemment via HELLO
     local function _masterSeenRecently(name)
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
@@ -1551,23 +1546,40 @@ function CDZ.RequestAdjust(a, b)
         return false
     end
 
-    local onlineNow = false
-    if gmName then
-        onlineNow = (gmRow and gmRow.online) or _masterSeenRecently(gmName)
+    -- ➕ Étape commune (décision après lecture du roster à jour)
+    local function decideAndSend()
+        -- Cible = GM effectif (rang 0 du roster) — relu depuis le cache fraîchement scanné
+        local gmName, gmRow = CDZ.GetGuildMasterCached and CDZ.GetGuildMasterCached() or nil, nil
+        if type(gmName) == "table" and not gmRow then gmName, gmRow = gmName[1], gmName[2] end
+        if not gmRow and CDZ.GetGuildMasterCached then gmName, gmRow = CDZ.GetGuildMasterCached() end
+
+        local onlineNow = false
+        if gmName then
+            onlineNow = (gmRow and gmRow.online) or _masterSeenRecently(gmName)
+        end
+
+        if gmName and onlineNow then
+            -- GM réellement disponible : envoi direct
+            CDZ.Comm_Whisper(gmName, "TX_REQ", payload)
+        else
+            -- GM hors-ligne ou inconnu : persiste → flush auto sur HELLO
+            if CDZ.Pending_AddTXREQ then CDZ.Pending_AddTXREQ(payload) end
+            if UIErrorsFrame and UIErrorsFrame.AddMessage then
+                UIErrorsFrame:AddMessage("|cffffff80[CDZ]|r GM hors-ligne : demande mise en file d’attente.", 1, 0.9, 0.4)
+            end
+            if ns.Emit then ns.Emit("debug:changed") end
+        end
     end
 
-    if gmName and onlineNow then
-        -- GM réellement disponible : envoi direct
-        CDZ.Comm_Whisper(gmName, "TX_REQ", payload)
+    -- ✏️ Nouveau : rafraîchir le roster AVANT la décision d’envoi
+    if CDZ.RefreshGuildCache then
+        CDZ.RefreshGuildCache(function() decideAndSend() end)
     else
-        -- GM hors-ligne ou inconnu : persiste → flush auto sur HELLO
-        if CDZ.Pending_AddTXREQ then CDZ.Pending_AddTXREQ(payload) end
-        if UIErrorsFrame and UIErrorsFrame.AddMessage then
-            UIErrorsFrame:AddMessage("|cffffff80[CDZ]|r GM hors-ligne : demande mise en file d’attente.", 1, 0.9, 0.4)
-        end
-        if ns.Emit then ns.Emit("debug:changed") end
+        -- Fallback si jamais la fonction n’existe pas
+        decideAndSend()
     end
 end
+
 
 -- ===== File d'attente persistante des TX_REQ (client) =====
 function CDZ.Pending_AddTXREQ(kv)
