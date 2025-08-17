@@ -176,9 +176,11 @@ function CDZ.Expenses_InstallHooks()
                     local spent = tonumber(p.total)
                             or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
-                        -- Privilégie l’itemID si connu
-                        CDZ.LogExpense("HdV", p.itemID or p.link, p.name or "Achat HdV", p.qty or 1, spent)
+                        local qty = tonumber(p.qty) or 1
+                        local unit = math.floor(spent / math.max(1, qty))
+                        CDZ.LogExpense("HdV", p.itemID or p.link, p.name or "Achat HdV", qty, unit)
                     end
+
                     CDZ._pendingAH.items[auctionID] = nil
                 else
                     -- Fallback robuste si l’entrée Start/Confirm n’a pas été vue
@@ -354,8 +356,10 @@ function CDZ.Expenses_InstallHooks()
             local extCostCount = GetMerchantItemCostInfo and GetMerchantItemCostInfo(index) or 0
             if extCostCount and extCostCount > 0 then return end -- achat non-or
             local link = GetMerchantItemLink and GetMerchantItemLink(index) or name
-            local total = (price or 0) * q
-            if total > 0 then CDZ.LogExpense("Boutique", link, name, q, total) end
+            local unit = math.floor((price or 0) / math.max(1, stackCount or 1))
+            if unit > 0 then
+                CDZ.LogExpense("Boutique", link, name, q, unit)
+            end
         end)
         CDZ._merchantHook = true
     end
