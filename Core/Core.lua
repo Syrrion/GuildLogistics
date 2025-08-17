@@ -73,9 +73,16 @@ function CDZ.GetPlayersArray()
     EnsureDB()
     local out = {}
     for name, p in pairs(ChroniquesDuZephyrDB.players) do
-        local credit = tonumber(p.credit) or 0
-        local debit  = tonumber(p.debit) or 0
-        table.insert(out, { name=name, credit=credit, debit=debit, solde=credit-debit })
+        local credit   = tonumber(p.credit) or 0
+        local debit    = tonumber(p.debit)  or 0
+        local reserved = (p.reserved == true)
+        table.insert(out, {
+            name   = name,
+            credit = credit,
+            debit  = debit,
+            solde  = credit - debit,
+            reserved = reserved,          -- ✅ on propage le statut pour les filtres en aval
+        })
     end
     table.sort(out, function(a,b) return a.name:lower() < b.name:lower() end)
     return out
@@ -85,9 +92,15 @@ end
 function CDZ.GetPlayersArrayActive()
     local src = CDZ.GetPlayersArray()
     local out = {}
-    for _, r in ipairs(src) do if not r.reserved then out[#out+1] = r end end
+    for _, r in ipairs(src) do
+        -- ✅ robuste même si un appelant fournit une ligne sans champ 'reserved'
+        local isRes = (r.reserved ~= nil) and r.reserved
+                      or (CDZ.IsReserved and CDZ.IsReserved(r.name)) or false
+        if not isRes then out[#out+1] = r end
+    end
     return out
 end
+
 
 function CDZ.GetPlayersArrayReserve()
     EnsureDB()

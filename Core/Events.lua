@@ -4,6 +4,9 @@ local CDZ = ns.CDZ
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
+f:RegisterEvent("GUILD_ROSTER_UPDATE")       -- pour les icônes de classe
+f:RegisterEvent("GET_ITEM_INFO_RECEIVED")    -- pour les noms d’objets
+
 f:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" then
         if name ~= ADDON then return end
@@ -40,5 +43,13 @@ f:SetScript("OnEvent", function(self, event, name)
         if CDZ.RefreshGuildCache then
             ns.Util.After(3.0, function() CDZ.RefreshGuildCache() end)
         end
+
+    -- ➕ Dès que la guilde ou les items sont prêts, on rafraîchit le panneau affiché
+    elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
+        if ns and ns.RefreshAll then ns.RefreshAll() end
     end
 end)
+
+
+
+

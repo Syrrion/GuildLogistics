@@ -2,7 +2,8 @@ local ADDON, ns = ...
 local CDZ, UI = ns.CDZ, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, addBtn, lv, footer
+local panel, addBtn, lv, footer, totalFS
+
 
 local cols = UI.NormalizeColumns({
     { key="name",   title="Nom",    min=240, flex=1 },
@@ -183,6 +184,7 @@ end
 local function Refresh()
     local active  = (CDZ.GetPlayersArrayActive  and CDZ.GetPlayersArrayActive())  or {}
     local reserve = (CDZ.GetPlayersArrayReserve and CDZ.GetPlayersArrayReserve()) or {}
+
     if lvActive  then lvActive:SetData(active)   end
     if lvReserve then
         -- tag pour UpdateRow (savoir de quelle liste provient l’item)
@@ -190,11 +192,21 @@ local function Refresh()
         for i, it in ipairs(reserve) do wrapped[i] = { data = it, fromReserve = true } end
         lvReserve:SetData(wrapped)
     end
+
+    -- ✅ Total cumulé des soldes (actif + réserve)
+    do
+        local total = 0
+        for _, it in ipairs(active)  do total = total + (tonumber(it.solde) or 0) end
+        for _, it in ipairs(reserve) do total = total + (tonumber(it.solde) or 0) end
+        if totalFS then
+            local txt = (UI and UI.MoneyText) and UI.MoneyText(total) or (tostring(total).." po")
+            totalFS:SetText("|cffffd200Total soldes :|r " .. txt)
+        end
+    end
+
     if lvActive  and lvActive.Layout  then lvActive:Layout()  end
     if lvReserve and lvReserve.Layout then lvReserve:Layout() end
 end
-
-
 
 local function Build(container)
     panel = container
@@ -249,8 +261,13 @@ local function Build(container)
 
     footer = UI.CreateFooter(panel, 36)
 
+    -- Total cumulé (gauche) — même principe que l'onglet Ressources
+    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
+
     -- Bouton Ajouter un joueur
     addBtn = UI.Button(footer, "Ajouter un joueur", { size="sm", variant="primary", minWidth=120 })
+
     addBtn:SetOnClick(function()
         if not (CDZ.IsMaster and CDZ.IsMaster()) then
             UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Ajout au roster réservé au GM.", 1, 0.4, 0.4)
