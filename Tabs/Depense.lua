@@ -269,8 +269,19 @@ local function Layout()
     bottomPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -pad, pad + footerH)
 
     if UI.AttachButtonsFooterRight then
-        local buttons = { btnToggle, btnClearAll }
-        if CDZ.IsMaster and CDZ.IsMaster() then table.insert(buttons, 1, btnCreateLot) end
+        local buttons = {}
+        local isGM = (CDZ.IsMaster and CDZ.IsMaster()) or false
+
+        if isGM and btnCreateLot then table.insert(buttons, btnCreateLot) end
+
+        if isGM then
+            if btnToggle   then btnToggle:Show()   table.insert(buttons, btnToggle)   end
+            if btnClearAll then btnClearAll:Show() table.insert(buttons, btnClearAll) end
+        else
+            if btnToggle   then btnToggle:Hide()   end
+            if btnClearAll then btnClearAll:Hide() end
+        end
+
         UI.AttachButtonsFooterRight(footer, buttons, 8, nil)
     end
 
@@ -344,28 +355,27 @@ local function Build(container)
             UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Aucune ressource sélectionnée.", 1,0.4,0.4)
             return
         end
-        local dlg = UI.CreatePopup({ title = "Créer un lot", width = 420, height = 220 })
+        local dlg = UI.CreatePopup({ title = "Créer un lot", width = 420, height = 320 })
         local nameLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nameLabel:SetText("Nom du lot :")
         local nameInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nameInput:SetSize(240, 28); nameInput:SetAutoFocus(true)
         local typeLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); typeLabel:SetText("Type :")
-        local cbMulti  = CreateFrame("CheckButton", nil, dlg.content, "UICheckButtonTemplate")
+        -- (Case à cocher supprimée)
         local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Utilisations (si multi) :")
-        local nInput   = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(2)
+        local nInput   = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(1)
 
         nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -6)
         nameInput:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
         typeLabel:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -14)
-        cbMulti:SetPoint("LEFT", typeLabel, "RIGHT", 8, 0)
-        cbMulti.text = cbMulti:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); cbMulti.text:SetPoint("LEFT", cbMulti, "RIGHT", 4, 0); cbMulti.text:SetText("Multi-utilisations")
+        -- (cbMulti supprimé)
         nLabel:SetPoint("TOPLEFT", typeLabel, "BOTTOMLEFT", 0, -14)
         nInput:SetPoint("LEFT", nLabel, "RIGHT", 8, 0)
 
         dlg:SetButtons({
             { text = "Créer", default = true, onClick = function()
                 local nm = nameInput:GetText() or ""
-                local isMulti = cbMulti:GetChecked() and true or false
-                local N = tonumber(nInput:GetText() or "2") or 2
-                if not isMulti then N = 1 end
+                local N  = tonumber(nInput:GetNumber() or 1) or 1
+                if N < 1 then N = 1 end
+                local isMulti = (N > 1)
                 if CDZ.Lot_Create then
                     CDZ.Lot_Create(nm, isMulti, N, idxs)
                     selected = {}

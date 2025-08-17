@@ -78,14 +78,21 @@ local function UpdateRow(i, r, f, it)
 
     local inRoster = (ns.CDZ.HasPlayer and ns.CDZ.HasPlayer(it.main)) or false
     local canAdd = (ns.CDZ.IsMaster and ns.CDZ.IsMaster()) and true or false
-    if inRoster or not canAdd then
+
+    if inRoster then
         if f.btnAdd then f.btnAdd:Hide() end
         if f.inRoster then
-            f.inRoster:SetText(inRoster and "Dans le roster" or "Réservé au GM")
+            f.inRoster:SetText("Dans le roster")
             f.inRoster:Show()
             f.inRoster:ClearAllPoints()
             f.inRoster:SetPoint("CENTER", f.act, "CENTER", 0, 0)
         end
+
+    elseif not canAdd then
+        -- Non-GM : pas de bouton et pas de message "Réservé au GM" -> on laisse vide
+        if f.btnAdd then f.btnAdd:Hide() end
+        if f.inRoster then f.inRoster:Hide() end
+
     else
         if f.inRoster then f.inRoster:Hide() end
         if f.btnAdd then
@@ -93,11 +100,9 @@ local function UpdateRow(i, r, f, it)
             f.btnAdd:SetScript("OnClick", function()
                 ns.CDZ.AddPlayer(it.main)
                 if ns.RefreshAll then ns.RefreshAll() end
-                if ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
             end)
         end
     end
-
 
     if f.act and f.act._applyRowActionsLayout then f.act._applyRowActionsLayout() end
 end
@@ -191,10 +196,10 @@ local function Build(container)
     })
 end
 
--- Popup roster à largeur dynamique
 -- Popup roster à largeur dynamique + auto-refresh à la fin du scan
 function UI.ShowGuildRosterPopup()
-    local dlg = UI.CreatePopup({ title = "Ajouter un membre de la guilde", height = 520 })
+    local dlg = UI.CreatePopup({ title = "Ajouter un membre de la guilde", height = 670 })
+
 
     -- Largeur mini des colonnes + scrollbar + marges internes
     local sb  = (UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)
