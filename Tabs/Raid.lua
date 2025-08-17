@@ -298,4 +298,4 @@ local function Build(container)
     end
 end
 
-UI.RegisterTab("Démarrer un raid", Build, Refresh, Layout)
+UI.RegisterTab("Démarrer un raid", Build, Refresh, Layout, { hidden = not (CDZ.IsMaster and CDZ.IsMaster()) })

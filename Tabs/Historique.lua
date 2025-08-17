@@ -140,7 +140,7 @@ local function Build(container)
 
     footer = UI.CreateFooter(panel, 36)
     backBtn = UI.Button(footer, "< Retour", { size="sm", minWidth=110 })
-    backBtn:SetOnClick(function() if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Raid") end end)
+    backBtn:SetOnClick(function() if UI and UI.ShowTabByLabel then UI.ShowTabByLabel("Roster") end end)
     backBtn:ClearAllPoints()
     backBtn:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 

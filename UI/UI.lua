@@ -330,9 +330,14 @@ end
 
 -- ➕ Hook « RefreshActive » utilisé par Comm.lua
 function UI.RefreshActive()
+    local isGM = (ns.CDZ and ns.CDZ.IsMaster and ns.CDZ.IsMaster()) or false
+    if UI.SetTabVisible then
+        UI.SetTabVisible("Démarrer un raid", isGM)
+    end
     UI.UpdateRequestsBadge()
     UI.RefreshAll()
 end
+
 ns.RefreshActive = UI.RefreshActive
 
 function ns.ToggleUI()

@@ -184,13 +184,12 @@ local function Build(container)
         end, { width = 460 })
     end)
 
-    -- Bouton footer (droite) : popup d’ajout depuis la guilde
-    local btnGuild = UI.Button(footer, "Ajouter un membre de la guilde", { size="sm", minWidth=220 })
+    -- Bouton footer (droite) : popup membres guilde (consultation pour non-GM)
+    local isGM   = (CDZ.IsMaster and CDZ.IsMaster()) or false
+    local label  = isGM and "Ajouter un membre de la guilde" or "Membres de la guilde"
+    local btnGuild = UI.Button(footer, label, { size="sm", minWidth=220 })
     btnGuild:SetOnClick(function()
-        if not (CDZ.IsMaster and CDZ.IsMaster()) then
-            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Ajout au roster réservé au GM.", 1, 0.4, 0.4)
-            return
-        end
+        -- Non-GM : consultation autorisée
         if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
     end)
 

@@ -690,35 +690,60 @@ function CDZ._SnapshotApply(kv)
         end
     end
 
-    -- ➕ Import Historique depuis le snapshot
+    -- ➕ Import Historique depuis le snapshot (robuste 6/7 champs + filtres)
     ChroniquesDuZephyrDB.history = {}
     for _, s in ipairs(kv.H or {}) do
         if type(s) == "string" then
-            local hid, ts, total, per, count, refunded, rest =
-                s:match("^(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+            local hid, ts, total, per, count, refunded, rest
+
+            -- Format export actuel (6 champs) : ts,total,perHead,count,ref,participants
+            ts, total, per, count, refunded, rest =
+                s:match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+
+            -- Ancien format toléré (7 champs) : hid,ts,total,per,count,ref,rest
+            if not ts then
+                hid, ts, total, per, count, refunded, rest =
+                    s:match("^(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+            end
+
             local names = {}
             if rest and rest ~= "" then
                 for name in tostring(rest):gmatch("[^;]+") do names[#names+1] = name end
             end
-            ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
-                hid = (hid ~= "" and hid or nil),
-                ts  = safenum(ts, 0),
-                total = safenum(total, 0),
-                perHead = safenum(per, 0),
-                count = safenum(count, #names),
-                participants = names,
-                refunded = (safenum(refunded, 0) == 1),
-            }
+
+            -- Filtre anti-lignes fantômes : ts valide ET au moins un champ non nul
+            local _ts      = safenum(ts, 0)
+            local _total   = safenum(total, 0)
+            local _per     = safenum(per, 0)
+            local _count   = safenum(count, #names)
+            local _ref     = (safenum(refunded, 0) == 1)
+
+            if _ts > 0 and (_total ~= 0 or _per ~= 0 or _count > 0) then
+                ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
+                    hid = (hid ~= "" and hid or nil),
+                    ts  = _ts,
+                    total = _total,
+                    perHead = _per,
+                    count = _count,
+                    participants = names,
+                    refunded = _ref,
+                }
+            end
+
         elseif type(s) == "table" then
             -- tolérance (au cas où)
-            ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
-                hid = s.hid, ts = safenum(s.ts, 0),
-                total = safenum(s.total or s.t, 0),
-                perHead = safenum(s.perHead or s.per or s.p, 0),
-                count = safenum(s.count or s.c or #(s.names or s.participants or {}), 0),
-                participants = s.names or s.participants or {},
-                refunded = (s.refunded or s.r == 1) and true or false,
-            }
+            local _ts    = safenum(s.ts, 0)
+            local _total = safenum(s.total or s.t, 0)
+            local _per   = safenum(s.perHead or s.per or s.p, 0)
+            local _parts = s.names or s.participants or {}
+            local _count = safenum(s.count or s.c or #_parts, 0)
+            if _ts > 0 and (_total ~= 0 or _per ~= 0 or _count > 0) then
+                ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = {
+                    hid = s.hid, ts = _ts, total = _total, perHead = _per,
+                    count = _count, participants = _parts,
+                    refunded = (s.refunded or s.r == 1) and true or false,
+                }
+            end
         end
     end
     if ns and ns.Emit then ns.Emit("history:changed") end
