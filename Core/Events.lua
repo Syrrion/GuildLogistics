@@ -4,8 +4,23 @@ local CDZ = ns.CDZ
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
-f:RegisterEvent("GUILD_ROSTER_UPDATE")       -- pour les icônes de classe
-f:RegisterEvent("GET_ITEM_INFO_RECEIVED")    -- pour les noms d’objets
+-- ➕ Rafraîchissements asynchrones (icônes de classe, noms d’objets)
+f:RegisterEvent("GUILD_ROSTER_UPDATE")
+f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+
+-- ➕ Throttle + garde-fou : on ne refresh que si l’UI est visible
+local _pendingUIRefresh = false
+local function _ScheduleActiveTabRefresh()
+    if _pendingUIRefresh then return end
+    _pendingUIRefresh = true
+    local function doRefresh()
+        _pendingUIRefresh = false
+        if ns and ns.RefreshAll and ns.UI and ns.UI.Main and ns.UI.Main:IsShown() then
+            ns.RefreshAll()
+        end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0.15, doRefresh) else doRefresh() end
+end
 
 f:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" then
@@ -43,13 +58,7 @@ f:SetScript("OnEvent", function(self, event, name)
         if CDZ.RefreshGuildCache then
             ns.Util.After(3.0, function() CDZ.RefreshGuildCache() end)
         end
-
-    -- ➕ Dès que la guilde ou les items sont prêts, on rafraîchit le panneau affiché
     elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
-        if ns and ns.RefreshAll then ns.RefreshAll() end
+        _ScheduleActiveTabRefresh()
     end
 end)
-
-
-
-
