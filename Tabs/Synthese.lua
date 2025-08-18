@@ -5,13 +5,14 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 local panel, addBtn, lv, footer, totalFS
 
 local cols = UI.NormalizeColumns({
+    { key="lvl",    title="Niv",    w=44, justify="CENTER" },
     { key="name",   title="Nom",    min=150, flex=1 },
     { key="ilvl",   title="iLvl",   w=64, justify="CENTER" },
-    { key="last",   title="Dernière connexion", w=180 },
-    { key="act",    title="", w=300 },
-    { key="solde",  title="Solde",  w=140 },
+    { key="mkey",   title="Clé",    w=200, justify="LEFT" },
+    { key="last",   title="Présence", w=180 },
+    { key="act",    title="", w=200 },
+    { key="solde",  title="Solde",  w=80 },
 })
-
 
 local function money(v)
     v = tonumber(v) or 0
@@ -20,8 +21,10 @@ end
 
 local function BuildRow(r)
     local f = {}
+    f.lvl   = UI.Label(r, { justify = "CENTER" })
     f.name  = UI.CreateNameTag(r)
     f.ilvl  = UI.Label(r, { justify = "CENTER" })
+    f.mkey  = UI.Label(r, { justify = "LEFT" })
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
@@ -52,6 +55,28 @@ local function UpdateRow(i, r, f, data)
     end
     if f.last then f.last:SetText(lastTxt) end
 
+    -- ➕ Niveau (lu via l'API de guilde)
+    if f.lvl then
+        local lvlVal = nil
+        local rows2 = CDZ.GetGuildRowsCached and CDZ.GetGuildRowsCached() or {}
+        for _, gr in ipairs(rows2) do
+            if CDZ.NormName and CDZ.NormName(gr.name_amb or gr.name_raw) == CDZ.NormName(data.name) then
+                if GetGuildRosterInfo and gr.idx then
+                    local _, _, _, level = GetGuildRosterInfo(gr.idx)
+                    lvlVal = tonumber(level)
+                end
+                break
+            end
+        end
+        f.lvl:SetText(lvlVal and tostring(lvlVal) or "")
+    end
+
+    -- ➕ Clé mythique possédée (format court)
+    if f.mkey then
+        local mkeyTxt = (CDZ.GetMKeyText and CDZ.GetMKeyText(data.name)) or ""
+        f.mkey:SetText(mkeyTxt or "")
+    end
+
     -- ➕ Affichage iLvl du main (uniquement si joueur en ligne)
     local ilvl = (CDZ.GetIlvl and CDZ.GetIlvl(data.name)) or nil
     local ilvlTxt = ""
@@ -77,7 +102,6 @@ local function UpdateRow(i, r, f, data)
         end
         f.ilvl:SetText(ilvlTxt)
     end
-
 
     -- ✅ Autorisations : GM partout ; sinon uniquement sa propre ligne (comparaison Nom-Royaume)
     local isGM   = (ns and ns.Util and ns.Util.IsGM and ns.Util.IsGM()) or (ns and ns.CDZ and ns.CDZ.IsGM and ns.CDZ.IsGM()) or false
@@ -274,7 +298,7 @@ local function Build(container)
         UpdateRow(i, r, f, it)  -- logique existante pour crédit/débit/supp.
         -- ➕ bouton "Mettre en réserve" (GM uniquement)
         if not r.btnReserve then
-            r.btnReserve = UI.Button(r, "Mettre en réserve", { size="sm", minWidth=120, tooltip="Basculer ce joueur en Réserve" })
+            r.btnReserve = UI.Button(r, "> Réserve", { size="sm", minWidth=120, tooltip="Basculer ce joueur en Réserve" })
             if r.btnDelete then r.btnReserve:SetPoint("RIGHT", r.btnDelete, "LEFT", -6, 0) end
         end
         local isMaster = (CDZ.IsMaster and CDZ.IsMaster()) or false
@@ -292,7 +316,7 @@ local function Build(container)
         UpdateRow(i, r, f, data)
         -- ➕ bouton "Intégrer au roster" (GM uniquement)
         if not r.btnReserve then
-            r.btnReserve = UI.Button(r, "Intégrer au roster", { size="sm", minWidth=120, tooltip="Renvoyer ce joueur dans le Roster actif" })
+            r.btnReserve = UI.Button(r, "> Roster", { size="sm", minWidth=120, tooltip="Renvoyer ce joueur dans le Roster actif" })
             if r.btnDelete then r.btnReserve:SetPoint("RIGHT", r.btnDelete, "LEFT", -6, 0) end
         end
         local isMaster = (CDZ.IsMaster and CDZ.IsMaster()) or false

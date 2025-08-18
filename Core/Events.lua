@@ -11,6 +11,12 @@ f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 f:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE")
 
+-- ➕ Clé M+: recalcul/émission sur évènements pertinents
+f:RegisterEvent("BAG_UPDATE_DELAYED")
+f:RegisterEvent("CHALLENGE_MODE_START")
+f:RegisterEvent("CHALLENGE_MODE_COMPLETED")
+f:RegisterEvent("CHALLENGE_MODE_RESET")
+
 -- ➕ Throttle + garde-fou : on ne refresh que si l’UI est visible
 local _pendingUIRefresh = false
 local function _ScheduleActiveTabRefresh()
@@ -65,11 +71,22 @@ f:SetScript("OnEvent", function(self, event, name)
         if CDZ.UpdateOwnIlvlIfMain then
             ns.Util.After(5.0, function() CDZ.UpdateOwnIlvlIfMain() end)
         end
+        -- ➕ déclenche la remontée de la clé (léger décalage)
+        if CDZ.UpdateOwnKeystoneIfMain then
+            ns.Util.After(7.0, function() CDZ.UpdateOwnKeystoneIfMain() end)
+        end
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
         if CDZ.UpdateOwnIlvlIfMain then CDZ.UpdateOwnIlvlIfMain() end
 
+    elseif event == "BAG_UPDATE_DELAYED"
+        or event == "CHALLENGE_MODE_START"
+        or event == "CHALLENGE_MODE_COMPLETED"
+        or event == "CHALLENGE_MODE_RESET" then
+        if CDZ.UpdateOwnKeystoneIfMain then CDZ.UpdateOwnKeystoneIfMain() end
+
     elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
+
         -- ➕ Demande une mise à jour du roster côté serveur
         if C_GuildInfo and C_GuildInfo.GuildRoster then
             C_GuildInfo.GuildRoster()
@@ -90,4 +107,6 @@ end)
 -- ➕ Rafraîchissement visuel quand un iLvl change (centralisé)
 if ns and ns.On then
     ns.On("ilvl:changed", function() _ScheduleActiveTabRefresh() end)
+    -- ➕ et aussi quand une clé change
+    ns.On("mkey:changed", function() _ScheduleActiveTabRefresh() end)
 end

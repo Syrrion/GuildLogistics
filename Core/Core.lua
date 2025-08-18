@@ -450,6 +450,11 @@ function CDZ.UpdateOwnIlvlIfMain()
     end
     if not equipped then return end
 
+    -- 🚫 Stop si pas dans roster/réserve
+    if not (CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me)) then
+        return
+    end
+
     local ilvl = math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
     local changed = (CDZ._lastOwnIlvl or -1) ~= ilvl
     CDZ._lastOwnIlvl = ilvl
@@ -462,10 +467,231 @@ function CDZ.UpdateOwnIlvlIfMain()
     end
 end
 
+
+-- ➕ ======  CLÉ MYTHIQUE : stockage local + formatage + diffusion ======
+-- Lecture formatée pour l'UI ("NomDuDonjon +17", avec +X en orange)
+function CDZ.GetMKeyText(name)
+    if not name or name == "" then return "" end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    local p = ChroniquesDuZephyrDB.players[name]
+    if not p then return "" end
+    local lvl = tonumber(p.mkeyLevel or 0) or 0
+    if lvl <= 0 then return "" end
+
+    local label = (p.mkeyName and p.mkeyName ~= "") and p.mkeyName or ""
+    if (label == "" or label == "Clé") and tonumber(p.mkeyMapId or 0) > 0 then
+        local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(tonumber(p.mkeyMapId))
+        if nm and nm ~= "" then label = nm end
+    end
+    if label == "" then label = "Clé" end
+
+    -- ✨ Coloration orange du niveau
+    local levelText = string.format("|cffffa500+%d|r", lvl)
+
+    return string.format("%s %s", label, levelText)
+end
+
+-- Application locale (sans créer d’entrée ; timestamp dominant)
+local function _SetMKeyLocal(name, mapId, level, mapName, ts, by)
+    if not name or name == "" then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    local p = ChroniquesDuZephyrDB.players[name]
+    if not p then return end
+
+    local nowts   = tonumber(ts) or time()
+    local prev_ts = tonumber(p.mkeyTs or 0) or 0
+    if nowts >= prev_ts then
+        p.mkeyMapId = tonumber(mapId) or 0
+        p.mkeyLevel = math.max(0, tonumber(level) or 0)
+        p.mkeyName  = tostring(mapName or "")
+        p.mkeyTs    = nowts
+        p.mkeyAuth  = tostring(by or "")
+        if ns.Emit then ns.Emit("mkey:changed", name) end
+        if ns.RefreshAll then ns.RefreshAll() end
+    end
+end
+
+-- ➕ Résolution du nom de donjon depuis un mapId (avec cache)
+CDZ._mkeyNameCache = CDZ._mkeyNameCache or {}
+function CDZ.ResolveMKeyMapName(mapId)
+    local mid = tonumber(mapId) or 0
+    if mid <= 0 then return nil end
+    local cached = CDZ._mkeyNameCache[mid]
+    if cached and cached ~= "" then
+        if CDZ.DebugMKey then CDZ.DebugMKey("MKEY_RESOLVE", { mid=mid, name=cached, src="CACHE" }) end
+        return cached
+    end
+
+    local name
+    local src = "NONE"
+
+    -- 1) API moderne (Retail 11.x)
+    if C_MythicPlus then
+        if C_MythicPlus.GetMapUIInfo then
+            local ok, res = pcall(C_MythicPlus.GetMapUIInfo, mid)
+            if ok and res then
+                if type(res) == "table" and res.name then
+                    name = tostring(res.name)
+                elseif type(res) == "string" then
+                    name = res
+                end
+                if name and name ~= "" then src = "C_MythicPlus.GetMapUIInfo" end
+            end
+        end
+        if not name and C_MythicPlus.GetMapInfo then
+            local ok2, info = pcall(C_MythicPlus.GetMapInfo, mid)
+            if ok2 and type(info) == "table" and info.name then
+                name = tostring(info.name)
+                if name and name ~= "" then src = "C_MythicPlus.GetMapInfo" end
+            end
+        end
+    end
+
+    -- 2) Fallback API héritée
+    if not name and C_ChallengeMode then
+        if C_ChallengeMode.GetMapUIInfo then
+            local ok3, nm = pcall(C_ChallengeMode.GetMapUIInfo, mid)
+            if ok3 and nm then
+                name = type(nm) == "string" and nm or tostring(nm)
+                if name and name ~= "" then src = "C_ChallengeMode.GetMapUIInfo" end
+            end
+        end
+        if not name and C_ChallengeMode.GetMapInfo then
+            local ok4, inf = pcall(C_ChallengeMode.GetMapInfo, mid)
+            if ok4 and type(inf) == "table" and inf.name then
+                name = tostring(inf.name)
+                if name and name ~= "" then src = "C_ChallengeMode.GetMapInfo" end
+            end
+        end
+    end
+
+    if name and name ~= "" then
+        CDZ._mkeyNameCache[mid] = name
+    end
+
+    -- ➕ Trace debug résolution
+    if CDZ.DebugMKey then
+        CDZ.DebugMKey("MKEY_RESOLVE", { mid=mid, name=name or "", src=src })
+    end
+
+    return name
+end
+
+-- ➕ Joueur autorisé à émettre ? (présent en actif OU réserve)
+function CDZ.IsPlayerInRosterOrReserve(name)
+    if not name or name == "" then return false end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    return ChroniquesDuZephyrDB.players[name] ~= nil
+end
+
+-- Lit la clé possédée (API M+ si dispo, sinon parsing sacs)
+local function _ReadOwnedKeystone()
+    local lvl, mid = 0, 0
+    local src = "NONE"
+
+    -- utilitaire pour extraire le nom lisible du donjon depuis le texte du lien
+    local function _nameFromLinkText(link)
+        if not link or link == "" then return nil end
+        local inside = link:match("%[(.-)%]") or ""   -- texte entre crochets
+        if inside == "" then return nil end
+        -- enlève le préfixe éventuel "Clé mythique :" ou "Keystone:"
+        local after = inside:match(":%s*(.+)") or inside
+        -- supprime la partie "(+15)" ou "(15)" en fin de texte
+        after = after:gsub("%s*%(%+?%d+%)%s*$", "")
+        after = after:gsub("^%s+", ""):gsub("%s+$", "")
+        return (after ~= "" and after) or nil
+    end
+
+    -- 1) API Blizzard (Retail 11.x)
+    if C_MythicPlus then
+        local okMid, vMid = pcall(C_MythicPlus.GetOwnedKeystoneChallengeMapID)
+        local okLvl, vLvl = pcall(C_MythicPlus.GetOwnedKeystoneLevel)
+        if okMid and type(vMid) == "number" then mid = vMid or 0 end
+        if okLvl and type(vLvl) == "number" then lvl = vLvl or 0 end
+        if (lvl > 0 and mid > 0) then src = "API" end
+    end
+
+    local mapName = ""
+
+    -- 2) Nom depuis l’API ChallengeMode (source fiable)
+    if mapName == "" and mid and mid > 0 and C_ChallengeMode and C_ChallengeMode.GetMapUIInfo then
+        local okn, nm = pcall(C_ChallengeMode.GetMapUIInfo, mid)
+        if okn and nm then
+            mapName = type(nm) == "string" and nm or tostring(nm)
+        end
+    end
+
+    -- 3) Dernier recours : résolveur basé sur mid
+    if mapName == "" and mid and mid > 0 then
+        local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(mid)
+        if nm and nm ~= "" then mapName = nm end
+    end
+
+    -- trace debug
+    if CDZ.DebugMKey then
+        CDZ.DebugMKey("MKEY_READ", { src=src, mid=mid or 0, lvl=lvl or 0, map=mapName or "" })
+    end
+
+    return mid or 0, lvl or 0, mapName or ""
+end
+
+-- Calcul & diffusion de MA propre clé (uniquement si le perso connecté est le main)
+function CDZ.UpdateOwnKeystoneIfMain()
+    if not (CDZ.IsConnectedMain and CDZ.IsConnectedMain()) then return end
+
+    -- Throttle anti-spam
+    local tnow = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
+    CDZ._mkeyNextSendAt = CDZ._mkeyNextSendAt or 0
+    if tnow < CDZ._mkeyNextSendAt then return end
+    CDZ._mkeyNextSendAt = tnow + 5.0
+
+    -- Lecture robuste (API M+ -> fallback sacs)
+    local mid, lvl, mapName = _ReadOwnedKeystone()
+
+    -- ✅ Nom canonique (évite "Nom-" quand prealm est nil ; normalise le royaume)
+    local function _MyFull()
+        local n, r = UnitFullName and UnitFullName("player")
+        if not n or n == "" then n = (UnitName and UnitName("player")) or "?" end
+        local realm = r and r:gsub("%s+",""):gsub("'","")
+        if (not realm or realm == "") then
+            realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+            realm = realm and realm:gsub("%s+",""):gsub("'","") or ""
+        end
+        return (realm ~= "" and (n.."-"..realm)) or n
+    end
+    local me = _MyFull()
+    if ns and ns.Util and ns.Util.NormalizeFull then me = ns.Util.NormalizeFull(me) end
+
+    -- 🚫 Stop si pas dans roster/réserve (et ne crée **pas** d’entrée)
+    if not (CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me)) then
+        return
+    end
+
+    -- Complète le nom du donjon si absent (via résolveur dédié)
+    if (not mapName or mapName == "" or mapName == "Clé") and mid and mid > 0 then
+        local nm2 = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(mid)
+        if nm2 and nm2 ~= "" then mapName = nm2 end
+    end
+
+    local changed = (CDZ._lastOwnMKeyId or -1) ~= (mid or 0) or (CDZ._lastOwnMKeyLvl or -1) ~= (lvl or 0)
+    CDZ._lastOwnMKeyId  = mid or 0
+    CDZ._lastOwnMKeyLvl = lvl or 0
+
+    local ts = time()
+    _SetMKeyLocal(me, mid or 0, lvl or 0, mapName or "", ts, me)
+    if changed and CDZ.BroadcastMKeyUpdate then
+        CDZ.BroadcastMKeyUpdate(me, mid or 0, lvl or 0, mapName or "", ts, me)
+    end
+end
+
 -- =========================
 -- ======  HISTORY    ======
 -- =========================
 function CDZ.AddHistorySession(total, perHead, participants, ctx)
+
     EnsureDB()
     ChroniquesDuZephyrDB.historyNextId = ChroniquesDuZephyrDB.historyNextId or 1
 

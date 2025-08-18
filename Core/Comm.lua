@@ -482,6 +482,39 @@ function CDZ.ClearDebugLogs()
     if ns.Emit then ns.Emit("debug:changed") end
 end
 
+-- ✏️ Trace locale vers l’onglet Debug avec entête conforme (raw = "v=1|t=...|s=...|p=...|n=...|payload")
+function CDZ.DebugMKey(event, fields)
+    if CDZ and CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then return end
+
+    local tname = tostring(event or "MKEY_DBG")
+    local kv    = type(fields) == "table" and fields or {}
+    kv.t = tname
+    kv.s = 0  -- séquence "locale"
+
+    -- Utilise l’encodeur existant (compression éventuelle gérée)
+    local payload = packPayloadStr and packPayloadStr(kv) or ""
+    -- Entête attendu par l’onglet Debug (il extrait après "|n=...|")
+    local header  = string.format("v=1|t=%s|s=%d|p=%d|n=%d|", tname, 0, 1, 1)
+    local raw     = header .. payload
+
+    local me = (playerFullName and playerFullName()) or ""
+
+    DebugLog[#DebugLog+1] = {
+        ts        = _nowPrecise and _nowPrecise() or time(),
+        dir       = "send",            -- s’affiche dans la liste « Envoyés »
+        type      = tname,
+        size      = #payload,
+
+        chan      = "LOCAL", channel = "LOCAL", dist = "LOCAL",
+        target    = me, from = me, sender = me, emitter = me,
+
+        seq       = 0, part = 1, total = 1,
+        raw       = raw,               -- ✅ exploité par groupLogs() → fullPayload
+        state     = "sent", status = "sent", stateText = "Transmis",
+    }
+    if ns.Emit then ns.Emit("debug:changed") end
+end
+
 local function _ensureTicker()
     if OutTicker then return end
     local last = 0
@@ -1130,6 +1163,43 @@ function CDZ._HandleFull(sender, msgType, kv)
             end
         end
 
+    -- ➕ Nouvelle mise à jour « Clé mythique »
+    elseif msgType == "MKEY_UPDATE" then
+        local pname = tostring(kv.name or "")
+        local by    = tostring(kv.by   or sender or "")
+        if pname ~= "" and CDZ.NormName and (CDZ.NormName(pname) == CDZ.NormName(by)) then
+            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+            ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            -- ⚠️ jamais créer de joueur ici
+            local p = ChroniquesDuZephyrDB.players[pname]
+            if p then
+                local n_mid = safenum(kv.mid, 0)
+                local n_lvl = safenum(kv.lvl, 0)
+                local n_map = tostring(kv.map or "")
+                -- Résoudre le nom via résolveur commun
+                if (n_map == "" or n_map == "Clé") and n_mid > 0 then
+                    local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(n_mid)
+                    if nm and nm ~= "" then n_map = nm end
+                end
+                local n_ts  = safenum(kv.ts, now())
+                local prev  = safenum(p.mkeyTs, 0)
+                if n_ts >= prev then
+                    p.mkeyMapId = n_mid
+                    p.mkeyLevel = n_lvl
+                    p.mkeyName  = n_map
+                    p.mkeyTs    = n_ts
+                    p.mkeyAuth  = by
+                    if ns.Emit then ns.Emit("mkey:changed", pname) end
+                    if ns.RefreshAll then ns.RefreshAll() end
+
+                    -- ➕ Trace debug réception + application
+                    if CDZ.DebugMKey then
+                        CDZ.DebugMKey("MKEY_RECV_APPLY", { name=pname, mid=n_mid, lvl=n_lvl, map=n_map, by=by })
+                    end
+                end
+            end
+        end
+
     elseif msgType == "HIST_ADD" then
         if not shouldApply() then return end
         ChroniquesDuZephyrDB.history = ChroniquesDuZephyrDB.history or {}
@@ -1302,16 +1372,38 @@ function CDZ._HandleFull(sender, msgType, kv)
         end
 
         -- ✏️ Ajout : envoyer mon iLvl actuel en WHISPER à celui qui a fait HELLO
+                -- ✏️ Ajout : envoyer mon iLvl/Clé au HELLO uniquement si je suis listé
         if from and from ~= "" and from ~= playerFullName() then
             local me = playerFullName()
-            local p  = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[me]) or {}
-            local ilvl = safenum(p.ilvl, 0)
-            CDZ.Comm_Whisper(from, "ILVL_UPDATE", {
-                name = me,
-                ilvl = ilvl,
-                ts   = now(),
-                by   = me,
-            })
+            if CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me) then
+                local p  = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[me]) or {}
+                local ilvl = safenum(p.ilvl, 0)
+                CDZ.Comm_Whisper(from, "ILVL_UPDATE", {
+                    name = me,
+                    ilvl = ilvl,
+                    ts   = now(),
+                    by   = me,
+                })
+
+                -- ➕ Envoie aussi la clé mythique (si dispo)
+                local mid = safenum(p.mkeyMapId, 0)
+                local lvl = safenum(p.mkeyLevel, 0)
+                local map = tostring(p.mkeyName or "")
+                if lvl > 0 then
+                    if (map == "" or map == "Clé") and mid > 0 then
+                        local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(mid)
+                        if nm and nm ~= "" then map = nm end
+                    end
+                    CDZ.Comm_Whisper(from, "MKEY_UPDATE", {
+                        name = me,
+                        mid  = mid,
+                        lvl  = lvl,
+                        map  = map,
+                        ts   = now(),
+                        by   = me,
+                    })
+                end
+            end
         end
         
         -- ✏️ Flush TX_REQ si le HELLO vient du GM effectif (tolérant au roster pas encore prêt)
@@ -1976,11 +2068,47 @@ end
 function CDZ.BroadcastIlvlUpdate(name, ilvl, ts, by)
     local n = tostring(name or "")
     if n == "" then return end
+    -- 🚫 Bloque l'émission si le joueur n'est pas listé (roster ou réserve)
+    if not (CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(n)) then return end
     CDZ.Comm_Broadcast("ILVL_UPDATE", {
         name = n,
         ilvl = math.floor(tonumber(ilvl) or 0),
         ts   = safenum(ts, now()),
         by   = tostring(by or n)
+    })
+end
+
+
+-- ➕ Diffusion « Clé mythique »
+function CDZ.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
+    -- ⚠️ on **ignore** le paramètre 'name' et on impose le nom canonique du joueur
+    local me = playerFullName()
+    local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+    me = nf(me)
+
+    -- 🚫 Bloque l'émission si le joueur n'est pas listé (roster ou réserve)
+    if not (CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me)) then return end
+
+    -- ✅ Complète le nom du donjon si vide (à partir de mid)
+    local mapTxt = tostring(mapName or "")
+    local midNum = safenum(mapId, 0)
+    if (mapTxt == "" or mapTxt == "Clé") and midNum > 0 and CDZ.ResolveMKeyMapName then
+        local nm = CDZ.ResolveMKeyMapName(midNum)
+        if nm and nm ~= "" then mapTxt = nm end
+    end
+
+    -- ➕ Trace debug
+    if CDZ.DebugMKey then
+        CDZ.DebugMKey("MKEY_SEND", { mid=midNum, lvl=safenum(level,0), map=mapTxt, name=me })
+    end
+
+    CDZ.Comm_Broadcast("MKEY_UPDATE", {
+        name = me,
+        mid  = midNum,
+        lvl  = safenum(level, 0),
+        map  = mapTxt,
+        ts   = safenum(ts, now()),
+        by   = me,
     })
 end
 
