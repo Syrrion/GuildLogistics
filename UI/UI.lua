@@ -10,7 +10,7 @@ UI.FONT_YELLOW = {1, 0.82, 0}
 UI.WHITE = {1,1,1}
 UI.ACCENT = {0.22,0.55,0.95}
 UI.FOOTER_RIGHT_PAD = UI.FOOTER_RIGHT_PAD or 8
-
+UI.TITLE_SYNC_PAD_RIGHT = UI.TITLE_SYNC_PAD_RIGHT or 40
 
 -- Style des footers (centralisé)
 UI.FOOTER_H            = UI.FOOTER_H            or 36
@@ -179,14 +179,27 @@ syncPanel:Hide()
 syncPanel:SetFrameStrata(close:GetFrameStrata())
 syncPanel:SetFrameLevel(close:GetFrameLevel())
 
--- Positionné à gauche des boutons de droite
-if debugBtn and debugBtn.GetObjectType then
-    syncPanel:SetPoint("TOPRIGHT", debugBtn, "TOPLEFT", -12, 0)
-elseif reloadBtn and reloadBtn.GetObjectType then
-    syncPanel:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -12, 0)
-else
-    syncPanel:SetPoint("TOPRIGHT", Main, "TOPRIGHT", -64, -2)
+-- Positionneur : ancre au bord droit du bandeau rouge (titleRight),
+-- centré verticalement dans ce bandeau, avec un padding configurable.
+local function PositionSyncIndicator()
+    syncPanel:ClearAllPoints()
+    local pad = tonumber(UI.TITLE_SYNC_PAD_RIGHT or 12)
+
+    local s  = Main._cdzNeutral
+    local tr = s and s.title and s.title.right or nil
+    if tr then
+        -- Centré verticalement dans le bandeau + collé au bord droit du "TitleRight"
+        syncPanel:SetPoint("RIGHT", tr, "RIGHT", -pad, 0)
+    elseif debugBtn and debugBtn.GetObjectType then
+        -- Fallback si la skin n'est pas encore prête
+        syncPanel:SetPoint("TOPRIGHT", debugBtn, "TOPLEFT", -12, 0)
+    elseif reloadBtn and reloadBtn.GetObjectType then
+        syncPanel:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -12, 0)
+    else
+        syncPanel:SetPoint("TOPRIGHT", Main, "TOPRIGHT", -64, -2)
+    end
 end
+PositionSyncIndicator()
 syncPanel:SetHeight(20)
 
 local syncText = syncPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -321,6 +334,8 @@ function UI.Finalize()
         end
     end
     UI._layout = function()
+        -- Repositionne l'indicateur après tout reskin/redimensionnement.
+        if PositionSyncIndicator then PositionSyncIndicator() end
         for i, def in ipairs(Registered) do
             if Panels[i]:IsShown() and def.layout then def.layout() end
         end

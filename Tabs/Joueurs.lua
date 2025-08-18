@@ -9,7 +9,7 @@ local cols = UI.NormalizeColumns({
     { key="main",  title="Joueur",             min=420, flex=1 },
     { key="last",  title="Dernière connexion", w=180 },
     { key="count", title="Rerolls",            w=120 },
-    { key="act",   title="Actions",            w=220 },
+    { key="act",   title="",                   w=220 },
 })
 
 -- Construction d’une ligne
