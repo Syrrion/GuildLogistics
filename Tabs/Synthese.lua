@@ -52,15 +52,32 @@ local function UpdateRow(i, r, f, data)
     end
     if f.last then f.last:SetText(lastTxt) end
 
-    -- ➕ Affichage iLvl du main (source = self-report du joueur)
+    -- ➕ Affichage iLvl du main (uniquement si joueur en ligne)
     local ilvl = (CDZ.GetIlvl and CDZ.GetIlvl(data.name)) or nil
+    local ilvlTxt = ""
     if f.ilvl then
-        if ilvl and ilvl > 0 then
-            f.ilvl:SetText(tostring(ilvl))
-        else
-            f.ilvl:SetText("|cffaaaaaa?|r")
+        -- Vérifie si le joueur est en ligne via le cache guilde
+        local isOnline = false
+        local guildRows = CDZ.GetGuildRowsCached and CDZ.GetGuildRowsCached() or {}
+        for _, gr in ipairs(guildRows) do
+            if CDZ.NormName and CDZ.NormName(gr.name_amb or gr.name_raw) == CDZ.NormName(data.name) then
+                isOnline = gr.online
+                break
+            end
         end
+
+        if isOnline then
+            if ilvl and ilvl > 0 then
+                ilvlTxt = tostring(ilvl)
+            else
+                ilvlTxt = "|cffaaaaaa?|r"  -- joueur en ligne mais pas encore d’info iLvl
+            end
+        else
+            ilvlTxt = ""  -- hors ligne : rien du tout
+        end
+        f.ilvl:SetText(ilvlTxt)
     end
+
 
     -- ✅ Autorisations : GM partout ; sinon uniquement sa propre ligne (comparaison Nom-Royaume)
     local isGM   = (ns and ns.Util and ns.Util.IsGM and ns.Util.IsGM()) or (ns and ns.CDZ and ns.CDZ.IsGM and ns.CDZ.IsGM()) or false
