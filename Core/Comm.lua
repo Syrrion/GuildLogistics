@@ -378,6 +378,9 @@ local OutTicker = nil
 -- Boîtes aux lettres (réassemblage fragments)
 local Inbox     = {}
 
+-- ➕ Suivi d’une synchro FULL en cours par émetteur (pour piloter l’UI)
+local ActiveFullSync = ActiveFullSync or {}   -- [senderKey]=true
+
 -- Journalisation (onglet Debug)
 local DebugLog  = DebugLog or {} -- { {dir,type,size,chan,channel,dist,target,from,sender,emitter,seq,part,total,raw,state,status,stateText} ... }
 local SendLogIndexBySeq = SendLogIndexBySeq or {}  -- index "pending" ENVOI par seq
@@ -1338,6 +1341,11 @@ function CDZ._HandleFull(sender, msgType, kv)
         if not okByToken then return end
 
         if not shouldApply() then return end
+
+        -- ➕ Indiquer à l'UI que la synchro débute, puis céder la main au frame suivant
+        if ns and ns.Emit then ns.Emit("sync:begin", "full") end
+        C_Timer.After(0, function()
+            local _ok, _err = pcall(function()
         CDZ._SnapshotApply(kv)
         refreshActive()
 
@@ -1349,6 +1357,23 @@ function CDZ._HandleFull(sender, msgType, kv)
             if ns.Emit then ns.Emit("debug:changed") end
             Discovery[hid] = nil
         end
+            end)
+
+            -- ➕ Fin de synchro (ok/erreur)
+            if ns and ns.Emit then ns.Emit("sync:end", "full", _ok) end
+            if not _ok then
+                local eh = geterrorhandler() or print
+                eh(_err)
+            end
+        end)
+
+        -- ➕ Indicateur UI : fin du traitement (ok/erreur)
+        if ns and ns.Emit then ns.Emit("sync:end", "full", _ok) end
+        if not _ok then
+            local eh = geterrorhandler() or print
+            eh(_err)
+        end
+
 
     elseif msgType == "SYNC_ACK" then
         -- Reçu par l'émetteur du FULL : fin de transfert (place à des métriques éventuelles)
@@ -1370,6 +1395,15 @@ local function onAddonMsg(prefix, message, channel, sender)
     local seq  = safenum(s, 0)
     local part = safenum(p, 1)
     local total= safenum(n, 1)
+
+    -- ➕ Affiche l’indicateur dès le 1er fragment d’un SYNC_FULL
+    if t == "SYNC_FULL" and part == 1 then
+        local senderKey = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(sender)) or tostring(sender or "")
+        if not ActiveFullSync[senderKey] then
+            ActiveFullSync[senderKey] = true
+            if ns and ns.Emit then ns.Emit("sync:begin", "full") end
+        end
+    end
 
     -- ➜ Registre/MAJ d'une ligne unique par séquence pour l'UI
     local idx = RecvLogIndexBySeq[seq]
@@ -1430,32 +1464,32 @@ local function onAddonMsg(prefix, message, channel, sender)
         box.got = box.got + 1
     end
 
+    if box.got >= box.total then
+        -- Reconstitution
+        local full = table.concat(box.parts, "")
+        Inbox[key] = nil
 
-    if box.got == box.total then
-        local chunks = {}
-        for i = 1, box.total do
-            if not box.parts[i] then chunks = nil; break else chunks[#chunks+1] = box.parts[i] end
-        end
-        if chunks then
-            -- ✅ Fin de réception : marquer l'état "Reçu" et libérer l'index
-            local i = RecvLogIndexBySeq[seq]
-            if i and DebugLog[i] then
-                DebugLog[i].ts        = _nowPrecise()
-                DebugLog[i].state     = "received"
-                DebugLog[i].status    = "received"
-                DebugLog[i].stateText = "Reçu"
-                DebugLog[i].part      = total
-                DebugLog[i].total     = total
-                if ns.Emit then ns.Emit("debug:changed") end
+        -- ➕ Termine proprement l’indicateur en toute circonstance pour SYNC_FULL
+        local function _finishSync(ok)
+            if t == "SYNC_FULL" and ActiveFullSync[senderKey] then
+                ActiveFullSync[senderKey] = nil
+                if ns and ns.Emit then ns.Emit("sync:end", "full", ok) end
             end
-            RecvLogIndexBySeq[seq] = nil
+        end
 
-            Inbox[key] = nil
-            local full = table.concat(chunks, "")
-            -- Décompression éventuelle (balise 'c=z|...')
-            full = unpackPayloadStr(full)
+        if t then
+            -- Décodage KV + enfilement ordonné (sécurisé)
+            local _ok, _err = pcall(function()
             local kv = decodeKV(full)
             enqueueComplete(sender, t, kv)
+            end)
+            _finishSync(_ok)
+            if not _ok then
+                local eh = geterrorhandler() or print
+                eh(_err)
+            end
+        else
+            _finishSync(true)
         end
     end
 end

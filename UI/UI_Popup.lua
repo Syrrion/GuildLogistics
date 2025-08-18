@@ -11,10 +11,7 @@ function UI.CreatePopup(opts)
     f:SetPoint("CENTER")
     f:SetMovable(true); f:EnableMouse(true)
 
-    -- Permettre le drag partout (incl. header décoratif via HitRectInsets de la skin)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    f:SetScript("OnDragStop",  function(self) self:StopMovingOrSizing() end)
+    f:SetMovable(true); f:EnableMouse(true)
     if f.SetClampedToScreen then f:SetClampedToScreen(true) end
 
     -- Habillage Neutral (même look que la fenêtre principale)
@@ -23,19 +20,29 @@ function UI.CreatePopup(opts)
 
     -- Zone draggable (sur la frise du titre)
     local drag = CreateFrame("Frame", nil, f)
-    drag:SetPoint("TOPLEFT",  f, "TOPLEFT",  L-8, -(8))
-    drag:SetPoint("TOPRIGHT", f, "TOPRIGHT", -(R-8), -(8))
-    drag:SetHeight(64)
+    if skin.header then
+        drag:SetAllPoints(skin.header)   -- exactement la zone du décor
+    else
+        -- fallback si jamais le skin n’a pas de header
+        drag:SetPoint("TOP", f, "TOP", 0, -4)
+        drag:SetSize(400, 85) -- largeur raisonnable par défaut
+    end
+
     drag:EnableMouse(true)
     drag:RegisterForDrag("LeftButton")
     drag:SetScript("OnDragStart", function() f:StartMoving() end)
     drag:SetScript("OnDragStop",  function() f:StopMovingOrSizing() end)
 
-    -- Titre centré
-    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+     -- Titre centré (ancré dans la zone draggable pour rester au-dessus)
+    f.title = drag:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     f.title:SetText(opts.title or "Information")
     f.title:SetTextColor(0.98, 0.95, 0.80)
-    f.title:SetPoint("CENTER", drag, "CENTER", 0, -2)
+
+    if UI.PositionTitle then
+        UI.PositionTitle(f.title, drag, -85)
+    else
+        f.title:SetPoint("CENTER", drag, "CENTER", 0, -85)
+    end
 
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
@@ -250,7 +257,7 @@ end
 
 function UI.PopupRaidDebit(name, deducted, after, ctx)
     -- Hauteur augmentée pour accueillir le détail des composants
-    local dlg = UI.CreatePopup({ title = "Participation au raid validée !", width = 560, height = 400 })
+    local dlg = UI.CreatePopup({ title = "Participation au raid validée !", width = 660, height = 400 })
     local lines = {}
     lines[#lines+1] = "Bon raid !\n"
 
@@ -372,7 +379,6 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         lv:SetData(rows)
         dlg._lv = lv
 
-        -- ➕ Reflow différé + hooks (échelle UI / resize)
         local function ReflowList()
             if not lv or not lv.Layout then return end
             lv.opts.topOffset = ComputeLVTopOffset()

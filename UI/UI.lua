@@ -172,6 +172,71 @@ end)
 UI.ReloadButton = reloadBtn
 UI.DebugButton  = debugBtn
 
+-- ➕ Indicateur de synchronisation (barre de titre, aligné à droite)
+local syncPanel = CreateFrame("Frame", nil, Main)
+syncPanel:Hide()
+-- Même strata/level que la croix : passe au-dessus de l'overlay du skin
+syncPanel:SetFrameStrata(close:GetFrameStrata())
+syncPanel:SetFrameLevel(close:GetFrameLevel())
+
+-- Positionné à gauche des boutons de droite
+if debugBtn and debugBtn.GetObjectType then
+    syncPanel:SetPoint("TOPRIGHT", debugBtn, "TOPLEFT", -12, 0)
+elseif reloadBtn and reloadBtn.GetObjectType then
+    syncPanel:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -12, 0)
+else
+    syncPanel:SetPoint("TOPRIGHT", Main, "TOPRIGHT", -64, -2)
+end
+syncPanel:SetHeight(20)
+
+local syncText = syncPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+syncText:SetDrawLayer("OVERLAY", 3)
+syncText:SetPoint("RIGHT", syncPanel, "RIGHT", 0, 0)
+syncText:SetJustifyH("RIGHT")
+syncText:SetText("")
+
+-- Animation par points « … »
+local syncTicker
+local function _startSyncAnim(base)
+    base = tostring(base or "Synchronisation des données en cours")
+    if syncTicker and syncTicker.Cancel then syncTicker:Cancel() end
+    local dots = 0
+    syncPanel:Show()
+    syncText:SetText(base .. "…")
+    syncPanel:SetWidth(syncText:GetStringWidth() + 4)
+    syncTicker = C_Timer.NewTicker(0.4, function()
+        dots = (dots % 3) + 1
+        local suffix = string.rep(".", dots)
+        syncText:SetText(string.format("%s%s", base, suffix))
+        syncPanel:SetWidth(syncText:GetStringWidth() + 4)
+    end)
+end
+
+local function _stopSyncAnim()
+    if syncTicker and syncTicker.Cancel then syncTicker:Cancel() end
+    syncTicker = nil
+    syncPanel:Hide()
+end
+
+-- API publique
+function UI.SyncIndicatorShow(msg) _startSyncAnim(msg) end
+function UI.SyncIndicatorHide() _stopSyncAnim() end
+
+-- Coupe l’animation si la fenêtre est masquée
+Main:HookScript("OnHide", function()
+    if UI.SyncIndicatorHide then UI.SyncIndicatorHide() end
+end)
+
+-- Branchements : affichage dès réception du 1er fragment, arrêt à la fin
+if ns and ns.On then
+    ns.On("sync:begin", function()
+        if UI.SyncIndicatorShow then UI.SyncIndicatorShow("Synchronisation des données en cours") end
+    end)
+    ns.On("sync:end", function()
+        if UI.SyncIndicatorHide then UI.SyncIndicatorHide() end
+    end)
+end
+
 -- ===================== Tabs =====================
 local Registered, Panels, Tabs = {}, {}, {}
 UI._tabIndexByLabel = {}

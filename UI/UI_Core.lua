@@ -592,3 +592,13 @@ function CDZ.Minimap_Init()
     b:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
 end
 -- (Fin ex-Minimap.lua)  :contentReference[oaicite:5]{index=5}
+
+-- Positionne un titre au centre d’une zone (par ex. bandeau drag)
+-- frame  = FontString du titre
+-- anchor = zone de référence (souvent le drag invisible)
+-- yOffset = décalage vertical manuel (optionnel, défaut -28)
+function UI.PositionTitle(frame, anchor, yOffset)
+    if not frame or not anchor then return end
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", anchor, "CENTER", 0, yOffset or -28)
+end
