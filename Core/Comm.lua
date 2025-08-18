@@ -56,7 +56,7 @@ local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
-local OUT_MAX_PER_SEC = 2
+local OUT_MAX_PER_SEC = 4
 
 -- Compression (optionnelle via LibDeflate) : compresse avant fragmentation, décompresse après réassemblage
 local LD do
@@ -1091,20 +1091,38 @@ function CDZ._HandleFull(sender, msgType, kv)
     -- ➕ Suppression d'une dépense (diffusée par le GM)
     elseif msgType == "EXP_REMOVE" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
-        local id = safenum(kv.id, 0); if id <= 0 then return end
-        local list = ChroniquesDuZephyrDB.expenses.list
-        for i = #list, 1, -1 do
-            if safenum(list[i].id, 0) == id then
-                table.remove(list, i)
-                break
-            end
+        local id = safenum(kv.id, 0)
+        local e = ChroniquesDuZephyrDB.expenses
+        if e and e.list then
+            local keep = {}
+            for _, it in ipairs(e.list) do if safenum(it.id, -1) ~= id then keep[#keep+1] = it end end
+            e.list = keep
         end
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
-        refreshActive()
+        if ns.Emit then ns.Emit("expenses:changed") end
 
-    -- ➕ Historique : ajout / remboursement / annulation / suppression
+    elseif msgType == "ILVL_UPDATE" then
+        -- Acceptation stricte: seule la source (= le main lui-même) fait foi
+        local pname = tostring(kv.name or "")
+        local by    = tostring(kv.by   or sender or "")
+        if pname ~= "" and CDZ.NormName and (CDZ.NormName(pname) == CDZ.NormName(by)) then
+            local n_ilvl = safenum(kv.ilvl, -1)
+            local n_ts   = safenum(kv.ts, now())
+            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+            ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            local p = ChroniquesDuZephyrDB.players[pname] or { credit=0, debit=0, reserved=false }
+            local prev = safenum(p.ilvlTs, 0)
+            if n_ilvl >= 0 and n_ts >= prev then
+                p.ilvl     = math.floor(n_ilvl)
+                p.ilvlTs   = n_ts
+                p.ilvlAuth = by
+                ChroniquesDuZephyrDB.players[pname] = p
+                if ns.Emit then ns.Emit("ilvl:changed", pname) end
+                if ns.RefreshAll then ns.RefreshAll() end
+            end
+        end
+
     elseif msgType == "HIST_ADD" then
         if not shouldApply() then return end
         ChroniquesDuZephyrDB.history = ChroniquesDuZephyrDB.history or {}
@@ -1913,6 +1931,18 @@ function CDZ.GM_RemoveExpense(id)
     ChroniquesDuZephyrDB.meta.rev = rv
     ChroniquesDuZephyrDB.meta.lastModified = now()
     CDZ.Comm_Broadcast("EXP_REMOVE", { id = safenum(id,0), rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+end
+
+-- Diffusion iLvl du main (léger, hors versionning GM)
+function CDZ.BroadcastIlvlUpdate(name, ilvl, ts, by)
+    local n = tostring(name or "")
+    if n == "" then return end
+    CDZ.Comm_Broadcast("ILVL_UPDATE", {
+        name = n,
+        ilvl = math.floor(tonumber(ilvl) or 0),
+        ts   = safenum(ts, now()),
+        by   = tostring(by or n)
+    })
 end
 
 function CDZ.GM_CreateLot(name, sessions, totalCopper, itemIds)

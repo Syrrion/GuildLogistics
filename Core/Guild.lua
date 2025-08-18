@@ -229,10 +229,27 @@ function CDZ.IsMasterOnline()
     return gmRow and gmRow.online and true or false
 end
 
--- ✏️ Teste si un nom (any realm) est le GM (tolérant aux formats court/complet)
 function CDZ.IsNameGuildMaster(name)
     if not name or name == "" then return false end
     local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
     if not gmName or gmName == "" then return false end
     return CDZ.NormName(name) == CDZ.NormName(gmName)
 end
+
+-- ===== iLvl (helpers main connecté) =====
+function CDZ.IsConnectedMain()
+    local pname, prealm = UnitFullName("player")
+    local me = (pname or "") .. "-" .. (prealm or "")
+    local myKey  = CDZ.NormName and CDZ.NormName(me)
+    local mainKey = CDZ.GetMainOf and CDZ.GetMainOf(me) or myKey
+    return (mainKey == myKey)
+end
+
+function CDZ.GetConnectedMainName()
+    if CDZ.IsConnectedMain and CDZ.IsConnectedMain() then
+        local pname, prealm = UnitFullName("player")
+        return (pname or "") .. "-" .. (prealm or "")
+    end
+    return nil
+end
+

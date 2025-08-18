@@ -7,6 +7,9 @@ f:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- ➕ Rafraîchissements asynchrones (icônes de classe, noms d’objets)
 f:RegisterEvent("GUILD_ROSTER_UPDATE")
 f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+-- ➕ iLvl: mise à jour auto du main
+f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+f:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE")
 
 -- ➕ Throttle + garde-fou : on ne refresh que si l’UI est visible
 local _pendingUIRefresh = false
@@ -58,6 +61,14 @@ f:SetScript("OnEvent", function(self, event, name)
         if CDZ.RefreshGuildCache then
             ns.Util.After(3.0, function() CDZ.RefreshGuildCache() end)
         end
+        -- ➕ déclenche aussi l’envoi d’ilvl si on est sur le main
+        if CDZ.UpdateOwnIlvlIfMain then
+            ns.Util.After(5.0, function() CDZ.UpdateOwnIlvlIfMain() end)
+        end
+
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
+        if CDZ.UpdateOwnIlvlIfMain then CDZ.UpdateOwnIlvlIfMain() end
+
     elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
         -- ➕ Demande une mise à jour du roster côté serveur
         if C_GuildInfo and C_GuildInfo.GuildRoster then
@@ -75,3 +86,8 @@ f:SetScript("OnEvent", function(self, event, name)
     end
 
 end)
+
+-- ➕ Rafraîchissement visuel quand un iLvl change (centralisé)
+if ns and ns.On then
+    ns.On("ilvl:changed", function() _ScheduleActiveTabRefresh() end)
+end

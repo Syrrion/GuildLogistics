@@ -399,6 +399,69 @@ function CDZ.GM_SetReserved(name, flag)
 end
 
 -- =========================
+-- =====  iLvl (main)  =====
+-- =========================
+
+-- Lecture simple (nil si inconnu)
+function CDZ.GetIlvl(name)
+    if not name or name == "" then return nil end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    local p = ChroniquesDuZephyrDB.players[name]
+    return p and tonumber(p.ilvl or nil) or nil
+end
+
+-- Application locale + signal UI (protégée)
+local function _SetIlvlLocal(name, ilvl, ts, by)
+    if not name or name == "" then return end
+    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
+    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+    local p = ChroniquesDuZephyrDB.players[name] or { credit = 0, debit = 0, reserved = false }
+    ChroniquesDuZephyrDB.players[name] = p
+
+    local nowts   = tonumber(ts) or time()
+    local prev_ts = tonumber(p.ilvlTs or 0) or 0
+    if nowts >= prev_ts then
+        p.ilvl     = math.floor(tonumber(ilvl) or 0)
+        p.ilvlTs   = nowts
+        p.ilvlAuth = tostring(by or "")
+        if ns.Emit then ns.Emit("ilvl:changed", name) end
+        if ns.RefreshAll then ns.RefreshAll() end
+    end
+end
+
+-- Calcul & diffusion : uniquement si le perso connecté EST le main
+function CDZ.UpdateOwnIlvlIfMain()
+    if not (CDZ.IsConnectedMain and CDZ.IsConnectedMain()) then return end
+
+    -- Throttle anti-spam
+    local tnow = GetTimePreciseSec and GetTimePreciseSec() or (debugprofilestop and (debugprofilestop()/1000)) or 0
+    CDZ._ilvlNextSendAt = CDZ._ilvlNextSendAt or 0
+    if tnow < CDZ._ilvlNextSendAt then return end
+    CDZ._ilvlNextSendAt = tnow + 5.0
+
+    local name, realm = UnitFullName("player")
+    local me = (name or "") .. "-" .. (realm or "")
+    local equipped = nil
+    if GetAverageItemLevel then
+        local overall, equippedRaw = GetAverageItemLevel()
+        equipped = equippedRaw or overall
+    end
+    if not equipped then return end
+
+    local ilvl = math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
+    local changed = (CDZ._lastOwnIlvl or -1) ~= ilvl
+    CDZ._lastOwnIlvl = ilvl
+
+    -- Stocke local + diffuse si variation
+    local ts = time()
+    _SetIlvlLocal(me, ilvl, ts, me)
+    if changed and CDZ.BroadcastIlvlUpdate then
+        CDZ.BroadcastIlvlUpdate(me, ilvl, ts, me)
+    end
+end
+
+-- =========================
 -- ======  HISTORY    ======
 -- =========================
 function CDZ.AddHistorySession(total, perHead, participants, ctx)

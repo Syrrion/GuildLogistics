@@ -4,13 +4,14 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
 local panel, addBtn, lv, footer, totalFS
 
-
 local cols = UI.NormalizeColumns({
     { key="name",   title="Nom",    min=150, flex=1 },
+    { key="ilvl",   title="iLvl",   w=64, justify="CENTER" },
     { key="last",   title="Dernière connexion", w=180 },
     { key="act",    title="", w=300 },
     { key="solde",  title="Solde",  w=140 },
 })
+
 
 local function money(v)
     v = tonumber(v) or 0
@@ -20,6 +21,7 @@ end
 local function BuildRow(r)
     local f = {}
     f.name  = UI.CreateNameTag(r)
+    f.ilvl  = UI.Label(r, { justify = "CENTER" })
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
@@ -50,6 +52,15 @@ local function UpdateRow(i, r, f, data)
     end
     if f.last then f.last:SetText(lastTxt) end
 
+    -- ➕ Affichage iLvl du main (source = self-report du joueur)
+    local ilvl = (CDZ.GetIlvl and CDZ.GetIlvl(data.name)) or nil
+    if f.ilvl then
+        if ilvl and ilvl > 0 then
+            f.ilvl:SetText(tostring(ilvl))
+        else
+            f.ilvl:SetText("|cffaaaaaa?|r")
+        end
+    end
 
     -- ✅ Autorisations : GM partout ; sinon uniquement sa propre ligne (comparaison Nom-Royaume)
     local isGM   = (ns and ns.Util and ns.Util.IsGM and ns.Util.IsGM()) or (ns and ns.CDZ and ns.CDZ.IsGM and ns.CDZ.IsGM()) or false
