@@ -1392,6 +1392,18 @@ function CDZ._HandleFull(sender, msgType, kv)
 
             -- ➕ Fin de synchro (ok/erreur)
             if ns and ns.Emit then ns.Emit("sync:end", "full", _ok) end
+
+            -- ➕ Après application réussie du FULL : rebroadcast d'un HELLO (GUILD)
+            if _ok then
+                local hid2   = string.format("%d.%03d", time(), math.random(0, 999))
+                local me     = playerFullName()
+                local rv_me  = safenum(getRev(), 0)
+                -- petit délai pour laisser respirer l'UI et éviter les collisions d’événements
+                C_Timer.After(0.2, function()
+                    CDZ.Comm_Broadcast("HELLO", { hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
+                end)
+            end
+
             if not _ok then
                 local eh = geterrorhandler() or print
                 eh(_err)
