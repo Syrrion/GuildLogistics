@@ -56,7 +56,7 @@ local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
-local OUT_MAX_PER_SEC = 4
+local OUT_MAX_PER_SEC = 2
 
 -- Compression (optionnelle via LibDeflate) : compresse avant fragmentation, décompresse après réassemblage
 local LD do
@@ -1294,6 +1294,19 @@ function CDZ._HandleFull(sender, msgType, kv)
             _scheduleOfferReply(hid, from, rvi)
         end
 
+        -- ✏️ Ajout : envoyer mon iLvl actuel en WHISPER à celui qui a fait HELLO
+        if from and from ~= "" and from ~= playerFullName() then
+            local me = playerFullName()
+            local p  = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[me]) or {}
+            local ilvl = safenum(p.ilvl, 0)
+            CDZ.Comm_Whisper(from, "ILVL_UPDATE", {
+                name = me,
+                ilvl = ilvl,
+                ts   = now(),
+                by   = me,
+            })
+        end
+        
         -- ✏️ Flush TX_REQ si le HELLO vient du GM effectif (tolérant au roster pas encore prêt)
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
@@ -1384,14 +1397,6 @@ function CDZ._HandleFull(sender, msgType, kv)
                 eh(_err)
             end
         end)
-
-        -- ➕ Indicateur UI : fin du traitement (ok/erreur)
-        if ns and ns.Emit then ns.Emit("sync:end", "full", _ok) end
-        if not _ok then
-            local eh = geterrorhandler() or print
-            eh(_err)
-        end
-
 
     elseif msgType == "SYNC_ACK" then
         -- Reçu par l'émetteur du FULL : fin de transfert (place à des métriques éventuelles)
@@ -1498,7 +1503,8 @@ local function onAddonMsg(prefix, message, channel, sender)
         if t then
             -- Décodage KV + enfilement ordonné (sécurisé)
             local _ok, _err = pcall(function()
-            local kv = decodeKV(full)
+            local plain = unpackPayloadStr(full)
+            local kv = decodeKV(plain)
             enqueueComplete(sender, t, kv)
             end)
             _finishSync(_ok)
