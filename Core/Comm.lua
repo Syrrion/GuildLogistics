@@ -860,6 +860,11 @@ function CDZ._HandleFull(sender, msgType, kv)
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
     local meta = ChroniquesDuZephyrDB.meta
 
+    -- ➕ Double sécurité : en mode bootstrap (rev=0), ignorer tout sauf "SYNC_*"
+    if safenum(meta.rev, 0) == 0 and not tostring(msgType or ""):match("^SYNC_") then
+        return
+    end
+
     local rv   = safenum(kv.rv, -1)
     local myrv = safenum(meta.rev, 0)
     local lm   = safenum(kv.lm, -1)
@@ -1393,12 +1398,16 @@ function CDZ._HandleFull(sender, msgType, kv)
             -- ➕ Fin de synchro (ok/erreur)
             if ns and ns.Emit then ns.Emit("sync:end", "full", _ok) end
 
-            -- ➕ Après application réussie du FULL : rebroadcast d'un HELLO (GUILD)
+            -- ➕ Après application réussie du FULL : recalcul iLvl local du joueur
             if _ok then
+                C_Timer.After(0.15, function()
+                    if CDZ.UpdateOwnIlvlIfMain then CDZ.UpdateOwnIlvlIfMain() end
+                end)
+
+                -- ➕ Puis rebroadcast d'un HELLO (GUILD)
                 local hid2   = string.format("%d.%03d", time(), math.random(0, 999))
                 local me     = playerFullName()
                 local rv_me  = safenum(getRev(), 0)
-                -- petit délai pour laisser respirer l'UI et éviter les collisions d’événements
                 C_Timer.After(0.2, function()
                     CDZ.Comm_Broadcast("HELLO", { hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
                 end)
@@ -1426,7 +1435,17 @@ local function onAddonMsg(prefix, message, channel, sender)
     local peekType = message:match("v=1|t=([^|]+)|")
     if not (CDZ and CDZ._helloSent) and peekType ~= "HELLO" then return end
 
+    -- ➕ Mode bootstrap : si la DB locale est en version 0, ne traiter QUE les messages "SYNC_*"
+    do
+        local rev0 = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0)
+        if rev0 == 0 then
+            local pt = tostring(peekType or "")
+            if not pt:match("^SYNC_") then return end
+        end
+    end
+
     local t, s, p, n = message:match("v=1|t=([^|]+)|s=(%d+)|p=(%d+)|n=(%d+)|")
+
     local seq  = safenum(s, 0)
     local part = safenum(p, 1)
     local total= safenum(n, 1)
