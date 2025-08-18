@@ -416,8 +416,9 @@ local function _SetIlvlLocal(name, ilvl, ts, by)
     if not name or name == "" then return end
     ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
     ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-    local p = ChroniquesDuZephyrDB.players[name] or { credit = 0, debit = 0, reserved = false }
-    ChroniquesDuZephyrDB.players[name] = p
+    -- ⚠️ Ne pas créer d'entrée : si le joueur n'est pas dans le roster (actif/réserve), on sort.
+    local p = ChroniquesDuZephyrDB.players[name]
+    if not p then return end
 
     local nowts   = tonumber(ts) or time()
     local prev_ts = tonumber(p.ilvlTs or 0) or 0

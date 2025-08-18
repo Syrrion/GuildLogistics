@@ -1116,15 +1116,17 @@ function CDZ._HandleFull(sender, msgType, kv)
             local n_ts   = safenum(kv.ts, now())
             ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
             ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-            local p = ChroniquesDuZephyrDB.players[pname] or { credit=0, debit=0, reserved=false }
-            local prev = safenum(p.ilvlTs, 0)
-            if n_ilvl >= 0 and n_ts >= prev then
-                p.ilvl     = math.floor(n_ilvl)
-                p.ilvlTs   = n_ts
-                p.ilvlAuth = by
-                ChroniquesDuZephyrDB.players[pname] = p
-                if ns.Emit then ns.Emit("ilvl:changed", pname) end
-                if ns.RefreshAll then ns.RefreshAll() end
+            -- ⚠️ Ne JAMAIS créer de joueur ici : on met à jour uniquement s'il existe déjà (actif ou réserve)
+            local p = ChroniquesDuZephyrDB.players[pname]
+            if p then
+                local prev = safenum(p.ilvlTs, 0)
+                if n_ilvl >= 0 and n_ts >= prev then
+                    p.ilvl     = math.floor(n_ilvl)
+                    p.ilvlTs   = n_ts
+                    p.ilvlAuth = by
+                    if ns.Emit then ns.Emit("ilvl:changed", pname) end
+                    if ns.RefreshAll then ns.RefreshAll() end
+                end
             end
         end
 
