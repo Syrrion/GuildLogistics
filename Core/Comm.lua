@@ -240,6 +240,24 @@ local HelloElect      = HelloElect or {}   -- [hid] = { startedAt, endsAt, decid
 -- [hid] = { initiator=me, rv_me, decided=false, endsAt, offers={[normName]={player,rv,est,h}}, grantedTo, token, reason }
 local Discovery = Discovery or {}
 
+-- Registre de suppression des envois non-critiques (ILVL/MKEY) par cible
+local _NonCritSuppress = _NonCritSuppress or {}
+local _NONCRIT_TYPES = { ILVL_UPDATE=true, MKEY_UPDATE=true }
+
+local function _suppressTo(target, seconds)
+    if not target or not seconds then return end
+    local key = (_norm and _norm(target)) or string.lower(target or "")
+    local untilTs = (now() + seconds)
+    _NonCritSuppress[key] = math.max(_NonCritSuppress[key] or 0, untilTs)
+end
+
+local function _isSuppressedTo(target)
+    if not target then return false end
+    local key = (_norm and _norm(target)) or string.lower(target or "")
+    return (now() < (_NonCritSuppress[key] or 0))
+end
+
+
 -- Cooldown d’OFFERS par initiateur
 -- [normInitiator] = lastTs
 local OfferCooldown = OfferCooldown or {}
@@ -298,8 +316,18 @@ local function _decideAndGrant(hid)
     if not sess or sess.grantedTo then return end
     sess.decided = true
 
-    -- Si FULL pertinent vu pendant fenêtre → annuler
-    if (LastFullSeenRv or -1) >= safenum(sess.rv_me, 0) and (now() - (LastFullSeenAt or 0)) < HELLO_WAIT_SEC then
+    local rv_me = safenum(sess.rv_me, 0)
+
+    -- Si FULL "récent" vu → on n'annule QUE s'il n'existe aucune offre strictement meilleure
+    local fullSeen = (LastFullSeenRv or -1) >= rv_me and (now() - (LastFullSeenAt or 0)) < HELLO_WAIT_SEC
+    local hasBetter = false
+    do
+        local offers = sess.offers or {}
+        for _, o in pairs(offers) do
+            if safenum(o.rv, -1) > rv_me then hasBetter = true; break end
+        end
+    end
+    if fullSeen and not hasBetter then
         HelloElect[hid] = HelloElect[hid] or {}
         HelloElect[hid].decided = true
         HelloElect[hid].winner  = nil
@@ -572,9 +600,26 @@ function CDZ.Comm_Broadcast(typeName, kv)
     _send(typeName, "GUILD", nil, kv)
 end
 
-function CDZ.Comm_Whisper(target, typeName, kv)
-    _send(typeName, "WHISPER", target, kv)
+function CDZ.Comm_Whisper(target, msgType, data)
+    -- Bloque l'émission des updates non-critiques vers une cible en cours de handshake
+    if _NONCRIT_TYPES[msgType] and _isSuppressedTo(target) then
+        return -- ne rien envoyer
+    end
+
+    _send(msgType, "WHISPER", target, data)
+
+    -- Dès qu'on propose un SYNC_OFFER, on "gèle" les non-critiques vers cette cible
+    if msgType == "SYNC_OFFER" then
+        _suppressTo(target, (HELLO_WAIT_SEC or 5) + 2)
+    elseif msgType == "SYNC_GRANT" then
+        -- Petit gel après un GRANT pour laisser passer le FULL proprement
+        _suppressTo(target, 2)
+    end
+
+    return true
 end
+
+
 
 -- ===== Application snapshot (import/export compact) =====
 function CDZ._SnapshotExport()
@@ -1380,21 +1425,28 @@ function CDZ._HandleFull(sender, msgType, kv)
 
         -- ======= Handshake & Snapshots =======
     elseif msgType == "HELLO" then
-        -- Côté pair : répondre par une OFFER uniquement si rv_peer > rv_initiateur
-        local hid   = kv.hid or kv.helloId or ""
-        local from  = kv.player or kv.from or sender
-        local rvi   = safenum(kv.rv, -1)
-        if hid ~= "" and from and from ~= "" then
-            _scheduleOfferReply(hid, from, rvi)
+        local hid     = kv.hid or ""
+        -- ⚠️ Comparer des révisions de DB (pas la révision de code addon)
+        local rv_me   = safenum(getRev(), 0)
+        local rv_them = safenum(kv.rv, -1)
+
+        -- Si on est plus à jour que l'initiateur, préparer le gel des non-critiques vers lui
+        if rv_me > rv_them then
+            _suppressTo(sender, (HELLO_WAIT_SEC or 5) + 2)
         end
 
-        -- ✏️ Ajout : envoyer mon iLvl actuel en WHISPER à celui qui a fait HELLO
-        if from and from ~= "" and from ~= playerFullName() then
+        -- Programmer éventuellement une OFFER vers l'initiateur
+        if hid ~= "" and sender and sender ~= "" then
+            _scheduleOfferReply(hid, sender, rv_them)
+        end
+
+        -- ✏️ Envoyer mon iLvl/Clé en WHISPER à l'initiateur (seulement si sa DB n'est pas obsolète)
+        if sender and sender ~= "" and sender ~= playerFullName() and rv_them >= rv_me then
             local me = playerFullName()
             if CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me) then
-                local p  = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[me]) or {}
+                local p    = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[me]) or {}
                 local ilvl = safenum(p.ilvl, 0)
-                CDZ.Comm_Whisper(from, "ILVL_UPDATE", {
+                CDZ.Comm_Whisper(sender, "ILVL_UPDATE", {
                     name = me,
                     ilvl = ilvl,
                     ts   = now(),
@@ -1419,7 +1471,7 @@ function CDZ._HandleFull(sender, msgType, kv)
                         local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(mid)
                         if nm and nm ~= "" then map = nm end
                     end
-                    CDZ.Comm_Whisper(from, "MKEY_UPDATE", {
+                    CDZ.Comm_Whisper(sender, "MKEY_UPDATE", {
                         name = me,
                         mid  = mid,
                         lvl  = lvl,
@@ -1434,13 +1486,13 @@ function CDZ._HandleFull(sender, msgType, kv)
         -- ✏️ Flush TX_REQ si le HELLO vient du GM effectif (tolérant au roster pas encore prêt)
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
-        local fromNF = nf(from)
+        local senderNF = nf(sender)
 
-        if gmName and fromNF == nf(gmName) then
+        if gmName and senderNF == nf(gmName) then
             if CDZ.Pending_FlushToMaster then CDZ.Pending_FlushToMaster(gmName) end
         else
             -- Roster possiblement pas prêt : on retente quelques fois (délais 1s)
-            CDZ._awaitHelloFrom = fromNF
+            CDZ._awaitHelloFrom = senderNF
             CDZ._awaitHelloRetry = 0
             local function _tryFlushLater()
                 if not CDZ._awaitHelloFrom then return end
@@ -1467,9 +1519,9 @@ function CDZ._HandleFull(sender, msgType, kv)
         if hid ~= "" and sess and _norm(sess.initiator) == _norm(playerFullName()) then
             _registerOffer(hid, kv.from or sender, kv.rv, kv.est, kv.h)
 
-            -- Si la fenêtre est déjà close mais qu'aucun GRANT n'a été émis,
-            -- décider immédiatement pour accepter l'offre tardive.
-            if sess.decided and not sess.grantedTo then
+            -- Si une offre STRICTEMENT meilleure que ma version arrive, décider tout de suite
+            local offerRv = safenum(kv.rv, 0)
+            if not sess.grantedTo and (offerRv > safenum(sess.rv_me, 0) or sess.decided) then
                 C_Timer.After(0, function() _decideAndGrant(hid) end)
             end
         end
@@ -1490,6 +1542,9 @@ function CDZ._HandleFull(sender, msgType, kv)
         -- Mémoriser la vue du FULL (anti-doublon & inhibitions)
         LastFullSeenAt = now()
         LastFullSeenRv = safenum(kv.rv, -1)
+
+        -- Le FULL finalise le handshake : lever la suppression pour l'émetteur
+        _suppressTo(sender, -999999)
 
         -- Vérifier jeton si une découverte locale est active
         local hid   = kv.hid or ""
