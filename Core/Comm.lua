@@ -483,10 +483,10 @@ function CDZ.ClearDebugLogs()
 end
 
 -- ✏️ Trace locale vers l’onglet Debug avec entête conforme (raw = "v=1|t=...|s=...|p=...|n=...|payload")
-function CDZ.DebugMKey(event, fields)
+function CDZ.DebugLocal(event, fields)
     if CDZ and CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then return end
 
-    local tname = tostring(event or "MKEY_DBG")
+    local tname = tostring(event or "DEBUG")
     local kv    = type(fields) == "table" and fields or {}
     kv.t = tname
     kv.s = 0  -- séquence "locale"
@@ -510,7 +510,7 @@ function CDZ.DebugMKey(event, fields)
 
         seq       = 0, part = 1, total = 1,
         raw       = raw,               -- ✅ exploité par groupLogs() → fullPayload
-        state     = "sent", status = "sent", stateText = "Transmis",
+        state     = "sent", status = "sent", stateText = "|cffffd200Debug|r",
     }
     if ns.Emit then ns.Emit("debug:changed") end
 end
@@ -921,6 +921,27 @@ function CDZ._HandleFull(sender, msgType, kv)
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = safenum(kv.lm, now())
             refreshActive()
+
+            -- ✏️ Si l'UPSERT me concerne et que je suis connecté, envoyer iLvl + M+ en broadcast
+            local me = nf(playerFullName())
+            if me == full then
+                -- iLvl : lecture immédiate puis broadcast
+                local ilvl = (CDZ.ReadOwnEquippedIlvl and CDZ.ReadOwnEquippedIlvl()) or nil
+                if ilvl then
+                    CDZ.BroadcastIlvlUpdate(me, ilvl, now(), me)
+                end
+
+                -- Clé mythique : lecture immédiate puis broadcast
+                local mid, lvl, map = 0, 0, ""
+                if CDZ.ReadOwnedKeystone then mid, lvl, map = CDZ.ReadOwnedKeystone() end
+                if safenum(lvl, 0) > 0 then
+                    if (not map or map == "" or map == "Clé") and safenum(mid, 0) > 0 and CDZ.ResolveMKeyMapName then
+                        local nm = CDZ.ResolveMKeyMapName(mid)
+                        if nm and nm ~= "" then map = nm end
+                    end
+                    CDZ.BroadcastMKeyUpdate(me, safenum(mid, 0), safenum(lvl, 0), tostring(map or ""), now(), me)
+                end
+            end
         end
 
     elseif msgType == "ROSTER_REMOVE" then
@@ -1191,11 +1212,6 @@ function CDZ._HandleFull(sender, msgType, kv)
                     p.mkeyAuth  = by
                     if ns.Emit then ns.Emit("mkey:changed", pname) end
                     if ns.RefreshAll then ns.RefreshAll() end
-
-                    -- ➕ Trace debug réception + application
-                    if CDZ.DebugMKey then
-                        CDZ.DebugMKey("MKEY_RECV_APPLY", { name=pname, mid=n_mid, lvl=n_lvl, map=n_map, by=by })
-                    end
                 end
             end
         end
@@ -1372,7 +1388,6 @@ function CDZ._HandleFull(sender, msgType, kv)
         end
 
         -- ✏️ Ajout : envoyer mon iLvl actuel en WHISPER à celui qui a fait HELLO
-                -- ✏️ Ajout : envoyer mon iLvl/Clé au HELLO uniquement si je suis listé
         if from and from ~= "" and from ~= playerFullName() then
             local me = playerFullName()
             if CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me) then
@@ -1385,10 +1400,19 @@ function CDZ._HandleFull(sender, msgType, kv)
                     by   = me,
                 })
 
-                -- ➕ Envoie aussi la clé mythique (si dispo)
+                -- ➕ Envoie aussi la clé mythique (si dispo, avec fallback API si non stockée)
                 local mid = safenum(p.mkeyMapId, 0)
                 local lvl = safenum(p.mkeyLevel, 0)
                 local map = tostring(p.mkeyName or "")
+                -- Fallback : lecture live si DB vide / obsolète
+                if (lvl <= 0 or mid <= 0) and CDZ.ReadOwnedKeystone then
+                    local _mid, _lvl, _map = CDZ.ReadOwnedKeystone()
+                    if safenum(_mid,0) > 0 then mid = safenum(_mid,0) end
+                    if safenum(_lvl,0) > 0 then lvl = safenum(_lvl,0) end
+                    if (not map or map == "" or map == "Clé") and _map and _map ~= "" then
+                        map = tostring(_map)
+                    end
+                end
                 if lvl > 0 then
                     if (map == "" or map == "Clé") and mid > 0 then
                         local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(mid)
@@ -2078,7 +2102,6 @@ function CDZ.BroadcastIlvlUpdate(name, ilvl, ts, by)
     })
 end
 
-
 -- ➕ Diffusion « Clé mythique »
 function CDZ.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
     -- ⚠️ on **ignore** le paramètre 'name' et on impose le nom canonique du joueur
@@ -2095,11 +2118,6 @@ function CDZ.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
     if (mapTxt == "" or mapTxt == "Clé") and midNum > 0 and CDZ.ResolveMKeyMapName then
         local nm = CDZ.ResolveMKeyMapName(midNum)
         if nm and nm ~= "" then mapTxt = nm end
-    end
-
-    -- ➕ Trace debug
-    if CDZ.DebugMKey then
-        CDZ.DebugMKey("MKEY_SEND", { mid=midNum, lvl=safenum(level,0), map=mapTxt, name=me })
     end
 
     CDZ.Comm_Broadcast("MKEY_UPDATE", {

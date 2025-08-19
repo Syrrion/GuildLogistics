@@ -520,7 +520,6 @@ function CDZ.ResolveMKeyMapName(mapId)
     if mid <= 0 then return nil end
     local cached = CDZ._mkeyNameCache[mid]
     if cached and cached ~= "" then
-        if CDZ.DebugMKey then CDZ.DebugMKey("MKEY_RESOLVE", { mid=mid, name=cached, src="CACHE" }) end
         return cached
     end
 
@@ -569,11 +568,6 @@ function CDZ.ResolveMKeyMapName(mapId)
 
     if name and name ~= "" then
         CDZ._mkeyNameCache[mid] = name
-    end
-
-    -- ➕ Trace debug résolution
-    if CDZ.DebugMKey then
-        CDZ.DebugMKey("MKEY_RESOLVE", { mid=mid, name=name or "", src=src })
     end
 
     return name
@@ -630,12 +624,27 @@ local function _ReadOwnedKeystone()
         if nm and nm ~= "" then mapName = nm end
     end
 
-    -- trace debug
-    if CDZ.DebugMKey then
-        CDZ.DebugMKey("MKEY_READ", { src=src, mid=mid or 0, lvl=lvl or 0, map=mapName or "" })
-    end
-
     return mid or 0, lvl or 0, mapName or ""
+end
+
+-- ➕ Expose un lecteur public de la clé possédée (fallback si déjà défini ailleurs)
+if not CDZ.ReadOwnedKeystone then
+    function CDZ.ReadOwnedKeystone()
+        return _ReadOwnedKeystone()
+    end
+end
+
+-- ➕ Lecture immédiate de mon iLvl équipé (sans diffusion)
+if not CDZ.ReadOwnEquippedIlvl then
+    function CDZ.ReadOwnEquippedIlvl()
+        local equipped
+        if GetAverageItemLevel then
+            local overall, eq = GetAverageItemLevel()
+            equipped = eq or overall
+        end
+        if not equipped then return nil end
+        return math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
+    end
 end
 
 -- Calcul & diffusion de MA propre clé (uniquement si le perso connecté est le main)

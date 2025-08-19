@@ -6,9 +6,9 @@ local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS
 
 local cols = UI.NormalizeColumns({
     { key="lvl",    title="Niv",    w=44, justify="CENTER" },
-    { key="name",   title="Nom",    min=150, flex=1 },
+    { key="name",   title="Nom",    min=180, flex=1 },
     { key="ilvl",   title="iLvl",   w=64, justify="CENTER" },
-    { key="mkey",   title="Clé",    w=200, justify="LEFT" },
+    { key="mkey",   title="Clé Mythique +",    w=200, justify="LEFT" },
     { key="last",   title="Présence", w=180 },
     { key="act",    title="", w=200 },
     { key="solde",  title="Solde",  w=80 },
@@ -163,7 +163,11 @@ local function UpdateRow(i, r, f, data)
 
     if f.mkey then
         local mkeyTxt = (CDZ.GetMKeyText and CDZ.GetMKeyText(data.name)) or ""
-        f.mkey:SetText(mkeyTxt or "")
+        if gi.online then
+            f.mkey:SetText(mkeyTxt or "")
+        else
+            f.mkey:SetText("|cffaaaaaa-|r")
+        end
     end
 
     if f.ilvl then
@@ -171,6 +175,8 @@ local function UpdateRow(i, r, f, data)
         local txt = ""
         if gi.online then
             txt = (ilvl and ilvl > 0) and tostring(ilvl) or "|cffaaaaaa?|r"
+        else
+            txt = "|cffaaaaaa-|r"
         end
         f.ilvl:SetText(txt)
     end
