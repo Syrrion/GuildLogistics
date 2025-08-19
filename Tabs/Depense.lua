@@ -36,8 +36,8 @@ local colsLots = UI.NormalizeColumns({
     { key="type",   title="Utilisations",  w=110 },
     { key="status", title="Restantes",     w=110 },
     { key="content",title="Contenu",       w=60 },
-    { key="act",    title="",              w=40 },
     { key="total",  title="Valeur totale", w=120 },
+    { key="act",    title="",              w=(CDZ.IsMaster and CDZ.IsMaster()) and 40 or 0 },
 })
 
 -- =========================
@@ -91,6 +91,8 @@ local function AttachDeleteExpenseHandler(r, f, d)
 end
 
 local function AttachDeleteLotHandler(r, lot)
+    -- Sécurise l'appel si le bouton n'existe pas (non-GM)
+    if not r.btnDelete then return end
     local canDelete = (tonumber(lot.used or 0) or 0) == 0
     r.btnDelete:SetEnabled(canDelete)
     r.btnDelete:SetOnClick(function()
@@ -159,9 +161,11 @@ local function BuildRowLots(r)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
-    r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=30 })
-    r.btnDelete:SetShown(CDZ.IsMaster and CDZ.IsMaster())
-    UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
+    -- Bouton X uniquement pour le GM
+    if CDZ.IsMaster and CDZ.IsMaster() then
+        r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=30 })
+        UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
+    end
     return f
 end
 

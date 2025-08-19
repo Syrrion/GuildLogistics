@@ -294,7 +294,8 @@ end
 
 local function _decideAndGrant(hid)
     local sess = Discovery[hid]
-    if not sess or sess.decided then return end
+    -- Autorise une nouvelle décision tant qu'aucun GRANT n'a été émis
+    if not sess or sess.grantedTo then return end
     sess.decided = true
 
     -- Si FULL pertinent vu pendant fenêtre → annuler
@@ -328,7 +329,7 @@ local function _decideAndGrant(hid)
         return
     end
 
-    -- Token sans overflow : timestamp + 8 hex “safe”
+    -- Jeton pseudo-aléatoire : timestamp + 8 hex “safe”
     local token = string.format("%d-%s", now(), _randHex8())
     sess.token     = token
     sess.grantedTo = chosen.player
@@ -1465,6 +1466,12 @@ function CDZ._HandleFull(sender, msgType, kv)
         local sess = Discovery[hid]
         if hid ~= "" and sess and _norm(sess.initiator) == _norm(playerFullName()) then
             _registerOffer(hid, kv.from or sender, kv.rv, kv.est, kv.h)
+
+            -- Si la fenêtre est déjà close mais qu'aucun GRANT n'a été émis,
+            -- décider immédiatement pour accepter l'offre tardive.
+            if sess.decided and not sess.grantedTo then
+                C_Timer.After(0, function() _decideAndGrant(hid) end)
+            end
         end
 
     elseif msgType == "SYNC_GRANT" then
