@@ -631,12 +631,18 @@ function GLOG._SnapshotExport()
             t.I[#t.I+1] = tostring(uid) .. ":" .. tostring(name)
         end
     end
+
     for _, e in ipairs(GuildLogisticsDB.expenses.list) do
+        -- Préfère l'ID de source stable si présent, sinon retombe sur l’ancien libellé texte
+        local srcField = tonumber(e.sourceId or 0) or 0
+        if srcField == 0 then srcField = tostring(e.source or "") end
+
         t.E[#t.E+1] = table.concat({
             safenum(e.id,0), safenum(e.qty,0), safenum(e.copper,0),
-            tostring(e.source or ""), safenum(e.lotId,0), safenum(e.itemID,0)
+            srcField, safenum(e.lotId,0), safenum(e.itemID,0)
         }, ",")
     end
+
     for _, l in ipairs(GuildLogisticsDB.lots.list) do
         local ids = {}
         for _, id in ipairs(l.itemIds or {}) do ids[#ids+1] = tostring(id) end
@@ -728,14 +734,23 @@ function GLOG._SnapshotApply(kv)
             id = safenum(id,0); if id <= 0 then return end
             -- Normalise lotId: 0 => nil (sinon les “libres” disparaissent de l’UI)
             local _lot = safenum(lotId,0); if _lot == 0 then _lot = nil end
-            GuildLogisticsDB.expenses.list[#GuildLogisticsDB.expenses.list+1] = {
-                id = id,
-                qty = safenum(qty,0),
-                copper = safenum(copper,0),
-                source = src,
-                lotId = _lot,
-                itemID = safenum(itemId,0), -- ✅ normalisation clé attendue par l’UI
+
+            -- src peut être un label (ancien format) OU un ID numérique (nouveau format)
+            local _sid = safenum(src, 0)
+            local entry = {
+                id      = id,
+                qty     = safenum(qty,0),
+                copper  = safenum(copper,0),
+                lotId   = _lot,
+                itemID  = safenum(itemId,0), -- ✅ normalisation clé attendue par l’UI
             }
+            if _sid > 0 then
+                entry.sourceId = _sid    -- nouveau format
+            else
+                entry.source   = tostring(src or "") -- rétro-compat
+            end
+
+            GuildLogisticsDB.expenses.list[#GuildLogisticsDB.expenses.list+1] = entry
             GuildLogisticsDB.expenses.nextId = math.max(GuildLogisticsDB.expenses.nextId or 1, id + 1)
         end
 
@@ -1615,6 +1630,16 @@ function GLOG._HandleFull(sender, msgType, kv)
         LastFullSeenAt = now()
         LastFullSeenRv = safenum(kv.rv, -1)
 
+        -- ⛔ Ignore notre propre FULL (évite de ré-appliquer/vider localement chez le GM)
+        do
+            local senderKey = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(sender)) or tostring(sender or "")
+            local meKey     = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(playerFullName())) or playerFullName()
+            if senderKey == meKey then
+                if GLOG.Debug then GLOG.Debug("RECV","SYNC_FULL","ignored self") end
+                return
+            end
+        end
+
         -- Le FULL finalise le handshake : lever la suppression pour l'émetteur
         _suppressTo(sender, -999999)
 
@@ -1626,6 +1651,7 @@ function GLOG._HandleFull(sender, msgType, kv)
         if hid ~= "" and sess then
             okByToken = (token ~= "" and token == sess.token)
         end
+
         if not okByToken then return end
 
         if not shouldApply() then return end
