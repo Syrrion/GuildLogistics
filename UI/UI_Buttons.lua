@@ -1,4 +1,5 @@
 local ADDON, ns = ...
+local Tr = ns and ns.Tr
 local UI = ns.UI
 
 local SIZE = { xs=20, sm=24, md=28, lg=32 }
@@ -58,14 +59,14 @@ end
 function UI.Button(parent, text, opts)
     opts = opts or {}
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetText(text or "OK")
+    b:SetText((Tr and Tr(text or "OK")) or (text or "OK"))
     b:SetHeight(SIZE[opts.size or "sm"] or (opts.height or 24))
     UI.SizeToText(b, opts)
-    if opts.tooltip then UI.SetTooltip(b, opts.tooltip) end
+    if opts.tooltip then UI.SetTooltip(b, (Tr and Tr(opts.tooltip)) or opts.tooltip) end
     applyVariant(b, opts.variant)
 
     local _SetText = b.SetText
-    b.SetText = function(self, t) _SetText(self, t); UI.SizeToText(self, opts) end
+    b.SetText = function(self, t) _SetText(self, (Tr and Tr(t)) or t); UI.SizeToText(self, opts) end
 
     function b:SetConfirm(msg, cb) UI.ConfirmClick(self, msg, cb); return self end
     function b:SetDebounce(ms, cb) UI.DebouncedClick(self, ms, cb); return self end

@@ -1,11 +1,14 @@
 ## Interface: 112500
-## Title: Guild & Raid Manager
-## Notes: Guild & Raid Manager
+## Title: Guild Logistics
+## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
 ## Version: 1.0.0
-## SavedVariables: GuildManagerDB, GuildManagerUI
-## IconTexture: Interface\AddOns\GuildManager\Ressources\Media\LogoAddonWoW256.tga
+## SavedVariables: GuildLogisticsDB, GuildLogisticsUI
+## IconTexture: Interface\AddOns\GuildLogistics\Ressources\Media\LogoAddonWoW256.tga
 ## Dependencies: LibDeflate
+
+Locales/locales-enUS.lua
+Locales/locales-frFR.lua
 
 Core/Core.lua
 Core/Helper.lua

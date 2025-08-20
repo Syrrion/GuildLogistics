@@ -1,5 +1,6 @@
 local ADDON, ns = ...
-local GMGR, UI = ns.GMGR, ns.UI
+local Tr = ns and ns.Tr
+local GLOG, UI = ns.GLOG, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
 local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS
@@ -21,7 +22,7 @@ local function money(v)
 end
 
 local function CanActOn(name)
-    local isMaster = GMGR.IsMaster and GMGR.IsMaster()
+    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
     if isMaster then return true, true end
     local meFull = ns.Util.playerFullName and ns.Util.playerFullName()
     if (not meFull or meFull == "") and UnitFullName then
@@ -34,9 +35,9 @@ local function CanActOn(name)
 end
 
 local function FindGuildInfo(playerName)
-    local guildRows = GMGR.GetGuildRowsCached and GMGR.GetGuildRowsCached() or {}
+    local guildRows = GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached() or {}
     for _, gr in ipairs(guildRows) do
-        if GMGR.NormName and GMGR.NormName(gr.name_amb or gr.name_raw) == GMGR.NormName(playerName) then
+        if GLOG.NormName and GLOG.NormName(gr.name_amb or gr.name_raw) == GLOG.NormName(playerName) then
             local info = {
                 online = gr.online,
                 idx = gr.idx,
@@ -68,9 +69,9 @@ local function AttachDepositHandler(btn, name, canAct, isMaster)
             amt = math.floor(tonumber(amt) or 0)
             if amt > 0 then
                 if isMaster then
-                    if GMGR.GM_AdjustAndBroadcast then GMGR.GM_AdjustAndBroadcast(name, amt) end
+                    if GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(name, amt) end
                 else
-                    if GMGR.RequestAdjust then GMGR.RequestAdjust(name, amt) end
+                    if GLOG.RequestAdjust then GLOG.RequestAdjust(name, amt) end
                 end
             end
         end)
@@ -85,9 +86,9 @@ local function AttachWithdrawHandler(btn, name, canAct, isMaster)
             if amt > 0 then
                 local delta = -amt
                 if isMaster then
-                    if GMGR.GM_AdjustAndBroadcast then GMGR.GM_AdjustAndBroadcast(name, delta) end
+                    if GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(name, delta) end
                 else
-                    if GMGR.RequestAdjust then GMGR.RequestAdjust(name, delta) end
+                    if GLOG.RequestAdjust then GLOG.RequestAdjust(name, delta) end
                 end
             end
         end)
@@ -98,11 +99,11 @@ local function AttachDeleteHandler(btn, name, isMaster)
     btn:SetScript("OnClick", function()
         if not isMaster then return end
         UI.PopupConfirm("Supprimer "..(name or "").." du roster ?", function()
-            if GMGR.RemovePlayer then
-                GMGR.RemovePlayer(name)
-            elseif GMGR.BroadcastRosterRemove then
-                local uid = (GMGR.GetUID and GMGR.GetUID(name)) or nil
-                GMGR.BroadcastRosterRemove(uid or name)
+            if GLOG.RemovePlayer then
+                GLOG.RemovePlayer(name)
+            elseif GLOG.BroadcastRosterRemove then
+                local uid = (GLOG.GetUID and GLOG.GetUID(name)) or nil
+                GLOG.BroadcastRosterRemove(uid or name)
             end
             if ns.RefreshAll then ns.RefreshAll() end
         end)
@@ -162,7 +163,7 @@ local function UpdateRow(i, r, f, data)
     end
 
     if f.mkey then
-        local mkeyTxt = (GMGR.GetMKeyText and GMGR.GetMKeyText(data.name)) or ""
+        local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
         if gi.online then
             f.mkey:SetText(mkeyTxt or "")
         else
@@ -171,7 +172,7 @@ local function UpdateRow(i, r, f, data)
     end
 
     if f.ilvl then
-        local ilvl = (GMGR.GetIlvl and GMGR.GetIlvl(data.name)) or nil
+        local ilvl = (GLOG.GetIlvl and GLOG.GetIlvl(data.name)) or nil
         local txt = ""
         if gi.online then
             txt = (ilvl and ilvl > 0) and tostring(ilvl) or "|cffaaaaaa?|r"
@@ -228,8 +229,8 @@ end
 
 -- Refresh
 local function Refresh()
-    local active  = (GMGR.GetPlayersArrayActive  and GMGR.GetPlayersArrayActive())  or {}
-    local reserve = (GMGR.GetPlayersArrayReserve and GMGR.GetPlayersArrayReserve()) or {}
+    local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
+    local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve()) or {}
 
     if lvActive  then lvActive:SetData(active) end
     if lvReserve then
@@ -250,7 +251,7 @@ end
 -- Footer
 local function BuildFooterButtons(footer, isGM)
     local btnAdd   = UI.Button(footer, "Ajouter un joueur", { size="sm", variant="primary", minWidth=120 })
-    local btnGuild = UI.Button(footer, isGM and "Ajouter un membre de la guilde" or "Membres de la guilde", { size="sm", minWidth=220 })
+    local btnGuild = UI.Button(footer, isGM and Tr("add_guild_member") or Tr("guild_members"), { size="sm", minWidth=220 })
     local btnHist  = UI.Button(footer, "Historique des raids", { size="sm", minWidth=160, tooltip="Voir l’historique des raids" })
 
     btnAdd:SetOnClick(function()
@@ -258,7 +259,7 @@ local function BuildFooterButtons(footer, isGM)
         UI.PopupPromptText("Ajouter un joueur", "Nom du joueur externe à inclure dans le roster", function(name)
             name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
             if name == "" then return end
-            if GMGR.AddPlayer and GMGR.AddPlayer(name) then
+            if GLOG.AddPlayer and GLOG.AddPlayer(name) then
                 if ns.RefreshAll then ns.RefreshAll() end
             end
         end, { width = 460 })
@@ -296,11 +297,11 @@ local function Build(container)
         updateRow = function(i, r, f, it)
             UpdateRow(i, r, f, it)
             if r.btnReserve then
-                local isMaster = GMGR.IsMaster and GMGR.IsMaster()
+                local isMaster = GLOG.IsMaster and GLOG.IsMaster()
                 r.btnReserve:SetShown(isMaster)
                 if isMaster then
                     r.btnReserve:SetOnClick(function()
-                        if GMGR.GM_SetReserved then GMGR.GM_SetReserved(it.name, true) end
+                        if GLOG.GM_SetReserved then GLOG.GM_SetReserved(it.name, true) end
                     end)
                 end
             end
@@ -314,11 +315,11 @@ local function Build(container)
             local data = it.data or it
             UpdateRow(i, r, f, data)
             if r.btnRoster then
-                local isMaster = GMGR.IsMaster and GMGR.IsMaster()
+                local isMaster = GLOG.IsMaster and GLOG.IsMaster()
                 r.btnRoster:SetShown(isMaster)
                 if isMaster then
                     r.btnRoster:SetOnClick(function()
-                        if GMGR.GM_SetReserved then GMGR.GM_SetReserved(data.name, false) end
+                        if GLOG.GM_SetReserved then GLOG.GM_SetReserved(data.name, false) end
                     end)
                 end
             end
@@ -331,8 +332,8 @@ local function Build(container)
     totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 
-    local isGM = GMGR.IsMaster and GMGR.IsMaster()
+    local isGM = GLOG.IsMaster and GLOG.IsMaster()
     BuildFooterButtons(footer, isGM)
 end
 
-UI.RegisterTab("Roster", Build, Refresh, Layout)
+UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout)

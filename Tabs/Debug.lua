@@ -1,5 +1,6 @@
 local ADDON, ns = ...
-local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
+local Tr = ns and ns.Tr
+local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 local U = ns.Util
 
@@ -9,14 +10,14 @@ local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, fo
 -- Rafraîchit l'étiquette de version DB dans le footer
 local function UpdateDBVersionLabel()
     if not verFS then return end
-    local rv = (GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev) or 0
+    local rv = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev) or 0
     verFS:SetText("DB v"..tostring(rv))
 end
 
 -- ➕ Affiche "GM: Nom-Royaume" (rang 0 du roster)
 local function UpdateMasterLabel()
     if not gmFS then return end
-    local gmName = GMGR.GetGuildMasterCached and select(1, GMGR.GetGuildMasterCached())
+    local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached())
     local txt = "GM: " .. (gmName and Ambiguate(gmName, "none") or "—")
     gmFS:SetText(txt)
 end
@@ -25,8 +26,8 @@ end
 local function UpdateMasterLabel()
     if not gmFS then return end
     local gmName, gmRow = nil, nil
-    if GMGR and GMGR.GetGuildMasterCached then
-        gmName, gmRow = GMGR.GetGuildMasterCached()
+    if GLOG and GLOG.GetGuildMasterCached then
+        gmName, gmRow = GLOG.GetGuildMasterCached()
     end
     local txt = gmName and ("GM: " .. Ambiguate(gmName, "short")) or "GM: —"
     gmFS:SetText(txt)
@@ -104,8 +105,8 @@ local function UpdateRow(i, r, f, it)
         local st = ""
         if it.type == "HELLO" then
             local hid = it.kv and it.kv.helloId
-            if hid and ns.GMGR and ns.GMGR._GetHelloElect then
-                local info = ns.GMGR._GetHelloElect(hid)
+            if hid and ns.GLOG and ns.GLOG._GetHelloElect then
+                local info = ns.GLOG._GetHelloElect(hid)
                 local nowt = time()
                 local started = (info and info.startedAt) or (it.tsFirst or nowt)
                 local endsAt  = (info and info.endsAt) or (started + HELLO_WAIT_SEC)
@@ -280,7 +281,7 @@ end
 
 function Refresh()
     -- ➕ Si le débug est désactivé : listes vides et mise en page safe
-    if GMGR.IsDebugEnabled and not GMGR.IsDebugEnabled() then
+    if GLOG.IsDebugEnabled and not GLOG.IsDebugEnabled() then
         if lvRecv    then lvRecv:SetData({})    end
         if lvSend    then lvSend:SetData({})    end
         if lvPending then lvPending:SetData({}) end
@@ -295,7 +296,7 @@ function Refresh()
 
 
     -- Split RECU / ENVOI + filtre UI côté RECU (on garde le traitement logique inchangé ailleurs)
-    for _, e in ipairs(GMGR.GetDebugLogs()) do
+    for _, e in ipairs(GLOG.GetDebugLogs()) do
         if e.dir == "recv" then
             if not (_normalize(e.target) == selfNorm) then
                 recvData[#recvData+1] = e
@@ -315,8 +316,8 @@ function Refresh()
     if lvSend then lvSend:SetData(groupedSend) end
 
     -- ➕ Alimente la file d'attente (pending TX_REQ)
-    if lvPending and GMGR.GetPendingOutbox then
-        local pending = GMGR.GetPendingOutbox() or {}
+    if lvPending and GLOG.GetPendingOutbox then
+        local pending = GLOG.GetPendingOutbox() or {}
         lvPending:SetData(pending)
     end
 
@@ -331,16 +332,16 @@ local function Build(container)
 
     purgeDBBtn = UI.Button(panel, "Purger Debug", { size="sm", minWidth=120 })
     purgeDBBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
-    purgeDBBtn:SetOnClick(function() GMGR.ClearDebugLogs(); Refresh() end)
+    purgeDBBtn:SetOnClick(function() GLOG.ClearDebugLogs(); Refresh() end)
 
     purgeAllBtn = UI.Button(panel, "Purge totale", { size="sm", minWidth=120, tooltip="Wipe DB + reset UI + Reload" })
     purgeAllBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
     purgeAllBtn:SetConfirm("Purger la DB + réinitialiser l’UI puis recharger ?", function()
-        if GMGR.WipeAllSaved then
-            GMGR.WipeAllSaved()
-        elseif GMGR.WipeAllData then
-            GMGR.WipeAllData()
-            GuildManagerUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680 }
+        if GLOG.WipeAllSaved then
+            GLOG.WipeAllSaved()
+        elseif GLOG.WipeAllData then
+            GLOG.WipeAllData()
+            GuildLogisticsUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680 }
         end
         ReloadUI()
     end)
@@ -348,10 +349,10 @@ local function Build(container)
     -- ➕ GM : Purge Lots & objets épuisés
     local purgeEpuBtn = UI.Button(panel, "Purge Lots & objets épuisés", { size="sm", minWidth=240, tooltip = "Supprime localement tous les lots épuisés et tous leurs objets." })
     purgeEpuBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
-    purgeEpuBtn:SetShown(GMGR.IsMaster and GMGR.IsMaster())
+    purgeEpuBtn:SetShown(GLOG.IsMaster and GLOG.IsMaster())
     purgeEpuBtn:SetConfirm("Supprimer les lots épuisés et leurs objets associés ?", function()
-        if GMGR.PurgeLotsAndItemsExhausted then
-            local l, it = GMGR.PurgeLotsAndItemsExhausted()
+        if GLOG.PurgeLotsAndItemsExhausted then
+            local l, it = GLOG.PurgeLotsAndItemsExhausted()
             if UpdateDBVersionLabel then UpdateDBVersionLabel() end
             if ns.RefreshAll then ns.RefreshAll() end
             if UI.Toast then UI.Toast(("Purge effectuée : %d lot(s), %d objet(s) supprimés."):format(l or 0, it or 0)) end
@@ -361,10 +362,10 @@ local function Build(container)
     -- ➕ GM : Purger Ressources (tout effacer)
     local purgeResBtn = UI.Button(panel, "Purger Ressources", { size="sm", minWidth=180, tooltip = "Supprime localement tous les lots et tous les objets (ressources)." })
     purgeResBtn:SetPoint("RIGHT", purgeEpuBtn, "LEFT", -8, 0)
-    purgeResBtn:SetShown(GMGR.IsMaster and GMGR.IsMaster())
+    purgeResBtn:SetShown(GLOG.IsMaster and GLOG.IsMaster())
     purgeResBtn:SetConfirm("Supprimer localement TOUS les lots et TOUS les objets ?", function()
-        if GMGR.PurgeAllResources then
-            local l, it = GMGR.PurgeAllResources()
+        if GLOG.PurgeAllResources then
+            local l, it = GLOG.PurgeAllResources()
             if UpdateDBVersionLabel then UpdateDBVersionLabel() end
             if ns.RefreshAll then ns.RefreshAll() end
             if UI.Toast then UI.Toast(("Ressources purgées : %d lot(s), %d objet(s)."):format(l or 0, it or 0)) end
@@ -385,18 +386,15 @@ local function Build(container)
     if UpdateMasterLabel then UpdateMasterLabel() end
 
     -- ➕ Bouton GM : Forcer ma version (envoi direct d’un SYNC_FULL)
-    forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200,
-        tooltip = "Diffuse immédiatement un snapshot complet (SYNC_FULL)" })
-    forceSyncBtn:SetConfirm("Diffuser et FORCER la version du GM (SYNC_FULL) ?", function()
-        if GMGR and GMGR._SnapshotExport and GMGR.Comm_Broadcast then
+    forceSyncBtn = UI.Button(footer, Tr("btn_force_version_gm"), { size="sm", minWidth=200,
+        tooltip = Tr("lbl_diffusing_snapshot") })
+    forceSyncBtn:SetConfirm(Tr("lbl_diffusing_snapshot_confirm"), function()
+        if GLOG and GLOG._SnapshotExport and GLOG.Comm_Broadcast then
             -- Option: on garde le comportement 'force' en incrémentant la révision locale si disponible
-            local newrv = (GMGR.IncRev and GMGR.IncRev()) or nil
-            local snap = GMGR._SnapshotExport()
+            local newrv = (GLOG.IncRev and GLOG.IncRev()) or nil
+            local snap = GLOG._SnapshotExport()
             if newrv then snap.rv = newrv end
-            GMGR.Comm_Broadcast("SYNC_FULL", snap)
-            if UIErrorsFrame then
-                UIErrorsFrame:AddMessage("|cff40ff40[GMGR]|r SYNC_FULL envoyé (rv="..tostring(snap.rv)..")", 0.4, 1, 0.4)
-            end
+            GLOG.Comm_Broadcast("SYNC_FULL", snap)
         end
     end)
 
@@ -410,20 +408,20 @@ local function Build(container)
     pendingArea = CreateFrame("Frame", nil, panel)
 
     -- Titre + trait pour chaque zone
-    UI.SectionHeader(recvArea,    "Liste des paquets entrants")
+    UI.SectionHeader(recvArea,    Tr("lbl_incoming_packets"))
     lvRecv    = UI.ListView(recvArea,    cols,         { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
 
-    UI.SectionHeader(sendArea,    "Liste des paquets sortants")
+    UI.SectionHeader(sendArea,    Tr("lbl_outcoming_packets"))
     lvSend    = UI.ListView(sendArea,    cols,         { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
 
-    UI.SectionHeader(pendingArea, "Liste des paquets en file d'attente")
+    UI.SectionHeader(pendingArea, Tr("lbl_pending_packets"))
     lvPending = UI.ListView(pendingArea, pendingCols,  { buildRow = BuildPendingRow, updateRow = UpdatePendingRow, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = footer })
 
     -- Colonnes simplifiées pour la file d'attente (heure / type / info)
     local colsQueue = UI.NormalizeColumns({
-        { key="time", title="Heure", w=110 },
-        { key="type", title="Type",  w=100 },
-        { key="info", title="Demande", min=240, flex=1 },
+        { key="time", title=Tr("col_time"), w=110 },
+        { key="type", title=Tr("col_type"),  w=100 },
+        { key="info", title=Tr("col_request"), min=240, flex=1 },
     })
     local function BuildRowQueue(r)
         local f = {}
@@ -485,7 +483,7 @@ end
 
 -- ➕ Layout avec footer et visibilité GM
 local function Layout()
-    local isMaster = GMGR.IsMaster and GMGR.IsMaster()
+    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
     if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end
     if UI.AttachButtonsFooterRight then
         local buttons = { purgeDBBtn, purgeAllBtn }
@@ -515,7 +513,7 @@ if ns and ns.On then
 end
 
 -- Affichage lisible d’une (sous-)table pour le debug réseau (évite "table: 0x...")
-function GMGR.Debug_TinyDump(v, depth)
+function GLOG.Debug_TinyDump(v, depth)
     depth = depth or 2
     local t = type(v)
     if t ~= "table" then return tostring(v) end
@@ -529,7 +527,7 @@ function GMGR.Debug_TinyDump(v, depth)
     end
     if isArray then
         for i=1, math.min(maxk, 5) do
-            out[#out+1] = GMGR.Debug_TinyDump(v[i], depth-1)
+            out[#out+1] = GLOG.Debug_TinyDump(v[i], depth-1)
         end
         if maxk > 5 then out[#out+1] = ("…(%d items)"):format(maxk) end
         return "["..table.concat(out,", ").."]"
@@ -537,7 +535,7 @@ function GMGR.Debug_TinyDump(v, depth)
         for k,val in pairs(v) do
             n = n + 1
             if n > 5 then out[#out+1] = "…"; break end
-            out[#out+1] = tostring(k)..":"..GMGR.Debug_TinyDump(val, depth-1)
+            out[#out+1] = tostring(k)..":"..GLOG.Debug_TinyDump(val, depth-1)
         end
         return "{"..table.concat(out,", ").."}"
     end
@@ -571,7 +569,7 @@ local function BuildOptions(panel)
 
     -- === Section 1 : Thème de l'interface ===
     local y = 0
-    local headerH = UI.SectionHeader(content, "Thème de l'interface", { topPad = y }) or (UI.SECTION_HEADER_H or 26)
+    local headerH = UI.SectionHeader(content, Tr("opt_ui_theme"), { topPad = y }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH + 8
 
     local function makeRadioV(group, key, text)
@@ -588,21 +586,21 @@ local function BuildOptions(panel)
 
         b:SetScript("OnClick", function(self)
             _SetRadioGroupChecked(group, key)
-            GuildManagerUI = GuildManagerUI or {}
+            GuildLogisticsUI = GuildLogisticsUI or {}
 
             if group == themeRadios then
                 -- Thème
-                GuildManagerUI.theme = key
+                GuildLogisticsUI.theme = key
                 if UI.SetTheme then UI.SetTheme(key) end
 
             elseif group == autoRadios then
                 -- Ouverture auto
-                GuildManagerUI.autoOpen = (key == "YES")
+                GuildLogisticsUI.autoOpen = (key == "YES")
 
             elseif group == debugRadios then
                 -- Activer le débug
-                GuildManagerUI.debugEnabled = (key == "YES")
-                if UI.SetDebugEnabled then UI.SetDebugEnabled(GuildManagerUI.debugEnabled) end
+                GuildLogisticsUI.debugEnabled = (key == "YES")
+                if UI.SetDebugEnabled then UI.SetDebugEnabled(GuildLogisticsUI.debugEnabled) end
             end
 
         end)
@@ -613,27 +611,27 @@ local function BuildOptions(panel)
     end
 
     -- Ordre demandé : Automatique, Alliance, Horde, Neutre
-    makeRadioV(themeRadios, "AUTO",     "Automatique")
-    makeRadioV(themeRadios, "ALLIANCE", "Alliance")
-    makeRadioV(themeRadios, "HORDE",    "Horde")
-    makeRadioV(themeRadios, "NEUTRAL",  "Neutre")
+    makeRadioV(themeRadios, "AUTO",     Tr("opt_auto"))
+    makeRadioV(themeRadios, "ALLIANCE", Tr("opt_alliance"))
+    makeRadioV(themeRadios, "HORDE",    Tr("opt_horde"))
+    makeRadioV(themeRadios, "NEUTRAL",  Tr("opt_neutral"))
 
     -- === Section 2 : Ouverture auto ===
-    local headerH2 = UI.SectionHeader(content, "Ouvrir automatiquement à l'ouverture du jeu", { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    local headerH2 = UI.SectionHeader(content, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH2 + 8
 
-    makeRadioV(autoRadios, "YES", "Oui")
-    makeRadioV(autoRadios, "NO",  "Non")
+    makeRadioV(autoRadios, "YES", Tr("opt_yes"))
+    makeRadioV(autoRadios, "NO",  Tr("opt_no"))
 
     -- === Section 3 : Activer le débug ===
-    local headerH3 = UI.SectionHeader(content, "Activer le débug", { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    local headerH3 = UI.SectionHeader(content, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH3 + 8
 
-    makeRadioV(debugRadios, "YES", "Oui")
-    makeRadioV(debugRadios, "NO",  "Non")
+    makeRadioV(debugRadios, "YES", Tr("opt_yes"))
+    makeRadioV(debugRadios, "NO",  Tr("opt_no"))
 
     -- Valeurs initiales
-    local saved = GMGR.GetSavedWindow and GMGR.GetSavedWindow() or {}
+    local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
     local theme = (saved and saved.theme) or "AUTO"
     local auto  = (saved and saved.autoOpen) and "YES" or "NO"
     local dbg   = ((saved and saved.debugEnabled) ~= false) and "YES" or "NO"  -- Oui par défaut
@@ -643,5 +641,5 @@ local function BuildOptions(panel)
     _SetRadioGroupChecked(debugRadios, dbg)
 end
 
-UI.RegisterTab("Options", BuildOptions, RefreshOptions)
-UI.RegisterTab("Debug", Build, Refresh, Layout, { hidden = true })
+UI.RegisterTab(Tr("tab_options"), BuildOptions, RefreshOptions)
+UI.RegisterTab(Tr("tab_debug"), Build, Refresh, Layout, { hidden = true })

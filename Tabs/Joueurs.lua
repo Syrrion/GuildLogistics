@@ -1,5 +1,6 @@
 local ADDON, ns = ...
-local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
+local Tr = ns and ns.Tr
+local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD
 
 local panel, lv
@@ -76,9 +77,9 @@ local function UpdateRow(i, r, f, it)
         f.last:SetText(ns.Format.LastSeen(it.days or it.lastSeenDays, it.hours or it.lastSeenHours))
     end
 
-    local inRoster = (ns.GMGR.HasPlayer and ns.GMGR.HasPlayer(it.main)) or false
-    local isReserve = (ns.GMGR.IsReserved and ns.GMGR.IsReserved(it.main)) or false
-    local canAdd = (ns.GMGR.IsMaster and ns.GMGR.IsMaster()) and true or false
+    local inRoster = (ns.GLOG.HasPlayer and ns.GLOG.HasPlayer(it.main)) or false
+    local isReserve = (ns.GLOG.IsReserved and ns.GLOG.IsReserved(it.main)) or false
+    local canAdd = (ns.GLOG.IsMaster and ns.GLOG.IsMaster()) and true or false
 
     if inRoster then
         if f.btnAdd then f.btnAdd:Hide() end
@@ -100,7 +101,7 @@ local function UpdateRow(i, r, f, it)
         if f.btnAdd then
             f.btnAdd:Show()
             f.btnAdd:SetScript("OnClick", function()
-                ns.GMGR.AddPlayer(it.main)
+                ns.GLOG.AddPlayer(it.main)
                 if ns.RefreshAll then ns.RefreshAll() end
             end)
         end
@@ -115,10 +116,10 @@ local function EnsureFullMain(e)
     if m:find("-", 1, true) then return m end
 
     -- Cherche le royaume à partir des lignes scannées de la guilde
-    local rows = (GMGR and GMGR.GetGuildRowsCached and GMGR.GetGuildRowsCached()) or {}
+    local rows = (GLOG and GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
     for _, r in ipairs(rows) do
         local amb = r.name_amb or r.name_raw
-        if amb and GMGR.NormName and GMGR.NormName(amb) == e.key then
+        if amb and GLOG.NormName and GLOG.NormName(amb) == e.key then
             local raw = r.name_raw or amb
             local realm = tostring(raw or ""):match("^[^-]+%-(.+)$")
             if realm and realm ~= "" then
@@ -167,21 +168,21 @@ local function Layout()
 end
 
 local function Refresh()
-    local need = (not GMGR.IsGuildCacheReady or not GMGR.IsGuildCacheReady())
-    if not need and GMGR.GetGuildCacheTimestamp then
-        local age = time() - GMGR.GetGuildCacheTimestamp()
+    local need = (not GLOG.IsGuildCacheReady or not GLOG.IsGuildCacheReady())
+    if not need and GLOG.GetGuildCacheTimestamp then
+        local age = time() - GLOG.GetGuildCacheTimestamp()
         if age > 60 then need = true end
     end
     if need then
         lv:SetData({ {kind="sep", label="Scan du roster en cours…"} })
-        GMGR.RefreshGuildCache(function()
+        GLOG.RefreshGuildCache(function()
             if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
             if ns and ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
         end)
         return
     end
 
-    local items = buildItemsFromAgg(GMGR.GetGuildMainsAggregated())
+    local items = buildItemsFromAgg(GLOG.GetGuildMainsAggregated())
     lv:SetData(items)
     lv:Layout()
 end
@@ -200,7 +201,7 @@ end
 
 -- Popup roster à largeur dynamique + auto-refresh à la fin du scan
 function UI.ShowGuildRosterPopup()
-    local dlg = UI.CreatePopup({ title = "Ajouter un membre de la guilde", height = 670 })
+    local dlg = UI.CreatePopup({ title = Tr("add_guild_member"), height = 670 })
 
 
     -- Largeur mini des colonnes + scrollbar + marges internes
@@ -226,7 +227,7 @@ function UI.ShowGuildRosterPopup()
     -- Fonction d’update spécifique à la popup (utilisée par le callback du scan)
     local function updatePopup()
         if not dlg or not dlg:IsShown() then return end
-        local items = buildItemsFromAgg(GMGR.GetGuildMainsAggregated())
+        local items = buildItemsFromAgg(GLOG.GetGuildMainsAggregated())
         pv:SetData(items)
         pv:Layout()
     end
@@ -234,15 +235,15 @@ function UI.ShowGuildRosterPopup()
     dlg:SetScript("OnHide", function() if ns and ns.UI then ns.UI._rosterPopupUpdater = nil end end)
 
     -- État initial : cache prêt récent -> data directe, sinon message + scan avec callback local
-    local need = (not GMGR.IsGuildCacheReady or not GMGR.IsGuildCacheReady())
-    if not need and GMGR.GetGuildCacheTimestamp then
-        local age = time() - GMGR.GetGuildCacheTimestamp()
+    local need = (not GLOG.IsGuildCacheReady or not GLOG.IsGuildCacheReady())
+    if not need and GLOG.GetGuildCacheTimestamp then
+        local age = time() - GLOG.GetGuildCacheTimestamp()
         if age > 60 then need = true end
     end
 
     if need then
         pv:SetData({ {kind="sep", label="Scan du roster en cours…"} })
-        GMGR.RefreshGuildCache(updatePopup)
+        GLOG.RefreshGuildCache(updatePopup)
     else
         updatePopup()
     end

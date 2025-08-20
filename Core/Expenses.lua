@@ -1,39 +1,39 @@
 local ADDON, ns = ...
-ns.GMGR = ns.GMGR or {}
-local GMGR = ns.GMGR
+ns.GLOG = ns.GLOG or {}
+local GLOG = ns.GLOG
 
-local function EnsureDB() if GMGR._EnsureDB then GMGR._EnsureDB() end end
+local function EnsureDB() if GLOG._EnsureDB then GLOG._EnsureDB() end end
 
 -- ====== State & API ======
-function GMGR.IsExpensesRecording()
+function GLOG.IsExpensesRecording()
     EnsureDB()
-    return GuildManagerDB.expenses and GuildManagerDB.expenses.recording
+    return GuildLogisticsDB.expenses and GuildLogisticsDB.expenses.recording
 end
 
-function GMGR.ExpensesStart()
+function GLOG.ExpensesStart()
     EnsureDB()
-    GuildManagerDB.expenses.recording = true
-    if GMGR.Expenses_InstallHooks then GMGR.Expenses_InstallHooks() end
+    GuildLogisticsDB.expenses.recording = true
+    if GLOG.Expenses_InstallHooks then GLOG.Expenses_InstallHooks() end
     return true
 end
 
-function GMGR.ExpensesStop()
+function GLOG.ExpensesStop()
     EnsureDB()
-    GuildManagerDB.expenses.recording = false
+    GuildLogisticsDB.expenses.recording = false
     return true
 end
 
-function GMGR.ExpensesToggle()
+function GLOG.ExpensesToggle()
     EnsureDB()
-    local e = GuildManagerDB.expenses
+    local e = GuildLogisticsDB.expenses
     e.recording = not e.recording
-    if e.recording and GMGR.Expenses_InstallHooks then GMGR.Expenses_InstallHooks() end
+    if e.recording and GLOG.Expenses_InstallHooks then GLOG.Expenses_InstallHooks() end
     return e.recording
 end
 
-function GMGR.LogExpense(source, itemLink, itemName, qty, copper)
+function GLOG.LogExpense(source, itemLink, itemName, qty, copper)
     EnsureDB()
-    local e = GuildManagerDB.expenses
+    local e = GuildLogisticsDB.expenses
     if not (e and e.recording) then return end
     local amount = tonumber(copper) or 0
     if amount <= 0 then return end
@@ -66,8 +66,8 @@ function GMGR.LogExpense(source, itemLink, itemName, qty, copper)
     })
 
     -- ➕ diffusion aux joueurs (le GM seul diffuse)
-    if GMGR.BroadcastExpenseAdd and GMGR.IsMaster and GMGR.IsMaster() then
-        GMGR.BroadcastExpenseAdd({
+    if GLOG.BroadcastExpenseAdd and GLOG.IsMaster and GLOG.IsMaster() then
+        GLOG.BroadcastExpenseAdd({
             id = nid, src = source, i = iid or 0,
             q = tonumber(qty) or 1, c = amount
         })
@@ -77,18 +77,18 @@ function GMGR.LogExpense(source, itemLink, itemName, qty, copper)
 end
 
 
-function GMGR.GetExpenses()
+function GLOG.GetExpenses()
     EnsureDB()
-    local e = GuildManagerDB.expenses or { list = {} }
+    local e = GuildLogisticsDB.expenses or { list = {} }
     local total = 0
     for _, it in ipairs(e.list or {}) do total = total + (tonumber(it.copper) or 0) end
     return e.list or {}, total
 end
 
 -- === Suppression / Vidage des dépenses ===
-function GMGR.DeleteExpense(ref)
+function GLOG.DeleteExpense(ref)
     EnsureDB()
-    local e = GuildManagerDB.expenses
+    local e = GuildLogisticsDB.expenses
     if not (e and e.list) then return false end
 
     local i = tonumber(ref)
@@ -115,16 +115,16 @@ function GMGR.DeleteExpense(ref)
     if ns and ns.RefreshAll then ns.RefreshAll() end
 
     -- Diffusion GM : notifier les autres clients
-    if GMGR.GM_RemoveExpense and GMGR.IsMaster and GMGR.IsMaster() and tonumber(eid or 0) > 0 then
-        GMGR.GM_RemoveExpense(eid)
+    if GLOG.GM_RemoveExpense and GLOG.IsMaster and GLOG.IsMaster() and tonumber(eid or 0) > 0 then
+        GLOG.GM_RemoveExpense(eid)
     end
     return true
 end
 
 
-function GMGR.ClearExpenses()
+function GLOG.ClearExpenses()
     EnsureDB()
-    local e = GuildManagerDB.expenses
+    local e = GuildLogisticsDB.expenses
     if not e then return false end
     local keep = {}
     for _, it in ipairs(e.list or {}) do
@@ -136,22 +136,22 @@ function GMGR.ClearExpenses()
 end
 
 -- Récupérer une dépense par id stable (retourne l'index courant et l'entrée)
-function GMGR.GetExpenseById(id)
+function GLOG.GetExpenseById(id)
     EnsureDB()
-    local e = GuildManagerDB.expenses
+    local e = GuildLogisticsDB.expenses
     for idx, it in ipairs(e.list or {}) do
         if it.id == id then return idx, it end
     end
 end
 
 -- ====== Hooks (Boutique / HdV) ======
-function GMGR.Expenses_InstallHooks()
-    if GMGR._expHooksInstalled then return end
-    GMGR._expHooksInstalled = true
+function GLOG.Expenses_InstallHooks()
+    if GLOG._expHooksInstalled then return end
+    GLOG._expHooksInstalled = true
     EnsureDB()
 
     -- file d’attente HdV + dernier prix coté (commodities)
-    GMGR._pendingAH = GMGR._pendingAH or {
+    GLOG._pendingAH = GLOG._pendingAH or {
         items = {},
         commodities = {},
         lastUnitPrice  = nil, -- COMMODITY_PRICE_UPDATED
@@ -159,7 +159,7 @@ function GMGR.Expenses_InstallHooks()
     }
 
     -- 1) Événements Retail HdV
-    if not GMGR._ahEventFrame then
+    if not GLOG._ahEventFrame then
         local ev = CreateFrame("Frame")
         ev:RegisterEvent("AUCTION_HOUSE_PURCHASE_COMPLETED") -- auctionID
         ev:RegisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
@@ -167,21 +167,21 @@ function GMGR.Expenses_InstallHooks()
         ev:RegisterEvent("COMMODITY_PRICE_UPDATED") -- unit,total
 
         ev:SetScript("OnEvent", function(_, event, ...)
-            if not GMGR.IsExpensesRecording() then return end
+            if not GLOG.IsExpensesRecording() then return end
 
             if event == "AUCTION_HOUSE_PURCHASE_COMPLETED" then
                 local auctionID = ...
-                local p = GMGR._pendingAH.items[auctionID]
+                local p = GLOG._pendingAH.items[auctionID]
                 if p then
                     local spent = tonumber(p.total)
                             or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
                         local qty = tonumber(p.qty) or 1
                         local unit = math.floor(spent / math.max(1, qty))
-                        GMGR.LogExpense("HdV", p.itemID or p.link, p.name or "Achat HdV", qty, unit)
+                        GLOG.LogExpense(Tr("label_ah"), p.itemID or p.link, p.name or Tr("label_ah"), qty, unit)
                     end
 
-                    GMGR._pendingAH.items[auctionID] = nil
+                    GLOG._pendingAH.items[auctionID] = nil
                 else
                     -- Fallback robuste si l’entrée Start/Confirm n’a pas été vue
                     if C_AuctionHouse and C_AuctionHouse.GetAuctionInfoByID then
@@ -190,48 +190,48 @@ function GMGR.Expenses_InstallHooks()
                             local amount = tonumber(info.buyoutAmount or info.bidAmount)
                             if amount and amount > 0 then
                                 local link = info.itemLink
-                                local name = (link and link:match("%[(.-)%]")) or info.itemName or "Achat HdV"
+                                local name = (link and link:match("%[(.-)%]")) or info.itemName or Tr("label_ah")
                                 local iid  = (info.itemKey and info.itemKey.itemID)
                                         or (link and GetItemInfoInstant and select(1, GetItemInfoInstant(link)))
-                                GMGR.LogExpense("HdV", iid or link, name, 1, amount)
+                                GLOG.LogExpense(Tr("label_ah"), iid or link, name, 1, amount)
                             end
                         end
                     end
                 end
 
             elseif event == "COMMODITY_PURCHASE_SUCCEEDED" then
-                local p = table.remove(GMGR._pendingAH.commodities, 1)
+                local p = table.remove(GLOG._pendingAH.commodities, 1)
                 if p then
                     local spent = tonumber(p.total)
-                            or tonumber(GMGR._pendingAH.lastTotalPrice)
-                            or ((GMGR._pendingAH.lastUnitPrice and p.qty) and (GMGR._pendingAH.lastUnitPrice * p.qty))
+                            or tonumber(GLOG._pendingAH.lastTotalPrice)
+                            or ((GLOG._pendingAH.lastUnitPrice and p.qty) and (GLOG._pendingAH.lastUnitPrice * p.qty))
                             or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
-                        GMGR.LogExpense("HdV", p.itemID or p.link, p.name or "Achat HdV", p.qty or 1, spent)
+                        GLOG.LogExpense(Tr("label_ah"), p.itemID or p.link, p.name or Tr("label_ah"), p.qty or 1, spent)
                     end
                 end
 
             elseif event == "COMMODITY_PURCHASE_FAILED" then
-                table.remove(GMGR._pendingAH.commodities, 1)
+                table.remove(GLOG._pendingAH.commodities, 1)
 
             elseif event == "COMMODITY_PRICE_UPDATED" then
                 local unitPrice, totalPrice = ...
-                GMGR._pendingAH.lastUnitPrice  = tonumber(unitPrice)
-                GMGR._pendingAH.lastTotalPrice = tonumber(totalPrice)
+                GLOG._pendingAH.lastUnitPrice  = tonumber(unitPrice)
+                GLOG._pendingAH.lastTotalPrice = tonumber(totalPrice)
             end
         end)
 
-        GMGR._ahEventFrame = ev
+        GLOG._ahEventFrame = ev
     end
 
     -- 2) Attente du chargement de l’UI HdV pour poser les hooks de méthode
     local function InstallAHHooks()
-        if not C_AuctionHouse or GMGR._ahHooksInstalled then return end
+        if not C_AuctionHouse or GLOG._ahHooksInstalled then return end
 
         -- Items (non-commodities)
-        if C_AuctionHouse.StartItemPurchase and not GMGR._ahStartItemHook then
+        if C_AuctionHouse.StartItemPurchase and not GLOG._ahStartItemHook then
             hooksecurefunc(C_AuctionHouse, "StartItemPurchase", function(auctionID)
-                local p = GMGR._pendingAH.items[auctionID] or { qty = 1 }
+                local p = GLOG._pendingAH.items[auctionID] or { qty = 1 }
                 p.preMoney = p.preMoney or (GetMoney() or 0)
                 local info = C_AuctionHouse.GetAuctionInfoByID and C_AuctionHouse.GetAuctionInfoByID(auctionID)
                 if info then
@@ -239,14 +239,14 @@ function GMGR.Expenses_InstallHooks()
                     p.name   = info.itemName or (info.itemLink and info.itemLink:match("%[(.-)%]")) or p.name
                     p.itemID = p.itemID or (info.itemKey and info.itemKey.itemID) or (info.itemLink and GetItemInfoInstant and select(1, GetItemInfoInstant(info.itemLink)))
                 end
-                GMGR._pendingAH.items[auctionID] = p
+                GLOG._pendingAH.items[auctionID] = p
             end)
-            GMGR._ahStartItemHook = true
+            GLOG._ahStartItemHook = true
         end
 
-        if C_AuctionHouse.ConfirmItemPurchase and not GMGR._ahConfirmItemHook then
+        if C_AuctionHouse.ConfirmItemPurchase and not GLOG._ahConfirmItemHook then
             hooksecurefunc(C_AuctionHouse, "ConfirmItemPurchase", function(auctionID, expectedPrice)
-                local p = GMGR._pendingAH.items[auctionID] or { qty = 1 }
+                local p = GLOG._pendingAH.items[auctionID] or { qty = 1 }
                 p.preMoney = p.preMoney or (GetMoney() or 0)
                 p.total = tonumber(expectedPrice) or p.total
                 if (not p.link) or (not p.name) or (not p.itemID) then
@@ -257,26 +257,26 @@ function GMGR.Expenses_InstallHooks()
                         p.itemID = p.itemID or (info.itemKey and info.itemKey.itemID) or (info.itemLink and GetItemInfoInstant and select(1, GetItemInfoInstant(info.itemLink)))
                     end
                 end
-                GMGR._pendingAH.items[auctionID] = p
+                GLOG._pendingAH.items[auctionID] = p
             end)
-            GMGR._ahConfirmItemHook = true
+            GLOG._ahConfirmItemHook = true
         end
 
-        if C_AuctionHouse.PlaceBid and not GMGR._ahPlaceBidHook then
+        if C_AuctionHouse.PlaceBid and not GLOG._ahPlaceBidHook then
             hooksecurefunc(C_AuctionHouse, "PlaceBid", function(auctionID, bidAmount)
-                local p = GMGR._pendingAH.items[auctionID] or { qty = 1 }
+                local p = GLOG._pendingAH.items[auctionID] or { qty = 1 }
                 p.preMoney = p.preMoney or (GetMoney() or 0)
                 p.total = p.total or tonumber(bidAmount)
-                GMGR._pendingAH.items[auctionID] = p
+                GLOG._pendingAH.items[auctionID] = p
             end)
-            GMGR._ahPlaceBidHook = true
+            GLOG._ahPlaceBidHook = true
         end
 
         -- Commodities (matériaux en vrac)
-        if C_AuctionHouse.StartCommoditiesPurchase and not GMGR._ahStartCommHook then
+        if C_AuctionHouse.StartCommoditiesPurchase and not GLOG._ahStartCommHook then
             hooksecurefunc(C_AuctionHouse, "StartCommoditiesPurchase", function(itemID, quantity)
                 local name, link = GetItemInfo(itemID)
-                table.insert(GMGR._pendingAH.commodities, {
+                table.insert(GLOG._pendingAH.commodities, {
                     itemID   = itemID,
                     qty      = quantity or 1,
                     name     = name,
@@ -285,48 +285,48 @@ function GMGR.Expenses_InstallHooks()
                     total    = nil, -- fixée au Confirm / price-updated
                 })
             end)
-            GMGR._ahStartCommHook = true
+            GLOG._ahStartCommHook = true
         end
 
-        if C_AuctionHouse.ConfirmCommoditiesPurchase and not GMGR._ahConfirmCommHook then
+        if C_AuctionHouse.ConfirmCommoditiesPurchase and not GLOG._ahConfirmCommHook then
             hooksecurefunc(C_AuctionHouse, "ConfirmCommoditiesPurchase", function(itemID, quantity)
                 -- On MET À JOUR la dernière entrée (créée par Start...), on n’en crée pas une nouvelle
-                local idx = #GMGR._pendingAH.commodities
+                local idx = #GLOG._pendingAH.commodities
                 if idx > 0 then
-                    local p = GMGR._pendingAH.commodities[idx]
+                    local p = GLOG._pendingAH.commodities[idx]
                     p.qty   = quantity or p.qty or 1
                     -- Priorité au dernier total coté remonté par COMMODITY_PRICE_UPDATED
-                    p.total = p.total or GMGR._pendingAH.lastTotalPrice
-                           or ((GMGR._pendingAH.lastUnitPrice and p.qty) and (GMGR._pendingAH.lastUnitPrice * p.qty))
-                    GMGR._pendingAH.commodities[idx] = p
+                    p.total = p.total or GLOG._pendingAH.lastTotalPrice
+                           or ((GLOG._pendingAH.lastUnitPrice and p.qty) and (GLOG._pendingAH.lastUnitPrice * p.qty))
+                    GLOG._pendingAH.commodities[idx] = p
                 else
                     -- Sécurité si Start n’a pas été capté (rare) : on crée une entrée minimaliste
                     local name, link = GetItemInfo(itemID)
-                    table.insert(GMGR._pendingAH.commodities, {
+                    table.insert(GLOG._pendingAH.commodities, {
                         itemID   = itemID,
                         qty      = quantity or 1,
                         name     = name,
                         link     = link,
                         preMoney = GetMoney() or 0,
-                        total    = GMGR._pendingAH.lastTotalPrice
-                                or ((GMGR._pendingAH.lastUnitPrice and quantity) and (GMGR._pendingAH.lastUnitPrice * quantity)),
+                        total    = GLOG._pendingAH.lastTotalPrice
+                                or ((GLOG._pendingAH.lastUnitPrice and quantity) and (GLOG._pendingAH.lastUnitPrice * quantity)),
                     })
                 end
             end)
-            GMGR._ahConfirmCommHook = true
+            GLOG._ahConfirmCommHook = true
         end
 
-        GMGR._ahHooksInstalled = true
+        GLOG._ahHooksInstalled = true
     end
 
     -- Installe tout de suite si l’API est déjà là
     InstallAHHooks()
 
     -- Et sinon, installe dès que l’UI HdV se charge
-    if not GMGR._ahHookWaiter then
-        GMGR._ahHookWaiter = CreateFrame("Frame")
-        GMGR._ahHookWaiter:RegisterEvent("ADDON_LOADED")
-        GMGR._ahHookWaiter:SetScript("OnEvent", function(_, _, addonName)
+    if not GLOG._ahHookWaiter then
+        GLOG._ahHookWaiter = CreateFrame("Frame")
+        GLOG._ahHookWaiter:RegisterEvent("ADDON_LOADED")
+        GLOG._ahHookWaiter:SetScript("OnEvent", function(_, _, addonName)
             if addonName == "Blizzard_AuctionHouse" or addonName == "Blizzard_AuctionHouseUI" then
                 InstallAHHooks()
             end
@@ -334,23 +334,23 @@ function GMGR.Expenses_InstallHooks()
     end
 
     -- 3) HdV Legacy (PlaceAuctionBid)
-    if _G.PlaceAuctionBid and not GMGR._legacyBidHook then
+    if _G.PlaceAuctionBid and not GLOG._legacyBidHook then
         hooksecurefunc("PlaceAuctionBid", function(listType, index, bid)
-            if not GMGR.IsExpensesRecording() then return end
+            if not GLOG.IsExpensesRecording() then return end
             local name, _, _, _, _, _, _, _, buyoutPrice = GetAuctionItemInfo(listType, index)
             local amount = (buyoutPrice and buyoutPrice > 0) and buyoutPrice or bid
             if amount and amount > 0 then
                 local link = GetAuctionItemLink(listType, index)
-                GMGR.LogExpense("HdV", link, name or "Achat HdV", 1, amount)
+                GLOG.LogExpense(Tr("label_ah"), link, name or Tr("label_ah"), 1, amount)
             end
         end)
-        GMGR._legacyBidHook = true
+        GLOG._legacyBidHook = true
     end
 
     -- 4) Boutique PNJ
-    if BuyMerchantItem and not GMGR._merchantHook then
+    if BuyMerchantItem and not GLOG._merchantHook then
         hooksecurefunc("BuyMerchantItem", function(index, quantity)
-            if not GMGR.IsExpensesRecording() then return end
+            if not GLOG.IsExpensesRecording() then return end
             local name, _, price = GetMerchantItemInfo(index) -- copper
             local q = quantity or 1
             local extCostCount = GetMerchantItemCostInfo and GetMerchantItemCostInfo(index) or 0
@@ -358,9 +358,9 @@ function GMGR.Expenses_InstallHooks()
             local link = GetMerchantItemLink and GetMerchantItemLink(index) or name
             local unit = math.floor((price or 0) / math.max(1, stackCount or 1))
             if unit > 0 then
-                GMGR.LogExpense("Boutique", link, name, q, unit)
+                GLOG.LogExpense(Tr("label_shop"), link, name, q, unit)
             end
         end)
-        GMGR._merchantHook = true
+        GLOG._merchantHook = true
     end
 end

@@ -1,8 +1,8 @@
 local ADDON, ns = ...
-ns.GMGR  = ns.GMGR  or {}
+ns.GLOG  = ns.GLOG  or {}
 ns.Util = ns.Util or {}
 
-local GMGR, U = ns.GMGR, ns.Util
+local GLOG, U = ns.GLOG, ns.Util
 
 -- =========================
 -- ===== Fonctions util =====
@@ -49,19 +49,19 @@ end
 -- =========================
 local function masterName()
     -- ⚠️ Source de vérité = roster (GM = rang index 0)
-    if GMGR and GMGR.GetGuildMasterCached then
-        local gm = GMGR.GetGuildMasterCached()
+    if GLOG and GLOG.GetGuildMasterCached then
+        local gm = GLOG.GetGuildMasterCached()
         if gm and gm ~= "" then return gm end
     end
     -- Fallback minimal si roster indisponible
-    GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.meta = GuildManagerDB.meta or {}
-    return GuildManagerDB.meta.master
+    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    return GuildLogisticsDB.meta.master
 end
 
 -- Chef de guilde = override toujours vrai
 -- Master désigné = strict si défini
 -- Sinon (pas de master), autorise les grades avec vraies permissions officiers
-function GMGR.IsMaster()
+function GLOG.IsMaster()
     -- 1) Chef de guilde : toujours autorisé
     if IsInGuild and IsInGuild() then
         local _, _, ri = GetGuildInfo("player")
@@ -71,7 +71,7 @@ function GMGR.IsMaster()
 end
 
 -- ➕ Optionnel : utilitaire explicite (peut servir à l’UI)
-function GMGR.IsGM()
+function GLOG.IsGM()
     if IsInGuild and IsInGuild() then
         local _, _, ri = GetGuildInfo("player")
         if ri == 0 then return true end
@@ -90,9 +90,9 @@ function GMGR.IsGM()
 end
 
 local function getRev()
-    if GMGR.GetRev then return safenum(GMGR.GetRev(), 0) end
-    GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.meta = GuildManagerDB.meta or {}
-    return safenum(GuildManagerDB.meta.rev, 0)
+    if GLOG.GetRev then return safenum(GLOG.GetRev(), 0) end
+    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    return safenum(GuildLogisticsDB.meta.rev, 0)
 end
 
 -- =========================
@@ -129,27 +129,27 @@ U.playerFullName = playerFullName
 U.SamePlayer     = SamePlayer
 
 -- -- Journal/Debug : stub sûr pour éviter les nil avant le chargement de Comm.lua
-ns.GMGR = ns.GMGR or {}
-if type(ns.GMGR.GetDebugLogs) ~= "function" then
+ns.GLOG = ns.GLOG or {}
+if type(ns.GLOG.GetDebugLogs) ~= "function" then
     local _fallbackDebug = {}
-    function ns.GMGR.GetDebugLogs() return _fallbackDebug end
+    function ns.GLOG.GetDebugLogs() return _fallbackDebug end
 end
-if type(ns.GMGR._SetDebugLogsRef) ~= "function" then
-    function ns.GMGR._SetDebugLogsRef(t)
+if type(ns.GLOG._SetDebugLogsRef) ~= "function" then
+    function ns.GLOG._SetDebugLogsRef(t)
         if type(t) == "table" then
-            ns.GMGR.GetDebugLogs = function() return t end
+            ns.GLOG.GetDebugLogs = function() return t end
         end
     end
 end
 
--- ➕ Helpers UID/Roster centraux (dans ns.Util) + miroirs dans GMGR pour compat
+-- ➕ Helpers UID/Roster centraux (dans ns.Util) + miroirs dans GLOG pour compat
 local function EnsureDB()
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.meta    = GuildManagerDB.meta    or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    GuildManagerDB.uids    = GuildManagerDB.uids    or {}
-    GuildManagerDB.meta.uidSeq = GuildManagerDB.meta.uidSeq or 1
-    return GuildManagerDB
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
+    GuildLogisticsDB.meta.uidSeq = GuildLogisticsDB.meta.uidSeq or 1
+    return GuildLogisticsDB
 end
 local function _norm(s) return (normalizeStr and normalizeStr(s)) or tostring(s or ""):gsub("%s+",""):lower() end
 
@@ -211,24 +211,24 @@ if type(U.EnsureRosterLocal) ~= "function" then
     end
 end
 
--- Miroirs compat dans GMGR (si absents)
-if type(ns.GMGR.GetOrAssignUID) ~= "function" then ns.GMGR.GetOrAssignUID = U.GetOrAssignUID end
-if type(ns.GMGR.GetNameByUID)  ~= "function" then ns.GMGR.GetNameByUID  = U.GetNameByUID  end
-if type(ns.GMGR.MapUID)        ~= "function" then ns.GMGR.MapUID        = U.MapUID        end
-if type(ns.GMGR.UnmapUID)      ~= "function" then ns.GMGR.UnmapUID      = U.UnmapUID      end
-if type(ns.GMGR.EnsureRosterLocal) ~= "function" then ns.GMGR.EnsureRosterLocal = U.EnsureRosterLocal end
-if type(ns.GMGR.FindUIDByName) ~= "function" then ns.GMGR.FindUIDByName = U.FindUIDByName end
-if type(ns.GMGR.GetUID)        ~= "function" then ns.GMGR.GetUID        = U.FindUIDByName end
+-- Miroirs compat dans GLOG (si absents)
+if type(ns.GLOG.GetOrAssignUID) ~= "function" then ns.GLOG.GetOrAssignUID = U.GetOrAssignUID end
+if type(ns.GLOG.GetNameByUID)  ~= "function" then ns.GLOG.GetNameByUID  = U.GetNameByUID  end
+if type(ns.GLOG.MapUID)        ~= "function" then ns.GLOG.MapUID        = U.MapUID        end
+if type(ns.GLOG.UnmapUID)      ~= "function" then ns.GLOG.UnmapUID      = U.UnmapUID      end
+if type(ns.GLOG.EnsureRosterLocal) ~= "function" then ns.GLOG.EnsureRosterLocal = U.EnsureRosterLocal end
+if type(ns.GLOG.FindUIDByName) ~= "function" then ns.GLOG.FindUIDByName = U.FindUIDByName end
+if type(ns.GLOG.GetUID)        ~= "function" then ns.GLOG.GetUID        = U.FindUIDByName end
 
 
 -- ➕ Gestion centrale des UID / Roster (idempotent)
 local function EnsureDB()
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.meta    = GuildManagerDB.meta    or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    GuildManagerDB.uids    = GuildManagerDB.uids    or {}
-    GuildManagerDB.meta.uidSeq = GuildManagerDB.meta.uidSeq or 1
-    return GuildManagerDB
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
+    GuildLogisticsDB.meta.uidSeq = GuildLogisticsDB.meta.uidSeq or 1
+    return GuildLogisticsDB
 end
 local function _norm(s) return normalizeStr and normalizeStr(s) or tostring(s or ""):gsub("%s+",""):lower() end
 
@@ -293,7 +293,7 @@ if type(U.EnsureRosterLocal) ~= "function" then
 end
 
 -- ➕ Utilitaires : guilde & titre principal
-function GMGR.GetCurrentGuildName()
+function GLOG.GetCurrentGuildName()
     if IsInGuild and IsInGuild() then
         local gname = GetGuildInfo("player")
         if type(gname) == "string" and gname ~= "" then
@@ -303,15 +303,15 @@ function GMGR.GetCurrentGuildName()
     return nil
 end
 
-function GMGR.BuildMainTitle()
-    local g = GMGR.GetCurrentGuildName and GMGR.GetCurrentGuildName()
+function GLOG.BuildMainTitle()
+    local g = GLOG.GetCurrentGuildName and GLOG.GetCurrentGuildName()
     if g and g ~= "" then
         return string.format("%s", g)
     end
     return ""
 end
 
-function GMGR.GetAddonIconTexture()
+function GLOG.GetAddonIconTexture()
     -- Préfère l'API moderne, sinon rétro-compatibilité
     local icon = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "IconTexture"))
               or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "IconTexture"))

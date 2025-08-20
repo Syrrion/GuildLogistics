@@ -1,6 +1,7 @@
 -- Tabs/Demandes.lua
 local ADDON, ns = ...
-local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
+local Tr = ns and ns.Tr
+local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD
 
 local panel, lv
@@ -32,16 +33,16 @@ local function UpdateRow(i, r, f, it)
     f.op:SetText(op)
 
     r.btnApprove:SetOnClick(function()
-        if not GMGR.IsMaster or not GMGR.IsMaster() then return end
+        if not GLOG.IsMaster or not GLOG.IsMaster() then return end
         -- Anti double-clic : masquer la ligne tout de suite
         if r and r.Hide then r:Hide() end
         if lv and lv.Layout then lv:Layout() end
 
         -- Traitement : appliquer et retirer de la file
-        if GMGR.GM_ApplyAndBroadcastByUID then
-            GMGR.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
+        if GLOG.GM_ApplyAndBroadcastByUID then
+            GLOG.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
         end
-        if GMGR.ResolveRequest then GMGR.ResolveRequest(it.id, true, "Approuvé via la liste") end
+        if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, true, "Approuvé via la liste") end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
         if Refresh then Refresh() end
@@ -56,7 +57,7 @@ local function UpdateRow(i, r, f, it)
         if lv and lv.Layout then lv:Layout() end
 
         -- Traitement : retirer de la file
-        if GMGR.ResolveRequest then GMGR.ResolveRequest(it.id, false, "Refusé via la liste") end
+        if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, false, "Refusé via la liste") end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
         if Refresh then Refresh() end
@@ -72,13 +73,13 @@ end
 
 local function Refresh()
     local rows = {}
-    if not GMGR.IsMaster or not GMGR.IsMaster() then
+    if not GLOG.IsMaster or not GLOG.IsMaster() then
         lv:SetData({})
         if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
         return
     end
-    for _, r in ipairs(GMGR.GetRequests()) do
-        local display = (GMGR.GetNameByUID and GMGR.GetNameByUID(r.uid)) or r.requester or "?"
+    for _, r in ipairs(GLOG.GetRequests()) do
+        local display = (GLOG.GetNameByUID and GLOG.GetNameByUID(r.uid)) or r.requester or "?"
         rows[#rows+1] = { id=r.id, ts=r.ts, uid=r.uid, name=display, delta=r.delta }
     end
     lv:SetData(rows)
@@ -93,4 +94,4 @@ local function Build(container)
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow })
 end
 
-UI.RegisterTab("Demandes", Build, Refresh, Layout, { hidden = false })
+UI.RegisterTab(Tr("tab_requests"), Build, Refresh, Layout, { hidden = false })

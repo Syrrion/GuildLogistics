@@ -1,12 +1,12 @@
 local ADDON, ns = ...
-ns.GMGR = ns.GMGR or {}
-local GMGR = ns.GMGR
+ns.GLOG = ns.GLOG or {}
+local GLOG = ns.GLOG
 
 -- Icône centrale de l’addon (réutilisable partout, y compris minimap)
-GMGR.ICON_TEXTURE = GMGR.ICON_TEXTURE or "Interface\\AddOns\\GuildManager\\Ressources\\Media\\LogoAddonWoW128.tga"
+GLOG.ICON_TEXTURE = GLOG.ICON_TEXTURE or "Interface\\AddOns\\GuildLogistics\\Ressources\\Media\\LogoAddonWoW128.tga"
 
-function GMGR.GetAddonIconTexture(size)
-    local base = "Interface\\AddOns\\GuildManager\\Ressources\\Media\\LogoAddonWoW"
+function GLOG.GetAddonIconTexture(size)
+    local base = "Interface\\AddOns\\GuildLogistics\\Ressources\\Media\\LogoAddonWoW"
     local pick
     if type(size) == "number" then
         if size <= 16 then       pick = "16"
@@ -34,7 +34,7 @@ end
 -- ======  DATABASE   ======
 -- =========================
 local function EnsureDB()
-    GuildManagerDB = GuildManagerDB or {
+    GuildLogisticsDB = GuildLogisticsDB or {
         players = {},
         history = {},
         expenses = { recording = false, list = {}, nextId = 1 },
@@ -45,23 +45,23 @@ local function EnsureDB()
         historyNextId = 1,  -- ➕ compteur HID
         debug = {},
     }
-    GuildManagerUI = GuildManagerUI or {
+    GuildLogisticsUI = GuildLogisticsUI or {
         point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
         minimap = { hide = false, angle = 215 },
     }
-    GuildManagerUI.minimap = GuildManagerUI.minimap or { hide=false, angle=215 }
-    if GuildManagerUI.minimap.angle == nil then GuildManagerUI.minimap.angle = 215 end
+    GuildLogisticsUI.minimap = GuildLogisticsUI.minimap or { hide=false, angle=215 }
+    if GuildLogisticsUI.minimap.angle == nil then GuildLogisticsUI.minimap.angle = 215 end
 
     -- ➕ Par défaut : débug actif (Oui)
-    if GuildManagerUI.debugEnabled == nil then GuildManagerUI.debugEnabled = true end
+    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = true end
 end
 
-GMGR._EnsureDB = EnsureDB
+GLOG._EnsureDB = EnsureDB
 
 -- ➕ API : état du débug
-function GMGR.IsDebugEnabled()
+function GLOG.IsDebugEnabled()
     EnsureDB()
-    return GuildManagerUI.debugEnabled ~= false
+    return GuildLogisticsUI.debugEnabled ~= false
 end
 
 -- =========================
@@ -70,10 +70,10 @@ end
 local function GetOrCreatePlayer(name)
     EnsureDB()
     if not name or name == "" then return { credit=0, debit=0, reserved=false } end
-    local p = GuildManagerDB.players[name]
+    local p = GuildLogisticsDB.players[name]
     if not p then
         p = { credit = 0, debit = 0, reserved = false }  -- ➕ flag de réserve par défaut
-        GuildManagerDB.players[name] = p
+        GuildLogisticsDB.players[name] = p
     else
         if p.reserved == nil then p.reserved = false end -- compat données anciennes
     end
@@ -81,9 +81,9 @@ local function GetOrCreatePlayer(name)
 end
 
 -- ➕ Statut « en réserve » (tolérant plusieurs clés héritées)
-function GMGR.IsReserved(name)
-    GuildManagerDB = GuildManagerDB or {}
-    local p = GuildManagerDB.players and GuildManagerDB.players[name]
+function GLOG.IsReserved(name)
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local p = GuildLogisticsDB.players and GuildLogisticsDB.players[name]
     if not p then return false end
     -- Tolère reserved / reserve / bench, ou un status textuel
     local v = p.reserved
@@ -96,12 +96,12 @@ function GMGR.IsReserved(name)
     return false
 end
 -- Alias rétro-compatible si jamais du code appelle IsReserve()
-GMGR.IsReserve = GMGR.IsReserved
+GLOG.IsReserve = GLOG.IsReserved
 
-function GMGR.GetPlayersArray()
+function GLOG.GetPlayersArray()
     EnsureDB()
     local out = {}
-    for name, p in pairs(GuildManagerDB.players) do
+    for name, p in pairs(GuildLogisticsDB.players) do
         local credit   = tonumber(p.credit) or 0
         local debit    = tonumber(p.debit)  or 0
         local reserved = (p.reserved == true)
@@ -118,23 +118,23 @@ function GMGR.GetPlayersArray()
 end
 
 -- ➕ Sous-ensembles utiles à l’UI (actif / réserve)
-function GMGR.GetPlayersArrayActive()
-    local src = GMGR.GetPlayersArray()
+function GLOG.GetPlayersArrayActive()
+    local src = GLOG.GetPlayersArray()
     local out = {}
     for _, r in ipairs(src) do
         -- ✅ robuste même si un appelant fournit une ligne sans champ 'reserved'
         local isRes = (r.reserved ~= nil) and r.reserved
-                      or (GMGR.IsReserved and GMGR.IsReserved(r.name)) or false
+                      or (GLOG.IsReserved and GLOG.IsReserved(r.name)) or false
         if not isRes then out[#out+1] = r end
     end
     return out
 end
 
 
-function GMGR.GetPlayersArrayReserve()
+function GLOG.GetPlayersArrayReserve()
     EnsureDB()
     local out = {}
-    for name, p in pairs(GuildManagerDB.players) do
+    for name, p in pairs(GuildLogisticsDB.players) do
         if p.reserved then
             local credit = tonumber(p.credit) or 0
             local debit  = tonumber(p.debit) or 0
@@ -148,31 +148,31 @@ function GMGR.GetPlayersArrayReserve()
     return out
 end
 
-function GMGR.AddPlayer(name)
+function GLOG.AddPlayer(name)
     if not name or name == "" then return end
     GetOrCreatePlayer(name)
-    if GMGR.GetOrAssignUID then GMGR.GetOrAssignUID(name) end
-    if GMGR.BroadcastRosterUpsert and GMGR.IsMaster and GMGR.IsMaster() then
-        GMGR.BroadcastRosterUpsert(name)
+    if GLOG.GetOrAssignUID then GLOG.GetOrAssignUID(name) end
+    if GLOG.BroadcastRosterUpsert and GLOG.IsMaster and GLOG.IsMaster() then
+        GLOG.BroadcastRosterUpsert(name)
     end
     return true
 end
 
 
-function GMGR.RemovePlayer(name)
-    if not (GMGR.IsMaster and GMGR.IsMaster()) then
-        UIErrorsFrame:AddMessage("|cffff6060[GMGR]|r Suppression du roster réservée au GM.", 1, 0.4, 0.4)
+function GLOG.RemovePlayer(name)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then
+        UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Suppression du roster réservée au GM.", 1, 0.4, 0.4)
         return false
     end
-    GuildManagerDB = GuildManagerDB or {}
-    local p = GuildManagerDB.players or {}
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local p = GuildLogisticsDB.players or {}
     if p[name] then p[name] = nil end
     -- Optionnel: retirer l'UID mappé
-    if GuildManagerDB.ids and GuildManagerDB.ids.byName then
-        local uid = GuildManagerDB.ids.byName[name]
+    if GuildLogisticsDB.ids and GuildLogisticsDB.ids.byName then
+        local uid = GuildLogisticsDB.ids.byName[name]
         if uid then
-            GuildManagerDB.ids.byName[name] = nil
-            if GuildManagerDB.ids.byId then GuildManagerDB.ids.byId[uid] = nil end
+            GuildLogisticsDB.ids.byName[name] = nil
+            if GuildLogisticsDB.ids.byId then GuildLogisticsDB.ids.byId[uid] = nil end
         end
     end
     if ns.RefreshAll then ns.RefreshAll() end
@@ -180,38 +180,38 @@ function GMGR.RemovePlayer(name)
 end
 
 
-function GMGR.HasPlayer(name)
+function GLOG.HasPlayer(name)
     EnsureDB()
     if not name or name == "" then return false end
-    return GuildManagerDB.players[name] ~= nil
+    return GuildLogisticsDB.players[name] ~= nil
 end
 
 -- ➕ Statut "en réserve" (alias bench pris en charge)
-function GMGR.IsReserve(name)
+function GLOG.IsReserve(name)
     EnsureDB()
     if not name or name == "" then return false end
-    local p = GuildManagerDB.players[name]
+    local p = GuildLogisticsDB.players[name]
     return (p and ((p.reserve == true) or (p.bench == true))) or false
 end
 
-function GMGR.Credit(name, amount)
+function GLOG.Credit(name, amount)
     local p = GetOrCreatePlayer(name)
     local a = math.floor(tonumber(amount) or 0)
     p.credit = (p.credit or 0) + a
 end
 
-function GMGR.Debit(name, amount)
+function GLOG.Debit(name, amount)
     local p = GetOrCreatePlayer(name)
     local a = math.floor(tonumber(amount) or 0)
     p.debit = (p.debit or 0) + a
 end
 
-function GMGR.GetSolde(name)
+function GLOG.GetSolde(name)
     local p = GetOrCreatePlayer(name)
     return (p.credit or 0) - (p.debit or 0)
 end
 
-function GMGR.SamePlayer(a, b)
+function GLOG.SamePlayer(a, b)
     if not a or not b then return false end
     -- Comparaison stricte sur le nom complet (insensible à la casse)
     return string.lower(tostring(a)) == string.lower(tostring(b))
@@ -219,10 +219,10 @@ end
 
 
 -- ➕ Normalisation des clés joueurs (merge "Nom" et "Nom-Realm", dédoublonne les realms répétés)
-function GMGR.NormalizePlayerKeys()
-    if not GuildManagerDB then return end
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    GuildManagerDB.uids    = GuildManagerDB.uids    or {}
+function GLOG.NormalizePlayerKeys()
+    if not GuildLogisticsDB then return end
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
 
     local function dedupRealm(full)
         full = tostring(full or "")
@@ -239,7 +239,7 @@ function GMGR.NormalizePlayerKeys()
 
     -- 1) Rebuild players avec clés normalisées + fusion des soldes
     local rebuilt = {}
-    for name, rec in pairs(GuildManagerDB.players) do
+    for name, rec in pairs(GuildLogisticsDB.players) do
         local norm = (NormalizeFull and NormalizeFull(name)) or name
         norm = dedupRealm(norm)
         local dst = rebuilt[norm]
@@ -250,37 +250,37 @@ function GMGR.NormalizePlayerKeys()
             dst.debit  = (dst.debit  or 0) + (tonumber(rec.debit)  or 0)
         end
     end
-    GuildManagerDB.players = rebuilt
+    GuildLogisticsDB.players = rebuilt
 
     -- 2) Normalise aussi la table des UIDs -> noms
     local newUIDs = {}
-    for uid, n in pairs(GuildManagerDB.uids) do
+    for uid, n in pairs(GuildLogisticsDB.uids) do
         local norm = (NormalizeFull and NormalizeFull(n)) or n
         newUIDs[tostring(uid)] = dedupRealm(norm)
     end
-    GuildManagerDB.uids = newUIDs
+    GuildLogisticsDB.uids = newUIDs
 end
 
 -- Ajuste directement le solde d’un joueur : delta > 0 => ajoute de l’or, delta < 0 => retire de l’or
-function GMGR.AdjustSolde(name, delta)
+function GLOG.AdjustSolde(name, delta)
     local d = math.floor(tonumber(delta) or 0)
-    if d == 0 then return GMGR.GetSolde(name) end
-    if d > 0 then GMGR.Credit(name, d) else GMGR.Debit(name, -d) end
-    return GMGR.GetSolde(name)
+    if d == 0 then return GLOG.GetSolde(name) end
+    if d > 0 then GLOG.Credit(name, d) else GLOG.Debit(name, -d) end
+    return GLOG.GetSolde(name)
 end
 
 -- Marquer la modif + broadcast par le GM depuis une seule API dédiée
-function GMGR.GM_AdjustAndBroadcast(name, delta)
-    if GMGR.GM_ApplyAndBroadcast then GMGR.GM_ApplyAndBroadcast(name, delta) end
+function GLOG.GM_AdjustAndBroadcast(name, delta)
+    if GLOG.GM_ApplyAndBroadcast then GLOG.GM_ApplyAndBroadcast(name, delta) end
 end
 
 -- Helpers conviviaux
-function GMGR.AddGold(name, amount)
-    return GMGR.AdjustSolde(name, math.floor(tonumber(amount) or 0))
+function GLOG.AddGold(name, amount)
+    return GLOG.AdjustSolde(name, math.floor(tonumber(amount) or 0))
 end
 
-function GMGR.RemoveGold(name, amount)
-    return GMGR.AdjustSolde(name, -math.floor(tonumber(amount) or 0))
+function GLOG.RemoveGold(name, amount)
+    return GLOG.AdjustSolde(name, -math.floor(tonumber(amount) or 0))
 end
 
 -- === Bus d’événements minimal ===
@@ -299,50 +299,50 @@ function ns.Emit(evt, ...)
     end
 end
 
-function GMGR.EnsureRosterLocal(name)
+function GLOG.EnsureRosterLocal(name)
     if not name or name == "" then return end
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     local created = false
-    if not GuildManagerDB.players[name] then
-        GuildManagerDB.players[name] = { credit = 0, debit = 0, reserved = false }
+    if not GuildLogisticsDB.players[name] then
+        GuildLogisticsDB.players[name] = { credit = 0, debit = 0, reserved = false }
         created = true
     else
-        if GuildManagerDB.players[name].reserved == nil then
-            GuildManagerDB.players[name].reserved = false
+        if GuildLogisticsDB.players[name].reserved == nil then
+            GuildLogisticsDB.players[name].reserved = false
         end
     end
     if created then ns.Emit("roster:upsert", name) end
 end
 
-function GMGR.RemovePlayerLocal(name, silent)
+function GLOG.RemovePlayerLocal(name, silent)
     if not name or name=="" then return false end
-    GuildManagerDB = GuildManagerDB or {}
-    local p = GuildManagerDB.players or {}
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local p = GuildLogisticsDB.players or {}
     local existed = not not p[name]
     if p[name] then p[name] = nil end
 
     -- ancien mapping (legacy)
-    if GuildManagerDB.ids and GuildManagerDB.ids.byName then
-        local _uid = GuildManagerDB.ids.byName[name]
+    if GuildLogisticsDB.ids and GuildLogisticsDB.ids.byName then
+        local _uid = GuildLogisticsDB.ids.byName[name]
         if _uid then
-            GuildManagerDB.ids.byName[name] = nil
-            if GuildManagerDB.ids.byId then GuildManagerDB.ids.byId[_uid] = nil end
+            GuildLogisticsDB.ids.byName[name] = nil
+            if GuildLogisticsDB.ids.byId then GuildLogisticsDB.ids.byId[_uid] = nil end
         end
     end
 
     -- purge aussi la table des UID actifs
-    if GuildManagerDB.uids then
+    if GuildLogisticsDB.uids then
         local uid = nil
-        if GMGR.FindUIDByName then
-            uid = GMGR.FindUIDByName(name)
+        if GLOG.FindUIDByName then
+            uid = GLOG.FindUIDByName(name)
         elseif ns and ns.Util and ns.Util.FindUIDByName then
             uid = ns.Util.FindUIDByName(name)
         end
         if not uid then
-            for k,v in pairs(GuildManagerDB.uids) do if v == name then uid = k break end end
+            for k,v in pairs(GuildLogisticsDB.uids) do if v == name then uid = k break end end
         end
-        if uid then GuildManagerDB.uids[uid] = nil end
+        if uid then GuildLogisticsDB.uids[uid] = nil end
     end
 
     if existed then ns.Emit("roster:removed", name) end
@@ -352,32 +352,32 @@ end
 
 -- Suppression orchestrée : réservée au GM + broadcast
 -- Remplace la version précédente de RemovePlayer si déjà présente
-function GMGR.RemovePlayer(name)
-    if not (GMGR.IsMaster and GMGR.IsMaster()) then
-        UIErrorsFrame:AddMessage("|cffff6060[GMGR]|r Suppression du roster réservée au GM.", 1, 0.4, 0.4)
+function GLOG.RemovePlayer(name)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then
+        UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Suppression du roster réservée au GM.", 1, 0.4, 0.4)
         return false
     end
     if not name or name=="" then return false end
 
-    local uid = GMGR.GetUID and GMGR.GetUID(name) or nil
+    local uid = GLOG.GetUID and GLOG.GetUID(name) or nil
 
     -- Applique localement (GM)
-    GMGR.RemovePlayerLocal(name, true)
+    GLOG.RemovePlayerLocal(name, true)
 
     -- Incrémente la révision et horodate pour les clients qui filtrent sur rv/lm
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.meta = GuildManagerDB.meta or {}
-    local rv = (GuildManagerDB.meta.rev or 0) + 1
-    GuildManagerDB.meta.rev = rv
-    GuildManagerDB.meta.lastModified = time()
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+    GuildLogisticsDB.meta.rev = rv
+    GuildLogisticsDB.meta.lastModified = time()
 
     -- Diffuse la suppression à toute la guilde avec rv/lm
-    if GMGR.Comm_Broadcast then
-        GMGR.Comm_Broadcast("ROSTER_REMOVE", {
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("ROSTER_REMOVE", {
             uid = uid,
             name = name,
             rv  = rv,
-            lm  = GuildManagerDB.meta.lastModified,
+            lm  = GuildLogisticsDB.meta.lastModified,
         })
     end
 
@@ -386,9 +386,9 @@ function GMGR.RemovePlayer(name)
 end
 
 -- ➕ API réserve : lecture + application locale + commande GM + broadcast
-function GMGR.IsReserved(name)
+function GLOG.IsReserved(name)
     EnsureDB()
-    local p = name and GuildManagerDB.players and GuildManagerDB.players[name]
+    local p = name and GuildLogisticsDB.players and GuildLogisticsDB.players[name]
     return (p and p.reserved) and true or false
 end
 
@@ -399,10 +399,10 @@ local function _SetReservedLocal(name, flag)
     if prev ~= p.reserved and ns.Emit then ns.Emit("roster:reserve", name, p.reserved) end
 end
 
-function GMGR.GM_SetReserved(name, flag)
-    if not (GMGR.IsMaster and GMGR.IsMaster()) then
+function GLOG.GM_SetReserved(name, flag)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then
         if UIErrorsFrame then
-            UIErrorsFrame:AddMessage("|cffff6060[GMGR]|r Changement d’attribution réservé au GM.", 1, .4, .4)
+            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Changement d’attribution réservé au GM.", 1, .4, .4)
         end
         return false
     end
@@ -410,16 +410,16 @@ function GMGR.GM_SetReserved(name, flag)
 
     _SetReservedLocal(name, flag)
 
-    GuildManagerDB.meta = GuildManagerDB.meta or {}
-    local rv = (GuildManagerDB.meta.rev or 0) + 1
-    GuildManagerDB.meta.rev = rv
-    GuildManagerDB.meta.lastModified = time()
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+    GuildLogisticsDB.meta.rev = rv
+    GuildLogisticsDB.meta.lastModified = time()
 
-    local uid = (GMGR.GetUID and GMGR.GetUID(name)) or (GMGR.FindUIDByName and GMGR.FindUIDByName(name)) or nil
-    if GMGR.Comm_Broadcast then
-        GMGR.Comm_Broadcast("ROSTER_RESERVE", {
+    local uid = (GLOG.GetUID and GLOG.GetUID(name)) or (GLOG.FindUIDByName and GLOG.FindUIDByName(name)) or nil
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("ROSTER_RESERVE", {
             uid = uid, name = name, res = flag and 1 or 0,
-            rv = rv, lm = GuildManagerDB.meta.lastModified
+            rv = rv, lm = GuildLogisticsDB.meta.lastModified
         })
     end
     if ns.RefreshAll then ns.RefreshAll() end
@@ -431,21 +431,21 @@ end
 -- =========================
 
 -- Lecture simple (nil si inconnu)
-function GMGR.GetIlvl(name)
+function GLOG.GetIlvl(name)
     if not name or name == "" then return nil end
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    local p = GuildManagerDB.players[name]
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
     return p and tonumber(p.ilvl or nil) or nil
 end
 
 -- Application locale + signal UI (protégée)
 local function _SetIlvlLocal(name, ilvl, ts, by)
     if not name or name == "" then return end
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     -- ⚠️ Ne pas créer d'entrée : si le joueur n'est pas dans le roster (actif/réserve), on sort.
-    local p = GuildManagerDB.players[name]
+    local p = GuildLogisticsDB.players[name]
     if not p then return end
 
     local nowts   = tonumber(ts) or time()
@@ -460,14 +460,14 @@ local function _SetIlvlLocal(name, ilvl, ts, by)
 end
 
 -- Calcul & diffusion : uniquement si le perso connecté EST le main
-function GMGR.UpdateOwnIlvlIfMain()
-    if not (GMGR.IsConnectedMain and GMGR.IsConnectedMain()) then return end
+function GLOG.UpdateOwnIlvlIfMain()
+    if not (GLOG.IsConnectedMain and GLOG.IsConnectedMain()) then return end
 
     -- Throttle anti-spam
     local tnow = GetTimePreciseSec and GetTimePreciseSec() or (debugprofilestop and (debugprofilestop()/1000)) or 0
-    GMGR._ilvlNextSendAt = GMGR._ilvlNextSendAt or 0
-    if tnow < GMGR._ilvlNextSendAt then return end
-    GMGR._ilvlNextSendAt = tnow + 5.0
+    GLOG._ilvlNextSendAt = GLOG._ilvlNextSendAt or 0
+    if tnow < GLOG._ilvlNextSendAt then return end
+    GLOG._ilvlNextSendAt = tnow + 5.0
 
     local name, realm = UnitFullName("player")
     local me = (name or "") .. "-" .. (realm or "")
@@ -479,37 +479,37 @@ function GMGR.UpdateOwnIlvlIfMain()
     if not equipped then return end
 
     -- 🚫 Stop si pas dans roster/réserve
-    if not (GMGR.IsPlayerInRosterOrReserve and GMGR.IsPlayerInRosterOrReserve(me)) then
+    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then
         return
     end
 
     local ilvl = math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
-    local changed = (GMGR._lastOwnIlvl or -1) ~= ilvl
-    GMGR._lastOwnIlvl = ilvl
+    local changed = (GLOG._lastOwnIlvl or -1) ~= ilvl
+    GLOG._lastOwnIlvl = ilvl
 
     -- Stocke local + diffuse si variation
     local ts = time()
     _SetIlvlLocal(me, ilvl, ts, me)
-    if changed and GMGR.BroadcastIlvlUpdate then
-        GMGR.BroadcastIlvlUpdate(me, ilvl, ts, me)
+    if changed and GLOG.BroadcastIlvlUpdate then
+        GLOG.BroadcastIlvlUpdate(me, ilvl, ts, me)
     end
 end
 
 
 -- ➕ ======  CLÉ MYTHIQUE : stockage local + formatage + diffusion ======
 -- Lecture formatée pour l'UI ("NomDuDonjon +17", avec +X en orange)
-function GMGR.GetMKeyText(name)
+function GLOG.GetMKeyText(name)
     if not name or name == "" then return "" end
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    local p = GuildManagerDB.players[name]
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
     if not p then return "" end
     local lvl = tonumber(p.mkeyLevel or 0) or 0
     if lvl <= 0 then return "" end
 
     local label = (p.mkeyName and p.mkeyName ~= "") and p.mkeyName or ""
     if (label == "" or label == "Clé") and tonumber(p.mkeyMapId or 0) > 0 then
-        local nm = GMGR.ResolveMKeyMapName and GMGR.ResolveMKeyMapName(tonumber(p.mkeyMapId))
+        local nm = GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(tonumber(p.mkeyMapId))
         if nm and nm ~= "" then label = nm end
     end
     if label == "" then label = "Clé" end
@@ -523,9 +523,9 @@ end
 -- Application locale (sans créer d’entrée ; timestamp dominant)
 local function _SetMKeyLocal(name, mapId, level, mapName, ts, by)
     if not name or name == "" then return end
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    local p = GuildManagerDB.players[name]
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
     if not p then return end
 
     local nowts   = tonumber(ts) or time()
@@ -542,11 +542,11 @@ local function _SetMKeyLocal(name, mapId, level, mapName, ts, by)
 end
 
 -- ➕ Résolution du nom de donjon depuis un mapId (avec cache)
-GMGR._mkeyNameCache = GMGR._mkeyNameCache or {}
-function GMGR.ResolveMKeyMapName(mapId)
+GLOG._mkeyNameCache = GLOG._mkeyNameCache or {}
+function GLOG.ResolveMKeyMapName(mapId)
     local mid = tonumber(mapId) or 0
     if mid <= 0 then return nil end
-    local cached = GMGR._mkeyNameCache[mid]
+    local cached = GLOG._mkeyNameCache[mid]
     if cached and cached ~= "" then
         return cached
     end
@@ -595,18 +595,18 @@ function GMGR.ResolveMKeyMapName(mapId)
     end
 
     if name and name ~= "" then
-        GMGR._mkeyNameCache[mid] = name
+        GLOG._mkeyNameCache[mid] = name
     end
 
     return name
 end
 
 -- ➕ Joueur autorisé à émettre ? (présent en actif OU réserve)
-function GMGR.IsPlayerInRosterOrReserve(name)
+function GLOG.IsPlayerInRosterOrReserve(name)
     if not name or name == "" then return false end
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.players = GuildManagerDB.players or {}
-    return GuildManagerDB.players[name] ~= nil
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    return GuildLogisticsDB.players[name] ~= nil
 end
 
 -- Lit la clé possédée (API M+ si dispo, sinon parsing sacs)
@@ -648,7 +648,7 @@ local function _ReadOwnedKeystone()
 
     -- 3) Dernier recours : résolveur basé sur mid
     if mapName == "" and mid and mid > 0 then
-        local nm = GMGR.ResolveMKeyMapName and GMGR.ResolveMKeyMapName(mid)
+        local nm = GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(mid)
         if nm and nm ~= "" then mapName = nm end
     end
 
@@ -656,15 +656,15 @@ local function _ReadOwnedKeystone()
 end
 
 -- ➕ Expose un lecteur public de la clé possédée (fallback si déjà défini ailleurs)
-if not GMGR.ReadOwnedKeystone then
-    function GMGR.ReadOwnedKeystone()
+if not GLOG.ReadOwnedKeystone then
+    function GLOG.ReadOwnedKeystone()
         return _ReadOwnedKeystone()
     end
 end
 
 -- ➕ Lecture immédiate de mon iLvl équipé (sans diffusion)
-if not GMGR.ReadOwnEquippedIlvl then
-    function GMGR.ReadOwnEquippedIlvl()
+if not GLOG.ReadOwnEquippedIlvl then
+    function GLOG.ReadOwnEquippedIlvl()
         local equipped
         if GetAverageItemLevel then
             local overall, eq = GetAverageItemLevel()
@@ -676,14 +676,14 @@ if not GMGR.ReadOwnEquippedIlvl then
 end
 
 -- Calcul & diffusion de MA propre clé (uniquement si le perso connecté est le main)
-function GMGR.UpdateOwnKeystoneIfMain()
-    if not (GMGR.IsConnectedMain and GMGR.IsConnectedMain()) then return end
+function GLOG.UpdateOwnKeystoneIfMain()
+    if not (GLOG.IsConnectedMain and GLOG.IsConnectedMain()) then return end
 
     -- Throttle anti-spam
     local tnow = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
-    GMGR._mkeyNextSendAt = GMGR._mkeyNextSendAt or 0
-    if tnow < GMGR._mkeyNextSendAt then return end
-    GMGR._mkeyNextSendAt = tnow + 5.0
+    GLOG._mkeyNextSendAt = GLOG._mkeyNextSendAt or 0
+    if tnow < GLOG._mkeyNextSendAt then return end
+    GLOG._mkeyNextSendAt = tnow + 5.0
 
     -- Lecture robuste (API M+ -> fallback sacs)
     local mid, lvl, mapName = _ReadOwnedKeystone()
@@ -703,34 +703,34 @@ function GMGR.UpdateOwnKeystoneIfMain()
     if ns and ns.Util and ns.Util.NormalizeFull then me = ns.Util.NormalizeFull(me) end
 
     -- 🚫 Stop si pas dans roster/réserve (et ne crée **pas** d’entrée)
-    if not (GMGR.IsPlayerInRosterOrReserve and GMGR.IsPlayerInRosterOrReserve(me)) then
+    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then
         return
     end
 
     -- Complète le nom du donjon si absent (via résolveur dédié)
     if (not mapName or mapName == "" or mapName == "Clé") and mid and mid > 0 then
-        local nm2 = GMGR.ResolveMKeyMapName and GMGR.ResolveMKeyMapName(mid)
+        local nm2 = GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(mid)
         if nm2 and nm2 ~= "" then mapName = nm2 end
     end
 
-    local changed = (GMGR._lastOwnMKeyId or -1) ~= (mid or 0) or (GMGR._lastOwnMKeyLvl or -1) ~= (lvl or 0)
-    GMGR._lastOwnMKeyId  = mid or 0
-    GMGR._lastOwnMKeyLvl = lvl or 0
+    local changed = (GLOG._lastOwnMKeyId or -1) ~= (mid or 0) or (GLOG._lastOwnMKeyLvl or -1) ~= (lvl or 0)
+    GLOG._lastOwnMKeyId  = mid or 0
+    GLOG._lastOwnMKeyLvl = lvl or 0
 
     local ts = time()
     _SetMKeyLocal(me, mid or 0, lvl or 0, mapName or "", ts, me)
-    if changed and GMGR.BroadcastMKeyUpdate then
-        GMGR.BroadcastMKeyUpdate(me, mid or 0, lvl or 0, mapName or "", ts, me)
+    if changed and GLOG.BroadcastMKeyUpdate then
+        GLOG.BroadcastMKeyUpdate(me, mid or 0, lvl or 0, mapName or "", ts, me)
     end
 end
 
 -- =========================
 -- ======  HISTORY    ======
 -- =========================
-function GMGR.AddHistorySession(total, perHead, participants, ctx)
+function GLOG.AddHistorySession(total, perHead, participants, ctx)
 
     EnsureDB()
-    GuildManagerDB.historyNextId = GuildManagerDB.historyNextId or 1
+    GuildLogisticsDB.historyNextId = GuildLogisticsDB.historyNextId or 1
 
     local s = {
         ts = time(),
@@ -739,21 +739,21 @@ function GMGR.AddHistorySession(total, perHead, participants, ctx)
         count = #(participants or {}),
         participants = { unpack(participants or {}) },
         refunded = false,
-        hid = GuildManagerDB.historyNextId, -- ➕ ID unique
+        hid = GuildLogisticsDB.historyNextId, -- ➕ ID unique
     }
-    GuildManagerDB.historyNextId = GuildManagerDB.historyNextId + 1
+    GuildLogisticsDB.historyNextId = GuildLogisticsDB.historyNextId + 1
 
     if type(ctx) == "table" and ctx.lots then
         s.lots = ctx.lots
     end
-    table.insert(GuildManagerDB.history, 1, s)
+    table.insert(GuildLogisticsDB.history, 1, s)
 
     -- Diffusion réseau (petit message) si GM
-    if GMGR.IsMaster and GMGR.IsMaster() and GMGR.Comm_Broadcast then
-        GuildManagerDB.meta = GuildManagerDB.meta or {}
-        local rv = (GuildManagerDB.meta.rev or 0) + 1
-        GuildManagerDB.meta.rev = rv
-        GuildManagerDB.meta.lastModified = time()
+    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+        local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+        GuildLogisticsDB.meta.rev = rv
+        GuildLogisticsDB.meta.lastModified = time()
 
         -- ➕ sérialise les lots pour l'ajout (liste de CSV "id,name,k,N,n,g")
         local Lraw = {}
@@ -769,106 +769,106 @@ function GMGR.AddHistorySession(total, perHead, participants, ctx)
             end
         end
 
-        GMGR.Comm_Broadcast("HIST_ADD", {
+        GLOG.Comm_Broadcast("HIST_ADD", {
             ts = s.ts, total = s.total, per = s.perHead, cnt = s.count,
             r = s.refunded and 1 or 0, P = s.participants, L = Lraw, -- ➕
-            rv = rv, lm = GuildManagerDB.meta.lastModified,
+            rv = rv, lm = GuildLogisticsDB.meta.lastModified,
         })
     end
     if ns.Emit then ns.Emit("history:changed") end
 end
 
-function GMGR.GetHistory()
+function GLOG.GetHistory()
     EnsureDB()
-    return GuildManagerDB.history
+    return GuildLogisticsDB.history
 end
 
-function GMGR.RefundSession(idx)
+function GLOG.RefundSession(idx)
     EnsureDB()
-    local s = GuildManagerDB.history[idx]
+    local s = GuildLogisticsDB.history[idx]
     if not s or s.refunded then return false end
     local per = tonumber(s.perHead) or 0
     local parts = s.participants or {}
 
-    if GMGR.IsMaster and GMGR.IsMaster() and GMGR.GM_BroadcastBatch then
+    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.GM_BroadcastBatch then
         local adjusts = {}
         for _, name in ipairs(parts) do adjusts[#adjusts+1] = { name = name, delta = per } end
-        GMGR.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
+        GLOG.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
     else
-        for _, name in ipairs(parts) do if GuildManagerDB.players[name] then GMGR.Credit(name, per) end end
+        for _, name in ipairs(parts) do if GuildLogisticsDB.players[name] then GLOG.Credit(name, per) end end
     end
 
     s.refunded = true
 
     -- Diffusion du changement d'état si GM
-    if GMGR.IsMaster and GMGR.IsMaster() and GMGR.Comm_Broadcast then
-        GuildManagerDB.meta = GuildManagerDB.meta or {}
-        local rv = (GuildManagerDB.meta.rev or 0) + 1
-        GuildManagerDB.meta.rev = rv
-        GuildManagerDB.meta.lastModified = time()
-        GMGR.Comm_Broadcast("HIST_REFUND", { ts = s.ts, h = s.hid, rv = rv, lm = GuildManagerDB.meta.lastModified })
+    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+        local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+        GuildLogisticsDB.meta.rev = rv
+        GuildLogisticsDB.meta.lastModified = time()
+        GLOG.Comm_Broadcast("HIST_REFUND", { ts = s.ts, h = s.hid, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true
 end
 
-function GMGR.UnrefundSession(idx)
+function GLOG.UnrefundSession(idx)
     EnsureDB()
-    local s = GuildManagerDB.history[idx]
+    local s = GuildLogisticsDB.history[idx]
     if not s or not s.refunded then return false end
     local per = tonumber(s.perHead) or 0
     local parts = s.participants or {}
 
-    if GMGR.IsMaster and GMGR.IsMaster() and GMGR.GM_BroadcastBatch then
+    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.GM_BroadcastBatch then
         local adjusts = {}
         for _, name in ipairs(parts) do adjusts[#adjusts+1] = { name = name, delta = -per } end
-        GMGR.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
+        GLOG.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
     else
-        for _, name in ipairs(parts) do if GuildManagerDB.players[name] then GMGR.Debit(name, per) end end
+        for _, name in ipairs(parts) do if GuildLogisticsDB.players[name] then GLOG.Debit(name, per) end end
     end
 
     s.refunded = false
 
     -- Diffusion du changement d'état si GM
-    if GMGR.IsMaster and GMGR.IsMaster() and GMGR.Comm_Broadcast then
-        GuildManagerDB.meta = GuildManagerDB.meta or {}
-        local rv = (GuildManagerDB.meta.rev or 0) + 1
-        GuildManagerDB.meta.rev = rv
-        GuildManagerDB.meta.lastModified = time()
-        GMGR.Comm_Broadcast("HIST_REFUND", { ts = s.ts, h = s.hid, r = 0, rv = rv, lm = GuildManagerDB.meta.lastModified })
+    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+        local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+        GuildLogisticsDB.meta.rev = rv
+        GuildLogisticsDB.meta.lastModified = time()
+        GLOG.Comm_Broadcast("HIST_REFUND", { ts = s.ts, h = s.hid, r = 0, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true
 end
 
-function GMGR.DeleteHistory(idx)
+function GLOG.DeleteHistory(idx)
     EnsureDB()
-    local hist = GuildManagerDB.history or {}
+    local hist = GuildLogisticsDB.history or {}
     local s = hist[idx]; if not s then return false end
     local ts = s.ts
     table.remove(hist, idx)
 
     -- Diffusion de la suppression si GM
-    if GMGR.IsMaster and GMGR.IsMaster() and GMGR.Comm_Broadcast then
-        GuildManagerDB.meta = GuildManagerDB.meta or {}
-        local rv = (GuildManagerDB.meta.rev or 0) + 1
-        GuildManagerDB.meta.rev = rv
-        GuildManagerDB.meta.lastModified = time()
-        GMGR.Comm_Broadcast("HIST_DEL", { ts = ts, h = s.hid, rv = rv, lm = GuildManagerDB.meta.lastModified })
+    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+        local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+        GuildLogisticsDB.meta.rev = rv
+        GuildLogisticsDB.meta.lastModified = time()
+        GLOG.Comm_Broadcast("HIST_DEL", { ts = ts, h = s.hid, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true
 end
 
-function GMGR.WipeAllData()
+function GLOG.WipeAllData()
     -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)
-    local isMaster = (GMGR.IsMaster and GMGR.IsMaster())
+    local isMaster = (GLOG.IsMaster and GLOG.IsMaster())
         or (IsInGuild and IsInGuild() and select(3, GetGuildInfo("player")) == 0)
         or false
-    local oldRev     = (GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev) or 0
+    local oldRev     = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev) or 0
     local keepRev    = isMaster and oldRev or 0
-    local keepMaster = (GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.master) or nil
-    GuildManagerDB = {
+    local keepMaster = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.master) or nil
+    GuildLogisticsDB = {
         players  = {},
         history  = {},
         expenses = { recording = false, list = {}, nextId = 1 },
@@ -881,15 +881,15 @@ function GMGR.WipeAllData()
 end
 
 -- Purge complète : DB + préférences UI
-function GMGR.WipeAllSaved()
+function GLOG.WipeAllSaved()
     -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)
-    local isMaster = (GMGR.IsMaster and GMGR.IsMaster())
+    local isMaster = (GLOG.IsMaster and GLOG.IsMaster())
         or (IsInGuild and IsInGuild() and select(3, GetGuildInfo("player")) == 0)
         or false
-    local oldRev     = (GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev) or 0
+    local oldRev     = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev) or 0
     local keepRev    = isMaster and oldRev or 0
-    local keepMaster = (GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.master) or nil
-    GuildManagerDB = {
+    local keepMaster = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.master) or nil
+    GuildLogisticsDB = {
         players  = {},
         history  = {},
         expenses = { recording = false, list = {}, nextId = 1 },
@@ -899,20 +899,20 @@ function GMGR.WipeAllSaved()
         requests = {},
         debug    = {},
     }
-    GuildManagerUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680, minimap = { hide=false, angle=215 } }
+    GuildLogisticsUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680, minimap = { hide=false, angle=215 } }
 end
 
-function GMGR.GetRev()
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.meta = GuildManagerDB.meta or {}
-    return GuildManagerDB.meta.rev or 0
+function GLOG.GetRev()
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    return GuildLogisticsDB.meta.rev or 0
 end
 
-function GMGR.IncRev()
-    GuildManagerDB = GuildManagerDB or {}
-    GuildManagerDB.meta = GuildManagerDB.meta or {}
-    GuildManagerDB.meta.rev = (GuildManagerDB.meta.rev or 0) + 1
-    return GuildManagerDB.meta.rev
+function GLOG.IncRev()
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    GuildLogisticsDB.meta.rev = (GuildLogisticsDB.meta.rev or 0) + 1
+    return GuildLogisticsDB.meta.rev
 end
 
 -- =========================
@@ -923,24 +923,24 @@ end
 -- "Ressources libres" (dépenses non rattachées).
 
 local function _ensureLots()
-    GMGR._EnsureDB()
-    GuildManagerDB.lots     = GuildManagerDB.lots     or { nextId = 1, list = {} }
-    GuildManagerDB.expenses = GuildManagerDB.expenses or { recording=false, list = {}, nextId = 1 }
+    GLOG._EnsureDB()
+    GuildLogisticsDB.lots     = GuildLogisticsDB.lots     or { nextId = 1, list = {} }
+    GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { recording=false, list = {}, nextId = 1 }
 end
 
-function GMGR.GetLots()
+function GLOG.GetLots()
     _ensureLots()
-    return GuildManagerDB.lots.list
+    return GuildLogisticsDB.lots.list
 end
 
-function GMGR.Lot_GetById(id)
+function GLOG.Lot_GetById(id)
     _ensureLots()
-    for _, l in ipairs(GuildManagerDB.lots.list or {}) do
+    for _, l in ipairs(GuildLogisticsDB.lots.list or {}) do
         if l.id == id then return l end
     end
 end
 
-function GMGR.Lot_Status(lot)
+function GLOG.Lot_Status(lot)
     if not lot then return "?" end
     local used = tonumber(lot.used or 0) or 0
     local N    = tonumber(lot.sessions or 1) or 1
@@ -949,35 +949,35 @@ function GMGR.Lot_Status(lot)
     return "EPU"
 end
 
-function GMGR.Lot_IsSelectable(lot)
-    return lot and (not lot.__pendingConsume) and GMGR.Lot_Status(lot) ~= "EPU"
+function GLOG.Lot_IsSelectable(lot)
+    return lot and (not lot.__pendingConsume) and GLOG.Lot_Status(lot) ~= "EPU"
 end
 
 -- Coût par utilisation (ex-ShareGold) en or entiers — pas de PA/PC.
-function GMGR.Lot_ShareGold(lot)  -- compat : on conserve le nom
+function GLOG.Lot_ShareGold(lot)  -- compat : on conserve le nom
     local totalC = tonumber(lot.totalCopper or lot.copper or 0) or 0
     local N      = tonumber(lot.sessions or 1) or 1
     return math.floor( math.floor(totalC / 10000) / N )
 end
 
 -- ➕ Utilitaires "charges"
-function GMGR.Lot_UseCostGold(lot)  -- alias explicite
-    return GMGR.Lot_ShareGold(lot)
+function GLOG.Lot_UseCostGold(lot)  -- alias explicite
+    return GLOG.Lot_ShareGold(lot)
 end
 
-function GMGR.Lot_Remaining(lot)   -- utilisations restantes
+function GLOG.Lot_Remaining(lot)   -- utilisations restantes
     local used = tonumber(lot.used or 0) or 0
     local N    = tonumber(lot.sessions or 1) or 1
     return math.max(0, N - used)
 end
 
--- Création : fige le contenu depuis une liste d'index ABSOLUS de GuildManagerDB.expenses.list
+-- Création : fige le contenu depuis une liste d'index ABSOLUS de GuildLogisticsDB.expenses.list
 -- isMulti = true/false ; sessions = N si multi (>=1)
-function GMGR.Lot_Create(name, isMulti, sessions, absIdxs)
+function GLOG.Lot_Create(name, isMulti, sessions, absIdxs)
     _ensureLots()
     name = name or "Lot"
-    local e = GuildManagerDB.expenses
-    local L = GuildManagerDB.lots
+    local e = GuildLogisticsDB.expenses
+    local L = GuildLogisticsDB.lots
     local id = L.nextId or 1
 
     local itemIds, total = {}, 0
@@ -995,40 +995,40 @@ function GMGR.Lot_Create(name, isMulti, sessions, absIdxs)
     if ns.Emit then ns.Emit("lots:changed") end
 
     -- ➕ Diffusion GM
-    if GMGR.BroadcastLotCreate and GMGR.IsMaster and GMGR.IsMaster() then GMGR.BroadcastLotCreate(l) end
+    if GLOG.BroadcastLotCreate and GLOG.IsMaster and GLOG.IsMaster() then GLOG.BroadcastLotCreate(l) end
     return l
 end
 
 -- Suppression possible uniquement si jamais utilisé (rend les ressources libres)
-function GMGR.Lot_Delete(id)
+function GLOG.Lot_Delete(id)
     _ensureLots()
-    local L = GuildManagerDB.lots
+    local L = GuildLogisticsDB.lots
     local list = L.list or {}
     local idx = nil
     for i, l in ipairs(list) do if l.id == id then idx = i break end end
     if not idx then return false end
     table.remove(list, idx)
-    for _, it in ipairs(GuildManagerDB.expenses.list or {}) do if it.lotId == id then it.lotId = nil end end
+    for _, it in ipairs(GuildLogisticsDB.expenses.list or {}) do if it.lotId == id then it.lotId = nil end end
     if ns.Emit then ns.Emit("lots:changed") end
     if ns.RefreshActive then ns.RefreshActive() end -- ✅ disparition immédiate à l’écran
 
     -- ➕ Diffusion GM
-    if GMGR.BroadcastLotDelete and GMGR.IsMaster and GMGR.IsMaster() then GMGR.BroadcastLotDelete(id) end
+    if GLOG.BroadcastLotDelete and GLOG.IsMaster and GLOG.IsMaster() then GLOG.BroadcastLotDelete(id) end
     return true
 end
 
-function GMGR.Lot_ListSelectable()
+function GLOG.Lot_ListSelectable()
     _ensureLots()
     local out = {}
-    for _, l in ipairs(GuildManagerDB.lots.list or {}) do
-        if GMGR.Lot_IsSelectable(l) then out[#out+1] = l end
+    for _, l in ipairs(GuildLogisticsDB.lots.list or {}) do
+        if GLOG.Lot_IsSelectable(l) then out[#out+1] = l end
     end
     return out
 end
 
-function GMGR.Lot_Consume(id)
+function GLOG.Lot_Consume(id)
     _ensureLots()
-    local l = GMGR.Lot_GetById(id); if not l then return false end
+    local l = GLOG.Lot_GetById(id); if not l then return false end
     local N = tonumber(l.sessions or 1) or 1
     local u = tonumber(l.used or 0) or 0
     l.used = math.min(u + 1, N)  -- ne décrémente que d'1, borné au max
@@ -1036,14 +1036,14 @@ function GMGR.Lot_Consume(id)
     return true
 end
 
-function GMGR.Lots_ConsumeMany(ids)
+function GLOG.Lots_ConsumeMany(ids)
     _ensureLots()
     ids = ids or {}
 
-    local isMaster = GMGR.IsMaster and GMGR.IsMaster()
+    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
     if isMaster then
         -- GM : applique directement la consommation (évite le blocage __pendingConsume)
-        local L = GuildManagerDB.lots
+        local L = GuildLogisticsDB.lots
         for _, id in ipairs(ids) do
             for _, l in ipairs(L.list or {}) do
                 if l.id == id then
@@ -1058,11 +1058,11 @@ function GMGR.Lots_ConsumeMany(ids)
 
         -- Diffusion : les autres clients (et GM aussi) recevront LOT_CONSUME,
         -- mais côté GM on a déjà appliqué => aucun lot bloqué en "pending".
-        if GMGR.BroadcastLotsConsume then GMGR.BroadcastLotsConsume(ids) end
+        if GLOG.BroadcastLotsConsume then GLOG.BroadcastLotsConsume(ids) end
 
     else
         -- Client : applique localement sans diffusion (borné).
-        local L = GuildManagerDB.lots
+        local L = GuildLogisticsDB.lots
         for _, id in ipairs(ids) do
             for _, l in ipairs(L.list or {}) do
                 if l.id == id then
@@ -1077,11 +1077,11 @@ function GMGR.Lots_ConsumeMany(ids)
 
 end
 
-function GMGR.Lots_ComputeGoldTotal(ids)
+function GLOG.Lots_ComputeGoldTotal(ids)
     local g = 0
     for _, id in ipairs(ids or {}) do
-        local l = GMGR.Lot_GetById(id)
-        if l and GMGR.Lot_IsSelectable(l) then g = g + GMGR.Lot_ShareGold(l) end
+        local l = GLOG.Lot_GetById(id)
+        if l and GLOG.Lot_IsSelectable(l) then g = g + GLOG.Lot_ShareGold(l) end
     end
     return g
 end
@@ -1093,23 +1093,23 @@ end
 -- Incrémente / réinitialise la révision selon le rôle
 local function _BumpRevisionLocal()
     EnsureDB()
-    local isMaster = (GMGR.IsMaster and GMGR.IsMaster()) or false
-    local rv = tonumber(GuildManagerDB.meta.rev or 0) or 0
-    GuildManagerDB.meta.rev = isMaster and (rv + 1) or 0
-    GuildManagerDB.meta.lastModified = time()
+    local isMaster = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local rv = tonumber(GuildLogisticsDB.meta.rev or 0) or 0
+    GuildLogisticsDB.meta.rev = isMaster and (rv + 1) or 0
+    GuildLogisticsDB.meta.lastModified = time()
 end
 
 -- Supprime tous les lots épuisés + tous leurs objets associés
-function GMGR.PurgeLotsAndItemsExhausted()
+function GLOG.PurgeLotsAndItemsExhausted()
     EnsureDB(); _ensureLots()
-    local L = GuildManagerDB.lots
-    local E = GuildManagerDB.expenses
+    local L = GuildLogisticsDB.lots
+    local E = GuildLogisticsDB.expenses
 
     local purgeLots   = {}
     local purgeItems  = {}
 
     for _, l in ipairs(L.list or {}) do
-        if (GMGR.Lot_Status and GMGR.Lot_Status(l) == "EPU") then
+        if (GLOG.Lot_Status and GLOG.Lot_Status(l) == "EPU") then
             purgeLots[l.id] = true
             for _, eid in ipairs(l.itemIds or {}) do purgeItems[eid] = true end
         end
@@ -1148,10 +1148,10 @@ function GMGR.PurgeLotsAndItemsExhausted()
 end
 
 -- Supprime absolument tous les lots + tous les objets
-function GMGR.PurgeAllResources()
+function GLOG.PurgeAllResources()
     EnsureDB(); _ensureLots()
-    local L = GuildManagerDB.lots
-    local E = GuildManagerDB.expenses
+    local L = GuildLogisticsDB.lots
+    local E = GuildLogisticsDB.expenses
 
     local removedLots  = #(L.list or {})
     local removedItems = #(E.list or {})
@@ -1171,31 +1171,42 @@ end
 -- ===== Window Save  ======
 -- =========================
 
-function GMGR.GetSavedWindow() EnsureDB(); return GuildManagerUI end
-function GMGR.SaveWindow(point, relTo, relPoint, x, y, w, h)
-    GuildManagerUI = GuildManagerUI or {}
-    GuildManagerUI.point    = point
-    GuildManagerUI.relTo    = relTo
-    GuildManagerUI.relPoint = relPoint
-    GuildManagerUI.x        = x
-    GuildManagerUI.y        = y
-    GuildManagerUI.width    = w
-    GuildManagerUI.height   = h
+function GLOG.GetSavedWindow() EnsureDB(); return GuildLogisticsUI end
+function GLOG.SaveWindow(point, relTo, relPoint, x, y, w, h)
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    GuildLogisticsUI.point    = point
+    GuildLogisticsUI.relTo    = relTo
+    GuildLogisticsUI.relPoint = relPoint
+    GuildLogisticsUI.x        = x
+    GuildLogisticsUI.y        = y
+    GuildLogisticsUI.width    = w
+    GuildLogisticsUI.height   = h
 end
 
 -- =========================
 -- ==== Demandes (GM) ======
 -- =========================
-function GMGR.GetRequests()
+function GLOG.GetRequests()
     EnsureDB()
-    GuildManagerDB.requests = GuildManagerDB.requests or {}
-    return GuildManagerDB.requests
+    GuildLogisticsDB.requests = GuildLogisticsDB.requests or {}
+    return GuildLogisticsDB.requests
 end
 
 -- Expose les demandes pour l’UI (badge/onglet)
-function GMGR.GetRequests()
+function GLOG.GetRequests()
     EnsureDB()
-    GuildManagerDB.requests = GuildManagerDB.requests or {}
-    return GuildManagerDB.requests
+    GuildLogisticsDB.requests = GuildLogisticsDB.requests or {}
+    return GuildLogisticsDB.requests
 end
 
+ns.Tr = ns.Tr or function(input, ...)
+    if input == nil then return "" end
+    local s = tostring(input)
+    local key = s
+    local v = (ns.L and ns.L[key]) or s
+    if select("#", ...) > 0 then
+        local ok, out = pcall(string.format, v, ...)
+        if ok then return out end
+    end
+    return v
+end

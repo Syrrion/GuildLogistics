@@ -1,5 +1,6 @@
 local ADDON, ns = ...
-local GMGR, UI = ns.GMGR, ns.UI
+local Tr = ns and ns.Tr
+local GLOG, UI = ns.GLOG, ns.UI
 local PAD = UI.OUTER_PAD
 
 -- Split vertical : joueurs en haut, lots en bas (sélection directe)
@@ -21,7 +22,7 @@ local cols = {
 local function SelectedCount()
     local n = 0
     for name, v in pairs(includes) do
-        if v and GMGR.HasPlayer and GMGR.HasPlayer(name) then n = n + 1 end
+        if v and GLOG.HasPlayer and GLOG.HasPlayer(name) then n = n + 1 end
     end
     return n
 end
@@ -81,7 +82,7 @@ local function UpdateRowLots(i, r, f, it)
     local used = tonumber(l.used or 0) or 0
     local N    = tonumber(l.sessions or 1) or 1
     local remaining = math.max(0, N - used)
-    local shareGold = (GMGR.Lot_ShareGold and GMGR.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
+    local shareGold = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
     f.name:SetText(l.name or ("Lot "..tostring(l.id)))
     f.frac:SetText((remaining).." rest.")
     f.gold:SetText(UI.MoneyText(shareGold))
@@ -90,9 +91,9 @@ local function UpdateRowLots(i, r, f, it)
         chosenLots[l.id] = self:GetChecked() and true or nil
         local total = 0
         for id,_ in pairs(chosenLots) do
-            local l2 = GMGR.Lot_GetById and GMGR.Lot_GetById(id)
+            local l2 = GLOG.Lot_GetById and GLOG.Lot_GetById(id)
             if l2 then
-                local g = (GMGR.Lot_ShareGold and GMGR.Lot_ShareGold(l2)) or math.floor( (math.floor((tonumber(l2.totalCopper or 0) or 0)/10000)) / (tonumber(l2.sessions or 1) or 1) )
+                local g = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l2)) or math.floor( (math.floor((tonumber(l2.totalCopper or 0) or 0)/10000)) / (tonumber(l2.sessions or 1) or 1) )
                 total = total + (g or 0)
             end
         end
@@ -137,19 +138,19 @@ end
 
 local function Refresh()
     -- ✅ seulement le roster ACTIF
-    local players = (GMGR.GetPlayersArrayActive and GMGR.GetPlayersArrayActive()) or GMGR.GetPlayersArray()
+    local players = (GLOG.GetPlayersArrayActive and GLOG.GetPlayersArrayActive()) or GLOG.GetPlayersArray()
     lv:SetData(players)
 
-    local selectable = (GMGR.Lot_ListSelectable and GMGR.Lot_ListSelectable()) or {}
+    local selectable = (GLOG.Lot_ListSelectable and GLOG.Lot_ListSelectable()) or {}
     local rows = {}; for _, l in ipairs(selectable) do rows[#rows+1] = { data = l } end
     lotsLV:SetData(rows)
 
     -- recalc montant global si des lots sont cochés
     local total = 0
     for id,_ in pairs(chosenLots) do
-        local l = GMGR.Lot_GetById and GMGR.Lot_GetById(id)
+        local l = GLOG.Lot_GetById and GLOG.Lot_GetById(id)
         if l then
-            local g = (GMGR.Lot_ShareGold and GMGR.Lot_ShareGold(l)) or 0
+            local g = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l)) or 0
             total = total + (g or 0)
         end
     end
@@ -187,25 +188,25 @@ local function Build(container)
             -- Contexte lots compact pour la popup
             local Lctx = {}
             for id,_ in pairs(chosenLots) do
-                local l = GMGR.Lot_GetById and GMGR.Lot_GetById(id)
+                local l = GLOG.Lot_GetById and GLOG.Lot_GetById(id)
                 if l then
                     local used = tonumber(l.used or 0) or 0
                     local N    = tonumber(l.sessions or 1) or 1
                     local k    = used + 1
-                    local g    = (GMGR.Lot_ShareGold and GMGR.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
+                    local g    = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
                     Lctx[#Lctx+1] = { id = id, name = l.name or ("Lot " .. tostring(id)), k = k, N = N, n = 1, gold = g }
                 end
             end
 
-            if GMGR.GM_BroadcastBatch then
-                GMGR.GM_BroadcastBatch(adjusts, { reason = "RAID_CLOSE", silent = silentFlag, L = Lctx })
+            if GLOG.GM_BroadcastBatch then
+                GLOG.GM_BroadcastBatch(adjusts, { reason = "RAID_CLOSE", silent = silentFlag, L = Lctx })
             else
                 -- fallback très anciens clients
                 for _, a in ipairs(adjusts) do
-                    if GMGR.GM_ApplyAndBroadcastEx then
-                        GMGR.GM_ApplyAndBroadcastEx(a.name, a.delta, { reason = "RAID_CLOSE", silent = silentFlag, L = Lctx })
-                    elseif GMGR.GM_ApplyAndBroadcast then
-                        GMGR.GM_ApplyAndBroadcast(a.name, a.delta)
+                    if GLOG.GM_ApplyAndBroadcastEx then
+                        GLOG.GM_ApplyAndBroadcastEx(a.name, a.delta, { reason = "RAID_CLOSE", silent = silentFlag, L = Lctx })
+                    elseif GLOG.GM_ApplyAndBroadcast then
+                        GLOG.GM_ApplyAndBroadcast(a.name, a.delta)
                     end
                 end
             end
@@ -216,7 +217,7 @@ local function Build(container)
             local meFull = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or UnitName("player")
             local myShort = (meFull and meFull:match("^(.-)%-.+$")) or (UnitName and UnitName("player")) or meFull
             local function isMe(name)
-                if GMGR.SamePlayer then return GMGR.SamePlayer(name, meFull) end
+                if GLOG.SamePlayer then return GLOG.SamePlayer(name, meFull) end
                 return string.lower(tostring(name or "")) == string.lower(tostring(meFull or ""))
             end
             local amISelected = false
@@ -235,7 +236,7 @@ local function Build(container)
                     ns.Util.After(1.0, function()
                         if not seen and ns.UI and ns.UI.PopupRaidDebit then
                             -- ✅ Fallback GM : lit le solde réellement en DB (pas de re-soustraction)
-                            local after = (GMGR.GetSolde and GMGR.GetSolde(meFull)) or 0
+                            local after = (GLOG.GetSolde and GLOG.GetSolde(meFull)) or 0
                             ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
                         end
                     end)
@@ -247,17 +248,17 @@ local function Build(container)
             for id,_ in pairs(chosenLots) do ids[#ids+1] = id end
             table.sort(ids)
 
-            if GMGR.Lots_ConsumeMany then
-                GMGR.Lots_ConsumeMany(ids)   -- consommation locale (inclut la diffusion côté GM)
+            if GLOG.Lots_ConsumeMany then
+                GLOG.Lots_ConsumeMany(ids)   -- consommation locale (inclut la diffusion côté GM)
             else
                 -- fallback très ancien Core
-                if GMGR.Lot_Consume then for _, id in ipairs(ids) do GMGR.Lot_Consume(id) end end
+                if GLOG.Lot_Consume then for _, id in ipairs(ids) do GLOG.Lot_Consume(id) end end
             end
             -- (diffusion retirée : déjà gérée dans Lots_ConsumeMany pour le GM)
 
             local Hctx = {}
             for id,_ in pairs(chosenLots) do
-                local l = GMGR.Lot_GetById and GMGR.Lot_GetById(id)
+                local l = GLOG.Lot_GetById and GLOG.Lot_GetById(id)
                 if l then
                     Hctx[#Hctx+1] = {
                         id = id,
@@ -268,7 +269,7 @@ local function Build(container)
                     }
                 end
             end
-            GMGR.AddHistorySession(total, per, selected, { lots = Hctx })
+            GLOG.AddHistorySession(total, per, selected, { lots = Hctx })
             chosenLots = {}
         end
 
@@ -322,4 +323,4 @@ local function Build(container)
     end
 end
 
-UI.RegisterTab("Démarrer un raid", Build, Refresh, Layout, { hidden = not (GMGR.IsMaster and GMGR.IsMaster()) })
+UI.RegisterTab(Tr("tab_start_raid"), Build, Refresh, Layout, { hidden = not (GLOG.IsMaster and GLOG.IsMaster()) })

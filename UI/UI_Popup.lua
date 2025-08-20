@@ -1,11 +1,12 @@
 local ADDON, ns = ...
+local Tr = ns and ns.Tr
 ns.UI = ns.UI or {}
 local UI = ns.UI
 
 -- Base popup (atlas Neutral)
 function UI.CreatePopup(opts)
     opts = opts or {}
-    local f = CreateFrame("Frame", "GMGR_Popup_" .. math.random(1e8), UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "GLOG_Popup_" .. math.random(1e8), UIParent, "BackdropTemplate")
     f:SetSize(opts.width or 460, opts.height or 240)
     f:SetFrameStrata("DIALOG"); f:SetToplevel(true)
     f:SetPoint("CENTER")
@@ -35,7 +36,7 @@ function UI.CreatePopup(opts)
 
      -- Titre centré (ancré dans la zone draggable pour rester au-dessus)
     f.title = drag:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    f.title:SetText(opts.title or "Information")
+    f.title:SetText((Tr and Tr(opts.title or "popup_info_title")) or (opts.title or "Information"))
     f.title:SetTextColor(0.98, 0.95, 0.80)
 
     if UI.PositionTitle then
@@ -235,7 +236,7 @@ function UI.ShowParticipantsPopup(names)
     })
     dlg._lv = lv
 
-    local pdb = (GuildManagerDB and GuildManagerDB.players) or {}
+    local pdb = (GuildLogisticsDB and GuildLogisticsDB.players) or {}
     local arr = {}
     for _, n in ipairs(names or {}) do arr[#arr+1] = n end
     table.sort(arr, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
@@ -248,8 +249,8 @@ function UI.ShowParticipantsPopup(names)
 end
 
 function UI.PopupText(title, text)
-    local dlg = UI.CreatePopup({ title = title or "Message", width = 700, height = 420 })
-    dlg:SetMessage(text or "")
+    local dlg = UI.CreatePopup({ title = (Tr and Tr(title or "popup_info_title")) or (title or "Information") })
+    dlg:SetMessage((Tr and Tr(text)) or text)
     dlg:SetButtons({ { text = "Fermer", default = true } })
     dlg:Show()
     return dlg
@@ -257,9 +258,9 @@ end
 
 function UI.PopupRaidDebit(name, deducted, after, ctx)
     -- Hauteur augmentée pour accueillir le détail des composants
-    local dlg = UI.CreatePopup({ title = "Participation au raid validée !", width = 660, height = 400 })
+    local dlg = UI.CreatePopup({ title = (Tr and Tr("popup_raid_ok")) or "Participation au raid validée !", width = 660, height = 400 })
     local lines = {}
-    lines[#lines+1] = "Bon raid !\n"
+    lines[#lines+1] = ((Tr and Tr("msg_good_raid")) or "Bon raid !") .. "\n"
 
     -- Petit utilitaire local pour nom d'objet
     local function _itemName(it)
@@ -277,7 +278,7 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     titleFS:SetJustifyH("CENTER")
     titleFS:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  0, -12)  -- marge haute
     titleFS:SetPoint("TOPRIGHT", dlg.content, "TOPRIGHT", 0, -12)
-    titleFS:SetText("Bon raid !")
+    titleFS:SetText((Tr and Tr("msg_good_raid")) or "Bon raid !")
 
     -- Lignes séparées pour contrôler précisément les espacements
     local dedFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -361,11 +362,11 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         -- ➕ Construit les lignes (prix = part * nbPartsUtilisées), avec fallback nom/prix depuis ctx.L
         local rows = {}
         for id, usedParts in pairs(usedByLot) do
-            local lot = ns and ns.GMGR and ns.GMGR.Lot_GetById and ns.GMGR.Lot_GetById(id)
+            local lot = ns and ns.GLOG and ns.GLOG.Lot_GetById and ns.GLOG.Lot_GetById(id)
             local name, perGold
             if lot then
                 name    = lot.name or ((metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id)))
-                perGold = (ns and ns.GMGR and ns.GMGR.Lot_ShareGold and ns.GMGR.Lot_ShareGold(lot)) or 0
+                perGold = (ns and ns.GLOG and ns.GLOG.Lot_ShareGold and ns.GLOG.Lot_ShareGold(lot)) or 0
             else
                 name    = (metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id))
                 perGold = tonumber(metaByLot[id] and (metaByLot[id].gold or metaByLot[id].g)) or 0

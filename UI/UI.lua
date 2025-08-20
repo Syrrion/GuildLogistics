@@ -1,5 +1,6 @@
 local ADDON, ns = ...
-local GMGR = ns.GMGR
+local Tr = ns and ns.Tr
+local GLOG = ns.GLOG
 
 ns.UI = ns.UI or {}
 local UI = ns.UI
@@ -82,9 +83,9 @@ function UI.Key(s)
 end
 
 -- ===================== Fenêtre principale =====================
-local Main = CreateFrame("Frame", "GMGR_Main", UIParent, "BackdropTemplate")
+local Main = CreateFrame("Frame", "GLOG_Main", UIParent, "BackdropTemplate")
 UI.Main = Main
-local saved = GMGR.GetSavedWindow and GMGR.GetSavedWindow() or {}
+local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
 Main:SetSize(saved.width or UI.DEFAULT_W, saved.height or UI.DEFAULT_H)
 Main:SetFrameStrata("HIGH")
 Main:SetMovable(true)
@@ -94,8 +95,8 @@ Main:SetScript("OnDragStart", function(self) self:StartMoving() end)
 Main:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local point, relTo, relPoint, x, y = self:GetPoint()
-    if GMGR.SaveWindow then
-        GMGR.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, self:GetWidth(), self:GetHeight())
+    if GLOG.SaveWindow then
+        GLOG.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, self:GetWidth(), self:GetHeight())
     end
 end)
 Main:SetResizable(true)
@@ -103,8 +104,8 @@ if Main.SetResizeBounds then Main:SetResizeBounds(980, 600) end
 Main:SetScript("OnSizeChanged", function(self, w, h)
     if UI._layout then UI._layout() end
     local point, relTo, relPoint, x, y = self:GetPoint()
-    if GMGR.SaveWindow then
-        GMGR.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, w, h)
+    if GLOG.SaveWindow then
+        GLOG.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, w, h)
     end
 end)
 Main:SetPoint(saved.point or "CENTER", UIParent, saved.relPoint or "CENTER", saved.x or 0, saved.y or 0)
@@ -128,7 +129,9 @@ Main.Content:SetClipsChildren(true)
 
 -- Titre centré sur la barre de titre
 Main.title = Main:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-Main.title:SetText(GMGR.BuildMainTitle and GMGR.BuildMainTitle() or "Guilde")
+do
+    Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or (Tr and Tr("main_title_guild")))
+end
 Main.title:SetTextColor(0.98, 0.95, 0.80)
 do
     local _, _, TOP = skin:GetInsets()
@@ -211,7 +214,9 @@ syncText:SetText("")
 -- Animation par points « … »
 local syncTicker
 local function _startSyncAnim(base)
-    base = tostring(base or "Synchronisation des données en cours")
+    -- si 'base' est une clé, on traduit ; si c'est l'ancien texte FR/EN, l'alias fera le relais
+    local keyOrLegacy = base or "sync_data"
+    base = (Tr and Tr(keyOrLegacy)) or tostring(keyOrLegacy)
     if syncTicker and syncTicker.Cancel then syncTicker:Cancel() end
     local dots = 0
     syncPanel:Show()
@@ -410,20 +415,20 @@ end
 
 -- ➕ Bascule « débug » centralisée (persistance + visibilité)
 function UI.SetDebugEnabled(enabled)
-    GuildManagerUI = GuildManagerUI or {}
-    GuildManagerUI.debugEnabled = (enabled ~= false)
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    GuildLogisticsUI.debugEnabled = (enabled ~= false)
 
     -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
     if UI.SetTabVisible then
-        UI.SetTabVisible("Debug", GuildManagerUI.debugEnabled)
+        UI.SetTabVisible("Debug", GuildLogisticsUI.debugEnabled)
     end
 
     -- ➕ Affiche/masque les boutons d’en-tête
     if UI.DebugButton and UI.DebugButton.SetShown then
-        UI.DebugButton:SetShown(GuildManagerUI.debugEnabled)
+        UI.DebugButton:SetShown(GuildLogisticsUI.debugEnabled)
     end
     if UI.ReloadButton and UI.ReloadButton.SetShown then
-        UI.ReloadButton:SetShown(GuildManagerUI.debugEnabled)
+        UI.ReloadButton:SetShown(GuildLogisticsUI.debugEnabled)
     end
 
     -- Rafraîchit l'UI courante pour refléter le changement
@@ -439,21 +444,21 @@ end
 
 -- ➕ Règle métier pour l'onglet "Demandes"
 function UI.UpdateRequestsBadge()
-    local isGM = (ns.GMGR and ns.GMGR.IsMaster and ns.GMGR.IsMaster()) or false
+    local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
     local cnt = 0
-    if isGM and ns.GMGR and ns.GMGR.GetRequests then
-        local t = ns.GMGR.GetRequests()
+    if isGM and ns.GLOG and ns.GLOG.GetRequests then
+        local t = ns.GLOG.GetRequests()
         cnt = (type(t)=="table") and #t or 0
     end
-    UI.SetTabBadge("Demandes", cnt)
-    UI.SetTabVisible("Demandes", isGM and cnt > 0)
+    UI.SetTabBadge(Tr("tab_requests"), cnt)
+    UI.SetTabVisible(Tr("tab_requests"), isGM and cnt > 0)
 end
 
 -- ➕ Hook « RefreshActive » utilisé par Comm.lua
 function UI.RefreshActive()
-    local isGM = (ns.GMGR and ns.GMGR.IsMaster and ns.GMGR.IsMaster()) or false
+    local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
     if UI.SetTabVisible then
-        UI.SetTabVisible("Démarrer un raid", isGM)
+        UI.SetTabVisible(Tr("tab_start_raid"), isGM)
     end
     UI.UpdateRequestsBadge()
     UI.RefreshAll()
@@ -468,12 +473,12 @@ function ns.ToggleUI()
         Main:Show()
 
         -- refresh guilde si nécessaire (cache vide ou > 60s)
-        if GMGR and GMGR.RefreshGuildCache then
-            local ts = GMGR.GetGuildCacheTimestamp and GMGR.GetGuildCacheTimestamp() or 0
+        if GLOG and GLOG.RefreshGuildCache then
+            local ts = GLOG.GetGuildCacheTimestamp and GLOG.GetGuildCacheTimestamp() or 0
             local now = (time and time() or 0)
             local stale = (now - ts) > 60
-            if stale or (GMGR.IsGuildCacheReady and not GMGR.IsGuildCacheReady()) then
-                GMGR.RefreshGuildCache(function()
+            if stale or (GLOG.IsGuildCacheReady and not GLOG.IsGuildCacheReady()) then
+                GLOG.RefreshGuildCache(function()
                     if ns.RefreshAll then ns.RefreshAll() end
                 end)
             end
@@ -490,7 +495,7 @@ Main:Hide()
 local _openAtLogin = CreateFrame("Frame")
 _openAtLogin:RegisterEvent("PLAYER_LOGIN")
 _openAtLogin:SetScript("OnEvent", function()
-    local saved = GMGR.GetSavedWindow and GMGR.GetSavedWindow() or {}
+    local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
 
     -- Applique le thème stocké (défaut: AUTO) et re-skin global
     if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
@@ -511,6 +516,6 @@ end)
 -- ➕ Met à jour le titre selon la guilde
 function UI.RefreshTitle()
     if Main and Main.title and Main.title.SetText then
-        Main.title:SetText(GMGR.BuildMainTitle and GMGR.BuildMainTitle() or "Guild Manager")
+        Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or "Guild Manager")
     end
 end
