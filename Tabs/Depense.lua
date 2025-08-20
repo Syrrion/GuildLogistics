@@ -223,20 +223,20 @@ local function UpdateRowLots(i, r, f, it)
     local st  = GLOG.Lot_Status and GLOG.Lot_Status(lot) or "?"
     local N   = tonumber(lot.sessions or 1) or 1
     local used= tonumber(lot.used or 0) or 0
-    local totalGold = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(lot) or 0) * N
+    local totalCopper = tonumber(lot.totalCopper or lot.copper or 0) or 0
 
     f.name:SetText(lot.name or (Tr("lbl_lot")..tostring(lot.id)))
     f.type:SetText(N>1 and (N..Tr("lbl_uses")) or "1"..Tr("lbl_use"))
     f.status:SetText( (st=="EPU" and Tr("badge_exhausted")) or (GLOG.Lot_Remaining and (GLOG.Lot_Remaining(lot).." "..Tr("suffix_remaining"))) or ((N-used).." "..Tr("suffix_remaining")))
     f.content:SetText(tostring(#(lot.itemIds or {})))
-    f.total:SetText(UI.MoneyText(totalGold))
+    f.total:SetText(moneyCopper(totalCopper))
 
     f.content:SetOnClick(function()
         local dlg = UI.CreatePopup({ title=Tr("lbl_bundle_contents") .. (lot.name or (Tr("lbl_lot") .. tostring(lot.id))), width=580, height=440 })
         local cols = UI.NormalizeColumns({
-            { key="qty",  title=Tr("col_qty_short"),   w=60,  justify="RIGHT" },
-            { key="item", title=Tr("col_item"), min=320, flex=1 },
-            { key="src",  title=Tr("col_source"), w=120 },
+            { key="qty",  title=Tr("col_qty_short"),   w=40,  justify="RIGHT" },
+            { key="item", title=Tr("col_item"), min=240, flex=1 },
+            { key="src",  title=Tr("col_source"), w=70 },
             { key="amt",  title=Tr("col_amount"), w=120, justify="RIGHT" },
         })
         local lv = UI.ListView(dlg.content, cols, {
@@ -244,17 +244,24 @@ local function UpdateRowLots(i, r, f, it)
                 local ff = {}
                 ff.qty   = UI.Label(r2, { justify="RIGHT" })
                 ff.src   = UI.Label(r2)
+                ff.unit  = UI.Label(r2, { justify="RIGHT" })
                 ff.amt   = UI.Label(r2, { justify="RIGHT" })
                 ff.item  = UI.CreateItemCell(r2, { size=20, width=240 })
                 return ff
             end,
             updateRow = function(i2, r2, ff, exp)
-                ff.qty:SetText(exp.qty or 1)
+                local q  = tonumber(exp.qty or 1) or 1
+                local cp = tonumber(exp.copper or 0) or 0
+                local unitCopper = (q > 0) and math.floor((cp / q) + 0.5) or 0
+
+                ff.qty:SetText(q)
                 ff.src:SetText(resolveSourceLabel(exp))
-                ff.amt:SetText(moneyCopper(exp.copper))
+                ff.unit:SetText(moneyCopper(unitCopper))
+                ff.amt:SetText(moneyCopper(cp))
                 UI.SetItemCell(ff.item, exp)
             end,
         })
+
         local rows = {}
         if GLOG.GetExpenseById then
             for _, eid in ipairs(lot.itemIds or {}) do
