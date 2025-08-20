@@ -630,11 +630,10 @@ local function BuildOptions(panel)
     makeRadioV(debugRadios, "YES", Tr("opt_yes"))
     makeRadioV(debugRadios, "NO",  Tr("opt_no"))
 
-    -- Valeurs initiales
     local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
     local theme = (saved and saved.theme) or "AUTO"
     local auto  = (saved and saved.autoOpen) and "YES" or "NO"
-    local dbg   = ((saved and saved.debugEnabled) ~= false) and "YES" or "NO"  -- Oui par défaut
+    local dbg   = (saved and saved.debugEnabled) and "YES" or "NO"
 
     _SetRadioGroupChecked(themeRadios, theme)
     _SetRadioGroupChecked(autoRadios,  auto)

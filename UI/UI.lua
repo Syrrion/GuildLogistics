@@ -501,8 +501,8 @@ _openAtLogin:SetScript("OnEvent", function()
     -- Applique le thème stocké (défaut: AUTO) et re-skin global
     if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
 
-    -- ➕ Applique l'état de debug (défaut : true → boutons visibles)
-    local debugOn = not (saved and saved.debugEnabled == false)
+    -- ✏️ Applique l'état de debug (défaut : false → boutons masqués)
+    local debugOn = (saved and saved.debugEnabled) == true
     if UI.SetDebugEnabled then UI.SetDebugEnabled(debugOn) end
 
     -- Ouverture auto uniquement si activée par l'utilisateur

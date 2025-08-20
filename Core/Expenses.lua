@@ -32,7 +32,7 @@ function GLOG.ExpensesToggle()
     return e.recording
 end
 
-function GLOG.LogExpense(source, itemLink, itemName, qty, copper)
+function GLOG.LogExpense(sourceId, itemLink, itemName, qty, copper)
     EnsureDB()
     local e = GuildLogisticsDB.expenses
     if not (e and e.recording) then return end
@@ -58,19 +58,23 @@ function GLOG.LogExpense(source, itemLink, itemName, qty, copper)
     table.insert(e.list, {
         id = nid,
         ts = time(),
-        source = source,                 -- "Boutique" | "HdV"
-        itemID = iid,                    -- ➕ ID WoW de l'objet
-        itemLink = normalizedLink,       -- lien minimal si besoin
-        itemName = itemName,             -- fallback UI
+        sourceId = tonumber(sourceId) or 0,
+        itemID = iid,
+        itemLink = normalizedLink,
+        itemName = itemName,
         qty = tonumber(qty) or 1,
         copper = amount,
     })
 
-    -- ➕ diffusion aux joueurs (le GM seul diffuse)
+-- ➕ diffusion aux joueurs (le GM seul diffuse)
     if GLOG.BroadcastExpenseAdd and GLOG.IsMaster and GLOG.IsMaster() then
         GLOG.BroadcastExpenseAdd({
-            id = nid, src = source, i = iid or 0,
-            q = tonumber(qty) or 1, c = amount
+            id  = nid,
+            sid = tonumber(sourceId) or 0,            -- <-- nouvel ID diffusé
+            src = (GLOG.GetExpenseSourceLabel and GLOG.GetExpenseSourceLabel(sourceId)) or nil, -- compat anciens clients
+            i   = iid or 0,
+            q   = tonumber(qty) or 1,
+            c   = amount
         })
     end
 
@@ -173,7 +177,7 @@ function GLOG.Expenses_InstallHooks()
                     if spent and spent > 0 then
                         local qty = tonumber(p.qty) or 1
                         local unit = math.floor(spent / math.max(1, qty))
-                        GLOG.LogExpense(Tr("label_ah"), p.itemID or p.link, p.name or Tr("label_ah"), qty, unit)
+                        GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   p.itemID or p.link, p.name, qty, unit)
                     end
 
                     GLOG._pendingAH.items[auctionID] = nil
@@ -188,7 +192,7 @@ function GLOG.Expenses_InstallHooks()
                                 local name = (link and link:match("%[(.-)%]")) or info.itemName or Tr("label_ah")
                                 local iid  = (info.itemKey and info.itemKey.itemID)
                                         or (link and GetItemInfoInstant and select(1, GetItemInfoInstant(link)))
-                                GLOG.LogExpense(Tr("label_ah"), iid or link, name, 1, amount)
+                                GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   iid or link,        name,   1,    amount)
                             end
                         end
                     end
@@ -202,7 +206,7 @@ function GLOG.Expenses_InstallHooks()
                             or ((GLOG._pendingAH.lastUnitPrice and p.qty) and (GLOG._pendingAH.lastUnitPrice * p.qty))
                             or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
-                        GLOG.LogExpense(Tr("label_ah"), p.itemID or p.link, p.name or Tr("label_ah"), p.qty or 1, spent)
+                        GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   p.itemID or p.link, p.name, p.qty or 1, spent)
                     end
                 end
 
@@ -336,7 +340,7 @@ function GLOG.Expenses_InstallHooks()
             local amount = (buyoutPrice and buyoutPrice > 0) and buyoutPrice or bid
             if amount and amount > 0 then
                 local link = GetAuctionItemLink(listType, index)
-                GLOG.LogExpense(Tr("label_ah"), link, name or Tr("label_ah"), 1, amount)
+                GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   link,               name,   1,    amount)
             end
         end)
         GLOG._legacyBidHook = true
@@ -353,7 +357,7 @@ function GLOG.Expenses_InstallHooks()
             local link = GetMerchantItemLink and GetMerchantItemLink(index) or name
             local unit = math.floor((price or 0) / math.max(1, stackCount or 1))
             if unit > 0 then
-                GLOG.LogExpense(Tr("lbl_shop"), link, name, q, unit)
+                GLOG.LogExpense(GLOG.EXPENSE_SOURCE.SHOP, link,               name,   q,    unit)
             end
         end)
         GLOG._merchantHook = true

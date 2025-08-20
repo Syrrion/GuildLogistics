@@ -52,8 +52,10 @@ local function EnsureDB()
     GuildLogisticsUI.minimap = GuildLogisticsUI.minimap or { hide=false, angle=215 }
     if GuildLogisticsUI.minimap.angle == nil then GuildLogisticsUI.minimap.angle = 215 end
 
-    -- ➕ Par défaut : débug actif (Oui)
-    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = true end
+    -- ✏️ Par défaut : débug inactif (Non)
+    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = false end
+    -- ➕ Par défaut : ouverture auto désactivée
+    if GuildLogisticsUI.autoOpen == nil then GuildLogisticsUI.autoOpen = false end
 end
 
 GLOG._EnsureDB = EnsureDB
@@ -1209,4 +1211,47 @@ ns.Tr = ns.Tr or function(input, ...)
         if ok then return out end
     end
     return v
+end
+
+-- ===== Dépenses : table de correspondance des sources (IDs stables) =====
+GLOG.EXPENSE_SOURCE = GLOG.EXPENSE_SOURCE or {
+    SHOP = 1,        -- Boutique PNJ
+    AH   = 2,        -- Hôtel des Ventes
+}
+
+function GLOG.GetExpenseSourceLabel(id)
+    local v = tonumber(id) or 0
+    if v == (GLOG.EXPENSE_SOURCE and GLOG.EXPENSE_SOURCE.SHOP) then
+        return (ns.Tr and ns.Tr("lbl_shop")) or "Shop"
+    elseif v == (GLOG.EXPENSE_SOURCE and GLOG.EXPENSE_SOURCE.AH) then
+        return (ns.Tr and ns.Tr("lbl_ah")) or "AH"
+    end
+    return ""
+end
+
+-- ===== Bus d'événements interne, simple et réutilisable =====
+GLOG.__evt = GLOG.__evt or {}
+
+function GLOG.On(event, callback)
+    if type(event) ~= "string" or type(callback) ~= "function" then return end
+    local L = GLOG.__evt[event]
+    if not L then L = {}; GLOG.__evt[event] = L end
+    table.insert(L, callback)
+end
+
+function GLOG.Off(event, callback)
+    local L = GLOG.__evt and GLOG.__evt[event]
+    if not L then return end
+    for i = #L, 1, -1 do
+        if L[i] == callback then table.remove(L, i) end
+    end
+end
+
+function GLOG.Emit(event, ...)
+    local L = GLOG.__evt and GLOG.__evt[event]
+    if not L then return end
+    for i = 1, #L do
+        local ok = pcall(L[i], ...)
+        -- on ignore les erreurs pour ne pas casser la chaîne de traitement
+    end
 end

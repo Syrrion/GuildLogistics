@@ -48,6 +48,14 @@ local function moneyCopper(v)
     return UI.MoneyFromCopper(tonumber(v) or 0)
 end
 
+-- Résout la source à afficher depuis l'ID (fallback sur l'ancien champ texte)
+local function resolveSourceLabel(it)
+    if it and it.sourceId and ns and ns.GLOG and ns.GLOG.GetExpenseSourceLabel then
+        return ns.GLOG.GetExpenseSourceLabel(it.sourceId)
+    end
+    return tostring(it and it.source or "")
+end
+
 local function resolveItemName(it)
     if it.itemID then
         local name = GetItemInfo and select(1, GetItemInfo(it.itemID))
@@ -140,7 +148,7 @@ local function UpdateRowFree(i, r, f, it)
     if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(GLOG.IsMaster and GLOG.IsMaster()) end
 
     f.qty:SetText(tostring(d.qty or 1))
-    f.source:SetText(tostring(d.source or ""))
+    f.source:SetText(resolveSourceLabel(d))
     f.amount:SetText(moneyCopper(d.copper))
     UI.SetItemCell(f.item, d)
 
@@ -202,7 +210,7 @@ local function UpdateRowLots(i, r, f, it)
             end,
             updateRow = function(i2, r2, ff, exp)
                 ff.qty:SetText(exp.qty or 1)
-                ff.src:SetText(exp.source or "")
+                ff.src:SetText(resolveSourceLabel(exp))
                 ff.amt:SetText(moneyCopper(exp.copper))
                 UI.SetItemCell(ff.item, exp)
             end,

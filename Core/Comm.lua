@@ -1156,15 +1156,17 @@ function GLOG._HandleFull(sender, msgType, kv)
         local id = safenum(kv.id, 0); if id <= 0 then return end
         for _, e in ipairs(GuildLogisticsDB.expenses.list) do if safenum(e.id,0) == id then return end end
 
-        -- Normalisations : clé 'src' pour la source, et lotId 0 -> nil
+        -- Normalisations : 'sid' = ID source stable, 'src' = libellé (compat), lotId 0 -> nil
         local _src = kv.src or kv.s
+        local _sid = safenum(kv.sid, 0)
         local _lot = safenum(kv.l, 0); if _lot == 0 then _lot = nil end
 
         local e = {
             id = id,
             qty = safenum(kv.q,0),
             copper = safenum(kv.c,0),
-            source = _src,
+            source  = _src,               -- compat anciens enregistrements
+            sourceId = (_sid > 0) and _sid or nil,
             lotId  = _lot,
             itemID = safenum(kv.i,0),
         }
@@ -2111,15 +2113,17 @@ function GLOG.BroadcastExpenseAdd(p)
     GuildLogisticsDB.meta.lastModified = now()
 
     GLOG.Comm_Broadcast("EXP_ADD", {
-        id = id,
+        id  = id,
         i   = safenum(p.i, 0),
         q   = safenum(p.q, 1),
         c   = safenum(p.c, 0),
-        src = p.src or p.s, -- la source voyage désormais sous 'src'
+        src = p.src or p.s,             -- compat : étiquette lisible
+        sid = safenum(p.sid, 0),        -- <-- nouvel ID de source stable
         l   = safenum(p.l, 0),
         rv  = rv,
         lm  = GuildLogisticsDB.meta.lastModified,
     })
+
 end
 
 -- ➕ Diffusion GM : suppression d'une dépense

@@ -196,7 +196,7 @@ function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
     local op = (tonumber(delta) or 0) >= 0 and "|cff40ff40+|r" or "|cffff6060-|r"
     local amt = UI.MoneyText(math.abs(tonumber(delta) or 0))
 
-    dlg:SetMessage((Tr("popup_tx_request_message"))
+    dlg:SetMessage(Tr("popup_tx_request_message")
         :format(playerName or "?", op, amt))
 
     dlg:SetButtons({
