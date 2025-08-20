@@ -1188,6 +1188,10 @@ function GLOG._HandleFull(sender, msgType, kv)
         end
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
+
+        -- ✏️ Alignement avec EXP_ADD : rafraîchit l’onglet/écran actif (Ressources inclus)
+        refreshActive()
+
         if ns.Emit then ns.Emit("expenses:changed") end
 
     elseif msgType == "ILVL_UPDATE" then
