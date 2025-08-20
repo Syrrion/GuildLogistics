@@ -1,6 +1,6 @@
 ## Interface: 112000
-## Title: Guild Manager
-## Notes: Guild Manager
+## Title: Guild & Raid Manager
+## Notes: Guild & Raid Manager
 ## Author: Ysendril-KirinTor
 ## Version: 0.1.0
 ## SavedVariables: GuildManagerDB, GuildManagerUI
