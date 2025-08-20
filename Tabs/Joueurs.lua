@@ -7,9 +7,9 @@ local panel, lv
 
 -- Colonnes normalisées
 local cols = UI.NormalizeColumns({
-    { key="main",  title="Joueur",             min=420, flex=1 },
-    { key="last",  title="Dernière connexion", w=180 },
-    { key="count", title="Rerolls",            w=120 },
+    { key="main",  title=Tr("col_player"),             min=420, flex=1 },
+    { key="last",  title=Tr("col_last_seen"), w=180 },
+    { key="count", title=Tr("col_rerolls"),            w=120 },
     { key="act",   title="",                   w=220 },
 })
 
@@ -25,8 +25,8 @@ local function BuildRow(r)
     -- Cellule d'actions = conteneur + bouton + libellé "dans le roster"
     f.act     = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     f.inRoster = UI.Label(f.act)
-    f.btnAdd  = UI.Button(f.act, "Ajouter au Roster", { size="sm", minWidth=160 })
-    f.inRoster:SetText("Dans le roster")
+    f.btnAdd  = UI.Button(f.act, Tr("btn_add_to_roster"), { size="sm", minWidth=160 })
+    f.inRoster:SetText(Tr("lbl_in_roster"))
 
     f.inRoster:SetJustifyH("CENTER")
     f.inRoster:Hide()
@@ -71,7 +71,7 @@ local function UpdateRow(i, r, f, it)
     UI.SetNameTag(f.main, it.main or "")
     f.count:SetText(it.count or 0)
     if it.onlineCount and it.onlineCount > 0 then
-        local txt = (it.onlineCount > 1) and ("|cff40ff40En ligne ("..it.onlineCount..")|r") or "|cff40ff40En ligne|r"
+        local txt = (it.onlineCount > 1) and ("|cff40ff40"..Tr("status_online")..("..it.onlineCount..").."|r") or "|cff40ff40"..Tr("status_online").."|r"
         f.last:SetText(txt)
     else
         f.last:SetText(ns.Format.LastSeen(it.days or it.lastSeenDays, it.hours or it.lastSeenHours))
@@ -85,7 +85,7 @@ local function UpdateRow(i, r, f, it)
         if f.btnAdd then f.btnAdd:Hide() end
         if f.inRoster then
             -- Montre explicitement le statut de réserve si applicable
-            f.inRoster:SetText(isReserve and "En réserve" or "Dans le roster")
+            f.inRoster:SetText(isReserve and Tr("lbl_in_reserve") or Tr("lbl_in_roster"))
             f.inRoster:Show()
             f.inRoster:ClearAllPoints()
             f.inRoster:SetPoint("CENTER", f.act, "CENTER", 0, 0)
@@ -151,14 +151,14 @@ local function buildItemsFromAgg(agg)
 
     local items = {}
     if #actives > 0 then
-        table.insert(items, {kind="sep", label="Connectés < 1 mois (perso le + récent)"} )
+        table.insert(items, {kind="sep", label=Tr("lbl_recent_online")} )
         for _, e in ipairs(actives) do table.insert(items, {kind="data", main=EnsureFullMain(e), days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
     end
     if #olds > 0 then
-        table.insert(items, {kind="sep", label="Dernière connexion ≥ 1 mois"} )
+        table.insert(items, {kind="sep", label=Tr("lbl_old_online")} )
         for _, e in ipairs(olds) do table.insert(items, {kind="data", main=EnsureFullMain(e), days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
     end
-    if #items == 0 then table.insert(items, {kind="sep", label="Aucun joueur trouvé (Remarque = pseudo du main)."}) end
+    if #items == 0 then table.insert(items, {kind="sep", label=Tr("lbl_no_player_found")}) end
     return items
 end
 
@@ -174,7 +174,7 @@ local function Refresh()
         if age > 60 then need = true end
     end
     if need then
-        lv:SetData({ {kind="sep", label="Scan du roster en cours…"} })
+        lv:SetData({ {kind="sep", label=Tr("lbl_scan_roster_progress")} })
         GLOG.RefreshGuildCache(function()
             if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
             if ns and ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
@@ -242,7 +242,7 @@ function UI.ShowGuildRosterPopup()
     end
 
     if need then
-        pv:SetData({ {kind="sep", label="Scan du roster en cours…"} })
+        pv:SetData({ {kind="sep", label=Tr("lbl_scan_roster_progress")} })
         GLOG.RefreshGuildCache(updatePopup)
     else
         updatePopup()

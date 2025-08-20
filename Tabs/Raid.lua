@@ -13,9 +13,9 @@ local lotsDirty = true -- flag d’invalidation des lots
 
 local cols = {
     { key="check", title="",      w=34,  justify="LEFT"  },
-    { key="name",  title="Nom",   min=300, flex=1, justify="LEFT" },
-    { key="solde", title="Solde", w=160, justify="LEFT"  },
-    { key="after", title="Après", w=160, justify="LEFT"  },
+    { key="name",  title=Tr("col_name"),   min=300, flex=1, justify="LEFT" },
+    { key="solde", title=Tr("col_balance"), w=160, justify="LEFT"  },
+    { key="after", title=Tr("col_after"), w=160, justify="LEFT"  },
 }
 
 -- ===== Utilitaires =====
@@ -83,8 +83,8 @@ local function UpdateRowLots(i, r, f, it)
     local N    = tonumber(l.sessions or 1) or 1
     local remaining = math.max(0, N - used)
     local shareGold = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
-    f.name:SetText(l.name or ("Lot "..tostring(l.id)))
-    f.frac:SetText((remaining).." rest.")
+    f.name:SetText(l.name or (Tr("lbl_left_short")..tostring(l.id)))
+    f.frac:SetText((remaining).." "..Tr("lbl_left_short"))
     f.gold:SetText(UI.MoneyText(shareGold))
     f.check:SetChecked(chosenLots[l.id] and true or false)
     f.check:SetScript("OnClick", function(self)
@@ -166,13 +166,13 @@ local function Build(container)
     footer = UI.CreateFooter(panel, 36)
 
     totalLabel = footer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    totalLabel:SetText("Montant global (po) :")
+    totalLabel:SetText(Tr("lbl_total_amount_gold"))
 
     totalInput = CreateFrame("EditBox", nil, footer, "InputBoxTemplate")
     totalInput:SetAutoFocus(false); totalInput:SetNumeric(true); totalInput:SetSize(120, 28)
     totalInput:SetScript("OnTextChanged", function() ns.RefreshAll() end)
 
-    closeBtn = UI.Button(footer, "Valider les participants", { size="sm", minWidth=220 })
+    closeBtn = UI.Button(footer, Tr("btn_confirm_participants"), { size="sm", minWidth=220 })
     closeBtn:SetOnClick(function()
         local total = tonumber(totalInput:GetText() or "0") or 0
         local selected = {}
@@ -194,7 +194,7 @@ local function Build(container)
                     local N    = tonumber(l.sessions or 1) or 1
                     local k    = used + 1
                     local g    = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
-                    Lctx[#Lctx+1] = { id = id, name = l.name or ("Lot " .. tostring(id)), k = k, N = N, n = 1, gold = g }
+                    Lctx[#Lctx+1] = { id = id, name = l.name or (Tr("lbl_lot") .. tostring(id)), k = k, N = N, n = 1, gold = g }
                 end
             end
 
@@ -273,13 +273,13 @@ local function Build(container)
             chosenLots = {}
         end
 
-        local dlg = UI.CreatePopup({ title = "Valider les participants", width = 520, height = 220 })
-        dlg:SetMessage(("Vous allez débiter %d joueur(s) de %s chacun.")
+        local dlg = UI.CreatePopup({ title = Tr("btn_confirm_participants"), width = 520, height = 220 })
+        dlg:SetMessage((Tr("warn_debit_n_players_each"))
             :format(#selected, UI.MoneyText(per)))
         dlg:SetButtons({
-            { text = "Notifier les joueurs", default = true, onClick = function() sendBatch(false) end },
-            { text = "Valider", onClick = function() sendBatch(true); if UI.ShowTabByLabel then UI.ShowTabByLabel("Historique") end end },
-            { text = "Annuler", variant = "ghost" },
+            { text = Tr("btn_notify_players"), default = true, onClick = function() sendBatch(false) end },
+            { text = Tr("btn_confirm"), onClick = function() sendBatch(true); if UI.ShowTabByLabel then UI.ShowTabByLabel(Tr("btn_raids_history")) end end },
+            { text = Tr("btn_cancel"), variant = "ghost" },
         })
         dlg:Show()
     end)
@@ -291,7 +291,7 @@ local function Build(container)
     lotsPane = CreateFrame("Frame", nil, panel)
 
     -- Titre + trait : joueurs participants (dans le conteneur paddé)
-    UI.SectionHeader(topPane, "Joueurs participants")
+    UI.SectionHeader(topPane, Tr("lbl_participating_players"))
 
     -- Liste des joueurs (haut), enfant de topPane
     lv = UI.ListView(topPane, cols, {
@@ -304,13 +304,13 @@ local function Build(container)
     -- Titre + trait : lots utilisables
     local colsLots = UI.NormalizeColumns({
         { key="check", title="",    w=34 },
-        { key="name",  title="Lot", min=260, flex=1 },
-        { key="frac",  title="Restant", w=90 },
-        { key="gold",  title="Montant",  w=120 },
+        { key="name",  title=Tr("col_bundle"), min=260, flex=1 },
+        { key="frac",  title=Tr("col_remaining"), w=90 },
+        { key="gold",  title=Tr("col_amount"),  w=120 },
     })
 
     -- Header + liste des lots
-    UI.SectionHeader(lotsPane, "Lots utilisables")
+    UI.SectionHeader(lotsPane, Tr("lbl_usable_bundles"))
     lotsLV = UI.ListView(lotsPane, colsLots, {
         buildRow = BuildRowLots,
         updateRow = UpdateRowLots,

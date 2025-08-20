@@ -1,4 +1,5 @@
 local ADDON, ns = ...
+local Tr = ns and ns.Tr
 ns.UI = ns.UI or {}
 local UI = ns.UI
 
@@ -39,8 +40,9 @@ function UI.ListView(parent, cols, opts)
         ov.bg:SetColorTexture(0, 0, 0, 0.12) -- léger grisage
 
         ov.fs = ov:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
-        ov.fs:SetText(self.opts.emptyText or "Aucune données...")
+        ov.fs:SetText(Tr(self.opts.emptyText or Tr("lbl_no_data")))
         ov.fs:SetJustifyH("CENTER"); ov.fs:SetJustifyV("MIDDLE")
+
         ov.fs:SetPoint("CENTER", ov, "CENTER", 0, 0)
 
         self._empty = ov

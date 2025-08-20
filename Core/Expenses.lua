@@ -1,4 +1,5 @@
 local ADDON, ns = ...
+local Tr = ns and ns.Tr
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
@@ -103,12 +104,6 @@ function GLOG.DeleteExpense(ref)
         end
     end
     if not idx then return false end
-
-    -- Interdit de supprimer une dépense rattachée à un lot
-    if e.list[idx] and e.list[idx].lotId then
-        if UIErrorsFrame then UIErrorsFrame:AddMessage("|cffff60...ce rattachée à un lot : suppression impossible.", 1,0.4,0.4) end
-        return false
-    end
 
     local eid = e.list[idx] and e.list[idx].id
     table.remove(e.list, idx)
@@ -358,7 +353,7 @@ function GLOG.Expenses_InstallHooks()
             local link = GetMerchantItemLink and GetMerchantItemLink(index) or name
             local unit = math.floor((price or 0) / math.max(1, stackCount or 1))
             if unit > 0 then
-                GLOG.LogExpense(Tr("label_shop"), link, name, q, unit)
+                GLOG.LogExpense(Tr("lbl_shop"), link, name, q, unit)
             end
         end)
         GLOG._merchantHook = true

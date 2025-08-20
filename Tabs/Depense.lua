@@ -18,10 +18,10 @@ local selected = {} -- sélection : clés = index absolu dans expenses.list
 local function BuildColsFree()
     local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
     local cols = {
-        { key="qty",    title="Qté",     w=44  },
-        { key="item",   title="Objet",   min=260, flex=1 },
-        { key="source", title="Source",  w=120 },
-        { key="amount", title="Montant", w=160 },
+        { key="qty",    title=Tr("col_qty_short"),     w=44  },
+        { key="item",   title=Tr("col_item"),   min=260, flex=1 },
+        { key="source", title=Tr("col_source"),  w=120 },
+        { key="amount", title=Tr("col_amount"), w=160 },
     }
     if isGM then
         table.insert(cols, 1, { key="sel", title="", w=34 })
@@ -84,7 +84,7 @@ local function AttachDeleteExpenseHandler(r, f, d)
     r.btnDelete:SetOnClick(function()
         local abs = r._abs
         local eid = tonumber(d.id or 0) or 0
-        UI.PopupConfirm("Supprimer cette ligne de ressource ?", function()
+        UI.PopupConfirm(Tr("confirm_delete_resource_line"), function()
             GLOG.DeleteExpense((eid > 0) and eid or abs)
             if ns.RefreshAll then ns.RefreshAll() end
         end)
@@ -116,7 +116,7 @@ local function BuildRowFree(r)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
-    r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=30 })
+    r.btnDelete = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=30 })
     r.btnDelete:SetShown(GLOG.IsMaster and GLOG.IsMaster())
     UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
     return f
@@ -164,7 +164,7 @@ local function BuildRowLots(r)
 
     -- Bouton X uniquement pour le GM
     if GLOG.IsMaster and GLOG.IsMaster() then
-        r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=30 })
+        r.btnDelete = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=30 })
         UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
     end
     return f
@@ -177,19 +177,19 @@ local function UpdateRowLots(i, r, f, it)
     local used= tonumber(lot.used or 0) or 0
     local totalGold = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(lot) or 0) * N
 
-    f.name:SetText(lot.name or ("Lot "..tostring(lot.id)))
-    f.type:SetText(N>1 and (N.." utilisations") or "1 utilisation")
-    f.status:SetText( (st=="EPU" and "Épuisé") or (GLOG.Lot_Remaining and (GLOG.Lot_Remaining(lot).." restantes")) or ((N-used).." restantes") )
+    f.name:SetText(lot.name or (Tr("lbl_lot")..tostring(lot.id)))
+    f.type:SetText(N>1 and (N..Tr("lbl_uses")) or "1"..Tr("lbl_use"))
+    f.status:SetText( (st=="EPU" and Tr("badge_exhausted")) or (GLOG.Lot_Remaining and (GLOG.Lot_Remaining(lot).." "..Tr("suffix_remaining"))) or ((N-used).." "..Tr("suffix_remaining")))
     f.content:SetText(tostring(#(lot.itemIds or {})))
     f.total:SetText(UI.MoneyText(totalGold))
 
     f.content:SetOnClick(function()
-        local dlg = UI.CreatePopup({ title="Contenu du lot : " .. (lot.name or ("Lot " .. tostring(lot.id))), width=580, height=440 })
+        local dlg = UI.CreatePopup({ title=Tr("lbl_bundle_contents") .. (lot.name or (Tr("lbl_lot") .. tostring(lot.id))), width=580, height=440 })
         local cols = UI.NormalizeColumns({
-            { key="qty",  title="Qté",   w=60,  justify="RIGHT" },
-            { key="item", title="Objet", min=320, flex=1 },
-            { key="src",  title="Source", w=120 },
-            { key="amt",  title="Montant", w=120, justify="RIGHT" },
+            { key="qty",  title=Tr("col_qty_short"),   w=60,  justify="RIGHT" },
+            { key="item", title=Tr("col_item"), min=320, flex=1 },
+            { key="src",  title=Tr("col_source"), w=120 },
+            { key="amt",  title=Tr("col_amount"), w=120, justify="RIGHT" },
         })
         local lv = UI.ListView(dlg.content, cols, {
             buildRow = function(r2)
@@ -215,7 +215,7 @@ local function UpdateRowLots(i, r, f, it)
             end
         end
         lv:SetData(rows)
-        dlg:SetButtons({ { text="Fermer", default=true } })
+        dlg:SetButtons({ { text=Tr("btn_close"), default=true } })
         dlg:Show()
     end)
 
@@ -271,7 +271,7 @@ local function Refresh()
         end
     end
     lvFree:SetData(items)
-    totalFS:SetText("|cffffd200Ressources libres :|r " .. moneyCopper(total))
+    totalFS:SetText("|cffffd200"..Tr("lbl_free_resources").."|r " .. moneyCopper(total))
 
     local lots = (GLOG.GetLots and GLOG.GetLots()) or {}
     table.sort(lots, function(a,b)
@@ -293,7 +293,7 @@ local function Refresh()
     btnCreateLot:SetShown(GLOG.IsMaster and GLOG.IsMaster())
     btnClearAll:SetEnabled(true)
     local on = GLOG.IsExpensesRecording and GLOG.IsExpensesRecording()
-    btnToggle:SetText(on and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
+    btnToggle:SetText(on and Tr("btn_stop_recording") or Tr("btn_start_recording_expenses"))
 
     Layout()
 end
@@ -309,26 +309,30 @@ local function Build(container)
     topPane  = CreateFrame("Frame", nil, panel)
     bottomPane = CreateFrame("Frame", nil, panel)
 
-    UI.SectionHeader(topPane,    "Réserve d'objets")
+    UI.SectionHeader(topPane,    Tr("lbl_item_reserve"))
     lvFree = UI.ListView(topPane, colsFree, { buildRow=BuildRowFree, updateRow=UpdateRowFree, topOffset=UI.SECTION_HEADER_H or 26 })
 
-    UI.SectionHeader(bottomPane, "Lots utilisables pour les raids")
+    UI.SectionHeader(bottomPane, Tr("lbl_usable_bundles_raids"))
     lvLots = UI.ListView(bottomPane, colsLots, { buildRow=BuildRowLots, updateRow=UpdateRowLots, topOffset=UI.SECTION_HEADER_H or 26})
 
-    btnCreateLot = UI.Button(footer, "Créer un lot", { size="sm", minWidth=140, tooltip="Sélectionnez des ressources pour créer un lot (contenu figé)." })
+    btnCreateLot = UI.Button(footer, Tr("btn_create_bundle"), { size="sm", minWidth=140, tooltip=Tr("hint_select_resources_bundle") })
     btnCreateLot:SetOnClick(function()
         if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
         local idxs = {}
-        for abs,v in pairs(selected) do if v then idxs[#idxs+1] = abs end end
+        for abs,v in pairs(selected) do 
+            if v then idxs[#idxs+1] = abs end 
+        end
         table.sort(idxs)
+
         if #idxs == 0 then
-            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Aucune ressource sélectionnée.", 1,0.4,0.4)
+            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r "..Tr("lbl_no_res_selected")..".", 1,0.4,0.4)
             return
         end
-        local dlg = UI.CreatePopup({ title="Créer un lot", width=420, height=220 })
-        local nameLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nameLabel:SetText("Nom du lot :")
+
+        local dlg = UI.CreatePopup({ title=Tr("btn_create_bundle"), width=420, height=220 })
+        local nameLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nameLabel:SetText(Tr("lbl_bundle_name"))
         local nameInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nameInput:SetSize(240, 28); nameInput:SetAutoFocus(true)
-        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText("Nombre d'utilisations")
+        local nLabel   = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); nLabel:SetText(Tr("lbl_num_uses"))
         local nInput   = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate"); nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(1)
         nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -14)
         nameInput:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
@@ -336,9 +340,9 @@ local function Build(container)
         nInput:SetPoint("LEFT", nLabel, "RIGHT", 8, 0)
 
         dlg:SetButtons({
-            { text="Créer", default=true, onClick=function()
+            { text=Tr("btn_create"), default=true, onClick=function()
                 local nm = nameInput:GetText() or ""
-                if nm == "" then nm = "Lot" end
+                if nm == "" then nm = Tr("lbl_bundle") end
                 local N  = tonumber(nInput:GetNumber() or 1) or 1
                 if N < 1 then N = 1 end
                 local isMulti = (N > 1)
@@ -348,12 +352,12 @@ local function Build(container)
                     if ns.RefreshAll then ns.RefreshAll() end
                 end
             end },
-            { text=CANCEL, variant="ghost" },
+            { text=Tr("btn_cancel"), variant="ghost" },
         })
         dlg:Show()
     end)
 
-    btnToggle = UI.Button(footer, "Démarrer l'enregistrement des dépenses", { size="sm", minWidth=260 })
+    btnToggle = UI.Button(footer, Tr("btn_start_recording_expenses"), { size="sm", minWidth=260 })
     btnToggle:SetOnClick(function()
         local isRecording = GLOG.IsExpensesRecording and GLOG.IsExpensesRecording()
         if isRecording and GLOG.ExpensesStop then
@@ -362,12 +366,12 @@ local function Build(container)
             GLOG.ExpensesStart()
         end
         local nowOn = GLOG.IsExpensesRecording and GLOG.IsExpensesRecording()
-        btnToggle:SetText(nowOn and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
+        btnToggle:SetText(nowOn and Tr("btn_stop_recording") or Tr("btn_start_recording_expenses"))
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 
-    btnClearAll = UI.Button(footer, "Tout vider (libres)", { size="sm", variant="danger", minWidth=160 })
-    btnClearAll:SetConfirm("Vider la liste des ressources libres ? (les lots ne sont pas affectés)", function()
+    btnClearAll = UI.Button(footer, Tr("btn_clear_all_free"), { size="sm", variant="danger", minWidth=160 })
+    btnClearAll:SetConfirm(Tr("confirm_clear_free_resources"), function()
         if GLOG.ClearExpenses then GLOG.ClearExpenses() end
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)

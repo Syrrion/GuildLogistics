@@ -34,9 +34,9 @@ function UI.CreatePopup(opts)
     drag:SetScript("OnDragStart", function() f:StartMoving() end)
     drag:SetScript("OnDragStop",  function() f:StopMovingOrSizing() end)
 
-     -- Titre centré (ancré dans la zone draggable pour rester au-dessus)
+    -- Titre centré (ancré dans la zone draggable pour rester au-dessus)
     f.title = drag:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    f.title:SetText((Tr and Tr(opts.title or "popup_info_title")) or (opts.title or "Information"))
+    f.title:SetText(Tr(opts.title or "popup_info_title"))
     f.title:SetTextColor(0.98, 0.95, 0.80)
 
     if UI.PositionTitle then
@@ -106,11 +106,12 @@ function UI.CreatePopup(opts)
         local arr = {}
         for i = 1, #buttons do
             local def = buttons[i]
-            local b = UI.Button(self.footer, def.text or "OK", {
+            local b = UI.Button(self.footer, def.text or "btn_ok", {
                 size = "sm",
                 minWidth = def.width or 110,
                 variant = def.variant,
             })
+
             b:SetOnClick(function()
                 if def.onClick then
                     local ok, err = pcall(def.onClick, b, self)
@@ -139,8 +140,8 @@ function UI.PopupConfirm(text, onAccept, onCancel, opts)
     })
     dlg:SetMessage(text)
     dlg:SetButtons({
-        { text = OKAY,   default = true, onClick = function() if onAccept then onAccept() end end },
-        { text = CANCEL, variant = "ghost", onClick = function() if onCancel then onCancel() end end },
+        { text = Tr("btn_confirm"),   default = true, onClick = function() if onAccept then onAccept() end end },
+        { text = Tr("btn_cancel"), variant = "ghost", onClick = function() if onCancel then onCancel() end end },
     })
     dlg:Show()
     return dlg
@@ -174,11 +175,11 @@ function UI.PopupPromptNumber(title, label, onAccept, opts)
     end)
 
     dlg:SetButtons({
-        { text = OKAY,   default = true, onClick = function()
+        { text = Tr("btn_confirm"),   default = true, onClick = function()
             local v = (eb.GetNumber and eb:GetNumber()) or (tonumber(eb:GetText()) or 0)
             if onAccept then onAccept(v) end
         end },
-        { text = CANCEL, variant = "ghost" },
+        { text = Tr("btn_cancel"), variant = "ghost" },
     })
     dlg:Show()
     return dlg
@@ -186,7 +187,7 @@ end
 
 -- Demande de transaction entrante (GM)
 function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
-    local title = "Demande de transaction"
+    local title = "popup_tx_request"
     local dlg = UI.CreatePopup({
         title  = title,
         width  = math.floor(520 * 1.10),
@@ -195,16 +196,16 @@ function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
     local op = (tonumber(delta) or 0) >= 0 and "|cff40ff40+|r" or "|cffff6060-|r"
     local amt = UI.MoneyText(math.abs(tonumber(delta) or 0))
 
-    dlg:SetMessage(("|cffffd200Demandeur:|r %s\n|cffffd200Opération:|r %s %s\n\nApprouver ?")
+    dlg:SetMessage((Tr("popup_tx_request_message"))
         :format(playerName or "?", op, amt))
 
     dlg:SetButtons({
-        { text = "Approuver", default = true, onClick = function()
+        { text = "btn_approve", default = true, onClick = function()
             if onApprove then onApprove() end
             if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
             if ns and ns.RefreshAll then ns.RefreshAll() end
         end },
-        { text = "Refuser", variant = "ghost", onClick = function()
+         { text = "btn_refuse", variant = "ghost", onClick = function()
             if onRefuse then onRefuse() end
             if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
             if ns and ns.RefreshAll then ns.RefreshAll() end
@@ -231,7 +232,8 @@ function UI.ShowParticipantsPopup(names)
         end,
         updateRow = function(i, r, f, item)
             UI.SetNameTag(f.name, item.name or "")
-            f.status:SetText(item.exists and "|cff40ff40Présent|r" or "|cffff7070Supprimé|r")
+            f.status:SetText(item.exists and Tr("lbl_status_present_colored") or Tr("lbl_status_deleted_colored"))
+
         end,
     })
     dlg._lv = lv
@@ -251,7 +253,7 @@ end
 function UI.PopupText(title, text)
     local dlg = UI.CreatePopup({ title = (Tr and Tr(title or "popup_info_title")) or (title or "Information") })
     dlg:SetMessage((Tr and Tr(text)) or text)
-    dlg:SetButtons({ { text = "Fermer", default = true } })
+    dlg:SetButtons({ { text = Tr("btn_close"), default = true } })
     dlg:Show()
     return dlg
 end
@@ -260,7 +262,7 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     -- Hauteur augmentée pour accueillir le détail des composants
     local dlg = UI.CreatePopup({ title = (Tr and Tr("popup_raid_ok")) or "Participation au raid validée !", width = 660, height = 400 })
     local lines = {}
-    lines[#lines+1] = ((Tr and Tr("msg_good_raid")) or "Bon raid !") .. "\n"
+    lines[#lines+1] = Tr("msg_good_raid") .. "\n"
 
     -- Petit utilitaire local pour nom d'objet
     local function _itemName(it)
@@ -278,22 +280,24 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     titleFS:SetJustifyH("CENTER")
     titleFS:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  0, -12)  -- marge haute
     titleFS:SetPoint("TOPRIGHT", dlg.content, "TOPRIGHT", 0, -12)
-    titleFS:SetText((Tr and Tr("msg_good_raid")) or "Bon raid !")
+    titleFS:SetText(Tr("msg_good_raid"))
 
     -- Lignes séparées pour contrôler précisément les espacements
     local dedFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     dedFS:SetJustifyH("CENTER")
     dedFS:SetPoint("TOPLEFT",  titleFS, "BOTTOMLEFT",  0, -12)     -- espace AU-DESSUS de « Montant déduit »
     dedFS:SetPoint("TOPRIGHT", titleFS, "BOTTOMRIGHT", 0, -12)
-    dedFS:SetText( ("|cffffd200Montant déduit :|r %s")
-        :format(UI.MoneyText(math.floor(tonumber(deducted) or 0))) )
+    dedFS:SetText( Tr("popup_deducted_amount_fmt"):format(
+        UI.MoneyText(math.floor(tonumber(deducted) or 0))
+    ) )
 
     local restFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     restFS:SetJustifyH("CENTER")
     restFS:SetPoint("TOPLEFT",  dedFS, "BOTTOMLEFT",  0, -8)       -- espace SOUS « Montant déduit »
     restFS:SetPoint("TOPRIGHT", dedFS, "BOTTOMRIGHT", 0, -8)
-    restFS:SetText( ("|cffffd200Solde restant :|r %s")
-        :format(UI.MoneyText(math.floor(tonumber(after) or 0))) )
+    restFS:SetText( Tr("popup_remaining_balance_fmt"):format(
+        UI.MoneyText(math.floor(tonumber(after) or 0))
+    ) )
 
     -- Forcer le wrapping si la largeur est connue
     local cw = dlg.content:GetWidth() or 0
@@ -318,9 +322,10 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
 
         -- ➕ colonnes : Lot (flex) + Prix (droite)
         local cols = UI.NormalizeColumns({
-            { key="lot",   title="Lots utilisés", min=200, flex=1, justify="LEFT"  },
-            { key="price", title="Prix",          w=120,              justify="RIGHT" },
+            { key="lot",   title=Tr("lbl_used_bundles"), min=200, flex=1, justify="LEFT"  },
+            { key="price", title=Tr("col_price"),        w=120,              justify="RIGHT" },
         })
+
 
         -- ➕ offset dynamique depuis le bas du header texte (pour éviter tout chevauchement)
         local function ComputeLVTopOffset()
@@ -365,10 +370,10 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
             local lot = ns and ns.GLOG and ns.GLOG.Lot_GetById and ns.GLOG.Lot_GetById(id)
             local name, perGold
             if lot then
-                name    = lot.name or ((metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id)))
+                name    = lot.name or ((metaByLot[id] and metaByLot[id].name) or (Tr("lbl_lot")..tostring(id)))
                 perGold = (ns and ns.GLOG and ns.GLOG.Lot_ShareGold and ns.GLOG.Lot_ShareGold(lot)) or 0
             else
-                name    = (metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id))
+                name    = (metaByLot[id] and metaByLot[id].name) or (Tr("lbl_lot")..tostring(id))
                 perGold = tonumber(metaByLot[id] and (metaByLot[id].gold or metaByLot[id].g)) or 0
             end
 
@@ -391,7 +396,7 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         if dlg.content and dlg.content.HookScript then dlg.content:HookScript("OnSizeChanged", ReflowList) end
     end
 
-    dlg:SetButtons({ { text = "Fermer", default = true } })
+    dlg:SetButtons({ { text = Tr("btn_close"), default = true } })
     dlg:Show()
     return dlg
 end
@@ -423,11 +428,11 @@ function UI.PopupPromptText(title, label, onAccept, opts)
     end)
 
     dlg:SetButtons({
-        { text = OKAY,   default = true, onClick = function()
+        { text = Tr("btn_confirm"),   default = true, onClick = function()
             local v = tostring(eb:GetText() or "")
             if onAccept then onAccept(v) end
         end },
-        { text = CANCEL, variant = "ghost" },
+        { text = Tr("btn_cancel"), variant = "ghost" },
     })
     dlg:Show()
     return dlg

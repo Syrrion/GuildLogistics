@@ -146,10 +146,11 @@ close:SetPoint("TOPRIGHT", Main, "TOPRIGHT", 2, 2)
 -- ➕ Bouton Reload au même niveau que la croix (dans la barre titre)
 local reloadBtn = CreateFrame("Button", ADDON.."ReloadButton", Main, "UIPanelButtonTemplate")
 reloadBtn:SetSize(60, 20)
-reloadBtn:SetText("Reload")
+reloadBtn:SetText(Tr("btn_reload"))
 -- S'assure d'être au-dessus du contenu, comme le bouton X
 reloadBtn:SetFrameStrata(close:GetFrameStrata())
 reloadBtn:SetFrameLevel(close:GetFrameLevel())
+
 -- Placé juste à gauche du X
 reloadBtn:ClearAllPoints()
 reloadBtn:SetPoint("TOPRIGHT", close, "TOPLEFT", -6, 0)
@@ -157,7 +158,7 @@ reloadBtn:SetScript("OnClick", function() ReloadUI() end)
 
 -- ➕ Bouton Debug à droite (collé au bouton Reload)
 local debugBtn = CreateFrame("Button", ADDON.."DebugButton", Main, "UIPanelButtonTemplate")
-debugBtn:SetText("Debug")
+debugBtn:SetText(Tr("tab_debug"))
 -- Même taille/strata/niveau que Reload
 local rw, rh = reloadBtn:GetSize()
 if rw and rh then debugBtn:SetSize(rw, rh) else debugBtn:SetSize(60, 20) end
@@ -168,7 +169,7 @@ debugBtn:ClearAllPoints()
 debugBtn:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -6, 0)
 -- Action : ouvre directement l'onglet Debug
 debugBtn:SetScript("OnClick", function()
-    if UI.ShowTabByLabel then UI.ShowTabByLabel("Debug") end
+    if UI.ShowTabByLabel then UI.ShowTabByLabel(Tr("tab_debug")) end
 end)
 
 -- ➕ Expose des références globales pour contrôle de visibilité
@@ -248,7 +249,7 @@ end)
 -- Branchements : affichage dès réception du 1er fragment, arrêt à la fin
 if ns and ns.On then
     ns.On("sync:begin", function()
-        if UI.SyncIndicatorShow then UI.SyncIndicatorShow("Synchronisation des données en cours") end
+        if UI.SyncIndicatorShow then UI.SyncIndicatorShow("sync_data") end
     end)
     ns.On("sync:end", function()
         if UI.SyncIndicatorHide then UI.SyncIndicatorHide() end
@@ -347,7 +348,7 @@ function UI.Finalize()
     end
 end
 
--- Navigation par label (ex: UI.ShowTabByLabel("Historique"))
+-- Navigation par label
 function UI.ShowTabByLabel(label)
     local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
     if idx then
@@ -420,7 +421,7 @@ function UI.SetDebugEnabled(enabled)
 
     -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
     if UI.SetTabVisible then
-        UI.SetTabVisible("Debug", GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug"), GuildLogisticsUI.debugEnabled)
     end
 
     -- ➕ Affiche/masque les boutons d’en-tête
@@ -516,6 +517,6 @@ end)
 -- ➕ Met à jour le titre selon la guilde
 function UI.RefreshTitle()
     if Main and Main.title and Main.title.SetText then
-        Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or "Guild Manager")
+        Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or Tr("app_title"))
     end
 end

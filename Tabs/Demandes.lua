@@ -7,10 +7,10 @@ local PAD = UI.OUTER_PAD
 local panel, lv
 
 local cols = UI.NormalizeColumns({
-    { key="date",  title="Date",   w=160 },
-    { key="name",  title="Joueur", min=240, flex=1 },
-    { key="op",    title="Opération", w=160 },
-    { key="act",   title="Actions", w=220 },
+    { key="date",  title=Tr("col_date"),   w=160 },
+    { key="name",  title=Tr("col_player"), min=240, flex=1 },
+    { key="op",    title=Tr("col_operation"), w=160 },
+    { key="act",   title="", w=220 },
 })
 
 local function BuildRow(r)
@@ -20,8 +20,8 @@ local function BuildRow(r)
     f.op   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
     f.act = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H); f.act:SetFrameLevel(r:GetFrameLevel()+1)
-    r.btnApprove = UI.Button(f.act, "Approuver", { size="sm", minWidth=120 })
-    r.btnRefuse  = UI.Button(f.act, "Refuser",   { size="sm", variant="ghost", minWidth=100 })
+    r.btnApprove = UI.Button(f.act, Tr("btn_approve"), { size="sm", minWidth=120 })
+    r.btnRefuse  = UI.Button(f.act, Tr("btn_refuse"),   { size="sm", variant="ghost", minWidth=100 })
     UI.AttachRowRight(f.act, { r.btnApprove, r.btnRefuse }, 8, -4, { leftPad=8, align="center" })
     return f
 end
@@ -42,7 +42,7 @@ local function UpdateRow(i, r, f, it)
         if GLOG.GM_ApplyAndBroadcastByUID then
             GLOG.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
         end
-        if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, true, "Approuvé via la liste") end
+        if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, true, Tr("badge_approved_list")) end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
         if Refresh then Refresh() end
@@ -57,7 +57,7 @@ local function UpdateRow(i, r, f, it)
         if lv and lv.Layout then lv:Layout() end
 
         -- Traitement : retirer de la file
-        if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, false, "Refusé via la liste") end
+        if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, false, Tr("badge_refused_list")) end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
         if Refresh then Refresh() end

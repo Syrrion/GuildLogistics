@@ -11,7 +11,7 @@ local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, fo
 local function UpdateDBVersionLabel()
     if not verFS then return end
     local rv = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev) or 0
-    verFS:SetText("DB v"..tostring(rv))
+    verFS:SetText(Tr("lbl_db_version_prefix")..tostring(rv))
 end
 
 -- ➕ Affiche "GM: Nom-Royaume" (rang 0 du roster)
@@ -57,16 +57,16 @@ end
 local HELLO_WAIT_SEC = 5
 
 local cols = UI.NormalizeColumns({
-    { key="time",  title="Heure",       w=110 },
-    { key="dir",   title="Sens",        w=70  },
-    { key="state", title="État",        w=160 },
-    { key="type",  title="Type",        w=160 },
-    { key="rv",    title="Ver.",        w=60  }, 
-    { key="size",  title="Taille",      w=80  },
-    { key="chan",  title="Canal",       w=80  },
-    { key="target",title="Émetteur",    min=200, flex=1 },
-    { key="frag",  title="Frag",        w=70  },
-    { key="view",  title=" ",           w=70  },
+    { key="time",  title=Tr("col_time"),       w=110 },
+    { key="dir",   title=Tr("col_dir"),        w=70  },
+    { key="state", title=Tr("col_state"),        w=160 },
+    { key="type",  title=Tr("col_type"),        w=160 },
+    { key="rv",    title=Tr("col_version_short"),        w=60  }, 
+    { key="size",  title=Tr("col_size"),      w=80  },
+    { key="chan",  title=Tr("col_channel"),       w=80  },
+    { key="target",title=Tr("col_sender"),    min=200, flex=1 },
+    { key="frag",  title=Tr("col_frag"),        w=70  },
+    { key="view",  title="",           w=70  },
 })
 
 local function BuildRow(r)
@@ -86,7 +86,7 @@ end
 
 local function UpdateRow(i, r, f, it)
     f.time:SetText(date("%H:%M:%S", it.ts or time()))
-    f.dir:SetText(it.dir == "send" and "|cff9ecbffENVOI|r" or "|cff7dff9aRECU|r")
+    f.dir:SetText(it.dir == "send" and "|cff9ecbff"..Tr("lbl_status_sent").."|r" or "|cff7dff9a"..Tr("lbl_status_recieved").."|r")
 
     local total = tonumber(it.total or 1) or 1
     local sent  = tonumber(it.sentCount or 0) or 0      -- fragments effectivement transmis (ENVOI)
@@ -94,11 +94,11 @@ local function UpdateRow(i, r, f, it)
 
     if it.dir == "send" then
         if sent <= 0 then
-            f.state:SetText("|cffffff00En attente|r")
+            f.state:SetText("|cffffff00"..Tr("lbl_status_waiting").."|r")
         elseif sent < total then
-            f.state:SetText("|cffffd200En cours|r")
+            f.state:SetText("|cffffd200"..Tr("lbl_status_inprogress").."|r")
         else
-            f.state:SetText("|cff7dff9aTransmis|r")
+            f.state:SetText("|cff7dff9a"..Tr("lbl_status_transmitted").."|r")
         end
     else
         -- État côté réception : HELLO => compte à rebours puis élu
@@ -111,9 +111,9 @@ local function UpdateRow(i, r, f, it)
                 local started = (info and info.startedAt) or (it.tsFirst or nowt)
                 local endsAt  = (info and info.endsAt) or (started + HELLO_WAIT_SEC)
                 if nowt < endsAt then
-                    st = "Découverte… " .. tostring(math.max(0, endsAt - nowt)) .. "s"
+                    st = Tr("lbl_status_discovering") .. tostring(math.max(0, endsAt - nowt)) .. "s"
                 elseif info and info.decided then
-                    st = "Élu : " .. (info.winner or "?")
+                    st = Tr("lbl_status_elected") .. (info.winner or "?")
                 end
             end
         end
@@ -121,11 +121,11 @@ local function UpdateRow(i, r, f, it)
         -- ➕ État générique côté réception si pas un HELLO (ou si HELLO non résolu)
         if st == "" then
             if got <= 0 then
-                st = "|cffffff00En attente|r"
+                st = "|cffffff00"..Tr("lbl_status_inprogress").."|r"
             elseif got < total then
-                st = ("|cffffd200Assemblage|r %d/%d"):format(got, total)
+                st = ("|cffffd200"..Tr("lbl_status_assembling").."|r %d/%d"):format(got, total)
             else
-                st = "|cff7dff9aReçu|r"
+                st = "|cff7dff9a"..Tr("lbl_status_recieved").."|r"
             end
         end
 
@@ -147,7 +147,7 @@ local function UpdateRow(i, r, f, it)
 
     f.view:SetOnClick(function()
         if not (ns.UI and ns.UI.PopupText) then return end
-        local title = (it.dir=="send" and "Message envoyé" or "Message reçu")
+        local title = (it.dir=="send" and Tr("lbl_message_sent") or Tr("lbl_message_received"))
 
         -- Décodage k=v|k=v avec support payload compressé 'c=z|...'
         local preview = it.fullPayload or ""
@@ -177,9 +177,9 @@ local function UpdateRow(i, r, f, it)
 
         local head = ("type=%s  rv=%s  lm=%s  chan=%s  emetteur=%s")
             :format(it.type or "?", tostring(kv.rv or it.rv or "?"), tostring(kv.lm or "?"), it.chan or "", emitter or "")
-        local body = (#decoded>0) and table.concat(decoded, "\n") or "(payload vide)"
-        local raw  = it.fullRaw or it.fullPayload or "(brut indisponible)"
-        ns.UI.PopupText(title, head.."\n\n"..body.."\n\n— BRUT —\n"..raw)
+        local body = (#decoded>0) and table.concat(decoded, "\n") or Tr("lbl_empty_payload")
+        local raw  = it.fullRaw or it.fullPayload or Tr("lbl_empty_raw")
+        ns.UI.PopupText(title, head.."\n\n"..body.."\n\n— "..Tr("lbl_raw").." —\n"..raw)
     end)
 end
 
@@ -330,13 +330,13 @@ local function Build(container)
     panel = container
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
-    purgeDBBtn = UI.Button(panel, "Purger Debug", { size="sm", minWidth=120 })
+    purgeDBBtn = UI.Button(panel, Tr("btn_purge_debug"), { size="sm", minWidth=120 })
     purgeDBBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
     purgeDBBtn:SetOnClick(function() GLOG.ClearDebugLogs(); Refresh() end)
 
-    purgeAllBtn = UI.Button(panel, "Purge totale", { size="sm", minWidth=120, tooltip="Wipe DB + reset UI + Reload" })
+    purgeAllBtn = UI.Button(panel,  Tr("btn_purge_full"), { size="sm", minWidth=120})
     purgeAllBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
-    purgeAllBtn:SetConfirm("Purger la DB + réinitialiser l’UI puis recharger ?", function()
+    purgeAllBtn:SetConfirm(Tr("lbl_purge_confirm_all"), function()
         if GLOG.WipeAllSaved then
             GLOG.WipeAllSaved()
         elseif GLOG.WipeAllData then
@@ -347,28 +347,28 @@ local function Build(container)
     end)
 
     -- ➕ GM : Purge Lots & objets épuisés
-    local purgeEpuBtn = UI.Button(panel, "Purge Lots & objets épuisés", { size="sm", minWidth=240, tooltip = "Supprime localement tous les lots épuisés et tous leurs objets." })
+    local purgeEpuBtn = UI.Button(panel, Tr("btn_purge_free_items_lots"), { size="sm", minWidth=240})
     purgeEpuBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
     purgeEpuBtn:SetShown(GLOG.IsMaster and GLOG.IsMaster())
-    purgeEpuBtn:SetConfirm("Supprimer les lots épuisés et leurs objets associés ?", function()
+    purgeEpuBtn:SetConfirm(Tr("lbl_purge_confirm_lots"), function()
         if GLOG.PurgeLotsAndItemsExhausted then
             local l, it = GLOG.PurgeLotsAndItemsExhausted()
             if UpdateDBVersionLabel then UpdateDBVersionLabel() end
             if ns.RefreshAll then ns.RefreshAll() end
-            if UI.Toast then UI.Toast(("Purge effectuée : %d lot(s), %d objet(s) supprimés."):format(l or 0, it or 0)) end
+            if UI.Toast then UI.Toast((Tr("lbl_purge_lots_confirm")):format(l or 0, it or 0)) end
         end
     end)
 
     -- ➕ GM : Purger Ressources (tout effacer)
-    local purgeResBtn = UI.Button(panel, "Purger Ressources", { size="sm", minWidth=180, tooltip = "Supprime localement tous les lots et tous les objets (ressources)." })
+    local purgeResBtn = UI.Button(panel, Tr("btn_purge_all_items_lots"), { size="sm", minWidth=180 })
     purgeResBtn:SetPoint("RIGHT", purgeEpuBtn, "LEFT", -8, 0)
     purgeResBtn:SetShown(GLOG.IsMaster and GLOG.IsMaster())
-    purgeResBtn:SetConfirm("Supprimer localement TOUS les lots et TOUS les objets ?", function()
+    purgeResBtn:SetConfirm(Tr("lbl_purge_confirm_all_lots"), function()
         if GLOG.PurgeAllResources then
             local l, it = GLOG.PurgeAllResources()
             if UpdateDBVersionLabel then UpdateDBVersionLabel() end
             if ns.RefreshAll then ns.RefreshAll() end
-            if UI.Toast then UI.Toast(("Ressources purgées : %d lot(s), %d objet(s)."):format(l or 0, it or 0)) end
+            if UI.Toast then UI.Toast((Tr("lbl_purge_all_lots_confirm")):format(l or 0, it or 0)) end
         end
     end)
 
@@ -435,7 +435,7 @@ local function Build(container)
         local dt = date and date("%H:%M:%S", tonumber(d.ts or 0)) or tostring(d.ts or "")
         f.time:SetText(dt)
         f.type:SetText(d.type or "")
-        f.info:SetText(d.info or ("ID " .. tostring(d.id or "")))
+        f.info:SetText(d.info or (Tr("lbl_id_prefix") .. tostring(d.id or "")))
     end
 
     -- Positionnement responsive (40/40/20 de la hauteur utile)
@@ -641,5 +641,5 @@ local function BuildOptions(panel)
     _SetRadioGroupChecked(debugRadios, dbg)
 end
 
-UI.RegisterTab(Tr("tab_options"), BuildOptions, RefreshOptions)
+UI.RegisterTab(Tr("tab_settings"), BuildOptions, RefreshOptions)
 UI.RegisterTab(Tr("tab_debug"), Build, Refresh, Layout, { hidden = true })

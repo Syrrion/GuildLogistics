@@ -560,10 +560,10 @@ function GLOG.Minimap_Init()
     -- Tooltip
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        local title = (GLOG.BuildMainTitle and GLOG.BuildMainTitle()) or "Guild Manager"
+        local title = (GLOG.BuildMainTitle and GLOG.BuildMainTitle()) or Tr("app_title")
         GameTooltip:SetText(title)
-        GameTooltip:AddLine("Clic gauche : Ouvrir / fermer la fenêtre", 1,1,1)
-        GameTooltip:AddLine("Glisser : déplacer l’icône autour de la minimap", 1,1,1)
+        GameTooltip:AddLine(Tr("tooltip_minimap_left"), 1,1,1)
+        GameTooltip:AddLine(Tr("tooltip_minimap_drag"), 1,1,1)
         GameTooltip:Show()
     end)
 

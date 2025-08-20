@@ -6,13 +6,13 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS
 
 local cols = UI.NormalizeColumns({
-    { key="lvl",    title="Niv",    w=44, justify="CENTER" },
-    { key="name",   title="Nom",    min=180, flex=1 },
-    { key="ilvl",   title="iLvl",   w=64, justify="CENTER" },
-    { key="mkey",   title="Clé Mythique +",    w=200, justify="LEFT" },
-    { key="last",   title="Présence", w=180 },
+    { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
+    { key="name",   title=Tr("col_name"),    min=180, flex=1 },
+    { key="ilvl",   title=Tr("col_ilvl"),   w=64, justify="CENTER" },
+    { key="mkey",   title=Tr("col_mplus_key"),    w=200, justify="LEFT" },
+    { key="last",   title=Tr("col_attendance"), w=180 },
     { key="act",    title="", w=200 },
-    { key="solde",  title="Solde",  w=80 },
+    { key="solde",  title=Tr("col_balance"),  w=80 },
 })
 
 -- Helpers
@@ -65,7 +65,7 @@ end
 local function AttachDepositHandler(btn, name, canAct, isMaster)
     btn:SetScript("OnClick", function()
         if not canAct then return end
-        UI.PopupPromptNumber("Ajouter de l’or à "..(name or ""), "Montant total (po) :", function(amt)
+        UI.PopupPromptNumber(Tr("prefix_add_gold_to")..(name or ""), Tr("lbl_total_amount_gold_alt"), function(amt)
             amt = math.floor(tonumber(amt) or 0)
             if amt > 0 then
                 if isMaster then
@@ -81,7 +81,7 @@ end
 local function AttachWithdrawHandler(btn, name, canAct, isMaster)
     btn:SetScript("OnClick", function()
         if not canAct then return end
-        UI.PopupPromptNumber("Retirer de l’or à "..(name or ""), "Montant total (po) :", function(amt)
+        UI.PopupPromptNumber(Tr("prefix_remove_gold_from")..(name or ""), Tr("lbl_total_amount_gold_alt"), function(amt)
             amt = math.floor(tonumber(amt) or 0)
             if amt > 0 then
                 local delta = -amt
@@ -98,7 +98,7 @@ end
 local function AttachDeleteHandler(btn, name, isMaster)
     btn:SetScript("OnClick", function()
         if not isMaster then return end
-        UI.PopupConfirm("Supprimer "..(name or "").." du roster ?", function()
+        UI.PopupConfirm(Tr("prefix_delete")..(name or "").." "..Tr("lbl_from_roster_question"), function()
             if GLOG.RemovePlayer then
                 GLOG.RemovePlayer(name)
             elseif GLOG.BroadcastRosterRemove then
@@ -124,17 +124,17 @@ local function BuildRow(r, context)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
-    r.btnDeposit  = UI.Button(f.act, "Dépôt d’or",   { size="sm", minWidth=90 })
-    r.btnWithdraw = UI.Button(f.act, "Retrait d’or", { size="sm", variant="ghost", minWidth=90 })
-    r.btnDelete   = UI.Button(f.act, "X",            { size="sm", variant="danger", minWidth=28, padX=12 })
+    r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=90 })
+    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"), { size="sm", variant="ghost", minWidth=90 })
+    r.btnDelete   = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=28, padX=12 })
 
     local buttons = { r.btnDeposit, r.btnWithdraw, r.btnDelete }
 
     if context == "active" then
-        r.btnReserve = UI.Button(f.act, "> Réserve", { size="sm", minWidth=120, tooltip="Basculer ce joueur en Réserve" })
+        r.btnReserve = UI.Button(f.act, Tr("btn_to_reserve"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_reserve")})
         table.insert(buttons, 1, r.btnReserve)
     elseif context == "reserve" then
-        r.btnRoster = UI.Button(f.act, "> Roster", { size="sm", minWidth=120, tooltip="Renvoyer ce joueur dans le Roster actif" })
+        r.btnRoster = UI.Button(f.act, Tr("btn_to_roster"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_roster") })
         table.insert(buttons, 1, r.btnRoster)
     end
 
@@ -150,11 +150,11 @@ local function UpdateRow(i, r, f, data)
 
     if f.last then
         if gi.online then
-            f.last:SetText("|cff40ff40En ligne|r")
+            f.last:SetText("|cff40ff40"..Tr("status_online").."|r")
         elseif gi.days or gi.hours then
             f.last:SetText(ns.Format.LastSeen(gi.days, gi.hours))
         else
-            f.last:SetText("|cffaaaaaa-|r")
+            f.last:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
         end
     end
 
@@ -167,7 +167,7 @@ local function UpdateRow(i, r, f, data)
         if gi.online then
             f.mkey:SetText(mkeyTxt or "")
         else
-            f.mkey:SetText("|cffaaaaaa-|r")
+            f.mkey:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
         end
     end
 
@@ -175,9 +175,9 @@ local function UpdateRow(i, r, f, data)
         local ilvl = (GLOG.GetIlvl and GLOG.GetIlvl(data.name)) or nil
         local txt = ""
         if gi.online then
-            txt = (ilvl and ilvl > 0) and tostring(ilvl) or "|cffaaaaaa?|r"
+            txt = (ilvl and ilvl > 0) and tostring(ilvl) or "|cffaaaaaa"..Tr("status_unknown").."|r"
         else
-            txt = "|cffaaaaaa-|r"
+            txt = "|cffaaaaaa"..Tr("status_empty").."|r"
         end
         f.ilvl:SetText(txt)
     end
@@ -244,19 +244,19 @@ local function Refresh()
     for _, it in ipairs(reserve) do total = total + (tonumber(it.solde) or 0) end
     if totalFS then
         local txt = (UI and UI.MoneyText) and UI.MoneyText(total) or (tostring(total).." po")
-        totalFS:SetText("|cffffd200Total soldes :|r " .. txt)
+        totalFS:SetText("|cffffd200"..Tr("lbl_total_balance").." :|r " .. txt)
     end
 end
 
 -- Footer
 local function BuildFooterButtons(footer, isGM)
-    local btnAdd   = UI.Button(footer, "Ajouter un joueur", { size="sm", variant="primary", minWidth=120 })
+    local btnAdd   = UI.Button(footer, Tr("btn_add_player"), { size="sm", variant="primary", minWidth=120 })
     local btnGuild = UI.Button(footer, isGM and Tr("add_guild_member") or Tr("guild_members"), { size="sm", minWidth=220 })
-    local btnHist  = UI.Button(footer, "Historique des raids", { size="sm", minWidth=160, tooltip="Voir l’historique des raids" })
+    local btnHist  = UI.Button(footer, Tr("btn_raids_history"), { size="sm", minWidth=160})
 
     btnAdd:SetOnClick(function()
         if not isGM then return end
-        UI.PopupPromptText("Ajouter un joueur", "Nom du joueur externe à inclure dans le roster", function(name)
+        UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
             name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
             if name == "" then return end
             if GLOG.AddPlayer and GLOG.AddPlayer(name) then
@@ -270,7 +270,7 @@ local function BuildFooterButtons(footer, isGM)
     end)
 
     btnHist:SetOnClick(function()
-        UI.ShowTabByLabel("Historique")
+        UI.ShowTabByLabel(Tr("btn_raids_history"))
     end)
 
     if UI.AttachButtonsFooterRight then
@@ -289,8 +289,8 @@ local function Build(container)
     activeArea  = CreateFrame("Frame", nil, panel)
     reserveArea = CreateFrame("Frame", nil, panel)
 
-    UI.SectionHeader(activeArea,  "Roster actif",      { topPad = 2 })
-    UI.SectionHeader(reserveArea, "Joueurs en réserve",{ topPad = 2 })
+    UI.SectionHeader(activeArea,  Tr("lbl_active_roster"),      { topPad = 2 })
+    UI.SectionHeader(reserveArea, Tr("lbl_reserved_players"),{ topPad = 2 })
 
     lvActive = UI.ListView(activeArea, cols, {
         buildRow = function(r) return BuildRow(r, "active") end,
