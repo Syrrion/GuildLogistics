@@ -34,24 +34,56 @@ local function CanActOn(name)
     return isSelf, isMaster
 end
 
-local function FindGuildInfo(playerName)
-    local guildRows = GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached() or {}
+function FindGuildInfo(playerName)
+    local guildRows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+    local NormName = GLOG.NormName
+    if not playerName or playerName == "" then return {} end
+
+    -- Détermine le main (si reroll), sinon le nom lui-même
+    local mainName = (GLOG.GetMainOf and GLOG.GetMainOf(playerName)) or playerName
+    local mainKey  = NormName and NormName(mainName)
+
+    local info = {}
+
+    -- Conserve idx/level du main uniquement (ne pas toucher aux autres éléments)
     for _, gr in ipairs(guildRows) do
-        if GLOG.NormName and GLOG.NormName(gr.name_amb or gr.name_raw) == GLOG.NormName(playerName) then
-            local info = {
-                online = gr.online,
-                idx = gr.idx,
-                days = gr.daysDerived,
-                hours = gr.hoursDerived,
-            }
+        if NormName and NormName(gr.name_amb or gr.name_raw) == mainKey then
+            info.idx = gr.idx
             if GetGuildRosterInfo and gr.idx then
                 local _, _, _, level = GetGuildRosterInfo(gr.idx)
                 info.level = tonumber(level)
             end
-            return info
+            break
         end
     end
-    return {}
+
+    -- Agrège la présence sur tous les rerolls rattachés au main
+    local anyOnline, minDays, minHours = false, nil, nil
+    for _, gr in ipairs(guildRows) do
+        local rowNameKey = NormName and NormName(gr.name_amb or gr.name_raw)
+        local rowMainKey = (gr.remark and NormName and NormName(strtrim(gr.remark))) or nil
+
+        -- Appartient au même main si :
+        --  - la note de guilde pointe vers ce main (reroll),
+        --  - ou c’est la fiche du main lui-même (pas de note ou note vide)
+        local belongsToMain =
+            (rowMainKey and rowMainKey == mainKey)
+            or ((rowMainKey == nil or rowMainKey == "") and rowNameKey == mainKey)
+
+        if belongsToMain then
+            if gr.online then anyOnline = true end
+            local d = gr.online and 0 or tonumber(gr.daysDerived)
+            local h = gr.online and 0 or tonumber(gr.hoursDerived)
+            if d ~= nil then minDays  = (minDays  == nil or d < minDays)  and d or minDays end
+            if h ~= nil then minHours = (minHours == nil or h < minHours) and h or minHours end
+        end
+    end
+
+    info.online = anyOnline
+    info.days   = minDays
+    info.hours  = minHours
+
+    return info
 end
 
 local function GetSolde(data)
