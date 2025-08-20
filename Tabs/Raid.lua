@@ -82,10 +82,14 @@ local function UpdateRowLots(i, r, f, it)
     local used = tonumber(l.used or 0) or 0
     local N    = tonumber(l.sessions or 1) or 1
     local remaining = math.max(0, N - used)
-    local shareGold = (GLOG.Lot_ShareGold and GLOG.Lot_ShareGold(l)) or math.floor( (math.floor((tonumber(l.totalCopper or 0) or 0)/10000)) / N )
+
+    -- Valeur exacte par utilisation en cuivre (pas d'arrondi à l'or)
+    local totalCopper  = tonumber(l.totalCopper or l.copper or 0) or 0
+    local shareCopper  = (N > 0) and math.floor((totalCopper / N) + 0.5) or 0
+
     f.name:SetText(l.name or (Tr("lbl_left_short")..tostring(l.id)))
     f.frac:SetText((remaining).." "..Tr("lbl_left_short"))
-    f.gold:SetText(UI.MoneyText(shareGold))
+    f.gold:SetText(UI.MoneyFromCopper(shareCopper))
     f.check:SetChecked(chosenLots[l.id] and true or false)
     f.check:SetScript("OnClick", function(self)
         chosenLots[l.id] = self:GetChecked() and true or nil
