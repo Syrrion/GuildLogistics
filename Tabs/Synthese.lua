@@ -270,7 +270,7 @@ local function BuildFooterButtons(footer, isGM)
     end)
 
     btnHist:SetOnClick(function()
-        UI.ShowTabByLabel(Tr("btn_raids_history"))
+        UI.ShowTabByLabel(Tr("tab_history"))
     end)
 
     if UI.AttachButtonsFooterRight then

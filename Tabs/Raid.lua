@@ -278,7 +278,7 @@ local function Build(container)
             :format(#selected, UI.MoneyText(per)))
         dlg:SetButtons({
             { text = Tr("btn_notify_players"), default = true, onClick = function() sendBatch(false) end },
-            { text = Tr("btn_confirm"), onClick = function() sendBatch(true); if UI.ShowTabByLabel then UI.ShowTabByLabel(Tr("btn_raids_history")) end end },
+            { text = Tr("btn_confirm"), onClick = function() sendBatch(true); if UI.ShowTabByLabel then UI.ShowTabByLabel(Tr("tab_history")) end end },
             { text = Tr("btn_cancel"), variant = "ghost" },
         })
         dlg:Show()
