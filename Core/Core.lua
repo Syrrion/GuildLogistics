@@ -2,6 +2,9 @@ local ADDON, ns = ...
 ns.CDZ = ns.CDZ or {}
 local CDZ = ns.CDZ
 
+-- Icône centrale de l’addon (réutilisable partout, y compris minimap)
+CDZ.ICON_TEXTURE = CDZ.ICON_TEXTURE or "Interface\\Icons\\INV_icon_wing06a"
+
 -- =========================
 -- ======  DATABASE   ======
 -- =========================

@@ -128,11 +128,13 @@ function UI.ListView(parent, cols, opts)
 
         local bottomTarget = self._bottomAnchor or self.parent
         local bottomPoint  = self._bottomAnchor and "TOPRIGHT" or "BOTTOMRIGHT"
-        local rightOffset  = self._bottomAnchor and 0 or ((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0))
+
+        local wantSafeRight = (self.opts.safeRight ~= false)
+        local rightOffset   = wantSafeRight and ((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)) or 0
+
         self.scroll:SetPoint("BOTTOMRIGHT", bottomTarget, bottomPoint, -rightOffset, 0)
 
         self.list:SetWidth(cW)
-
 
         -- Lignes
         local y = 0

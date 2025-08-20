@@ -291,3 +291,33 @@ if type(U.EnsureRosterLocal) ~= "function" then
         return db.players[n]
     end
 end
+
+-- ➕ Utilitaires : guilde & titre principal
+function CDZ.GetCurrentGuildName()
+    if IsInGuild and IsInGuild() then
+        local gname = GetGuildInfo("player")
+        if type(gname) == "string" and gname ~= "" then
+            return gname
+        end
+    end
+    return nil
+end
+
+function CDZ.BuildMainTitle()
+    local g = CDZ.GetCurrentGuildName and CDZ.GetCurrentGuildName()
+    if g and g ~= "" then
+        return string.format("%s", g)
+    end
+    return ""
+end
+
+function CDZ.GetAddonIconTexture()
+    -- Préfère l'API moderne, sinon rétro-compatibilité
+    local icon = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "IconTexture"))
+              or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "IconTexture"))
+    if type(icon) == "string" and icon ~= "" then
+        return icon -- ex: "Interface\\AddOns\\MonAddon\\media\\icon.blp" OU une texture Interface\\Icons\\*
+    end
+    -- Fallback : icône livre par défaut (ne dépend pas de fichiers de l'addon)
+    return "Interface\\Icons\\INV_Misc_Book_09"
+end

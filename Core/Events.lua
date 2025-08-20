@@ -44,6 +44,7 @@ f:SetScript("OnEvent", function(self, event, name)
         end
 
         if ns.UI and ns.UI.Finalize then ns.UI.Finalize() end
+        if ns.UI and ns.UI.RefreshTitle then ns.UI.RefreshTitle() end
         if ns.UI and ns.UI.UpdateRequestsBadge then ns.UI.UpdateRequestsBadge() end
         if CDZ.Minimap_Init then CDZ.Minimap_Init() end
 
@@ -99,9 +100,13 @@ f:SetScript("OnEvent", function(self, event, name)
             CDZ.RefreshGuildCache()
         end
 
+        -- ➕ Met à jour le titre si la guilde a changé / est disponible
+        if ns.UI and ns.UI.RefreshTitle then
+            ns.UI.RefreshTitle()
+        end
+
         _ScheduleActiveTabRefresh()
     end
-
 end)
 
 -- ➕ Rafraîchissement visuel quand un iLvl change (centralisé)

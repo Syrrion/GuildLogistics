@@ -58,25 +58,8 @@ local Seq      = 0     -- séquence réseau
 -- Limitation d'émission (paquets / seconde)
 local OUT_MAX_PER_SEC = 2
 
--- Compression (optionnelle via LibDeflate) : compresse avant fragmentation, décompresse après réassemblage
-local LD do
-    local lib = nil
-    local f = CreateFrame("Frame")
-    f:SetScript("OnEvent", function()
-        if not lib then
-            if LibStub then lib = LibStub:GetLibrary("LibDeflate", true) end
-        end
-    end)
-    f:RegisterEvent("ADDON_LOADED")
-    LD = setmetatable({}, {
-        __index = function(_, k)
-            if not lib then
-                if LibStub then lib = LibStub:GetLibrary("LibDeflate", true) end
-            end
-            return lib and lib[k]
-        end
-    })
-end
+-- Compression via LibDeflate (obligatoire)
+local LD = assert(LibStub and LibStub:GetLibrary("LibDeflate"),  "LibDeflate requis")
 
 -- Seuil de compression : ne pas compresser les tout petits messages
 local COMPRESS_MIN_SIZE = 200
@@ -92,15 +75,13 @@ local masterName     = (U and U.masterName)     or (_G and _G.masterName)     or
 local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=ChroniquesDuZephyrDB; return (db and db.meta and db.meta.rev) or 0 end
 
 local function _compressStr(s)
-    if not (LD and s and #s >= COMPRESS_MIN_SIZE) then return nil end
-    if not (LD and LD.CompressDeflate) then return nil end
+    if not s or #s < COMPRESS_MIN_SIZE then return nil end
     local comp = LD:CompressDeflate(s, { level = 6 })
     return comp and LD:EncodeForWoWAddonChannel(comp) or nil
 end
 
 local function _decompressStr(s)
-    if not (LD and s and s ~= "") then return nil end
-    if not (LD and LD.DecompressDeflate) then return nil end
+    if not s or s == "" then return nil end
     local decoded = LD:DecodeForWoWAddonChannel(s)
     if not decoded then return nil end
     local ok, raw = pcall(function() return LD:DecompressDeflate(decoded) end)

@@ -128,7 +128,7 @@ Main.Content:SetClipsChildren(true)
 
 -- Titre centré sur la barre de titre
 Main.title = Main:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-Main.title:SetText("Les Chroniques du Zéphyr")
+Main.title:SetText(CDZ.BuildMainTitle and CDZ.BuildMainTitle() or "Guilde")
 Main.title:SetTextColor(0.98, 0.95, 0.80)
 do
     local _, _, TOP = skin:GetInsets()
@@ -507,3 +507,10 @@ _openAtLogin:SetScript("OnEvent", function()
         if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
     end
 end)
+
+-- ➕ Met à jour le titre selon la guilde
+function UI.RefreshTitle()
+    if Main and Main.title and Main.title.SetText then
+        Main.title:SetText(CDZ.BuildMainTitle and CDZ.BuildMainTitle() or "Les Chroniques")
+    end
+end

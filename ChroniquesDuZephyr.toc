@@ -5,9 +5,7 @@
 ## Version: 0.9.0
 ## SavedVariables: ChroniquesDuZephyrDB, ChroniquesDuZephyrUI
 ## IconTexture: Interface\Icons\INV_icon_wing06a
-
-Plugins\LibDeflate\LibStub\LibStub.lua
-Plugins\LibDeflate\lib.xml
+## Dependencies: LibDeflate
 
 Core/Core.lua
 Core/Helper.lua

@@ -547,7 +547,7 @@ function CDZ.Minimap_Init()
     border:SetPoint("TOPLEFT", b, "TOPLEFT", -7, 6)
 
     local icon = b:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture("Interface\\ICONS\\INV_Misc_QuestionMark")
+    icon:SetTexture(CDZ.GetAddonIconTexture and CDZ.GetAddonIconTexture() or "Interface\\Icons\\INV_Misc_Book_09")
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER", b, "CENTER", 0, 0)
@@ -560,11 +560,13 @@ function CDZ.Minimap_Init()
     -- Tooltip
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:SetText("Chroniques du Zéphyr")
+        local title = (CDZ.BuildMainTitle and CDZ.BuildMainTitle()) or "Les Chroniques"
+        GameTooltip:SetText(title)
         GameTooltip:AddLine("Clic gauche : Ouvrir / fermer la fenêtre", 1,1,1)
         GameTooltip:AddLine("Glisser : déplacer l’icône autour de la minimap", 1,1,1)
         GameTooltip:Show()
     end)
+
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Drag (déplacement)
