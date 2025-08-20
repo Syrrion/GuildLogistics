@@ -313,10 +313,8 @@ local function Build(container)
     lotsLV = UI.ListView(lotsPane, colsLots, {
         buildRow = BuildRowLots,
         updateRow = UpdateRowLots,
-        topOffset = (UI.SECTION_HEADER_H or 26),
-        bottomAnchor = footer,
+        topOffset = (UI.SECTION_HEADER_H or 26)
     })
-
 
     -- Alignement footer
     if UI.AttachButtonsFooterRight then

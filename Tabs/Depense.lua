@@ -312,7 +312,7 @@ local function Build(container)
     lvFree = UI.ListView(topPane, colsFree, { buildRow=BuildRowFree, updateRow=UpdateRowFree, topOffset=UI.SECTION_HEADER_H or 26 })
 
     UI.SectionHeader(bottomPane, "Lots utilisables pour les raids")
-    lvLots = UI.ListView(bottomPane, colsLots, { buildRow=BuildRowLots, updateRow=UpdateRowLots, topOffset=UI.SECTION_HEADER_H or 26, bottomAnchor=footer })
+    lvLots = UI.ListView(bottomPane, colsLots, { buildRow=BuildRowLots, updateRow=UpdateRowLots, topOffset=UI.SECTION_HEADER_H or 26})
 
     btnCreateLot = UI.Button(footer, "Créer un lot", { size="sm", minWidth=140, tooltip="Sélectionnez des ressources pour créer un lot (contenu figé)." })
     btnCreateLot:SetOnClick(function()

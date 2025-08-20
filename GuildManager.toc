@@ -1,8 +1,8 @@
-## Interface: 112000
+## Interface: 112500
 ## Title: Guild & Raid Manager
 ## Notes: Guild & Raid Manager
 ## Author: Ysendril-KirinTor
-## Version: 0.1.0
+## Version: 1.0.0
 ## SavedVariables: GuildManagerDB, GuildManagerUI
 ## IconTexture: Interface\AddOns\GuildManager\Ressources\Media\LogoAddonWoW256.tga
 ## Dependencies: LibDeflate
