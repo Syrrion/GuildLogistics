@@ -1,7 +1,7 @@
 local ADDON, ns = ...
 ns.UI = ns.UI or {}
 local UI = ns.UI
-local CDZ = ns.CDZ
+local GMGR = ns.GMGR
 
 -- Thème de cadre (NEUTRAL | ALLIANCE | HORDE)
 UI.FRAME_THEME = "AUTO"
@@ -441,7 +441,7 @@ end
 function UI.SetNameTag(tag, name)
     if not tag then return end
     local class, r, g, b, coords = nil, 1,1,1,nil
-    if CDZ and CDZ.GetNameStyle then class, r, g, b, coords = CDZ.GetNameStyle(name) end
+    if GMGR and GMGR.GetNameStyle then class, r, g, b, coords = GMGR.GetNameStyle(name) end
     if tag.text then tag.text:SetText(name or "") tag.text:SetTextColor(r or 1, g or 1, b or 1) end
     if tag.icon and coords then
         tag.icon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes")
@@ -518,39 +518,38 @@ end
 -- (Fin ex-Format.lua)  :contentReference[oaicite:4]{index=4}
 
 -- ========== MINIMAP (ex-Minimap.lua) ==========
-function CDZ.Minimap_Init()
-    if CDZ._EnsureDB then CDZ._EnsureDB() end
-    ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
-    ChroniquesDuZephyrUI.minimap = ChroniquesDuZephyrUI.minimap or { hide=false, angle=215 }
-    if ChroniquesDuZephyrUI.minimap.angle == nil then
-        ChroniquesDuZephyrUI.minimap.angle = 215
+function GMGR.Minimap_Init()
+    if GMGR._EnsureDB then GMGR._EnsureDB() end
+    GuildManagerUI = GuildManagerUI or {}
+    GuildManagerUI.minimap = GuildManagerUI.minimap or { hide=false, angle=215 }
+    if GuildManagerUI.minimap.angle == nil then
+        GuildManagerUI.minimap.angle = 215
     end
-    if ChroniquesDuZephyrUI.minimap.hide then return end
+    if GuildManagerUI.minimap.hide then return end
 
-    if _G.CDZ_MinimapButton then
+    if _G.GMGR_MinimapButton then
         local r = (Minimap:GetWidth() / 2) - 5
-        local rad = math.rad(ChroniquesDuZephyrUI.minimap.angle or 215)
-        _G.CDZ_MinimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
+        local rad = math.rad(GuildManagerUI.minimap.angle or 215)
+        _G.GMGR_MinimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
         return
     end
 
-    local b = CreateFrame("Button", "CDZ_MinimapButton", Minimap)
+    local b = CreateFrame("Button", "GMGR_MinimapButton", Minimap)
     b:SetSize(32, 32)
     b:SetFrameStrata("MEDIUM")
     b:SetMovable(true)
     b:RegisterForDrag("LeftButton")
     b:RegisterForClicks("AnyUp")
 
-    local border = b:CreateTexture(nil, "BACKGROUND")
-    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    border:SetSize(56, 56)
-    border:SetPoint("TOPLEFT", b, "TOPLEFT", -7, 6)
-
     local icon = b:CreateTexture(nil, "ARTWORK")
-    icon:SetTexture(CDZ.GetAddonIconTexture and CDZ.GetAddonIconTexture() or "Interface\\Icons\\INV_Misc_Book_09")
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    icon:SetTexture((GMGR.GetAddonIconTexture and GMGR.GetAddonIconTexture("minimap")) or GMGR.ICON_TEXTURE or "Interface\\Icons\\INV_Misc_Book_09")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER", b, "CENTER", 0, 0)
+
+    local mask = b:CreateMaskTexture()
+    mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+    mask:SetAllPoints(icon)
+    icon:AddMaskTexture(mask)
 
     local hl = b:CreateTexture(nil, "HIGHLIGHT")
     hl:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
@@ -560,7 +559,7 @@ function CDZ.Minimap_Init()
     -- Tooltip
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        local title = (CDZ.BuildMainTitle and CDZ.BuildMainTitle()) or "Les Chroniques"
+        local title = (GMGR.BuildMainTitle and GMGR.BuildMainTitle()) or "Guild Manager"
         GameTooltip:SetText(title)
         GameTooltip:AddLine("Clic gauche : Ouvrir / fermer la fenêtre", 1,1,1)
         GameTooltip:AddLine("Glisser : déplacer l’icône autour de la minimap", 1,1,1)
@@ -578,7 +577,7 @@ function CDZ.Minimap_Init()
             local dx, dy = (cx/scale - mx), (cy/scale - my)
             local angle = math.deg(math.atan2(dy, dx))
             if angle < 0 then angle = angle + 360 end
-            ChroniquesDuZephyrUI.minimap.angle = angle
+            GuildManagerUI.minimap.angle = angle
             local r = (Minimap:GetWidth() / 2) - 5
             local rad = math.rad(angle or 215)
             btn:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
@@ -590,7 +589,7 @@ function CDZ.Minimap_Init()
     b:SetScript("OnClick", function() if ns.ToggleUI then ns.ToggleUI() end end)
 
     local r = (Minimap:GetWidth() / 2) - 5
-    local rad = math.rad(ChroniquesDuZephyrUI.minimap.angle or 215)
+    local rad = math.rad(GuildManagerUI.minimap.angle or 215)
     b:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
 end
 -- (Fin ex-Minimap.lua)  :contentReference[oaicite:5]{index=5}

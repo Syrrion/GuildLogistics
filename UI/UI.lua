@@ -1,5 +1,5 @@
 local ADDON, ns = ...
-local CDZ = ns.CDZ
+local GMGR = ns.GMGR
 
 ns.UI = ns.UI or {}
 local UI = ns.UI
@@ -82,9 +82,9 @@ function UI.Key(s)
 end
 
 -- ===================== Fenêtre principale =====================
-local Main = CreateFrame("Frame", "CDZ_Main", UIParent, "BackdropTemplate")
+local Main = CreateFrame("Frame", "GMGR_Main", UIParent, "BackdropTemplate")
 UI.Main = Main
-local saved = CDZ.GetSavedWindow and CDZ.GetSavedWindow() or {}
+local saved = GMGR.GetSavedWindow and GMGR.GetSavedWindow() or {}
 Main:SetSize(saved.width or UI.DEFAULT_W, saved.height or UI.DEFAULT_H)
 Main:SetFrameStrata("HIGH")
 Main:SetMovable(true)
@@ -94,8 +94,8 @@ Main:SetScript("OnDragStart", function(self) self:StartMoving() end)
 Main:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local point, relTo, relPoint, x, y = self:GetPoint()
-    if CDZ.SaveWindow then
-        CDZ.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, self:GetWidth(), self:GetHeight())
+    if GMGR.SaveWindow then
+        GMGR.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, self:GetWidth(), self:GetHeight())
     end
 end)
 Main:SetResizable(true)
@@ -103,8 +103,8 @@ if Main.SetResizeBounds then Main:SetResizeBounds(980, 600) end
 Main:SetScript("OnSizeChanged", function(self, w, h)
     if UI._layout then UI._layout() end
     local point, relTo, relPoint, x, y = self:GetPoint()
-    if CDZ.SaveWindow then
-        CDZ.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, w, h)
+    if GMGR.SaveWindow then
+        GMGR.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, w, h)
     end
 end)
 Main:SetPoint(saved.point or "CENTER", UIParent, saved.relPoint or "CENTER", saved.x or 0, saved.y or 0)
@@ -128,7 +128,7 @@ Main.Content:SetClipsChildren(true)
 
 -- Titre centré sur la barre de titre
 Main.title = Main:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-Main.title:SetText(CDZ.BuildMainTitle and CDZ.BuildMainTitle() or "Guilde")
+Main.title:SetText(GMGR.BuildMainTitle and GMGR.BuildMainTitle() or "Guilde")
 Main.title:SetTextColor(0.98, 0.95, 0.80)
 do
     local _, _, TOP = skin:GetInsets()
@@ -410,20 +410,20 @@ end
 
 -- ➕ Bascule « débug » centralisée (persistance + visibilité)
 function UI.SetDebugEnabled(enabled)
-    ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
-    ChroniquesDuZephyrUI.debugEnabled = (enabled ~= false)
+    GuildManagerUI = GuildManagerUI or {}
+    GuildManagerUI.debugEnabled = (enabled ~= false)
 
     -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
     if UI.SetTabVisible then
-        UI.SetTabVisible("Debug", ChroniquesDuZephyrUI.debugEnabled)
+        UI.SetTabVisible("Debug", GuildManagerUI.debugEnabled)
     end
 
     -- ➕ Affiche/masque les boutons d’en-tête
     if UI.DebugButton and UI.DebugButton.SetShown then
-        UI.DebugButton:SetShown(ChroniquesDuZephyrUI.debugEnabled)
+        UI.DebugButton:SetShown(GuildManagerUI.debugEnabled)
     end
     if UI.ReloadButton and UI.ReloadButton.SetShown then
-        UI.ReloadButton:SetShown(ChroniquesDuZephyrUI.debugEnabled)
+        UI.ReloadButton:SetShown(GuildManagerUI.debugEnabled)
     end
 
     -- Rafraîchit l'UI courante pour refléter le changement
@@ -439,10 +439,10 @@ end
 
 -- ➕ Règle métier pour l'onglet "Demandes"
 function UI.UpdateRequestsBadge()
-    local isGM = (ns.CDZ and ns.CDZ.IsMaster and ns.CDZ.IsMaster()) or false
+    local isGM = (ns.GMGR and ns.GMGR.IsMaster and ns.GMGR.IsMaster()) or false
     local cnt = 0
-    if isGM and ns.CDZ and ns.CDZ.GetRequests then
-        local t = ns.CDZ.GetRequests()
+    if isGM and ns.GMGR and ns.GMGR.GetRequests then
+        local t = ns.GMGR.GetRequests()
         cnt = (type(t)=="table") and #t or 0
     end
     UI.SetTabBadge("Demandes", cnt)
@@ -451,7 +451,7 @@ end
 
 -- ➕ Hook « RefreshActive » utilisé par Comm.lua
 function UI.RefreshActive()
-    local isGM = (ns.CDZ and ns.CDZ.IsMaster and ns.CDZ.IsMaster()) or false
+    local isGM = (ns.GMGR and ns.GMGR.IsMaster and ns.GMGR.IsMaster()) or false
     if UI.SetTabVisible then
         UI.SetTabVisible("Démarrer un raid", isGM)
     end
@@ -468,12 +468,12 @@ function ns.ToggleUI()
         Main:Show()
 
         -- refresh guilde si nécessaire (cache vide ou > 60s)
-        if CDZ and CDZ.RefreshGuildCache then
-            local ts = CDZ.GetGuildCacheTimestamp and CDZ.GetGuildCacheTimestamp() or 0
+        if GMGR and GMGR.RefreshGuildCache then
+            local ts = GMGR.GetGuildCacheTimestamp and GMGR.GetGuildCacheTimestamp() or 0
             local now = (time and time() or 0)
             local stale = (now - ts) > 60
-            if stale or (CDZ.IsGuildCacheReady and not CDZ.IsGuildCacheReady()) then
-                CDZ.RefreshGuildCache(function()
+            if stale or (GMGR.IsGuildCacheReady and not GMGR.IsGuildCacheReady()) then
+                GMGR.RefreshGuildCache(function()
                     if ns.RefreshAll then ns.RefreshAll() end
                 end)
             end
@@ -490,7 +490,7 @@ Main:Hide()
 local _openAtLogin = CreateFrame("Frame")
 _openAtLogin:RegisterEvent("PLAYER_LOGIN")
 _openAtLogin:SetScript("OnEvent", function()
-    local saved = CDZ.GetSavedWindow and CDZ.GetSavedWindow() or {}
+    local saved = GMGR.GetSavedWindow and GMGR.GetSavedWindow() or {}
 
     -- Applique le thème stocké (défaut: AUTO) et re-skin global
     if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
@@ -511,6 +511,6 @@ end)
 -- ➕ Met à jour le titre selon la guilde
 function UI.RefreshTitle()
     if Main and Main.title and Main.title.SetText then
-        Main.title:SetText(CDZ.BuildMainTitle and CDZ.BuildMainTitle() or "Les Chroniques")
+        Main.title:SetText(GMGR.BuildMainTitle and GMGR.BuildMainTitle() or "Guild Manager")
     end
 end

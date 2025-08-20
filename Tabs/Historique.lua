@@ -1,5 +1,5 @@
 local ADDON, ns = ...
-local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
+local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
 local panel, lv, footer, backBtn
@@ -13,7 +13,7 @@ local cols = UI.NormalizeColumns({
 })
 
 local function histNow()
-    return (CDZ.GetHistory and CDZ.GetHistory()) or ((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.history) or {})
+    return (GMGR.GetHistory and GMGR.GetHistory()) or ((GuildManagerDB and GuildManagerDB.history) or {})
 end
 
 local function ShowParticipants(names)
@@ -43,7 +43,7 @@ local function BuildRow(r)
     -- Boutons réservés GM
     r.btnRefund = UI.Button(f.act, "Rendre gratuit", { size="sm", variant="ghost", minWidth=140 })
     r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=26, padX=12 })
-    local isGM = (CDZ.IsMaster and CDZ.IsMaster()) or false
+    local isGM = (GMGR.IsMaster and GMGR.IsMaster()) or false
     r.btnRefund:SetShown(isGM)
     r.btnDelete:SetShown(isGM)
 
@@ -86,7 +86,7 @@ local function UpdateRow(i, r, f, s)
                 and "Annuler la gratuité et revenir à l’état initial ?"
                 or  "Rendre cette session gratuite pour tous les participants ?"
             UI.PopupConfirm(msg, function()
-                local ok = isUnrefund and CDZ.UnrefundSession(idx) or CDZ.RefundSession(idx)
+                local ok = isUnrefund and GMGR.UnrefundSession(idx) or GMGR.RefundSession(idx)
                 if ok and ns.RefreshAll then ns.RefreshAll() end
             end)
         end)
@@ -106,7 +106,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
         local idx = i
         r.btnDelete:SetScript("OnClick", function()
             UI.PopupConfirm("Supprimer définitivement cette ligne d’historique ?", function()
-                if CDZ.DeleteHistory and CDZ.DeleteHistory(idx) and ns.RefreshAll then ns.RefreshAll() end
+                if GMGR.DeleteHistory and GMGR.DeleteHistory(idx) and ns.RefreshAll then ns.RefreshAll() end
             end)
         end)
 
@@ -120,7 +120,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
             -- Calcule les charges utilisées et max
             local used, maxSessions = 0, 0
             for _, lot in ipairs(lots) do
-                local l = CDZ.Lot_GetById and CDZ.Lot_GetById(lot.id)
+                local l = GMGR.Lot_GetById and GMGR.Lot_GetById(lot.id)
                 if l then
                     used       = used + (tonumber(l.used or 0) or 0)
                     maxSessions= maxSessions + (tonumber(l.sessions or 1) or 1)
@@ -182,8 +182,8 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
             -- Reconstruit les lignes depuis la DB
             local rows = {}
-            local dbLots = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.lots and ChroniquesDuZephyrDB.lots.list) or {}
-            local dbExp  = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.expenses and ChroniquesDuZephyrDB.expenses.list) or {}
+            local dbLots = (GuildManagerDB and GuildManagerDB.lots and GuildManagerDB.lots.list) or {}
+            local dbExp  = (GuildManagerDB and GuildManagerDB.expenses and GuildManagerDB.expenses.list) or {}
 
             for _, lotRef in ipairs(lots) do
                 -- On retrouve le lot complet en DB

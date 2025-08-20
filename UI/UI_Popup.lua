@@ -5,7 +5,7 @@ local UI = ns.UI
 -- Base popup (atlas Neutral)
 function UI.CreatePopup(opts)
     opts = opts or {}
-    local f = CreateFrame("Frame", "CDZ_Popup_" .. math.random(1e8), UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "GMGR_Popup_" .. math.random(1e8), UIParent, "BackdropTemplate")
     f:SetSize(opts.width or 460, opts.height or 240)
     f:SetFrameStrata("DIALOG"); f:SetToplevel(true)
     f:SetPoint("CENTER")
@@ -235,7 +235,7 @@ function UI.ShowParticipantsPopup(names)
     })
     dlg._lv = lv
 
-    local pdb = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players) or {}
+    local pdb = (GuildManagerDB and GuildManagerDB.players) or {}
     local arr = {}
     for _, n in ipairs(names or {}) do arr[#arr+1] = n end
     table.sort(arr, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
@@ -361,11 +361,11 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         -- ➕ Construit les lignes (prix = part * nbPartsUtilisées), avec fallback nom/prix depuis ctx.L
         local rows = {}
         for id, usedParts in pairs(usedByLot) do
-            local lot = ns and ns.CDZ and ns.CDZ.Lot_GetById and ns.CDZ.Lot_GetById(id)
+            local lot = ns and ns.GMGR and ns.GMGR.Lot_GetById and ns.GMGR.Lot_GetById(id)
             local name, perGold
             if lot then
                 name    = lot.name or ((metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id)))
-                perGold = (ns and ns.CDZ and ns.CDZ.Lot_ShareGold and ns.CDZ.Lot_ShareGold(lot)) or 0
+                perGold = (ns and ns.GMGR and ns.GMGR.Lot_ShareGold and ns.GMGR.Lot_ShareGold(lot)) or 0
             else
                 name    = (metaByLot[id] and metaByLot[id].name) or ("Lot "..tostring(id))
                 perGold = tonumber(metaByLot[id] and (metaByLot[id].gold or metaByLot[id].g)) or 0

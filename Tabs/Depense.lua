@@ -1,5 +1,5 @@
 local ADDON, ns = ...
-local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
+local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
 -- =========================
@@ -15,7 +15,7 @@ local selected = {} -- sélection : clés = index absolu dans expenses.list
 -- ======   COLONNES   =====
 -- =========================
 local function BuildColsFree()
-    local isGM = (CDZ.IsMaster and CDZ.IsMaster()) or false
+    local isGM = (GMGR.IsMaster and GMGR.IsMaster()) or false
     local cols = {
         { key="qty",    title="Qté",     w=44  },
         { key="item",   title="Objet",   min=260, flex=1 },
@@ -37,7 +37,7 @@ local colsLots = UI.NormalizeColumns({
     { key="status", title="Restantes",     w=110 },
     { key="content",title="Contenu",       w=60 },
     { key="total",  title="Valeur totale", w=120 },
-    { key="act",    title="",              w=(CDZ.IsMaster and CDZ.IsMaster()) and 40 or 0 },
+    { key="act",    title="",              w=(GMGR.IsMaster and GMGR.IsMaster()) and 40 or 0 },
 })
 
 -- =========================
@@ -84,7 +84,7 @@ local function AttachDeleteExpenseHandler(r, f, d)
         local abs = r._abs
         local eid = tonumber(d.id or 0) or 0
         UI.PopupConfirm("Supprimer cette ligne de ressource ?", function()
-            CDZ.DeleteExpense((eid > 0) and eid or abs)
+            GMGR.DeleteExpense((eid > 0) and eid or abs)
             if ns.RefreshAll then ns.RefreshAll() end
         end)
     end)
@@ -96,7 +96,7 @@ local function AttachDeleteLotHandler(r, lot)
     local canDelete = (tonumber(lot.used or 0) or 0) == 0
     r.btnDelete:SetEnabled(canDelete)
     r.btnDelete:SetOnClick(function()
-        if canDelete and CDZ.Lot_Delete then CDZ.Lot_Delete(lot.id) end
+        if canDelete and GMGR.Lot_Delete then GMGR.Lot_Delete(lot.id) end
     end)
 end
 
@@ -116,7 +116,7 @@ local function BuildRowFree(r)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
     r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=30 })
-    r.btnDelete:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    r.btnDelete:SetShown(GMGR.IsMaster and GMGR.IsMaster())
     UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
     return f
 end
@@ -125,7 +125,7 @@ local function UpdateRowFree(i, r, f, it)
     local d = it.data or it
     r._abs = it._abs or i
 
-    if CDZ.IsMaster and CDZ.IsMaster() then
+    if GMGR.IsMaster and GMGR.IsMaster() then
         f.sel:Show()
         f.sel:SetChecked(selected[r._abs] or false)
         f.sel:SetScript("OnClick", function(self)
@@ -136,7 +136,7 @@ local function UpdateRowFree(i, r, f, it)
         f.sel:Hide()
         f.sel:SetScript("OnClick", nil)
     end
-    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(CDZ.IsMaster and CDZ.IsMaster()) end
+    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(GMGR.IsMaster and GMGR.IsMaster()) end
 
     f.qty:SetText(tostring(d.qty or 1))
     f.source:SetText(tostring(d.source or ""))
@@ -162,7 +162,7 @@ local function BuildRowLots(r)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
     -- Bouton X uniquement pour le GM
-    if CDZ.IsMaster and CDZ.IsMaster() then
+    if GMGR.IsMaster and GMGR.IsMaster() then
         r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=30 })
         UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
     end
@@ -171,14 +171,14 @@ end
 
 local function UpdateRowLots(i, r, f, it)
     local lot = it.data
-    local st  = CDZ.Lot_Status and CDZ.Lot_Status(lot) or "?"
+    local st  = GMGR.Lot_Status and GMGR.Lot_Status(lot) or "?"
     local N   = tonumber(lot.sessions or 1) or 1
     local used= tonumber(lot.used or 0) or 0
-    local totalGold = (CDZ.Lot_ShareGold and CDZ.Lot_ShareGold(lot) or 0) * N
+    local totalGold = (GMGR.Lot_ShareGold and GMGR.Lot_ShareGold(lot) or 0) * N
 
     f.name:SetText(lot.name or ("Lot "..tostring(lot.id)))
     f.type:SetText(N>1 and (N.." utilisations") or "1 utilisation")
-    f.status:SetText( (st=="EPU" and "Épuisé") or (CDZ.Lot_Remaining and (CDZ.Lot_Remaining(lot).." restantes")) or ((N-used).." restantes") )
+    f.status:SetText( (st=="EPU" and "Épuisé") or (GMGR.Lot_Remaining and (GMGR.Lot_Remaining(lot).." restantes")) or ((N-used).." restantes") )
     f.content:SetText(tostring(#(lot.itemIds or {})))
     f.total:SetText(UI.MoneyText(totalGold))
 
@@ -207,9 +207,9 @@ local function UpdateRowLots(i, r, f, it)
             end,
         })
         local rows = {}
-        if CDZ.GetExpenseById then
+        if GMGR.GetExpenseById then
             for _, eid in ipairs(lot.itemIds or {}) do
-                local _, it = CDZ.GetExpenseById(eid)
+                local _, it = GMGR.GetExpenseById(eid)
                 if it then table.insert(rows, it) end
             end
         end
@@ -244,7 +244,7 @@ local function Layout()
 
     if UI.AttachButtonsFooterRight then
         local buttons = {}
-        local isGM = (CDZ.IsMaster and CDZ.IsMaster()) or false
+        local isGM = (GMGR.IsMaster and GMGR.IsMaster()) or false
         if isGM and btnCreateLot then table.insert(buttons, btnCreateLot) end
         if isGM then
             if btnToggle   then btnToggle:Show()   table.insert(buttons, btnToggle)   end
@@ -261,7 +261,7 @@ local function Layout()
 end
 
 local function Refresh()
-    local e = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.expenses) or { list = {} }
+    local e = (GuildManagerDB and GuildManagerDB.expenses) or { list = {} }
     local items, total = {}, 0
     for idx, it in ipairs(e.list or {}) do
         if (not it.lotId) or (it.lotId == 0) then
@@ -272,7 +272,7 @@ local function Refresh()
     lvFree:SetData(items)
     totalFS:SetText("|cffffd200Ressources libres :|r " .. moneyCopper(total))
 
-    local lots = (CDZ.GetLots and CDZ.GetLots()) or {}
+    local lots = (GMGR.GetLots and GMGR.GetLots()) or {}
     table.sort(lots, function(a,b)
         local an = (a and a.name or ""):lower()
         local bn = (b and b.name or ""):lower()
@@ -283,15 +283,15 @@ local function Refresh()
     local rows = {}
     for _, l in ipairs(lots) do
         local pending = (l.__pendingConsume or l.__pendingDelete)
-        if (not pending) and not (CDZ.Lot_Status and CDZ.Lot_Status(l) == "EPU") then
+        if (not pending) and not (GMGR.Lot_Status and GMGR.Lot_Status(l) == "EPU") then
             rows[#rows+1] = { data=l }
         end
     end
     lvLots:SetData(rows)
 
-    btnCreateLot:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    btnCreateLot:SetShown(GMGR.IsMaster and GMGR.IsMaster())
     btnClearAll:SetEnabled(true)
-    local on = CDZ.IsExpensesRecording and CDZ.IsExpensesRecording()
+    local on = GMGR.IsExpensesRecording and GMGR.IsExpensesRecording()
     btnToggle:SetText(on and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
 
     Layout()
@@ -316,12 +316,12 @@ local function Build(container)
 
     btnCreateLot = UI.Button(footer, "Créer un lot", { size="sm", minWidth=140, tooltip="Sélectionnez des ressources pour créer un lot (contenu figé)." })
     btnCreateLot:SetOnClick(function()
-        if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+        if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
         local idxs = {}
         for abs,v in pairs(selected) do if v then idxs[#idxs+1] = abs end end
         table.sort(idxs)
         if #idxs == 0 then
-            UIErrorsFrame:AddMessage("|cffff6060[CDZ]|r Aucune ressource sélectionnée.", 1,0.4,0.4)
+            UIErrorsFrame:AddMessage("|cffff6060[GMGR]|r Aucune ressource sélectionnée.", 1,0.4,0.4)
             return
         end
         local dlg = UI.CreatePopup({ title="Créer un lot", width=420, height=220 })
@@ -341,8 +341,8 @@ local function Build(container)
                 local N  = tonumber(nInput:GetNumber() or 1) or 1
                 if N < 1 then N = 1 end
                 local isMulti = (N > 1)
-                if CDZ.Lot_Create then
-                    CDZ.Lot_Create(nm, isMulti, N, idxs)
+                if GMGR.Lot_Create then
+                    GMGR.Lot_Create(nm, isMulti, N, idxs)
                     selected = {}
                     if ns.RefreshAll then ns.RefreshAll() end
                 end
@@ -354,20 +354,20 @@ local function Build(container)
 
     btnToggle = UI.Button(footer, "Démarrer l'enregistrement des dépenses", { size="sm", minWidth=260 })
     btnToggle:SetOnClick(function()
-        local isRecording = CDZ.IsExpensesRecording and CDZ.IsExpensesRecording()
-        if isRecording and CDZ.ExpensesStop then
-            CDZ.ExpensesStop()
-        elseif (not isRecording) and CDZ.ExpensesStart then
-            CDZ.ExpensesStart()
+        local isRecording = GMGR.IsExpensesRecording and GMGR.IsExpensesRecording()
+        if isRecording and GMGR.ExpensesStop then
+            GMGR.ExpensesStop()
+        elseif (not isRecording) and GMGR.ExpensesStart then
+            GMGR.ExpensesStart()
         end
-        local nowOn = CDZ.IsExpensesRecording and CDZ.IsExpensesRecording()
+        local nowOn = GMGR.IsExpensesRecording and GMGR.IsExpensesRecording()
         btnToggle:SetText(nowOn and "Stopper l'enregistrement" or "Démarrer l'enregistrement des dépenses")
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 
     btnClearAll = UI.Button(footer, "Tout vider (libres)", { size="sm", variant="danger", minWidth=160 })
     btnClearAll:SetConfirm("Vider la liste des ressources libres ? (les lots ne sont pas affectés)", function()
-        if CDZ.ClearExpenses then CDZ.ClearExpenses() end
+        if GMGR.ClearExpenses then GMGR.ClearExpenses() end
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 

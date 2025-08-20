@@ -1,5 +1,5 @@
 local ADDON, ns = ...
-local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
+local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD or 16
 local U = ns.Util
 
@@ -9,14 +9,14 @@ local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, fo
 -- Rafraîchit l'étiquette de version DB dans le footer
 local function UpdateDBVersionLabel()
     if not verFS then return end
-    local rv = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev) or 0
+    local rv = (GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev) or 0
     verFS:SetText("DB v"..tostring(rv))
 end
 
 -- ➕ Affiche "GM: Nom-Royaume" (rang 0 du roster)
 local function UpdateMasterLabel()
     if not gmFS then return end
-    local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+    local gmName = GMGR.GetGuildMasterCached and select(1, GMGR.GetGuildMasterCached())
     local txt = "GM: " .. (gmName and Ambiguate(gmName, "none") or "—")
     gmFS:SetText(txt)
 end
@@ -25,8 +25,8 @@ end
 local function UpdateMasterLabel()
     if not gmFS then return end
     local gmName, gmRow = nil, nil
-    if CDZ and CDZ.GetGuildMasterCached then
-        gmName, gmRow = CDZ.GetGuildMasterCached()
+    if GMGR and GMGR.GetGuildMasterCached then
+        gmName, gmRow = GMGR.GetGuildMasterCached()
     end
     local txt = gmName and ("GM: " .. Ambiguate(gmName, "short")) or "GM: —"
     gmFS:SetText(txt)
@@ -104,8 +104,8 @@ local function UpdateRow(i, r, f, it)
         local st = ""
         if it.type == "HELLO" then
             local hid = it.kv and it.kv.helloId
-            if hid and ns.CDZ and ns.CDZ._GetHelloElect then
-                local info = ns.CDZ._GetHelloElect(hid)
+            if hid and ns.GMGR and ns.GMGR._GetHelloElect then
+                local info = ns.GMGR._GetHelloElect(hid)
                 local nowt = time()
                 local started = (info and info.startedAt) or (it.tsFirst or nowt)
                 local endsAt  = (info and info.endsAt) or (started + HELLO_WAIT_SEC)
@@ -280,7 +280,7 @@ end
 
 function Refresh()
     -- ➕ Si le débug est désactivé : listes vides et mise en page safe
-    if CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then
+    if GMGR.IsDebugEnabled and not GMGR.IsDebugEnabled() then
         if lvRecv    then lvRecv:SetData({})    end
         if lvSend    then lvSend:SetData({})    end
         if lvPending then lvPending:SetData({}) end
@@ -295,7 +295,7 @@ function Refresh()
 
 
     -- Split RECU / ENVOI + filtre UI côté RECU (on garde le traitement logique inchangé ailleurs)
-    for _, e in ipairs(CDZ.GetDebugLogs()) do
+    for _, e in ipairs(GMGR.GetDebugLogs()) do
         if e.dir == "recv" then
             if not (_normalize(e.target) == selfNorm) then
                 recvData[#recvData+1] = e
@@ -315,8 +315,8 @@ function Refresh()
     if lvSend then lvSend:SetData(groupedSend) end
 
     -- ➕ Alimente la file d'attente (pending TX_REQ)
-    if lvPending and CDZ.GetPendingOutbox then
-        local pending = CDZ.GetPendingOutbox() or {}
+    if lvPending and GMGR.GetPendingOutbox then
+        local pending = GMGR.GetPendingOutbox() or {}
         lvPending:SetData(pending)
     end
 
@@ -331,16 +331,16 @@ local function Build(container)
 
     purgeDBBtn = UI.Button(panel, "Purger Debug", { size="sm", minWidth=120 })
     purgeDBBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
-    purgeDBBtn:SetOnClick(function() CDZ.ClearDebugLogs(); Refresh() end)
+    purgeDBBtn:SetOnClick(function() GMGR.ClearDebugLogs(); Refresh() end)
 
     purgeAllBtn = UI.Button(panel, "Purge totale", { size="sm", minWidth=120, tooltip="Wipe DB + reset UI + Reload" })
     purgeAllBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
     purgeAllBtn:SetConfirm("Purger la DB + réinitialiser l’UI puis recharger ?", function()
-        if CDZ.WipeAllSaved then
-            CDZ.WipeAllSaved()
-        elseif CDZ.WipeAllData then
-            CDZ.WipeAllData()
-            ChroniquesDuZephyrUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680 }
+        if GMGR.WipeAllSaved then
+            GMGR.WipeAllSaved()
+        elseif GMGR.WipeAllData then
+            GMGR.WipeAllData()
+            GuildManagerUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680 }
         end
         ReloadUI()
     end)
@@ -348,10 +348,10 @@ local function Build(container)
     -- ➕ GM : Purge Lots & objets épuisés
     local purgeEpuBtn = UI.Button(panel, "Purge Lots & objets épuisés", { size="sm", minWidth=240, tooltip = "Supprime localement tous les lots épuisés et tous leurs objets." })
     purgeEpuBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
-    purgeEpuBtn:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    purgeEpuBtn:SetShown(GMGR.IsMaster and GMGR.IsMaster())
     purgeEpuBtn:SetConfirm("Supprimer les lots épuisés et leurs objets associés ?", function()
-        if CDZ.PurgeLotsAndItemsExhausted then
-            local l, it = CDZ.PurgeLotsAndItemsExhausted()
+        if GMGR.PurgeLotsAndItemsExhausted then
+            local l, it = GMGR.PurgeLotsAndItemsExhausted()
             if UpdateDBVersionLabel then UpdateDBVersionLabel() end
             if ns.RefreshAll then ns.RefreshAll() end
             if UI.Toast then UI.Toast(("Purge effectuée : %d lot(s), %d objet(s) supprimés."):format(l or 0, it or 0)) end
@@ -361,10 +361,10 @@ local function Build(container)
     -- ➕ GM : Purger Ressources (tout effacer)
     local purgeResBtn = UI.Button(panel, "Purger Ressources", { size="sm", minWidth=180, tooltip = "Supprime localement tous les lots et tous les objets (ressources)." })
     purgeResBtn:SetPoint("RIGHT", purgeEpuBtn, "LEFT", -8, 0)
-    purgeResBtn:SetShown(CDZ.IsMaster and CDZ.IsMaster())
+    purgeResBtn:SetShown(GMGR.IsMaster and GMGR.IsMaster())
     purgeResBtn:SetConfirm("Supprimer localement TOUS les lots et TOUS les objets ?", function()
-        if CDZ.PurgeAllResources then
-            local l, it = CDZ.PurgeAllResources()
+        if GMGR.PurgeAllResources then
+            local l, it = GMGR.PurgeAllResources()
             if UpdateDBVersionLabel then UpdateDBVersionLabel() end
             if ns.RefreshAll then ns.RefreshAll() end
             if UI.Toast then UI.Toast(("Ressources purgées : %d lot(s), %d objet(s)."):format(l or 0, it or 0)) end
@@ -388,14 +388,14 @@ local function Build(container)
     forceSyncBtn = UI.Button(footer, "Forcer ma version (GM)", { size="sm", minWidth=200,
         tooltip = "Diffuse immédiatement un snapshot complet (SYNC_FULL)" })
     forceSyncBtn:SetConfirm("Diffuser et FORCER la version du GM (SYNC_FULL) ?", function()
-        if CDZ and CDZ._SnapshotExport and CDZ.Comm_Broadcast then
+        if GMGR and GMGR._SnapshotExport and GMGR.Comm_Broadcast then
             -- Option: on garde le comportement 'force' en incrémentant la révision locale si disponible
-            local newrv = (CDZ.IncRev and CDZ.IncRev()) or nil
-            local snap = CDZ._SnapshotExport()
+            local newrv = (GMGR.IncRev and GMGR.IncRev()) or nil
+            local snap = GMGR._SnapshotExport()
             if newrv then snap.rv = newrv end
-            CDZ.Comm_Broadcast("SYNC_FULL", snap)
+            GMGR.Comm_Broadcast("SYNC_FULL", snap)
             if UIErrorsFrame then
-                UIErrorsFrame:AddMessage("|cff40ff40[CDZ]|r SYNC_FULL envoyé (rv="..tostring(snap.rv)..")", 0.4, 1, 0.4)
+                UIErrorsFrame:AddMessage("|cff40ff40[GMGR]|r SYNC_FULL envoyé (rv="..tostring(snap.rv)..")", 0.4, 1, 0.4)
             end
         end
     end)
@@ -485,7 +485,7 @@ end
 
 -- ➕ Layout avec footer et visibilité GM
 local function Layout()
-    local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+    local isMaster = GMGR.IsMaster and GMGR.IsMaster()
     if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end
     if UI.AttachButtonsFooterRight then
         local buttons = { purgeDBBtn, purgeAllBtn }
@@ -515,7 +515,7 @@ if ns and ns.On then
 end
 
 -- Affichage lisible d’une (sous-)table pour le debug réseau (évite "table: 0x...")
-function CDZ.Debug_TinyDump(v, depth)
+function GMGR.Debug_TinyDump(v, depth)
     depth = depth or 2
     local t = type(v)
     if t ~= "table" then return tostring(v) end
@@ -529,7 +529,7 @@ function CDZ.Debug_TinyDump(v, depth)
     end
     if isArray then
         for i=1, math.min(maxk, 5) do
-            out[#out+1] = CDZ.Debug_TinyDump(v[i], depth-1)
+            out[#out+1] = GMGR.Debug_TinyDump(v[i], depth-1)
         end
         if maxk > 5 then out[#out+1] = ("…(%d items)"):format(maxk) end
         return "["..table.concat(out,", ").."]"
@@ -537,7 +537,7 @@ function CDZ.Debug_TinyDump(v, depth)
         for k,val in pairs(v) do
             n = n + 1
             if n > 5 then out[#out+1] = "…"; break end
-            out[#out+1] = tostring(k)..":"..CDZ.Debug_TinyDump(val, depth-1)
+            out[#out+1] = tostring(k)..":"..GMGR.Debug_TinyDump(val, depth-1)
         end
         return "{"..table.concat(out,", ").."}"
     end
@@ -588,21 +588,21 @@ local function BuildOptions(panel)
 
         b:SetScript("OnClick", function(self)
             _SetRadioGroupChecked(group, key)
-            ChroniquesDuZephyrUI = ChroniquesDuZephyrUI or {}
+            GuildManagerUI = GuildManagerUI or {}
 
             if group == themeRadios then
                 -- Thème
-                ChroniquesDuZephyrUI.theme = key
+                GuildManagerUI.theme = key
                 if UI.SetTheme then UI.SetTheme(key) end
 
             elseif group == autoRadios then
                 -- Ouverture auto
-                ChroniquesDuZephyrUI.autoOpen = (key == "YES")
+                GuildManagerUI.autoOpen = (key == "YES")
 
             elseif group == debugRadios then
                 -- Activer le débug
-                ChroniquesDuZephyrUI.debugEnabled = (key == "YES")
-                if UI.SetDebugEnabled then UI.SetDebugEnabled(ChroniquesDuZephyrUI.debugEnabled) end
+                GuildManagerUI.debugEnabled = (key == "YES")
+                if UI.SetDebugEnabled then UI.SetDebugEnabled(GuildManagerUI.debugEnabled) end
             end
 
         end)
@@ -633,7 +633,7 @@ local function BuildOptions(panel)
     makeRadioV(debugRadios, "NO",  "Non")
 
     -- Valeurs initiales
-    local saved = CDZ.GetSavedWindow and CDZ.GetSavedWindow() or {}
+    local saved = GMGR.GetSavedWindow and GMGR.GetSavedWindow() or {}
     local theme = (saved and saved.theme) or "AUTO"
     local auto  = (saved and saved.autoOpen) and "YES" or "NO"
     local dbg   = ((saved and saved.debugEnabled) ~= false) and "YES" or "NO"  -- Oui par défaut

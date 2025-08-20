@@ -1,8 +1,8 @@
 local ADDON, ns = ...
-ns.CDZ  = ns.CDZ  or {}
+ns.GMGR  = ns.GMGR  or {}
 ns.Util = ns.Util or {}
 
-local CDZ, U = ns.CDZ, ns.Util
+local GMGR, U = ns.GMGR, ns.Util
 
 -- =========================
 -- ===== Fonctions util =====
@@ -49,19 +49,19 @@ end
 -- =========================
 local function masterName()
     -- ⚠️ Source de vérité = roster (GM = rang index 0)
-    if CDZ and CDZ.GetGuildMasterCached then
-        local gm = CDZ.GetGuildMasterCached()
+    if GMGR and GMGR.GetGuildMasterCached then
+        local gm = GMGR.GetGuildMasterCached()
         if gm and gm ~= "" then return gm end
     end
     -- Fallback minimal si roster indisponible
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    return ChroniquesDuZephyrDB.meta.master
+    GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.meta = GuildManagerDB.meta or {}
+    return GuildManagerDB.meta.master
 end
 
 -- Chef de guilde = override toujours vrai
 -- Master désigné = strict si défini
 -- Sinon (pas de master), autorise les grades avec vraies permissions officiers
-function CDZ.IsMaster()
+function GMGR.IsMaster()
     -- 1) Chef de guilde : toujours autorisé
     if IsInGuild and IsInGuild() then
         local _, _, ri = GetGuildInfo("player")
@@ -71,7 +71,7 @@ function CDZ.IsMaster()
 end
 
 -- ➕ Optionnel : utilitaire explicite (peut servir à l’UI)
-function CDZ.IsGM()
+function GMGR.IsGM()
     if IsInGuild and IsInGuild() then
         local _, _, ri = GetGuildInfo("player")
         if ri == 0 then return true end
@@ -90,9 +90,9 @@ function CDZ.IsGM()
 end
 
 local function getRev()
-    if CDZ.GetRev then return safenum(CDZ.GetRev(), 0) end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    return safenum(ChroniquesDuZephyrDB.meta.rev, 0)
+    if GMGR.GetRev then return safenum(GMGR.GetRev(), 0) end
+    GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.meta = GuildManagerDB.meta or {}
+    return safenum(GuildManagerDB.meta.rev, 0)
 end
 
 -- =========================
@@ -129,27 +129,27 @@ U.playerFullName = playerFullName
 U.SamePlayer     = SamePlayer
 
 -- -- Journal/Debug : stub sûr pour éviter les nil avant le chargement de Comm.lua
-ns.CDZ = ns.CDZ or {}
-if type(ns.CDZ.GetDebugLogs) ~= "function" then
+ns.GMGR = ns.GMGR or {}
+if type(ns.GMGR.GetDebugLogs) ~= "function" then
     local _fallbackDebug = {}
-    function ns.CDZ.GetDebugLogs() return _fallbackDebug end
+    function ns.GMGR.GetDebugLogs() return _fallbackDebug end
 end
-if type(ns.CDZ._SetDebugLogsRef) ~= "function" then
-    function ns.CDZ._SetDebugLogsRef(t)
+if type(ns.GMGR._SetDebugLogsRef) ~= "function" then
+    function ns.GMGR._SetDebugLogsRef(t)
         if type(t) == "table" then
-            ns.CDZ.GetDebugLogs = function() return t end
+            ns.GMGR.GetDebugLogs = function() return t end
         end
     end
 end
 
--- ➕ Helpers UID/Roster centraux (dans ns.Util) + miroirs dans CDZ pour compat
+-- ➕ Helpers UID/Roster centraux (dans ns.Util) + miroirs dans GMGR pour compat
 local function EnsureDB()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta    = ChroniquesDuZephyrDB.meta    or {}
-    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-    ChroniquesDuZephyrDB.uids    = ChroniquesDuZephyrDB.uids    or {}
-    ChroniquesDuZephyrDB.meta.uidSeq = ChroniquesDuZephyrDB.meta.uidSeq or 1
-    return ChroniquesDuZephyrDB
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta    = GuildManagerDB.meta    or {}
+    GuildManagerDB.players = GuildManagerDB.players or {}
+    GuildManagerDB.uids    = GuildManagerDB.uids    or {}
+    GuildManagerDB.meta.uidSeq = GuildManagerDB.meta.uidSeq or 1
+    return GuildManagerDB
 end
 local function _norm(s) return (normalizeStr and normalizeStr(s)) or tostring(s or ""):gsub("%s+",""):lower() end
 
@@ -211,24 +211,24 @@ if type(U.EnsureRosterLocal) ~= "function" then
     end
 end
 
--- Miroirs compat dans CDZ (si absents)
-if type(ns.CDZ.GetOrAssignUID) ~= "function" then ns.CDZ.GetOrAssignUID = U.GetOrAssignUID end
-if type(ns.CDZ.GetNameByUID)  ~= "function" then ns.CDZ.GetNameByUID  = U.GetNameByUID  end
-if type(ns.CDZ.MapUID)        ~= "function" then ns.CDZ.MapUID        = U.MapUID        end
-if type(ns.CDZ.UnmapUID)      ~= "function" then ns.CDZ.UnmapUID      = U.UnmapUID      end
-if type(ns.CDZ.EnsureRosterLocal) ~= "function" then ns.CDZ.EnsureRosterLocal = U.EnsureRosterLocal end
-if type(ns.CDZ.FindUIDByName) ~= "function" then ns.CDZ.FindUIDByName = U.FindUIDByName end
-if type(ns.CDZ.GetUID)        ~= "function" then ns.CDZ.GetUID        = U.FindUIDByName end
+-- Miroirs compat dans GMGR (si absents)
+if type(ns.GMGR.GetOrAssignUID) ~= "function" then ns.GMGR.GetOrAssignUID = U.GetOrAssignUID end
+if type(ns.GMGR.GetNameByUID)  ~= "function" then ns.GMGR.GetNameByUID  = U.GetNameByUID  end
+if type(ns.GMGR.MapUID)        ~= "function" then ns.GMGR.MapUID        = U.MapUID        end
+if type(ns.GMGR.UnmapUID)      ~= "function" then ns.GMGR.UnmapUID      = U.UnmapUID      end
+if type(ns.GMGR.EnsureRosterLocal) ~= "function" then ns.GMGR.EnsureRosterLocal = U.EnsureRosterLocal end
+if type(ns.GMGR.FindUIDByName) ~= "function" then ns.GMGR.FindUIDByName = U.FindUIDByName end
+if type(ns.GMGR.GetUID)        ~= "function" then ns.GMGR.GetUID        = U.FindUIDByName end
 
 
 -- ➕ Gestion centrale des UID / Roster (idempotent)
 local function EnsureDB()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta    = ChroniquesDuZephyrDB.meta    or {}
-    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-    ChroniquesDuZephyrDB.uids    = ChroniquesDuZephyrDB.uids    or {}
-    ChroniquesDuZephyrDB.meta.uidSeq = ChroniquesDuZephyrDB.meta.uidSeq or 1
-    return ChroniquesDuZephyrDB
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta    = GuildManagerDB.meta    or {}
+    GuildManagerDB.players = GuildManagerDB.players or {}
+    GuildManagerDB.uids    = GuildManagerDB.uids    or {}
+    GuildManagerDB.meta.uidSeq = GuildManagerDB.meta.uidSeq or 1
+    return GuildManagerDB
 end
 local function _norm(s) return normalizeStr and normalizeStr(s) or tostring(s or ""):gsub("%s+",""):lower() end
 
@@ -293,7 +293,7 @@ if type(U.EnsureRosterLocal) ~= "function" then
 end
 
 -- ➕ Utilitaires : guilde & titre principal
-function CDZ.GetCurrentGuildName()
+function GMGR.GetCurrentGuildName()
     if IsInGuild and IsInGuild() then
         local gname = GetGuildInfo("player")
         if type(gname) == "string" and gname ~= "" then
@@ -303,15 +303,15 @@ function CDZ.GetCurrentGuildName()
     return nil
 end
 
-function CDZ.BuildMainTitle()
-    local g = CDZ.GetCurrentGuildName and CDZ.GetCurrentGuildName()
+function GMGR.BuildMainTitle()
+    local g = GMGR.GetCurrentGuildName and GMGR.GetCurrentGuildName()
     if g and g ~= "" then
         return string.format("%s", g)
     end
     return ""
 end
 
-function CDZ.GetAddonIconTexture()
+function GMGR.GetAddonIconTexture()
     -- Préfère l'API moderne, sinon rétro-compatibilité
     local icon = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "IconTexture"))
               or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "IconTexture"))

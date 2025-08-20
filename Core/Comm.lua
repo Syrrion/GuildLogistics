@@ -1,25 +1,25 @@
 local ADDON, ns = ...
-ns.CDZ = ns.CDZ or {}
-local CDZ, UI = ns.CDZ, ns.UI
+ns.GMGR = ns.GMGR or {}
+local GMGR, UI = ns.GMGR, ns.UI
 
 -- ➕ Garde-fou : attache les helpers UID exposés par Helper.lua (et fallback ultime)
-CDZ.GetOrAssignUID = CDZ.GetOrAssignUID or (ns.Util and ns.Util.GetOrAssignUID)
-CDZ.GetNameByUID   = CDZ.GetNameByUID   or (ns.Util and ns.Util.GetNameByUID)
-CDZ.MapUID         = CDZ.MapUID         or (ns.Util and ns.Util.MapUID)
-CDZ.UnmapUID       = CDZ.UnmapUID       or (ns.Util and ns.Util.UnmapUID)
-CDZ.EnsureRosterLocal = CDZ.EnsureRosterLocal or (ns.Util and ns.Util.EnsureRosterLocal)
+GMGR.GetOrAssignUID = GMGR.GetOrAssignUID or (ns.Util and ns.Util.GetOrAssignUID)
+GMGR.GetNameByUID   = GMGR.GetNameByUID   or (ns.Util and ns.Util.GetNameByUID)
+GMGR.MapUID         = GMGR.MapUID         or (ns.Util and ns.Util.MapUID)
+GMGR.UnmapUID       = GMGR.UnmapUID       or (ns.Util and ns.Util.UnmapUID)
+GMGR.EnsureRosterLocal = GMGR.EnsureRosterLocal or (ns.Util and ns.Util.EnsureRosterLocal)
 
-if not CDZ.GetOrAssignUID then
+if not GMGR.GetOrAssignUID then
     -- Fallback minimal (au cas où Helper.lua n’est pas encore chargé — évite les nil)
     local function _ensureDB()
-        ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-        ChroniquesDuZephyrDB.meta    = ChroniquesDuZephyrDB.meta    or {}
-        ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-        ChroniquesDuZephyrDB.uids    = ChroniquesDuZephyrDB.uids    or {}
-        ChroniquesDuZephyrDB.meta.uidSeq = ChroniquesDuZephyrDB.meta.uidSeq or 1
-        return ChroniquesDuZephyrDB
+        GuildManagerDB = GuildManagerDB or {}
+        GuildManagerDB.meta    = GuildManagerDB.meta    or {}
+        GuildManagerDB.players = GuildManagerDB.players or {}
+        GuildManagerDB.uids    = GuildManagerDB.uids    or {}
+        GuildManagerDB.meta.uidSeq = GuildManagerDB.meta.uidSeq or 1
+        return GuildManagerDB
     end
-    function CDZ.GetOrAssignUID(name)
+    function GMGR.GetOrAssignUID(name)
         local db = _ensureDB()
         local full = tostring(name or "")
         for uid, stored in pairs(db.uids) do if stored == full then return uid end end
@@ -28,21 +28,21 @@ if not CDZ.GetOrAssignUID then
         db.players[full] = db.players[full] or { credit = 0, debit = 0 }
         return uid
     end
-    function CDZ.GetNameByUID(uid)
+    function GMGR.GetNameByUID(uid)
         local db = _ensureDB()
         return db.uids[tostring(uid or "")]
     end
-    function CDZ.MapUID(uid, name)
+    function GMGR.MapUID(uid, name)
         local db = _ensureDB()
         db.uids[tostring(uid or "")] = tostring(name or "")
         db.players[tostring(name or "")] = db.players[tostring(name or "")] or { credit=0, debit=0 }
         return uid
     end
-    function CDZ.UnmapUID(uid)
+    function GMGR.UnmapUID(uid)
         local db = _ensureDB()
         db.uids[tostring(uid or "")] = nil
     end
-    function CDZ.EnsureRosterLocal(name)
+    function GMGR.EnsureRosterLocal(name)
         local db = _ensureDB()
         local full = tostring(name or "")
         db.players[full] = db.players[full] or { credit = 0, debit = 0 }
@@ -51,7 +51,7 @@ if not CDZ.GetOrAssignUID then
 end
 
 -- ===== Constantes / État =====
-local PREFIX   = "CDZ1"
+local PREFIX   = "GMGR1"
 local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
@@ -72,7 +72,7 @@ local now            = (U and U.now)            or (_G and _G.now)            or
 local normalizeStr   = (U and U.normalizeStr)   or (_G and _G.normalizeStr)   or function(s) s=tostring(s or ""):gsub("%s+",""):gsub("'",""); return s:lower() end
 local playerFullName = (U and U.playerFullName) or (_G and _G.playerFullName) or function() local n,r=UnitFullName("player"); return r and (n.."-"..r) or n end
 local masterName     = (U and U.masterName)     or (_G and _G.masterName)     or function() return nil end
-local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=ChroniquesDuZephyrDB; return (db and db.meta and db.meta.rev) or 0 end
+local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=GuildManagerDB; return (db and db.meta and db.meta.rev) or 0 end
 
 local function _compressStr(s)
     if not s or #s < COMPRESS_MIN_SIZE then return nil end
@@ -274,7 +274,7 @@ local function _randHex8()
 end
 
 local function _estimateSnapshotSize()
-    local ok, snap = pcall(function() return (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {} end)
+    local ok, snap = pcall(function() return (GMGR._SnapshotExport and GMGR._SnapshotExport()) or {} end)
     if not ok then return 0 end
     local enc = encodeKV(snap) or ""
     local comp = _compressStr and _compressStr(enc) or nil
@@ -349,7 +349,7 @@ local function _decideAndGrant(hid)
     HelloElect[hid].decided = true
     if ns.Emit then ns.Emit("debug:changed") end
 
-    CDZ.Comm_Whisper(chosen.player, "SYNC_GRANT", {
+    GMGR.Comm_Whisper(chosen.player, "SYNC_GRANT", {
         hid   = hid,
         token = token,
         init  = sess.initiator,
@@ -375,7 +375,7 @@ local function _scheduleOfferReply(hid, initiator, rv_init)
     ns.Util.After(delay, function()
         local rv_peer = safenum(getRev(), 0)
         if rv_peer <= safenum(rv_init, 0) then return end
-        CDZ.Comm_Whisper(initiator, "SYNC_OFFER", {
+        GMGR.Comm_Whisper(initiator, "SYNC_OFFER", {
             hid = hid, rv = rv_peer, est = est, h = h, from = playerFullName()
         })
     end)
@@ -405,7 +405,7 @@ end
 
 local function pushLog(dir, t, size, channel, peerOrSender, seq, part, total, raw, state)
     -- ➕ Inhibition complète de la journalisation si le débug est désactivé
-    if CDZ and CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then return end
+    if GMGR and GMGR.IsDebugEnabled and not GMGR.IsDebugEnabled() then return end
 
     local isSend   = (dir == "send")
     local emitter  = isSend and ((playerFullName and playerFullName()) or "") or (peerOrSender or "")
@@ -481,20 +481,20 @@ local function _updateSendLog(item)
 end
 
 
-function CDZ.GetDebugLogs() return DebugLog end
-function CDZ.PurgeDebug()
+function GMGR.GetDebugLogs() return DebugLog end
+function GMGR.PurgeDebug()
     wipe(DebugLog)
     if ns.Emit then ns.Emit("debug:changed") end
 end
 -- ➕ Alias attendu par Tabs/Debug.lua
-function CDZ.ClearDebugLogs()
+function GMGR.ClearDebugLogs()
     wipe(DebugLog)
     if ns.Emit then ns.Emit("debug:changed") end
 end
 
 -- ✏️ Trace locale vers l’onglet Debug avec entête conforme (raw = "v=1|t=...|s=...|p=...|n=...|payload")
-function CDZ.DebugLocal(event, fields)
-    if CDZ and CDZ.IsDebugEnabled and not CDZ.IsDebugEnabled() then return end
+function GMGR.DebugLocal(event, fields)
+    if GMGR and GMGR.IsDebugEnabled and not GMGR.IsDebugEnabled() then return end
 
     local tname = tostring(event or "DEBUG")
     local kv    = type(fields) == "table" and fields or {}
@@ -577,11 +577,11 @@ local function _send(typeName, channel, target, kv)
     _ensureTicker()
 end
 
-function CDZ.Comm_Broadcast(typeName, kv)
+function GMGR.Comm_Broadcast(typeName, kv)
     _send(typeName, "GUILD", nil, kv)
 end
 
-function CDZ.Comm_Whisper(target, msgType, data)
+function GMGR.Comm_Whisper(target, msgType, data)
     -- Bloque l'émission des updates non-critiques vers une cible en cours de handshake
     if _NONCRIT_TYPES[msgType] and _isSuppressedTo(target) then
         return -- ne rien envoyer
@@ -603,15 +603,15 @@ end
 
 
 -- ===== Application snapshot (import/export compact) =====
-function CDZ._SnapshotExport()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-    ChroniquesDuZephyrDB.uids = ChroniquesDuZephyrDB.uids or {}
-    ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
-    ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+function GMGR._SnapshotExport()
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    GuildManagerDB.players = GuildManagerDB.players or {}
+    GuildManagerDB.uids = GuildManagerDB.uids or {}
+    GuildManagerDB.expenses = GuildManagerDB.expenses or { list = {}, nextId = 1 }
+    GuildManagerDB.lots = GuildManagerDB.lots or { list = {}, nextId = 1 }
 
-    local meta = ChroniquesDuZephyrDB.meta
+    local meta = GuildManagerDB.meta
     local t = {
         P = {}, I = {}, E = {}, L = {}, H = {}, HL = {},
         rv = safenum(meta.rev, 0),
@@ -620,24 +620,24 @@ function CDZ._SnapshotExport()
     }
 
 
-    for name, rec in pairs(ChroniquesDuZephyrDB.players) do
+    for name, rec in pairs(GuildManagerDB.players) do
         local res = (rec and rec.reserved) and 1 or 0
         t.P[#t.P+1] = table.concat({ name, safenum(rec.credit, 0), safenum(rec.debit, 0), res }, ":")
     end
 
-    local _players = ChroniquesDuZephyrDB.players or {}
-    for uid, name in pairs(ChroniquesDuZephyrDB.uids) do
+    local _players = GuildManagerDB.players or {}
+    for uid, name in pairs(GuildManagerDB.uids) do
         if name and _players[name] ~= nil then
             t.I[#t.I+1] = tostring(uid) .. ":" .. tostring(name)
         end
     end
-    for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list) do
+    for _, e in ipairs(GuildManagerDB.expenses.list) do
         t.E[#t.E+1] = table.concat({
             safenum(e.id,0), safenum(e.qty,0), safenum(e.copper,0),
             tostring(e.source or ""), safenum(e.lotId,0), safenum(e.itemID,0)
         }, ",")
     end
-    for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
+    for _, l in ipairs(GuildManagerDB.lots.list) do
         local ids = {}
         for _, id in ipairs(l.itemIds or {}) do ids[#ids+1] = tostring(id) end
         t.L[#t.L+1] = table.concat({
@@ -647,7 +647,7 @@ function CDZ._SnapshotExport()
     end
     -- Historique compact (CSV: ts,total,perHead,count,ref,participants(;))
     -- + ➕ tableau de correspondance HL : "ts|id,name,k,N,n,g;id,name,k,N,n,g"
-    for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
+    for _, h in ipairs(GuildManagerDB.history or {}) do
         local parts = table.concat(h.participants or {}, ";")
         t.H[#t.H+1] = table.concat({
             safenum(h.ts,0), safenum(h.total,0), safenum(h.perHead,0),
@@ -675,25 +675,25 @@ end
 
 
 
-function CDZ._SnapshotApply(kv)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    ChroniquesDuZephyrDB.players = {}
-    ChroniquesDuZephyrDB.uids = {}
-    ChroniquesDuZephyrDB.expenses = { list = {}, nextId = 1 }
-    ChroniquesDuZephyrDB.lots = { list = {}, nextId = 1 }
+function GMGR._SnapshotApply(kv)
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    GuildManagerDB.players = {}
+    GuildManagerDB.uids = {}
+    GuildManagerDB.expenses = { list = {}, nextId = 1 }
+    GuildManagerDB.lots = { list = {}, nextId = 1 }
 
-    local meta = ChroniquesDuZephyrDB.meta
+    local meta = GuildManagerDB.meta
     meta.rev = safenum(kv.rv, 0)
     meta.lastModified = safenum(kv.lm, now())
     meta.fullStamp = safenum(kv.fs, now())
 
-    -- (dans function CDZ._SnapshotApply(kv))
+    -- (dans function GMGR._SnapshotApply(kv))
     for _, s in ipairs(kv.P or {}) do
         -- Nouveau format (4 champs) : name:credit:debit:reserved
         local name, credit, debit, res = s:match("^(.-):(%-?%d+):(%-?%d+):(%-?%d+)$")
         if name then
-            ChroniquesDuZephyrDB.players[name] = {
+            GuildManagerDB.players[name] = {
                 credit   = safenum(credit,0),
                 debit    = safenum(debit,0),
                 reserved = safenum(res,0) ~= 0
@@ -702,7 +702,7 @@ function CDZ._SnapshotApply(kv)
             -- Compat anciens snapshots (3 champs) : name:credit:debit
             local n2, c2, d2 = s:match("^(.-):(%-?%d+):(%-?%d+)$")
             if n2 then
-                ChroniquesDuZephyrDB.players[n2] = {
+                GuildManagerDB.players[n2] = {
                     credit   = safenum(c2,0),
                     debit    = safenum(d2,0),
                     reserved = false
@@ -713,7 +713,7 @@ function CDZ._SnapshotApply(kv)
 
     for _, s in ipairs(kv.I or {}) do
         local uid, name = s:match("^(.-):(.-)$")
-        if uid and name then ChroniquesDuZephyrDB.uids[uid] = name end
+        if uid and name then GuildManagerDB.uids[uid] = name end
     end
     do
         local listE = kv.E or {}
@@ -728,7 +728,7 @@ function CDZ._SnapshotApply(kv)
             id = safenum(id,0); if id <= 0 then return end
             -- Normalise lotId: 0 => nil (sinon les “libres” disparaissent de l’UI)
             local _lot = safenum(lotId,0); if _lot == 0 then _lot = nil end
-            ChroniquesDuZephyrDB.expenses.list[#ChroniquesDuZephyrDB.expenses.list+1] = {
+            GuildManagerDB.expenses.list[#GuildManagerDB.expenses.list+1] = {
                 id = id,
                 qty = safenum(qty,0),
                 copper = safenum(copper,0),
@@ -736,7 +736,7 @@ function CDZ._SnapshotApply(kv)
                 lotId = _lot,
                 itemID = safenum(itemId,0), -- ✅ normalisation clé attendue par l’UI
             }
-            ChroniquesDuZephyrDB.expenses.nextId = math.max(ChroniquesDuZephyrDB.expenses.nextId or 1, id + 1)
+            GuildManagerDB.expenses.nextId = math.max(GuildManagerDB.expenses.nextId or 1, id + 1)
         end
 
         if aggregated then
@@ -759,7 +759,7 @@ function CDZ._SnapshotApply(kv)
         end
     end
     do
-        ChroniquesDuZephyrDB.history = {}
+        GuildManagerDB.history = {}
     end
 
     for _, s in ipairs(kv.L or {}) do
@@ -773,14 +773,14 @@ function CDZ._SnapshotApply(kv)
             if idsCsv and idsCsv ~= "" then
                 for v in tostring(idsCsv):gmatch("[^;]+") do l.itemIds[#l.itemIds+1] = safenum(v,0) end
             end
-            ChroniquesDuZephyrDB.lots.list[#ChroniquesDuZephyrDB.lots.list+1] = l
-            ChroniquesDuZephyrDB.lots.nextId = math.max(ChroniquesDuZephyrDB.lots.nextId or 1, id + 1)
+            GuildManagerDB.lots.list[#GuildManagerDB.lots.list+1] = l
+            GuildManagerDB.lots.nextId = math.max(GuildManagerDB.lots.nextId or 1, id + 1)
         end
     end
 
 
     -- ➕ Import Historique (compat CSV) + rattachement lots via HL et/ou s.L
-    ChroniquesDuZephyrDB.history = {}
+    GuildManagerDB.history = {}
 
     -- 1) Prépare un dictionnaire ts -> lots à partir de HL
     local HLmap = {}
@@ -882,7 +882,7 @@ function CDZ._SnapshotApply(kv)
             if not rec.lots and HLmap[rec.ts] and #HLmap[rec.ts] > 0 then
                 rec.lots = HLmap[rec.ts]
             end
-            ChroniquesDuZephyrDB.history[#ChroniquesDuZephyrDB.history+1] = rec
+            GuildManagerDB.history[#GuildManagerDB.history+1] = rec
         end
     end
 
@@ -906,7 +906,7 @@ local function enqueueComplete(sender, t, kv)
     while true do
         local item = table.remove(CompleteQ, 1)
         if not item then break end
-        CDZ._HandleFull(item._sender, item._t, item)
+        GMGR._HandleFull(item._sender, item._t, item)
     end
 end
 
@@ -915,10 +915,10 @@ local function refreshActive()
 end
 
 -- ===== Handler principal =====
-function CDZ._HandleFull(sender, msgType, kv)
+function GMGR._HandleFull(sender, msgType, kv)
     msgType = tostring(msgType or ""):upper()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local meta = ChroniquesDuZephyrDB.meta
+    GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local meta = GuildManagerDB.meta
 
     -- ➕ Double sécurité : en mode bootstrap (rev=0), ignorer tout sauf "SYNC_*"
     if safenum(meta.rev, 0) == 0 and not tostring(msgType or ""):match("^SYNC_") then
@@ -943,8 +943,8 @@ function CDZ._HandleFull(sender, msgType, kv)
         if uid and name then
             local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
             local full = nf(name)
-            if CDZ.MapUID then CDZ.MapUID(uid, full) end
-            if CDZ.EnsureRosterLocal then CDZ.EnsureRosterLocal(full) end
+            if GMGR.MapUID then GMGR.MapUID(uid, full) end
+            if GMGR.EnsureRosterLocal then GMGR.EnsureRosterLocal(full) end
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = safenum(kv.lm, now())
             refreshActive()
@@ -953,20 +953,20 @@ function CDZ._HandleFull(sender, msgType, kv)
             local me = nf(playerFullName())
             if me == full then
                 -- iLvl : lecture immédiate puis broadcast
-                local ilvl = (CDZ.ReadOwnEquippedIlvl and CDZ.ReadOwnEquippedIlvl()) or nil
+                local ilvl = (GMGR.ReadOwnEquippedIlvl and GMGR.ReadOwnEquippedIlvl()) or nil
                 if ilvl then
-                    CDZ.BroadcastIlvlUpdate(me, ilvl, now(), me)
+                    GMGR.BroadcastIlvlUpdate(me, ilvl, now(), me)
                 end
 
                 -- Clé mythique : lecture immédiate puis broadcast
                 local mid, lvl, map = 0, 0, ""
-                if CDZ.ReadOwnedKeystone then mid, lvl, map = CDZ.ReadOwnedKeystone() end
+                if GMGR.ReadOwnedKeystone then mid, lvl, map = GMGR.ReadOwnedKeystone() end
                 if safenum(lvl, 0) > 0 then
-                    if (not map or map == "" or map == "Clé") and safenum(mid, 0) > 0 and CDZ.ResolveMKeyMapName then
-                        local nm = CDZ.ResolveMKeyMapName(mid)
+                    if (not map or map == "" or map == "Clé") and safenum(mid, 0) > 0 and GMGR.ResolveMKeyMapName then
+                        local nm = GMGR.ResolveMKeyMapName(mid)
                         if nm and nm ~= "" then map = nm end
                     end
-                    CDZ.BroadcastMKeyUpdate(me, safenum(mid, 0), safenum(lvl, 0), tostring(map or ""), now(), me)
+                    GMGR.BroadcastMKeyUpdate(me, safenum(mid, 0), safenum(lvl, 0), tostring(map or ""), now(), me)
                 end
             end
         end
@@ -978,18 +978,18 @@ function CDZ._HandleFull(sender, msgType, kv)
 
         local uid  = kv.uid
         -- Récupérer le nom AVANT de défaire le mapping UID -> name.
-        local name = (uid and CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or kv.name
+        local name = (uid and GMGR.GetNameByUID and GMGR.GetNameByUID(uid)) or kv.name
 
-        if uid and CDZ.UnmapUID then CDZ.UnmapUID(uid) end
+        if uid and GMGR.UnmapUID then GMGR.UnmapUID(uid) end
 
         -- Purge du roster local (nom complet si possible)
         if name and name ~= "" then
-            if CDZ.RemovePlayerLocal then
-                CDZ.RemovePlayerLocal(name, true)
+            if GMGR.RemovePlayerLocal then
+                GMGR.RemovePlayerLocal(name, true)
             else
-                ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-                ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
-                ChroniquesDuZephyrDB.players[name] = nil
+                GuildManagerDB = GuildManagerDB or {}
+                GuildManagerDB.players = GuildManagerDB.players or {}
+                GuildManagerDB.players[name] = nil
             end
         end
 
@@ -1004,16 +1004,16 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "ROSTER_RESERVE" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+        GuildManagerDB.players = GuildManagerDB.players or {}
         local uid, name = kv.uid, kv.name
         -- récupérer le nom complet via l’UID si besoin
-        if (not name or name == "") and uid and CDZ.GetNameByUID then
-            name = CDZ.GetNameByUID(uid)
+        if (not name or name == "") and uid and GMGR.GetNameByUID then
+            name = GMGR.GetNameByUID(uid)
         end
         if name and name ~= "" then
-            local p = ChroniquesDuZephyrDB.players[name] or { credit=0, debit=0, reserved=false }
+            local p = GuildManagerDB.players[name] or { credit=0, debit=0, reserved=false }
             p.reserved = (tonumber(kv.res) or 0) ~= 0
-            ChroniquesDuZephyrDB.players[name] = p
+            GuildManagerDB.players[name] = p
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = safenum(kv.lm, now())
             if ns.Emit then ns.Emit("roster:reserve", name, p.reserved) end
@@ -1022,11 +1022,11 @@ function CDZ._HandleFull(sender, msgType, kv)
         
     elseif msgType == "TX_REQ" then
         -- Seul le GM traite les demandes : les clients non-GM ignorent.
-        if not (CDZ.IsMaster and CDZ.IsMaster()) then
+        if not (GMGR.IsMaster and GMGR.IsMaster()) then
             return
         end
 
-        if CDZ.AddIncomingRequest then CDZ.AddIncomingRequest(kv) end
+        if GMGR.AddIncomingRequest then GMGR.AddIncomingRequest(kv) end
         refreshActive()
 
         -- Popup côté GM
@@ -1035,15 +1035,15 @@ function CDZ._HandleFull(sender, msgType, kv)
             local _id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
             ui.PopupRequest(kv.who or sender, safenum(kv.delta,0),
                 function()
-                    if CDZ.GM_ApplyAndBroadcastByUID then
-                        CDZ.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), {
+                    if GMGR.GM_ApplyAndBroadcastByUID then
+                        GMGR.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), {
                             reason = "PLAYER_REQUEST", requester = kv.who or sender
                         })
                     end
-                    if CDZ.ResolveRequest then CDZ.ResolveRequest(_id, true, playerFullName()) end
+                    if GMGR.ResolveRequest then GMGR.ResolveRequest(_id, true, playerFullName()) end
                 end,
                 function()
-                    if CDZ.ResolveRequest then CDZ.ResolveRequest(_id, false, playerFullName()) end
+                    if GMGR.ResolveRequest then GMGR.ResolveRequest(_id, false, playerFullName()) end
                 end
             )
         end
@@ -1051,22 +1051,22 @@ function CDZ._HandleFull(sender, msgType, kv)
     elseif msgType == "TX_APPLIED" then
         if not shouldApply() then return end
         local applied = false
-        if CDZ.ApplyDeltaByName and kv.name and kv.delta then
-            CDZ.ApplyDeltaByName(kv.name, safenum(kv.delta,0), kv.by or sender)
+        if GMGR.ApplyDeltaByName and kv.name and kv.delta then
+            GMGR.ApplyDeltaByName(kv.name, safenum(kv.delta,0), kv.by or sender)
             applied = true
         else
             -- ➕ Fallback : appliquer localement si l’API n’est pas disponible
-            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.players = GuildManagerDB.players or {}
             local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
             local full = nf(kv.name or "")
-            local rec = ChroniquesDuZephyrDB.players[full] or { credit = 0, debit = 0 }
+            local rec = GuildManagerDB.players[full] or { credit = 0, debit = 0 }
             local d = safenum(kv.delta, 0)
             if d >= 0 then
                 rec.credit = safenum(rec.credit,0) + d
             else
                 rec.debit  = safenum(rec.debit,0)  + (-d)
             end
-            ChroniquesDuZephyrDB.players[full] = rec
+            GuildManagerDB.players[full] = rec
             applied = true
         end
         if applied then
@@ -1078,25 +1078,25 @@ function CDZ._HandleFull(sender, msgType, kv)
     elseif msgType == "TX_BATCH" then
         if not shouldApply() then return end
         local done = false
-        if CDZ.ApplyBatch then
-            CDZ.ApplyBatch(kv)
+        if GMGR.ApplyBatch then
+            GMGR.ApplyBatch(kv)
             done = true
         else
             -- ➕ Fallback : boucle sur les éléments du batch
-            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.players = GuildManagerDB.players or {}
             local U, D, N = kv.U or {}, kv.D or {}, kv.N or {}
             local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
             for i = 1, math.max(#U, #D, #N) do
-                local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or "?"
+                local name = N[i] or (GMGR.GetNameByUID and GMGR.GetNameByUID(U[i])) or "?"
                 local full = nf(name)
                 local d = safenum(D[i], 0)
-                local rec = ChroniquesDuZephyrDB.players[full] or { credit = 0, debit = 0 }
+                local rec = GuildManagerDB.players[full] or { credit = 0, debit = 0 }
                 if d >= 0 then
                     rec.credit = safenum(rec.credit,0) + d
                 else
                     rec.debit  = safenum(rec.debit,0)  + (-d)
                 end
-                ChroniquesDuZephyrDB.players[full] = rec
+                GuildManagerDB.players[full] = rec
             end
             done = true
         end
@@ -1112,11 +1112,11 @@ function CDZ._HandleFull(sender, msgType, kv)
                 local meK = nf(meFull)
                 local U, D, N = kv.U or {}, kv.D or {}, kv.N or {}
                 for i = 1, math.max(#U, #D, #N) do
-                    local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or "?"
+                    local name = N[i] or (GMGR.GetNameByUID and GMGR.GetNameByUID(U[i])) or "?"
                     if nf(name) == meK then
                         local d = safenum(D[i], 0)
                         local per   = -d
-                        local after = (CDZ.GetSolde and CDZ.GetSolde(meFull)) or 0
+                        local after = (GMGR.GetSolde and GMGR.GetSolde(meFull)) or 0
 
                         -- Parse kv.L (CSV "id,name,k,N,n,gold") → tableau d'objets
                         local Lctx, Lraw = {}, kv and kv.L
@@ -1152,9 +1152,9 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "EXP_ADD" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+        GuildManagerDB.expenses = GuildManagerDB.expenses or { list = {}, nextId = 1 }
         local id = safenum(kv.id, 0); if id <= 0 then return end
-        for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list) do if safenum(e.id,0) == id then return end end
+        for _, e in ipairs(GuildManagerDB.expenses.list) do if safenum(e.id,0) == id then return end end
 
         -- Normalisations : clé 'src' pour la source, et lotId 0 -> nil
         local _src = kv.src or kv.s
@@ -1168,8 +1168,8 @@ function CDZ._HandleFull(sender, msgType, kv)
             lotId  = _lot,
             itemID = safenum(kv.i,0),
         }
-        table.insert(ChroniquesDuZephyrDB.expenses.list, e)
-        ChroniquesDuZephyrDB.expenses.nextId = math.max(ChroniquesDuZephyrDB.expenses.nextId or 1, id + 1)
+        table.insert(GuildManagerDB.expenses.list, e)
+        GuildManagerDB.expenses.nextId = math.max(GuildManagerDB.expenses.nextId or 1, id + 1)
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
         refreshActive()
@@ -1178,7 +1178,7 @@ function CDZ._HandleFull(sender, msgType, kv)
     elseif msgType == "EXP_REMOVE" then
         if not shouldApply() then return end
         local id = safenum(kv.id, 0)
-        local e = ChroniquesDuZephyrDB.expenses
+        local e = GuildManagerDB.expenses
         if e and e.list then
             local keep = {}
             for _, it in ipairs(e.list) do if safenum(it.id, -1) ~= id then keep[#keep+1] = it end end
@@ -1192,13 +1192,13 @@ function CDZ._HandleFull(sender, msgType, kv)
         -- Acceptation stricte: seule la source (= le main lui-même) fait foi
         local pname = tostring(kv.name or "")
         local by    = tostring(kv.by   or sender or "")
-        if pname ~= "" and CDZ.NormName and (CDZ.NormName(pname) == CDZ.NormName(by)) then
+        if pname ~= "" and GMGR.NormName and (GMGR.NormName(pname) == GMGR.NormName(by)) then
             local n_ilvl = safenum(kv.ilvl, -1)
             local n_ts   = safenum(kv.ts, now())
-            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-            ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+            GuildManagerDB = GuildManagerDB or {}
+            GuildManagerDB.players = GuildManagerDB.players or {}
             -- ⚠️ Ne JAMAIS créer de joueur ici : on met à jour uniquement s'il existe déjà (actif ou réserve)
-            local p = ChroniquesDuZephyrDB.players[pname]
+            local p = GuildManagerDB.players[pname]
             if p then
                 local prev = safenum(p.ilvlTs, 0)
                 if n_ilvl >= 0 and n_ts >= prev then
@@ -1215,18 +1215,18 @@ function CDZ._HandleFull(sender, msgType, kv)
     elseif msgType == "MKEY_UPDATE" then
         local pname = tostring(kv.name or "")
         local by    = tostring(kv.by   or sender or "")
-        if pname ~= "" and CDZ.NormName and (CDZ.NormName(pname) == CDZ.NormName(by)) then
-            ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-            ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+        if pname ~= "" and GMGR.NormName and (GMGR.NormName(pname) == GMGR.NormName(by)) then
+            GuildManagerDB = GuildManagerDB or {}
+            GuildManagerDB.players = GuildManagerDB.players or {}
             -- ⚠️ jamais créer de joueur ici
-            local p = ChroniquesDuZephyrDB.players[pname]
+            local p = GuildManagerDB.players[pname]
             if p then
                 local n_mid = safenum(kv.mid, 0)
                 local n_lvl = safenum(kv.lvl, 0)
                 local n_map = tostring(kv.map or "")
                 -- Résoudre le nom via résolveur commun
                 if (n_map == "" or n_map == "Clé") and n_mid > 0 then
-                    local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(n_mid)
+                    local nm = GMGR.ResolveMKeyMapName and GMGR.ResolveMKeyMapName(n_mid)
                     if nm and nm ~= "" then n_map = nm end
                 end
                 local n_ts  = safenum(kv.ts, now())
@@ -1245,10 +1245,10 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "HIST_ADD" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.history = ChroniquesDuZephyrDB.history or {}
+        GuildManagerDB.history = GuildManagerDB.history or {}
         local ts  = safenum(kv.ts,0)
         local exists = false
-        for _, h in ipairs(ChroniquesDuZephyrDB.history) do if safenum(h.ts,0) == ts then exists = true break end end
+        for _, h in ipairs(GuildManagerDB.history) do if safenum(h.ts,0) == ts then exists = true break end end
         if not exists and ts > 0 then
             local rec = {
                 ts = ts,
@@ -1279,7 +1279,7 @@ function CDZ._HandleFull(sender, msgType, kv)
             end
             if #Lctx > 0 then rec.lots = Lctx end
 
-            table.insert(ChroniquesDuZephyrDB.history, 1, rec)
+            table.insert(GuildManagerDB.history, 1, rec)
             meta.rev = (rv >= 0) and rv or myrv
             meta.lastModified = (lm >= 0) and lm or now()
             if ns.Emit then ns.Emit("history:changed") end
@@ -1290,7 +1290,7 @@ function CDZ._HandleFull(sender, msgType, kv)
         if not shouldApply() then return end
         local ts   = safenum(kv.ts,0)
         local flag = safenum(kv.r,1) ~= 0  -- ✅ applique r=1 ou r=0
-        for _, h in ipairs(ChroniquesDuZephyrDB.history or {}) do
+        for _, h in ipairs(GuildManagerDB.history or {}) do
             if safenum(h.ts,0) == ts then
                 h.refunded = flag
                 break
@@ -1305,7 +1305,7 @@ function CDZ._HandleFull(sender, msgType, kv)
         if not shouldApply() then return end
         local ts  = safenum(kv.ts,0)
         local hid = safenum(kv.h,0)
-        local t = ChroniquesDuZephyrDB.history or {}
+        local t = GuildManagerDB.history or {}
         for i = #t, 1, -1 do
             local rec = t[i]
             local match = (hid > 0 and safenum(rec.hid,0) == hid) or (hid == 0 and safenum(rec.ts,0) == ts)
@@ -1322,11 +1322,11 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "LOT_CREATE" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
-        ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+        GuildManagerDB.lots = GuildManagerDB.lots or { list = {}, nextId = 1 }
+        GuildManagerDB.expenses = GuildManagerDB.expenses or { list = {}, nextId = 1 }
 
         local id = safenum(kv.id, 0); if id <= 0 then return end
-        for _, l0 in ipairs(ChroniquesDuZephyrDB.lots.list) do if safenum(l0.id,0) == id then return end end
+        for _, l0 in ipairs(GuildManagerDB.lots.list) do if safenum(l0.id,0) == id then return end end
 
         local l = {
             id = id,
@@ -1343,7 +1343,7 @@ function CDZ._HandleFull(sender, msgType, kv)
         if not l.totalCopper or l.totalCopper <= 0 then
             local sum = 0
             for _, eid in ipairs(l.itemIds or {}) do
-                for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do
+                for _, e in ipairs(GuildManagerDB.expenses.list or {}) do
                     if safenum(e.id, -1) == safenum(eid, -2) then
                         sum = sum + safenum(e.copper, 0)
                         break
@@ -1357,13 +1357,13 @@ function CDZ._HandleFull(sender, msgType, kv)
         if #l.itemIds > 0 then
             local set = {}
             for _, eid in ipairs(l.itemIds) do set[safenum(eid, -1)] = true end
-            for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do
+            for _, e in ipairs(GuildManagerDB.expenses.list or {}) do
                 if set[safenum(e.id, -2)] then e.lotId = id end
             end
         end
 
-        table.insert(ChroniquesDuZephyrDB.lots.list, l)
-        ChroniquesDuZephyrDB.lots.nextId = math.max(ChroniquesDuZephyrDB.lots.nextId or 1, id + 1)
+        table.insert(GuildManagerDB.lots.list, l)
+        GuildManagerDB.lots.nextId = math.max(GuildManagerDB.lots.nextId or 1, id + 1)
 
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
@@ -1372,14 +1372,14 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "LOT_DELETE" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+        GuildManagerDB.lots = GuildManagerDB.lots or { list = {}, nextId = 1 }
         local id = safenum(kv.id, 0)
         local kept = {}
-        for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
+        for _, l in ipairs(GuildManagerDB.lots.list) do
             if safenum(l.id, -1) ~= id then kept[#kept+1] = l end
         end
-        ChroniquesDuZephyrDB.lots.list = kept
-        for _, e in ipairs(ChroniquesDuZephyrDB.expenses.list or {}) do if safenum(e.lotId,0) == id then e.lotId = nil end end
+        GuildManagerDB.lots.list = kept
+        for _, e in ipairs(GuildManagerDB.expenses.list or {}) do if safenum(e.lotId,0) == id then e.lotId = nil end end
         meta.rev = (rv >= 0) and rv or myrv
         meta.lastModified = (lm >= 0) and lm or now()
         if ns.Emit then ns.Emit("lots:changed") end
@@ -1387,13 +1387,13 @@ function CDZ._HandleFull(sender, msgType, kv)
 
     elseif msgType == "LOT_CONSUME" then
         if not shouldApply() then return end
-        ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+        GuildManagerDB.lots = GuildManagerDB.lots or { list = {}, nextId = 1 }
 
         -- ✅ de-dup rv/lot : n’applique qu’UNE fois par lot et par révision
-        CDZ._lastConsumeRv = CDZ._lastConsumeRv or {}
+        GMGR._lastConsumeRv = GMGR._lastConsumeRv or {}
 
         local set = {}; for _, v in ipairs(kv.ids or {}) do set[safenum(v, -2)] = true end
-        for _, l in ipairs(ChroniquesDuZephyrDB.lots.list) do
+        for _, l in ipairs(GuildManagerDB.lots.list) do
             if set[safenum(l.id, -2)] then
                 l.__pendingConsume = nil -- ✅ fin d’attente locale (optimistic UI)
                 l.used = safenum(l.used, 0) + 1
@@ -1424,10 +1424,10 @@ function CDZ._HandleFull(sender, msgType, kv)
         -- ✏️ Envoyer mon iLvl/Clé en WHISPER à l'initiateur (seulement si sa DB n'est pas obsolète)
         if sender and sender ~= "" and sender ~= playerFullName() and rv_them >= rv_me then
             local me = playerFullName()
-            if CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me) then
-                local p    = (ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.players and ChroniquesDuZephyrDB.players[me]) or {}
+            if GMGR.IsPlayerInRosterOrReserve and GMGR.IsPlayerInRosterOrReserve(me) then
+                local p    = (GuildManagerDB and GuildManagerDB.players and GuildManagerDB.players[me]) or {}
                 local ilvl = safenum(p.ilvl, 0)
-                CDZ.Comm_Whisper(sender, "ILVL_UPDATE", {
+                GMGR.Comm_Whisper(sender, "ILVL_UPDATE", {
                     name = me,
                     ilvl = ilvl,
                     ts   = now(),
@@ -1439,8 +1439,8 @@ function CDZ._HandleFull(sender, msgType, kv)
                 local lvl = safenum(p.mkeyLevel, 0)
                 local map = tostring(p.mkeyName or "")
                 -- Fallback : lecture live si DB vide / obsolète
-                if (lvl <= 0 or mid <= 0) and CDZ.ReadOwnedKeystone then
-                    local _mid, _lvl, _map = CDZ.ReadOwnedKeystone()
+                if (lvl <= 0 or mid <= 0) and GMGR.ReadOwnedKeystone then
+                    local _mid, _lvl, _map = GMGR.ReadOwnedKeystone()
                     if safenum(_mid,0) > 0 then mid = safenum(_mid,0) end
                     if safenum(_lvl,0) > 0 then lvl = safenum(_lvl,0) end
                     if (not map or map == "" or map == "Clé") and _map and _map ~= "" then
@@ -1449,10 +1449,10 @@ function CDZ._HandleFull(sender, msgType, kv)
                 end
                 if lvl > 0 then
                     if (map == "" or map == "Clé") and mid > 0 then
-                        local nm = CDZ.ResolveMKeyMapName and CDZ.ResolveMKeyMapName(mid)
+                        local nm = GMGR.ResolveMKeyMapName and GMGR.ResolveMKeyMapName(mid)
                         if nm and nm ~= "" then map = nm end
                     end
-                    CDZ.Comm_Whisper(sender, "MKEY_UPDATE", {
+                    GMGR.Comm_Whisper(sender, "MKEY_UPDATE", {
                         name = me,
                         mid  = mid,
                         lvl  = lvl,
@@ -1466,28 +1466,28 @@ function CDZ._HandleFull(sender, msgType, kv)
         
         -- ✏️ Flush TX_REQ si le HELLO vient du GM effectif (tolérant au roster pas encore prêt)
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
-        local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+        local gmName = GMGR.GetGuildMasterCached and select(1, GMGR.GetGuildMasterCached())
         local senderNF = nf(sender)
 
         if gmName and senderNF == nf(gmName) then
-            if CDZ.Pending_FlushToMaster then CDZ.Pending_FlushToMaster(gmName) end
+            if GMGR.Pending_FlushToMaster then GMGR.Pending_FlushToMaster(gmName) end
         else
             -- Roster possiblement pas prêt : on retente quelques fois (délais 1s)
-            CDZ._awaitHelloFrom = senderNF
-            CDZ._awaitHelloRetry = 0
+            GMGR._awaitHelloFrom = senderNF
+            GMGR._awaitHelloRetry = 0
             local function _tryFlushLater()
-                if not CDZ._awaitHelloFrom then return end
-                local gm = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
-                if gm and CDZ._awaitHelloFrom == nf(gm) then
-                    if CDZ.Pending_FlushToMaster then CDZ.Pending_FlushToMaster(gm) end
-                    CDZ._awaitHelloFrom = nil
+                if not GMGR._awaitHelloFrom then return end
+                local gm = GMGR.GetGuildMasterCached and select(1, GMGR.GetGuildMasterCached())
+                if gm and GMGR._awaitHelloFrom == nf(gm) then
+                    if GMGR.Pending_FlushToMaster then GMGR.Pending_FlushToMaster(gm) end
+                    GMGR._awaitHelloFrom = nil
                     return
                 end
-                CDZ._awaitHelloRetry = (CDZ._awaitHelloRetry or 0) + 1
-                if CDZ._awaitHelloRetry < 5 then
+                GMGR._awaitHelloRetry = (GMGR._awaitHelloRetry or 0) + 1
+                if GMGR._awaitHelloRetry < 5 then
                     if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
                 else
-                    CDZ._awaitHelloFrom = nil
+                    GMGR._awaitHelloFrom = nil
                 end
             end
             if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
@@ -1513,10 +1513,10 @@ function CDZ._HandleFull(sender, msgType, kv)
         local token = kv.token or ""
         local init  = kv.init or sender
         if hid ~= "" and token ~= "" and init and init ~= "" then
-            local snap = (CDZ._SnapshotExport and CDZ._SnapshotExport()) or {}
+            local snap = (GMGR._SnapshotExport and GMGR._SnapshotExport()) or {}
             snap.hid   = hid
             snap.token = token
-            CDZ.Comm_Whisper(init, "SYNC_FULL", snap)
+            GMGR.Comm_Whisper(init, "SYNC_FULL", snap)
         end
 
     elseif msgType == "SYNC_FULL" then
@@ -1543,12 +1543,12 @@ function CDZ._HandleFull(sender, msgType, kv)
         if ns and ns.Emit then ns.Emit("sync:begin", "full") end
         C_Timer.After(0, function()
             local _ok, _err = pcall(function()
-        CDZ._SnapshotApply(kv)
+        GMGR._SnapshotApply(kv)
         refreshActive()
 
         -- ACK vers l'émetteur si token présent
         if hid ~= "" and token ~= "" then
-            CDZ.Comm_Whisper(sender, "SYNC_ACK", { hid = hid, rv = safenum(meta.rev,0) })
+            GMGR.Comm_Whisper(sender, "SYNC_ACK", { hid = hid, rv = safenum(meta.rev,0) })
             HelloElect[hid] = HelloElect[hid] or {}
             HelloElect[hid].applied = true
             if ns.Emit then ns.Emit("debug:changed") end
@@ -1562,7 +1562,7 @@ function CDZ._HandleFull(sender, msgType, kv)
             -- ➕ Après application réussie du FULL : recalcul iLvl local du joueur
             if _ok then
                 C_Timer.After(0.15, function()
-                    if CDZ.UpdateOwnIlvlIfMain then CDZ.UpdateOwnIlvlIfMain() end
+                    if GMGR.UpdateOwnIlvlIfMain then GMGR.UpdateOwnIlvlIfMain() end
                 end)
 
                 -- ➕ Puis rebroadcast d'un HELLO (GUILD)
@@ -1570,7 +1570,7 @@ function CDZ._HandleFull(sender, msgType, kv)
                 local me     = playerFullName()
                 local rv_me  = safenum(getRev(), 0)
                 C_Timer.After(0.2, function()
-                    CDZ.Comm_Broadcast("HELLO", { hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
+                    GMGR.Comm_Broadcast("HELLO", { hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
                 end)
             end
 
@@ -1594,11 +1594,11 @@ local function onAddonMsg(prefix, message, channel, sender)
     if prefix ~= PREFIX then return end
     -- Ignorer toute réception tant que notre HELLO n'a pas été émis (sauf HELLO lui-même)
     local peekType = message:match("v=1|t=([^|]+)|")
-    if not (CDZ and CDZ._helloSent) and peekType ~= "HELLO" then return end
+    if not (GMGR and GMGR._helloSent) and peekType ~= "HELLO" then return end
 
     -- ➕ Mode bootstrap : si la DB locale est en version 0, ne traiter QUE les messages "SYNC_*"
     do
-        local rev0 = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0)
+        local rev0 = safenum((GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev), 0)
         if rev0 == 0 then
             local pt = tostring(peekType or "")
             if not pt:match("^SYNC_") then return end
@@ -1711,19 +1711,19 @@ local function onAddonMsg(prefix, message, channel, sender)
 end
 
 -- ===== Envoi mutations (roster & crédits) =====
-function CDZ.BroadcastRosterUpsert(name)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+function GMGR.BroadcastRosterUpsert(name)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
     if not name or name=="" then return end
-    local uid = CDZ.GetOrAssignUID(name)
+    local uid = GMGR.GetOrAssignUID(name)
     if not uid then return end
-    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("ROSTER_UPSERT", { uid = uid, name = name, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+    local rv = safenum((GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev), 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("ROSTER_UPSERT", { uid = uid, name = name, rv = rv, lm = GuildManagerDB.meta.lastModified })
 end
 
-function CDZ.BroadcastRosterRemove(idOrName)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+function GMGR.BroadcastRosterRemove(idOrName)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
     if not idOrName or idOrName=="" then return end
 
     local uid, name = nil, nil
@@ -1732,66 +1732,66 @@ function CDZ.BroadcastRosterRemove(idOrName)
     -- Si on reçoit un UID (ex: P000123), on garde tel quel ; sinon on considère que c’est un nom
     if s:match("^P%d+$") then
         uid  = s
-        name = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or nil
+        name = (GMGR.GetNameByUID and GMGR.GetNameByUID(uid)) or nil
     else
         name = s
-        uid  = (CDZ.FindUIDByName and CDZ.FindUIDByName(name)) or (CDZ.GetUID and CDZ.GetUID(name)) or nil
+        uid  = (GMGR.FindUIDByName and GMGR.FindUIDByName(name)) or (GMGR.GetUID and GMGR.GetUID(name)) or nil
         -- Surtout ne pas créer un nouvel UID lors d’une suppression : on accepte uid=nil, mais on envoie le nom
     end
 
-    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
+    local rv = safenum((GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev), 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
 
     -- On diffuse toujours les deux champs (uid + name) si disponibles pour une réception robuste
-    CDZ.Comm_Broadcast("ROSTER_REMOVE", {
-        uid = uid, name = name, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified
+    GMGR.Comm_Broadcast("ROSTER_REMOVE", {
+        uid = uid, name = name, rv = rv, lm = GuildManagerDB.meta.lastModified
     })
 end
 
-function CDZ.GM_ApplyAndBroadcast(name, delta)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local uid = CDZ.GetOrAssignUID(name); if not uid then return end
-    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    local nm = CDZ.GetNameByUID(uid) or name
-    CDZ.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified, by=playerFullName() })
+function GMGR.GM_ApplyAndBroadcast(name, delta)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    local uid = GMGR.GetOrAssignUID(name); if not uid then return end
+    local rv = safenum((GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev), 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    local nm = GMGR.GetNameByUID(uid) or name
+    GMGR.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=GuildManagerDB.meta.lastModified, by=playerFullName() })
 end
-function CDZ.GM_ApplyAndBroadcastEx(name, delta, extra)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local uid = CDZ.GetOrAssignUID(name); if not uid then return end
-    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    local nm = CDZ.GetNameByUID(uid) or name
-    local p = { uid=uid, name=nm, delta=delta, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified, by=playerFullName() }
+function GMGR.GM_ApplyAndBroadcastEx(name, delta, extra)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    local uid = GMGR.GetOrAssignUID(name); if not uid then return end
+    local rv = safenum((GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev), 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    local nm = GMGR.GetNameByUID(uid) or name
+    local p = { uid=uid, name=nm, delta=delta, rv=rv, lm=GuildManagerDB.meta.lastModified, by=playerFullName() }
     if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
-    CDZ.Comm_Broadcast("TX_APPLIED", p)
+    GMGR.Comm_Broadcast("TX_APPLIED", p)
 end
 
-function CDZ.GM_ApplyAndBroadcastByUID(uid, delta, extra)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local rv = safenum((ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
+function GMGR.GM_ApplyAndBroadcastByUID(uid, delta, extra)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    local rv = safenum((GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.rev), 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
     local p = {
         uid   = uid,
-        name  = (CDZ.GetNameByUID and CDZ.GetNameByUID(uid)) or tostring(uid),
+        name  = (GMGR.GetNameByUID and GMGR.GetNameByUID(uid)) or tostring(uid),
         delta = delta,
         rv    = rv,
-        lm    = ChroniquesDuZephyrDB.meta.lastModified,
+        lm    = GuildManagerDB.meta.lastModified,
         by    = playerFullName(),
     }
     if type(extra) == "table" then
         for k, v in pairs(extra) do if p[k] == nil then p[k] = v end end
     end
-    CDZ.Comm_Broadcast("TX_APPLIED", p)
+    GMGR.Comm_Broadcast("TX_APPLIED", p)
 end
 
 -- ➕ Envoi batch compact (1 seul TX_BATCH au lieu d'une rafale de TX_APPLIED)
-function CDZ.GM_BroadcastBatch(adjusts, opts)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+function GMGR.GM_BroadcastBatch(adjusts, opts)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
     adjusts = adjusts or {}
     opts    = opts or {}
 
@@ -1799,7 +1799,7 @@ function CDZ.GM_BroadcastBatch(adjusts, opts)
     for _, a in ipairs(adjusts) do
         local nm = a and a.name
         if nm and nm ~= "" then
-            local uid = (CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(nm)) or nil
+            local uid = (GMGR.GetOrAssignUID and GMGR.GetOrAssignUID(nm)) or nil
             names[#names+1]   = nm
             uids[#uids+1]    = uid or ""
             deltas[#deltas+1] = math.floor(tonumber(a.delta) or 0)
@@ -1817,36 +1817,36 @@ function CDZ.GM_BroadcastBatch(adjusts, opts)
         end
     end
 
-    CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
+    GMGR.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
 end
 
-function CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+function GMGR.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
 
     -- Versionnage unique partagé avec le broadcast
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
 
     -- ✅ Application LOCALE côté GM (on n'attend pas notre propre message réseau)
     do
         local U, D, N = uids or {}, deltas or {}, names or {}
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         for i = 1, math.max(#U, #D, #N) do
-            local name = N[i] or (CDZ.GetNameByUID and CDZ.GetNameByUID(U[i])) or nil
+            local name = N[i] or (GMGR.GetNameByUID and GMGR.GetNameByUID(U[i])) or nil
             local delta = safenum(D[i], 0)
             if name and delta ~= 0 then
-                if CDZ.ApplyDeltaByName then
-                    CDZ.ApplyDeltaByName(name, delta, playerFullName())
+                if GMGR.ApplyDeltaByName then
+                    GMGR.ApplyDeltaByName(name, delta, playerFullName())
                 else
-                    ChroniquesDuZephyrDB.players = ChroniquesDuZephyrDB.players or {}
+                    GuildManagerDB.players = GuildManagerDB.players or {}
                     local full = nf(name)
-                    local rec = ChroniquesDuZephyrDB.players[full] or { credit = 0, debit = 0 }
+                    local rec = GuildManagerDB.players[full] or { credit = 0, debit = 0 }
                     if delta >= 0 then rec.credit = safenum(rec.credit,0) + delta
                     else               rec.debit  = safenum(rec.debit,0)  + (-delta) end
-                    ChroniquesDuZephyrDB.players[full] = rec
+                    GuildManagerDB.players[full] = rec
                 end
             end
         end
@@ -1861,7 +1861,7 @@ function CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extr
         R  = reason or "",               -- libellé (optionnel)
         S  = silent and 1 or 0,          -- silencieux ? (bool → int)
         rv = rv,
-        lm = ChroniquesDuZephyrDB.meta.lastModified,
+        lm = GuildManagerDB.meta.lastModified,
     }
 
     -- Sérialise extra.L (liste des lots utilisés) en CSV "id,name,k,N,n,gold"
@@ -1890,13 +1890,13 @@ function CDZ.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extr
         end
     end
 
-    CDZ.Comm_Broadcast("TX_BATCH", p)
+    GMGR.Comm_Broadcast("TX_BATCH", p)
 end
 
-function CDZ.AddIncomingRequest(kv)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.requests = ChroniquesDuZephyrDB.requests or {}
-    local list = ChroniquesDuZephyrDB.requests
+function GMGR.AddIncomingRequest(kv)
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.requests = GuildManagerDB.requests or {}
+    local list = GuildManagerDB.requests
     local id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
     list[#list+1] = {
         id = id, uid = kv.uid, delta = safenum(kv.delta,0),
@@ -1904,25 +1904,25 @@ function CDZ.AddIncomingRequest(kv)
     }
     if ns.Emit then ns.Emit("requests:changed") end
 end
-function CDZ.ResolveRequest(id, accepted, by)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    local list = ChroniquesDuZephyrDB.requests or {}
+function GMGR.ResolveRequest(id, accepted, by)
+    GuildManagerDB = GuildManagerDB or {}
+    local list = GuildManagerDB.requests or {}
     local kept = {}
     for _, r in ipairs(list) do if r.id ~= id then kept[#kept+1] = r end end
-    ChroniquesDuZephyrDB.requests = kept
-    if accepted and CDZ and CDZ.GM_ApplyAndBroadcastByUID then
+    GuildManagerDB.requests = kept
+    if accepted and GMGR and GMGR.GM_ApplyAndBroadcastByUID then
         -- L’appelant a déjà appliqué la mutation
     end
     if ns.Emit then ns.Emit("requests:changed") end
 end
 
-function CDZ.RequestAdjust(a, b)
+function GMGR.RequestAdjust(a, b)
     -- Compat : UI appelle (name, delta) ; ancienne forme : (delta)
     local delta = (b ~= nil) and safenum(b, 0) or safenum(a, 0)
     if delta == 0 then return end
 
     local me  = playerFullName()
-    local uid = CDZ.GetOrAssignUID and CDZ.GetOrAssignUID(me)
+    local uid = GMGR.GetOrAssignUID and GMGR.GetOrAssignUID(me)
     if not uid then return end
 
     local payload = { uid = uid, delta = delta, who = me, ts = now(), reason = "CLIENT_REQ" }
@@ -1933,7 +1933,7 @@ function CDZ.RequestAdjust(a, b)
         local target = nf(name or "")
 
         -- 1) On a reçu un HELLO tout juste du GM et on attend le flush
-        if CDZ._awaitHelloFrom and nf(CDZ._awaitHelloFrom) == target then
+        if GMGR._awaitHelloFrom and nf(GMGR._awaitHelloFrom) == target then
             return true
         end
 
@@ -1955,9 +1955,9 @@ function CDZ.RequestAdjust(a, b)
     -- ➕ Étape commune (décision après lecture du roster à jour)
     local function decideAndSend()
         -- Cible = GM effectif (rang 0 du roster) — relu depuis le cache fraîchement scanné
-        local gmName, gmRow = CDZ.GetGuildMasterCached and CDZ.GetGuildMasterCached() or nil, nil
+        local gmName, gmRow = GMGR.GetGuildMasterCached and GMGR.GetGuildMasterCached() or nil, nil
         if type(gmName) == "table" and not gmRow then gmName, gmRow = gmName[1], gmName[2] end
-        if not gmRow and CDZ.GetGuildMasterCached then gmName, gmRow = CDZ.GetGuildMasterCached() end
+        if not gmRow and GMGR.GetGuildMasterCached then gmName, gmRow = GMGR.GetGuildMasterCached() end
 
         local onlineNow = false
         if gmName then
@@ -1966,20 +1966,20 @@ function CDZ.RequestAdjust(a, b)
 
         if gmName and onlineNow then
             -- GM réellement disponible : envoi direct
-            CDZ.Comm_Whisper(gmName, "TX_REQ", payload)
+            GMGR.Comm_Whisper(gmName, "TX_REQ", payload)
         else
             -- GM hors-ligne ou inconnu : persiste → flush auto sur HELLO
-            if CDZ.Pending_AddTXREQ then CDZ.Pending_AddTXREQ(payload) end
+            if GMGR.Pending_AddTXREQ then GMGR.Pending_AddTXREQ(payload) end
             if UIErrorsFrame and UIErrorsFrame.AddMessage then
-                UIErrorsFrame:AddMessage("|cffffff80[CDZ]|r GM hors-ligne : demande mise en file d’attente.", 1, 0.9, 0.4)
+                UIErrorsFrame:AddMessage("|cffffff80[GMGR]|r GM hors-ligne : demande mise en file d’attente.", 1, 0.9, 0.4)
             end
             if ns.Emit then ns.Emit("debug:changed") end
         end
     end
 
     -- ✏️ Nouveau : rafraîchir le roster AVANT la décision d’envoi
-    if CDZ.RefreshGuildCache then
-        CDZ.RefreshGuildCache(function() decideAndSend() end)
+    if GMGR.RefreshGuildCache then
+        GMGR.RefreshGuildCache(function() decideAndSend() end)
     else
         -- Fallback si jamais la fonction n’existe pas
         decideAndSend()
@@ -1988,10 +1988,10 @@ end
 
 
 -- ===== File d'attente persistante des TX_REQ (client) =====
-function CDZ.Pending_AddTXREQ(kv)
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.pending = ChroniquesDuZephyrDB.pending or {}
-    local P = ChroniquesDuZephyrDB.pending
+function GMGR.Pending_AddTXREQ(kv)
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.pending = GuildManagerDB.pending or {}
+    local P = GuildManagerDB.pending
     P.txreq = P.txreq or {}
     kv = kv or {}
     kv.id = kv.id or (tostring(now()) .. "-" .. tostring(math.random(1000,9999)))
@@ -2000,18 +2000,18 @@ function CDZ.Pending_AddTXREQ(kv)
     return kv.id
 end
 
-function CDZ.Pending_ListTXREQ()
-    local P = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.pending or {}
+function GMGR.Pending_ListTXREQ()
+    local P = GuildManagerDB and GuildManagerDB.pending or {}
     return (P and P.txreq) or {}
 end
 
-function CDZ.Pending_FlushToMaster(master)
-    local P = ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.pending or {}
+function GMGR.Pending_FlushToMaster(master)
+    local P = GuildManagerDB and GuildManagerDB.pending or {}
     if not P or not P.txreq or #P.txreq == 0 then return 0 end
 
     -- Destinataire par défaut : GM effectif (rang 0)
     if not master or master == "" then
-        if CDZ.GetGuildMasterCached then master = select(1, CDZ.GetGuildMasterCached()) end
+        if GMGR.GetGuildMasterCached then master = select(1, GMGR.GetGuildMasterCached()) end
     end
     if not master or master == "" then return 0 end
 
@@ -2019,7 +2019,7 @@ function CDZ.Pending_FlushToMaster(master)
     for i = 1, #P.txreq do
         local kv = P.txreq[i]
         if kv then
-            CDZ.Comm_Whisper(master, "TX_REQ", kv)
+            GMGR.Comm_Whisper(master, "TX_REQ", kv)
             sent = sent + 1
         end
     end
@@ -2029,9 +2029,9 @@ function CDZ.Pending_FlushToMaster(master)
 end
 
 -- (Optionnel pour l’UI Debug — si tu veux alimenter une 3e liste)
-function CDZ.GetPendingOutbox()
+function GMGR.GetPendingOutbox()
     local t = {}
-    for _, kv in ipairs(CDZ.Pending_ListTXREQ() or {}) do
+    for _, kv in ipairs(GMGR.Pending_ListTXREQ() or {}) do
         t[#t+1] = {
             ts   = safenum(kv.ts, 0),
             type = "TX_REQ",
@@ -2045,13 +2045,13 @@ end
 
 -- ===== Dépenses/Lots (émission GM) =====
 -- Diffusion : création d’un lot (utilisé par Core.Lot_Create)
-function CDZ.BroadcastLotCreate(l)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
+function GMGR.BroadcastLotCreate(l)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
 
     local payload = {
         id = safenum(l.id, 0),
@@ -2061,56 +2061,56 @@ function CDZ.BroadcastLotCreate(l)
         t  = safenum(l.totalCopper, 0),
         I  = {},
         rv = rv,
-        lm = ChroniquesDuZephyrDB.meta.lastModified,
+        lm = GuildManagerDB.meta.lastModified,
     }
     for _, eid in ipairs(l.itemIds or {}) do payload.I[#payload.I+1] = safenum(eid, 0) end
-    CDZ.Comm_Broadcast("LOT_CREATE", payload)
+    GMGR.Comm_Broadcast("LOT_CREATE", payload)
 end
 
 -- Diffusion : suppression d’un lot (utilisé par Core.Lot_Delete)
-function CDZ.BroadcastLotDelete(id)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("LOT_DELETE", { id = safenum(id,0), rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+function GMGR.BroadcastLotDelete(id)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("LOT_DELETE", { id = safenum(id,0), rv = rv, lm = GuildManagerDB.meta.lastModified })
 end
 
 -- Diffusion : consommation de plusieurs lots (utilisé par Core.Lots_ConsumeMany)
-function CDZ.BroadcastLotsConsume(ids)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+function GMGR.BroadcastLotsConsume(ids)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv = rv, lm = GuildManagerDB.meta.lastModified })
 end
 
 -- Conserve l'id alloué par le logger et versionne correctement.
-function CDZ.BroadcastExpenseAdd(p)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.meta     = ChroniquesDuZephyrDB.meta     or {}
-    ChroniquesDuZephyrDB.expenses = ChroniquesDuZephyrDB.expenses or { list = {}, nextId = 1 }
+function GMGR.BroadcastExpenseAdd(p)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.meta     = GuildManagerDB.meta     or {}
+    GuildManagerDB.expenses = GuildManagerDB.expenses or { list = {}, nextId = 1 }
 
     local id = safenum(p.id, 0)
     if id <= 0 then
-        id = safenum(ChroniquesDuZephyrDB.expenses.nextId, 1)
-        ChroniquesDuZephyrDB.expenses.nextId = id + 1
+        id = safenum(GuildManagerDB.expenses.nextId, 1)
+        GuildManagerDB.expenses.nextId = id + 1
     else
         -- S’assure que la séquence locale reste > id
-        local nextId = safenum(ChroniquesDuZephyrDB.expenses.nextId, 1)
-        if (id + 1) > nextId then ChroniquesDuZephyrDB.expenses.nextId = id + 1 end
+        local nextId = safenum(GuildManagerDB.expenses.nextId, 1)
+        if (id + 1) > nextId then GuildManagerDB.expenses.nextId = id + 1 end
     end
 
-    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev), 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
+    local rv = safenum((GuildManagerDB.meta and GuildManagerDB.meta.rev), 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
 
-    CDZ.Comm_Broadcast("EXP_ADD", {
+    GMGR.Comm_Broadcast("EXP_ADD", {
         id = id,
         i   = safenum(p.i, 0),
         q   = safenum(p.q, 1),
@@ -2118,26 +2118,26 @@ function CDZ.BroadcastExpenseAdd(p)
         src = p.src or p.s, -- la source voyage désormais sous 'src'
         l   = safenum(p.l, 0),
         rv  = rv,
-        lm  = ChroniquesDuZephyrDB.meta.lastModified,
+        lm  = GuildManagerDB.meta.lastModified,
     })
 end
 
 -- ➕ Diffusion GM : suppression d'une dépense
-function CDZ.GM_RemoveExpense(id)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev),0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("EXP_REMOVE", { id = safenum(id,0), rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified })
+function GMGR.GM_RemoveExpense(id)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    local rv = safenum((GuildManagerDB.meta and GuildManagerDB.meta.rev),0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("EXP_REMOVE", { id = safenum(id,0), rv = rv, lm = GuildManagerDB.meta.lastModified })
 end
 
 -- Diffusion iLvl du main (léger, hors versionning GM)
-function CDZ.BroadcastIlvlUpdate(name, ilvl, ts, by)
+function GMGR.BroadcastIlvlUpdate(name, ilvl, ts, by)
     local n = tostring(name or "")
     if n == "" then return end
     -- 🚫 Bloque l'émission si le joueur n'est pas listé (roster ou réserve)
-    if not (CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(n)) then return end
-    CDZ.Comm_Broadcast("ILVL_UPDATE", {
+    if not (GMGR.IsPlayerInRosterOrReserve and GMGR.IsPlayerInRosterOrReserve(n)) then return end
+    GMGR.Comm_Broadcast("ILVL_UPDATE", {
         name = n,
         ilvl = math.floor(tonumber(ilvl) or 0),
         ts   = safenum(ts, now()),
@@ -2146,24 +2146,24 @@ function CDZ.BroadcastIlvlUpdate(name, ilvl, ts, by)
 end
 
 -- ➕ Diffusion « Clé mythique »
-function CDZ.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
+function GMGR.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
     -- ⚠️ on **ignore** le paramètre 'name' et on impose le nom canonique du joueur
     local me = playerFullName()
     local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
     me = nf(me)
 
     -- 🚫 Bloque l'émission si le joueur n'est pas listé (roster ou réserve)
-    if not (CDZ.IsPlayerInRosterOrReserve and CDZ.IsPlayerInRosterOrReserve(me)) then return end
+    if not (GMGR.IsPlayerInRosterOrReserve and GMGR.IsPlayerInRosterOrReserve(me)) then return end
 
     -- ✅ Complète le nom du donjon si vide (à partir de mid)
     local mapTxt = tostring(mapName or "")
     local midNum = safenum(mapId, 0)
-    if (mapTxt == "" or mapTxt == "Clé") and midNum > 0 and CDZ.ResolveMKeyMapName then
-        local nm = CDZ.ResolveMKeyMapName(midNum)
+    if (mapTxt == "" or mapTxt == "Clé") and midNum > 0 and GMGR.ResolveMKeyMapName then
+        local nm = GMGR.ResolveMKeyMapName(midNum)
         if nm and nm ~= "" then mapTxt = nm end
     end
 
-    CDZ.Comm_Broadcast("MKEY_UPDATE", {
+    GMGR.Comm_Broadcast("MKEY_UPDATE", {
         name = me,
         mid  = midNum,
         lvl  = safenum(level, 0),
@@ -2173,26 +2173,26 @@ function CDZ.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
     })
 end
 
-function CDZ.GM_CreateLot(name, sessions, totalCopper, itemIds)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}
-    ChroniquesDuZephyrDB.lots = ChroniquesDuZephyrDB.lots or { list = {}, nextId = 1 }
+function GMGR.GM_CreateLot(name, sessions, totalCopper, itemIds)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB = GuildManagerDB or {}
+    GuildManagerDB.lots = GuildManagerDB.lots or { list = {}, nextId = 1 }
 
-    local id = safenum(ChroniquesDuZephyrDB.lots.nextId, 1)
-    ChroniquesDuZephyrDB.lots.nextId = id + 1
+    local id = safenum(GuildManagerDB.lots.nextId, 1)
+    GuildManagerDB.lots.nextId = id + 1
 
     -- Versionnage
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
 
     -- Calcul du total fiable côté GM si non fourni (ou incohérent)
     local total = 0
     if itemIds and #itemIds > 0 then
         for _, eid in ipairs(itemIds) do
-            if CDZ.GetExpenseById then
-                local _, it = CDZ.GetExpenseById(eid)
+            if GMGR.GetExpenseById then
+                local _, it = GMGR.GetExpenseById(eid)
                 if it then total = total + safenum(it.copper, 0) end
             end
         end
@@ -2200,7 +2200,7 @@ function CDZ.GM_CreateLot(name, sessions, totalCopper, itemIds)
     if safenum(totalCopper, 0) > 0 then total = safenum(totalCopper, 0) end
 
     -- Diffusion stricte : id, n, N, u, t, I (et méta)
-    CDZ.Comm_Broadcast("LOT_CREATE", {
+    GMGR.Comm_Broadcast("LOT_CREATE", {
         id = id,
         n  = name,
         N  = safenum(sessions, 1),
@@ -2208,34 +2208,34 @@ function CDZ.GM_CreateLot(name, sessions, totalCopper, itemIds)
         t  = safenum(total, 0),
         I  = itemIds or {},
         rv = rv,
-        lm = ChroniquesDuZephyrDB.meta.lastModified,
+        lm = GuildManagerDB.meta.lastModified,
     })
 end
 
-function CDZ.GM_DeleteLot(id)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev),0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("LOT_DELETE", { id=safenum(id,0), rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified })
+function GMGR.GM_DeleteLot(id)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    local rv = safenum((GuildManagerDB.meta and GuildManagerDB.meta.rev),0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("LOT_DELETE", { id=safenum(id,0), rv=rv, lm=GuildManagerDB.meta.lastModified })
 end
 
-function CDZ.GM_ConsumeLots(ids)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    local rv = safenum((ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.rev),0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv=rv, lm=ChroniquesDuZephyrDB.meta.lastModified })
+function GMGR.GM_ConsumeLots(ids)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    local rv = safenum((GuildManagerDB.meta and GuildManagerDB.meta.rev),0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("LOT_CONSUME", { ids = ids or {}, rv=rv, lm=GuildManagerDB.meta.lastModified })
 end
 
 -- ➕ Diffusion Historique (GM uniquement)
-function CDZ.BroadcastHistoryAdd(p)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("HIST_ADD", {
+function GMGR.BroadcastHistoryAdd(p)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("HIST_ADD", {
         h  = safenum(p.hid,0),
         ts = safenum(p.ts, now()),
         t  = safenum(p.total or p.t, 0),
@@ -2243,47 +2243,47 @@ function CDZ.BroadcastHistoryAdd(p)
         c  = safenum(p.count or p.c or #(p.names or p.participants or {}), 0),
         N  = p.names or p.participants or {},
         r  = safenum(p.r or (p.refunded and 1 or 0), 0),
-        rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+        rv = rv, lm = GuildManagerDB.meta.lastModified,
     })
 end
 
-function CDZ.BroadcastHistoryRefund(hid, ts, flag)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("HIST_REFUND", {
+function GMGR.BroadcastHistoryRefund(hid, ts, flag)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("HIST_REFUND", {
         h  = safenum(hid, 0),
         ts = safenum(ts, 0),
         r  = flag and 1 or 0,
         rv = rv,
-        lm = ChroniquesDuZephyrDB.meta.lastModified,
+        lm = GuildManagerDB.meta.lastModified,
     })
 end
 
-function CDZ.BroadcastHistoryDelete(hid)
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
-    ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    local rv = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.rev = rv
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    CDZ.Comm_Broadcast("HIST_DEL", {
+function GMGR.BroadcastHistoryDelete(hid)
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
+    GuildManagerDB.meta = GuildManagerDB.meta or {}
+    local rv = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.rev = rv
+    GuildManagerDB.meta.lastModified = now()
+    GMGR.Comm_Broadcast("HIST_DEL", {
         h = tostring(hid or ""),
-        rv = rv, lm = ChroniquesDuZephyrDB.meta.lastModified,
+        rv = rv, lm = GuildManagerDB.meta.lastModified,
     })
 end
 
 -- ===== Meta helpers =====
 local function incRev()
-    ChroniquesDuZephyrDB = ChroniquesDuZephyrDB or {}; ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
-    ChroniquesDuZephyrDB.meta.rev = safenum(ChroniquesDuZephyrDB.meta.rev, 0) + 1
-    ChroniquesDuZephyrDB.meta.lastModified = now()
-    return ChroniquesDuZephyrDB.meta.rev
+    GuildManagerDB = GuildManagerDB or {}; GuildManagerDB.meta = GuildManagerDB.meta or {}
+    GuildManagerDB.meta.rev = safenum(GuildManagerDB.meta.rev, 0) + 1
+    GuildManagerDB.meta.lastModified = now()
+    return GuildManagerDB.meta.rev
 end
 
 -- ===== Handshake / Init =====
-function CDZ.Sync_RequestHello()
+function GMGR.Sync_RequestHello()
     -- Émet un HELLO léger (avec caps) et collecte les OFFERS pendant HELLO_WAIT,
     -- puis choisit un gagnant et envoie un GRANT (token) en WHISPER.
     local hid   = string.format("%d.%03d", time(), math.random(0, 999))
@@ -2305,47 +2305,47 @@ function CDZ.Sync_RequestHello()
     C_Timer.After(HELLO_WAIT_SEC, function() _decideAndGrant(hid) end)
 
     -- ✅ Marqueur d’amorçage : on autorise la réception de réponses dès maintenant
-    CDZ._helloSent  = true
-    CDZ._lastHelloHid = hid
+    GMGR._helloSent  = true
+    GMGR._lastHelloHid = hid
 
-    CDZ.Comm_Broadcast("HELLO", { hid = hid, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
+    GMGR.Comm_Broadcast("HELLO", { hid = hid, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
 end
 
 
-function CDZ.Comm_Init()
+function GMGR.Comm_Init()
     C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 
     -- Normalisation éventuelle du master stocké (realm)
-    if ChroniquesDuZephyrDB and ChroniquesDuZephyrDB.meta and ChroniquesDuZephyrDB.meta.master then
-        local m = ChroniquesDuZephyrDB.meta.master
+    if GuildManagerDB and GuildManagerDB.meta and GuildManagerDB.meta.master then
+        local m = GuildManagerDB.meta.master
         local n, r = m:match("^(.-)%-(.+)$")
         if not r then
             local _, realm = UnitFullName("player")
-            ChroniquesDuZephyrDB.meta.master = m .. "-" .. (realm or "")
+            GuildManagerDB.meta.master = m .. "-" .. (realm or "")
         end
     end
 
-    if not CDZ._commFrame then
+    if not GMGR._commFrame then
         local f = CreateFrame("Frame")
         f:RegisterEvent("CHAT_MSG_ADDON")
         f:SetScript("OnEvent", function(_, _, prefix, msg, channel, sender) onAddonMsg(prefix, msg, channel, sender) end)
-        CDZ._commFrame = f
+        GMGR._commFrame = f
     end
 
     -- Nettoyage des fragments périmés
-    if not CDZ._inboxCleaner then
-        CDZ._inboxCleaner = C_Timer.NewTicker(10, function()
+    if not GMGR._inboxCleaner then
+        GMGR._inboxCleaner = C_Timer.NewTicker(10, function()
             local cutoff = now() - 30
             for k, box in pairs(Inbox) do if (box.ts or 0) < cutoff then Inbox[k] = nil end end
         end)
     end
 
     -- ✅ Démarrage automatique : envoie un HELLO pour ouvrir la découverte
-    if not CDZ._helloAutoStarted then
-        CDZ._helloAutoStarted = true
+    if not GMGR._helloAutoStarted then
+        GMGR._helloAutoStarted = true
         C_Timer.After(1.0, function()
             if IsInGuild and IsInGuild() then
-                CDZ.Sync_RequestHello()
+                GMGR.Sync_RequestHello()
             end
         end)
     end
@@ -2353,12 +2353,12 @@ function CDZ.Comm_Init()
     -- ✏️ Ne JAMAIS s’auto-désigner GM : on prend le roster (rang 0) si dispo
     C_Timer.After(5, function()
         if not IsInGuild or not IsInGuild() then return end
-        if not ChroniquesDuZephyrDB then ChroniquesDuZephyrDB = {} end
-        ChroniquesDuZephyrDB.meta = ChroniquesDuZephyrDB.meta or {}
+        if not GuildManagerDB then GuildManagerDB = {} end
+        GuildManagerDB.meta = GuildManagerDB.meta or {}
 
-        if not ChroniquesDuZephyrDB.meta.master or ChroniquesDuZephyrDB.meta.master == "" then
-            local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached()) or ""
-            ChroniquesDuZephyrDB.meta.master = gmName or ""
+        if not GuildManagerDB.meta.master or GuildManagerDB.meta.master == "" then
+            local gmName = GMGR.GetGuildMasterCached and select(1, GMGR.GetGuildMasterCached()) or ""
+            GuildManagerDB.meta.master = gmName or ""
             if ns.Emit then ns.Emit("meta:changed") end
         end
     end)
@@ -2367,18 +2367,18 @@ function CDZ.Comm_Init()
 end
 
 -- ===== API publique Debug =====
-function CDZ.GetHelloElect() return HelloElect end
+function GMGR.GetHelloElect() return HelloElect end
 -- ➕ Accès ciblé par hid (utilisé par certains onglets Debug)
-function CDZ._GetHelloElect(hid)
+function GMGR._GetHelloElect(hid)
     return HelloElect and HelloElect[hid]
 end
 
-function CDZ.ForceMyVersion()
-    if not (CDZ.IsMaster and CDZ.IsMaster()) then return end
+function GMGR.ForceMyVersion()
+    if not (GMGR.IsMaster and GMGR.IsMaster()) then return end
     local rv = incRev()
-    local snap = CDZ._SnapshotExport()
+    local snap = GMGR._SnapshotExport()
     snap.rv = rv
-    CDZ.Comm_Broadcast("SYNC_FULL", snap)
+    GMGR.Comm_Broadcast("SYNC_FULL", snap)
     LastFullSentAt = now()
 end
 
@@ -2387,17 +2387,17 @@ function decode(s) return decodeKV(s) end
 function encode(s) return encodeKV(s) end
 
 -- ✅ Bootstrap de secours : s’assure que Comm_Init est bien appelé
-if not CDZ._autoBootstrap then
+if not GMGR._autoBootstrap then
     local boot = CreateFrame("Frame")
     boot:RegisterEvent("ADDON_LOADED")
     boot:RegisterEvent("PLAYER_LOGIN")
     boot:SetScript("OnEvent", function(_, ev, name)
         if ev == "ADDON_LOADED" and name and name ~= ADDON then return end
-        if CDZ._commReady then return end
-        CDZ._commReady = true
-        if type(CDZ.Comm_Init) == "function" then
-            CDZ.Comm_Init()
+        if GMGR._commReady then return end
+        GMGR._commReady = true
+        if type(GMGR.Comm_Init) == "function" then
+            GMGR.Comm_Init()
         end
     end)
-    CDZ._autoBootstrap = true
+    GMGR._autoBootstrap = true
 end

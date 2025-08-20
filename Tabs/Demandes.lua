@@ -1,6 +1,6 @@
 -- Tabs/Demandes.lua
 local ADDON, ns = ...
-local CDZ, UI, F = ns.CDZ, ns.UI, ns.Format
+local GMGR, UI, F = ns.GMGR, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD
 
 local panel, lv
@@ -32,16 +32,16 @@ local function UpdateRow(i, r, f, it)
     f.op:SetText(op)
 
     r.btnApprove:SetOnClick(function()
-        if not CDZ.IsMaster or not CDZ.IsMaster() then return end
+        if not GMGR.IsMaster or not GMGR.IsMaster() then return end
         -- Anti double-clic : masquer la ligne tout de suite
         if r and r.Hide then r:Hide() end
         if lv and lv.Layout then lv:Layout() end
 
         -- Traitement : appliquer et retirer de la file
-        if CDZ.GM_ApplyAndBroadcastByUID then
-            CDZ.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
+        if GMGR.GM_ApplyAndBroadcastByUID then
+            GMGR.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
         end
-        if CDZ.ResolveRequest then CDZ.ResolveRequest(it.id, true, "Approuvé via la liste") end
+        if GMGR.ResolveRequest then GMGR.ResolveRequest(it.id, true, "Approuvé via la liste") end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
         if Refresh then Refresh() end
@@ -56,7 +56,7 @@ local function UpdateRow(i, r, f, it)
         if lv and lv.Layout then lv:Layout() end
 
         -- Traitement : retirer de la file
-        if CDZ.ResolveRequest then CDZ.ResolveRequest(it.id, false, "Refusé via la liste") end
+        if GMGR.ResolveRequest then GMGR.ResolveRequest(it.id, false, "Refusé via la liste") end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
         if Refresh then Refresh() end
@@ -72,13 +72,13 @@ end
 
 local function Refresh()
     local rows = {}
-    if not CDZ.IsMaster or not CDZ.IsMaster() then
+    if not GMGR.IsMaster or not GMGR.IsMaster() then
         lv:SetData({})
         if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
         return
     end
-    for _, r in ipairs(CDZ.GetRequests()) do
-        local display = (CDZ.GetNameByUID and CDZ.GetNameByUID(r.uid)) or r.requester or "?"
+    for _, r in ipairs(GMGR.GetRequests()) do
+        local display = (GMGR.GetNameByUID and GMGR.GetNameByUID(r.uid)) or r.requester or "?"
         rows[#rows+1] = { id=r.id, ts=r.ts, uid=r.uid, name=display, delta=r.delta }
     end
     lv:SetData(rows)

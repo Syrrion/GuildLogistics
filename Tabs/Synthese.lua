@@ -1,5 +1,5 @@
 local ADDON, ns = ...
-local CDZ, UI = ns.CDZ, ns.UI
+local GMGR, UI = ns.GMGR, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
 local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS
@@ -21,7 +21,7 @@ local function money(v)
 end
 
 local function CanActOn(name)
-    local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+    local isMaster = GMGR.IsMaster and GMGR.IsMaster()
     if isMaster then return true, true end
     local meFull = ns.Util.playerFullName and ns.Util.playerFullName()
     if (not meFull or meFull == "") and UnitFullName then
@@ -34,9 +34,9 @@ local function CanActOn(name)
 end
 
 local function FindGuildInfo(playerName)
-    local guildRows = CDZ.GetGuildRowsCached and CDZ.GetGuildRowsCached() or {}
+    local guildRows = GMGR.GetGuildRowsCached and GMGR.GetGuildRowsCached() or {}
     for _, gr in ipairs(guildRows) do
-        if CDZ.NormName and CDZ.NormName(gr.name_amb or gr.name_raw) == CDZ.NormName(playerName) then
+        if GMGR.NormName and GMGR.NormName(gr.name_amb or gr.name_raw) == GMGR.NormName(playerName) then
             local info = {
                 online = gr.online,
                 idx = gr.idx,
@@ -68,9 +68,9 @@ local function AttachDepositHandler(btn, name, canAct, isMaster)
             amt = math.floor(tonumber(amt) or 0)
             if amt > 0 then
                 if isMaster then
-                    if CDZ.GM_AdjustAndBroadcast then CDZ.GM_AdjustAndBroadcast(name, amt) end
+                    if GMGR.GM_AdjustAndBroadcast then GMGR.GM_AdjustAndBroadcast(name, amt) end
                 else
-                    if CDZ.RequestAdjust then CDZ.RequestAdjust(name, amt) end
+                    if GMGR.RequestAdjust then GMGR.RequestAdjust(name, amt) end
                 end
             end
         end)
@@ -85,9 +85,9 @@ local function AttachWithdrawHandler(btn, name, canAct, isMaster)
             if amt > 0 then
                 local delta = -amt
                 if isMaster then
-                    if CDZ.GM_AdjustAndBroadcast then CDZ.GM_AdjustAndBroadcast(name, delta) end
+                    if GMGR.GM_AdjustAndBroadcast then GMGR.GM_AdjustAndBroadcast(name, delta) end
                 else
-                    if CDZ.RequestAdjust then CDZ.RequestAdjust(name, delta) end
+                    if GMGR.RequestAdjust then GMGR.RequestAdjust(name, delta) end
                 end
             end
         end)
@@ -98,11 +98,11 @@ local function AttachDeleteHandler(btn, name, isMaster)
     btn:SetScript("OnClick", function()
         if not isMaster then return end
         UI.PopupConfirm("Supprimer "..(name or "").." du roster ?", function()
-            if CDZ.RemovePlayer then
-                CDZ.RemovePlayer(name)
-            elseif CDZ.BroadcastRosterRemove then
-                local uid = (CDZ.GetUID and CDZ.GetUID(name)) or nil
-                CDZ.BroadcastRosterRemove(uid or name)
+            if GMGR.RemovePlayer then
+                GMGR.RemovePlayer(name)
+            elseif GMGR.BroadcastRosterRemove then
+                local uid = (GMGR.GetUID and GMGR.GetUID(name)) or nil
+                GMGR.BroadcastRosterRemove(uid or name)
             end
             if ns.RefreshAll then ns.RefreshAll() end
         end)
@@ -162,7 +162,7 @@ local function UpdateRow(i, r, f, data)
     end
 
     if f.mkey then
-        local mkeyTxt = (CDZ.GetMKeyText and CDZ.GetMKeyText(data.name)) or ""
+        local mkeyTxt = (GMGR.GetMKeyText and GMGR.GetMKeyText(data.name)) or ""
         if gi.online then
             f.mkey:SetText(mkeyTxt or "")
         else
@@ -171,7 +171,7 @@ local function UpdateRow(i, r, f, data)
     end
 
     if f.ilvl then
-        local ilvl = (CDZ.GetIlvl and CDZ.GetIlvl(data.name)) or nil
+        local ilvl = (GMGR.GetIlvl and GMGR.GetIlvl(data.name)) or nil
         local txt = ""
         if gi.online then
             txt = (ilvl and ilvl > 0) and tostring(ilvl) or "|cffaaaaaa?|r"
@@ -228,8 +228,8 @@ end
 
 -- Refresh
 local function Refresh()
-    local active  = (CDZ.GetPlayersArrayActive  and CDZ.GetPlayersArrayActive())  or {}
-    local reserve = (CDZ.GetPlayersArrayReserve and CDZ.GetPlayersArrayReserve()) or {}
+    local active  = (GMGR.GetPlayersArrayActive  and GMGR.GetPlayersArrayActive())  or {}
+    local reserve = (GMGR.GetPlayersArrayReserve and GMGR.GetPlayersArrayReserve()) or {}
 
     if lvActive  then lvActive:SetData(active) end
     if lvReserve then
@@ -258,7 +258,7 @@ local function BuildFooterButtons(footer, isGM)
         UI.PopupPromptText("Ajouter un joueur", "Nom du joueur externe à inclure dans le roster", function(name)
             name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
             if name == "" then return end
-            if CDZ.AddPlayer and CDZ.AddPlayer(name) then
+            if GMGR.AddPlayer and GMGR.AddPlayer(name) then
                 if ns.RefreshAll then ns.RefreshAll() end
             end
         end, { width = 460 })
@@ -296,11 +296,11 @@ local function Build(container)
         updateRow = function(i, r, f, it)
             UpdateRow(i, r, f, it)
             if r.btnReserve then
-                local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+                local isMaster = GMGR.IsMaster and GMGR.IsMaster()
                 r.btnReserve:SetShown(isMaster)
                 if isMaster then
                     r.btnReserve:SetOnClick(function()
-                        if CDZ.GM_SetReserved then CDZ.GM_SetReserved(it.name, true) end
+                        if GMGR.GM_SetReserved then GMGR.GM_SetReserved(it.name, true) end
                     end)
                 end
             end
@@ -314,11 +314,11 @@ local function Build(container)
             local data = it.data or it
             UpdateRow(i, r, f, data)
             if r.btnRoster then
-                local isMaster = CDZ.IsMaster and CDZ.IsMaster()
+                local isMaster = GMGR.IsMaster and GMGR.IsMaster()
                 r.btnRoster:SetShown(isMaster)
                 if isMaster then
                     r.btnRoster:SetOnClick(function()
-                        if CDZ.GM_SetReserved then CDZ.GM_SetReserved(data.name, false) end
+                        if GMGR.GM_SetReserved then GMGR.GM_SetReserved(data.name, false) end
                     end)
                 end
             end
@@ -331,7 +331,7 @@ local function Build(container)
     totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 
-    local isGM = CDZ.IsMaster and CDZ.IsMaster()
+    local isGM = GMGR.IsMaster and GMGR.IsMaster()
     BuildFooterButtons(footer, isGM)
 end
 

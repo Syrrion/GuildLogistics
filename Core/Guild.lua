@@ -1,8 +1,8 @@
 local ADDON, ns = ...
-ns.CDZ = ns.CDZ or {}
-local CDZ = ns.CDZ
+ns.GMGR = ns.GMGR or {}
+local GMGR = ns.GMGR
 
-function CDZ.NormName(name)
+function GMGR.NormName(name)
     if not name then return nil end
     local amb = Ambiguate(name, "none")
     amb = strtrim(amb or "")
@@ -12,14 +12,14 @@ function CDZ.NormName(name)
 end
 
 -- --------- Cache guilde ---------
-CDZ._guildCache = CDZ._guildCache or { rows=nil, mains=nil, byName={}, mainsClass={}, ts=0 }
+GMGR._guildCache = GMGR._guildCache or { rows=nil, mains=nil, byName={}, mainsClass={}, ts=0 }
 
 local function aggregateRows(rows)
     local mainsMap, mainsClass = {}, {}
 
     for _, r in ipairs(rows or {}) do
         local noteMain = r.remark and strtrim(r.remark) or ""
-        local key = (noteMain ~= "" and CDZ.NormName(noteMain)) or nil
+        local key = (noteMain ~= "" and GMGR.NormName(noteMain)) or nil
         if key and key ~= "" then
             local days  = (r.online and 0) or (tonumber(r.daysDerived)  or 9999)
             local hours = (r.online and 0) or (tonumber(r.hoursDerived) or 9999999)
@@ -34,7 +34,7 @@ local function aggregateRows(rows)
             if r.online then e.onlineCount = e.onlineCount + 1 end
 
             -- Détecte la ligne du main via NOM normalisé (base + lowercase)
-            if CDZ.NormName(r.name_amb or r.name_raw) == key then
+            if GMGR.NormName(r.name_amb or r.name_raw) == key then
                 e.classTag = e.classTag or r.class
             end
 
@@ -113,33 +113,33 @@ Scanner:SetScript("OnEvent", function(self, ev)
     end
 
     local agg, mainsClass = aggregateRows(rows)
-    CDZ._guildCache.rows       = rows
-    CDZ._guildCache.mains      = agg
-    CDZ._guildCache.mainsClass = mainsClass or {}
-    CDZ._guildCache.byName     = {}
+    GMGR._guildCache.rows       = rows
+    GMGR._guildCache.mains      = agg
+    GMGR._guildCache.mainsClass = mainsClass or {}
+    GMGR._guildCache.byName     = {}
 
     for _, rr in ipairs(rows) do
         local amb = rr.name_amb or rr.name_raw
-        local kFull = CDZ.NormName(amb)                 -- ex: "aratoryx"
-        local mainKey = (rr.remark and CDZ.NormName(rr.remark)) or ""
+        local kFull = GMGR.NormName(amb)                 -- ex: "aratoryx"
+        local mainKey = (rr.remark and GMGR.NormName(rr.remark)) or ""
 
         local rec = { class = rr.class, main = mainKey or "" }
-        if kFull and kFull ~= "" then CDZ._guildCache.byName[kFull] = rec end
+        if kFull and kFull ~= "" then GMGR._guildCache.byName[kFull] = rec end
         -- Par sécurité : indexe aussi la clé exacte lowercase si l’API remonte déjà "Name-Realm"
         local exactLower = amb and amb:lower() or nil
         if exactLower and exactLower ~= kFull then
-            CDZ._guildCache.byName[exactLower] = CDZ._guildCache.byName[exactLower] or rec
+            GMGR._guildCache.byName[exactLower] = GMGR._guildCache.byName[exactLower] or rec
         end
     end
 
-    CDZ._guildCache.ts = time()
+    GMGR._guildCache.ts = time()
 
     local cbs = self.callbacks
     self.callbacks = {}
     for _, cb in ipairs(cbs) do pcall(cb, true) end
 end)
 
-function CDZ.RefreshGuildCache(cb)
+function GMGR.RefreshGuildCache(cb)
     table.insert(Scanner.callbacks, type(cb)=="function" and cb or function() end)
     if not Scanner.pending then
         Scanner.pending = true
@@ -157,48 +157,48 @@ function CDZ.RefreshGuildCache(cb)
 end
 
 
-function CDZ.GetGuildMainsAggregatedCached()
-    return (CDZ._guildCache and CDZ._guildCache.mains) or {}
+function GMGR.GetGuildMainsAggregatedCached()
+    return (GMGR._guildCache and GMGR._guildCache.mains) or {}
 end
 
-function CDZ.GetGuildRowsCached()
-    return CDZ._guildCache and CDZ._guildCache.rows or {}
+function GMGR.GetGuildRowsCached()
+    return GMGR._guildCache and GMGR._guildCache.rows or {}
 end
 
 -- ✏️ Est-ce que le GM effectif (rang 0) est en ligne ?
-function CDZ.IsMasterOnline()
-    if not CDZ.GetGuildMasterCached then return false end
-    local gmName, gmRow = CDZ.GetGuildMasterCached()
+function GMGR.IsMasterOnline()
+    if not GMGR.GetGuildMasterCached then return false end
+    local gmName, gmRow = GMGR.GetGuildMasterCached()
     return gmRow and gmRow.online and true or false
 end
 
-function CDZ.IsGuildCacheReady()
-    local c = CDZ._guildCache
+function GMGR.IsGuildCacheReady()
+    local c = GMGR._guildCache
     return c and c.rows and #c.rows > 0
 end
 
-function CDZ.GetGuildCacheTimestamp()
-    local c = CDZ._guildCache
+function GMGR.GetGuildCacheTimestamp()
+    local c = GMGR._guildCache
     return (c and c.ts) or 0
 end
 
 -- helper utilisé par l’onglet Joueurs
-function CDZ.GetGuildMainsAggregated()
-    return CDZ.GetGuildMainsAggregatedCached()
+function GMGR.GetGuildMainsAggregated()
+    return GMGR.GetGuildMainsAggregatedCached()
 end
 
-function CDZ.GetMainOf(name)
-    local k = CDZ.NormName(name)
-    local by = CDZ._guildCache and CDZ._guildCache.byName
+function GMGR.GetMainOf(name)
+    local k = GMGR.NormName(name)
+    local by = GMGR._guildCache and GMGR._guildCache.byName
     local e = by and k and by[k]
     return (e and e.main ~= "" and e.main) or nil
 end
 
-function CDZ.GetNameClass(name)
-    local c = CDZ._guildCache
+function GMGR.GetNameClass(name)
+    local c = GMGR._guildCache
     if not c then return nil end
     local by = c.byName or {}
-    local k  = CDZ.NormName(name)
+    local k  = GMGR.NormName(name)
     local e  = k and by[k]
     local mainKey = e and e.main
     -- 1) classe du main (clé déjà normalisée) ; 2) sinon classe du perso scanné
@@ -206,16 +206,16 @@ function CDZ.GetNameClass(name)
     return cls
 end
 
-function CDZ.GetNameStyle(name)
-    local class = CDZ.GetNameClass(name)
+function GMGR.GetNameStyle(name)
+    local class = GMGR.GetNameClass(name)
     local col = (RAID_CLASS_COLORS and class and RAID_CLASS_COLORS[class]) or {r=1,g=1,b=1}
     local coords = CLASS_ICON_TCOORDS and class and CLASS_ICON_TCOORDS[class] or nil
     return class, col.r, col.g, col.b, coords
 end
 
 -- ➕ Qui est le GM (rang 0) dans le roster ?
-function CDZ.GetGuildMasterCached()
-    for _, r in ipairs(CDZ.GetGuildRowsCached() or {}) do
+function GMGR.GetGuildMasterCached()
+    for _, r in ipairs(GMGR.GetGuildRowsCached() or {}) do
         if tonumber(r.rankIndex or 99) == 0 then
             return r.name_amb or r.name_raw, r
         end
@@ -224,29 +224,29 @@ function CDZ.GetGuildMasterCached()
 end
 
 -- ➕ Le GM effectif est-il en ligne ?
-function CDZ.IsMasterOnline()
-    local gmName, gmRow = CDZ.GetGuildMasterCached()
+function GMGR.IsMasterOnline()
+    local gmName, gmRow = GMGR.GetGuildMasterCached()
     return gmRow and gmRow.online and true or false
 end
 
-function CDZ.IsNameGuildMaster(name)
+function GMGR.IsNameGuildMaster(name)
     if not name or name == "" then return false end
-    local gmName = CDZ.GetGuildMasterCached and select(1, CDZ.GetGuildMasterCached())
+    local gmName = GMGR.GetGuildMasterCached and select(1, GMGR.GetGuildMasterCached())
     if not gmName or gmName == "" then return false end
-    return CDZ.NormName(name) == CDZ.NormName(gmName)
+    return GMGR.NormName(name) == GMGR.NormName(gmName)
 end
 
 -- ===== iLvl (helpers main connecté) =====
-function CDZ.IsConnectedMain()
+function GMGR.IsConnectedMain()
     local pname, prealm = UnitFullName("player")
     local me = (pname or "") .. "-" .. (prealm or "")
-    local myKey  = CDZ.NormName and CDZ.NormName(me)
-    local mainKey = CDZ.GetMainOf and CDZ.GetMainOf(me) or myKey
+    local myKey  = GMGR.NormName and GMGR.NormName(me)
+    local mainKey = GMGR.GetMainOf and GMGR.GetMainOf(me) or myKey
     return (mainKey == myKey)
 end
 
-function CDZ.GetConnectedMainName()
-    if CDZ.IsConnectedMain and CDZ.IsConnectedMain() then
+function GMGR.GetConnectedMainName()
+    if GMGR.IsConnectedMain and GMGR.IsConnectedMain() then
         local pname, prealm = UnitFullName("player")
         return (pname or "") .. "-" .. (prealm or "")
     end

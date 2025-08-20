@@ -1,5 +1,5 @@
 local ADDON, ns = ...
-local CDZ = ns.CDZ
+local GMGR = ns.GMGR
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
@@ -34,57 +34,57 @@ end
 f:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" then
         if name ~= ADDON then return end
-        if CDZ._EnsureDB then CDZ._EnsureDB() end
-        if CDZ.ClearDebugLogs then CDZ.ClearDebugLogs() end
+        if GMGR._EnsureDB then GMGR._EnsureDB() end
+        if GMGR.ClearDebugLogs then GMGR.ClearDebugLogs() end
 
         -- Slash /cdz
-        SLASH_CDZ1 = "/cdz"
-        SlashCmdList.CDZ = function()
+        SLASH_GMGR1 = "/cdz"
+        SlashCmdList.GMGR = function()
             if ns.ToggleUI then ns.ToggleUI() end
         end
 
         if ns.UI and ns.UI.Finalize then ns.UI.Finalize() end
         if ns.UI and ns.UI.RefreshTitle then ns.UI.RefreshTitle() end
         if ns.UI and ns.UI.UpdateRequestsBadge then ns.UI.UpdateRequestsBadge() end
-        if CDZ.Minimap_Init then CDZ.Minimap_Init() end
+        if GMGR.Minimap_Init then GMGR.Minimap_Init() end
 
-        if CDZ.Comm_Init then CDZ.Comm_Init() end
+        if GMGR.Comm_Init then GMGR.Comm_Init() end
 
         -- relance automatique initiale
-        if CDZ.RefreshGuildCache then
+        if GMGR.RefreshGuildCache then
             if C_Timer and C_Timer.After then
-                C_Timer.After(1.0, function() CDZ.RefreshGuildCache() end)
+                C_Timer.After(1.0, function() GMGR.RefreshGuildCache() end)
             else
-                CDZ.RefreshGuildCache()
+                GMGR.RefreshGuildCache()
             end
         end
 
         -- si l’enregistrement dépenses était actif lors du reload, on remet les hooks
-        if CDZ.IsExpensesRecording and CDZ.IsExpensesRecording() and CDZ.Expenses_InstallHooks then
-            CDZ.Expenses_InstallHooks()
+        if GMGR.IsExpensesRecording and GMGR.IsExpensesRecording() and GMGR.Expenses_InstallHooks then
+            GMGR.Expenses_InstallHooks()
         end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
-        if CDZ.RefreshGuildCache then
-            ns.Util.After(3.0, function() CDZ.RefreshGuildCache() end)
+        if GMGR.RefreshGuildCache then
+            ns.Util.After(3.0, function() GMGR.RefreshGuildCache() end)
         end
         -- ➕ déclenche aussi l’envoi d’ilvl si on est sur le main
-        if CDZ.UpdateOwnIlvlIfMain then
-            ns.Util.After(5.0, function() CDZ.UpdateOwnIlvlIfMain() end)
+        if GMGR.UpdateOwnIlvlIfMain then
+            ns.Util.After(5.0, function() GMGR.UpdateOwnIlvlIfMain() end)
         end
         -- ➕ déclenche la remontée de la clé (léger décalage)
-        if CDZ.UpdateOwnKeystoneIfMain then
-            ns.Util.After(7.0, function() CDZ.UpdateOwnKeystoneIfMain() end)
+        if GMGR.UpdateOwnKeystoneIfMain then
+            ns.Util.After(7.0, function() GMGR.UpdateOwnKeystoneIfMain() end)
         end
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
-        if CDZ.UpdateOwnIlvlIfMain then CDZ.UpdateOwnIlvlIfMain() end
+        if GMGR.UpdateOwnIlvlIfMain then GMGR.UpdateOwnIlvlIfMain() end
 
     elseif event == "BAG_UPDATE_DELAYED"
         or event == "CHALLENGE_MODE_START"
         or event == "CHALLENGE_MODE_COMPLETED"
         or event == "CHALLENGE_MODE_RESET" then
-        if CDZ.UpdateOwnKeystoneIfMain then CDZ.UpdateOwnKeystoneIfMain() end
+        if GMGR.UpdateOwnKeystoneIfMain then GMGR.UpdateOwnKeystoneIfMain() end
 
     elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
 
@@ -96,8 +96,8 @@ f:SetScript("OnEvent", function(self, event, name)
         end
 
         -- ➕ Recharge notre cache local
-        if CDZ.RefreshGuildCache then
-            CDZ.RefreshGuildCache()
+        if GMGR.RefreshGuildCache then
+            GMGR.RefreshGuildCache()
         end
 
         -- ➕ Met à jour le titre si la guilde a changé / est disponible
