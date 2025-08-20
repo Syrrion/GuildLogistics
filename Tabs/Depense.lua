@@ -87,6 +87,36 @@ end
 -- =========================
 -- === Gestionnaires BTN ===
 -- =========================
+local function AttachSplitExpenseHandler(r, f, d)
+    if not r.btnSplit then return end
+    local qty = tonumber(d.qty or 1) or 1
+    local canSplit = (not d.lotId) and (qty > 1)
+    r.btnSplit:SetEnabled(canSplit)
+    r.btnSplit:SetOnClick(function()
+        if not canSplit then return end
+        UI.PopupPromptNumber(Tr("popup_split_title"), Tr("lbl_split_qty"), function(v)
+            local qs = tonumber(v or 0) or 0
+            if qs <= 0 or qs >= qty then
+                UI.PopupConfirm(Tr("err_split_qty_invalid"))
+                return
+            end
+            -- ID solide depuis la ligne (renseigné lors de l'update visuelle)
+            local eid = tonumber(r._expenseId) or tonumber(d.id) or tonumber(r._abs) or tonumber(r._index)
+            if GLOG and GLOG.Debug then GLOG.Debug("CLICK","SPLIT","eid=",eid,"qs=",qs) end
+            if not eid or eid <= 0 then
+                UI.PopupConfirm(Tr("err_split_failed"))
+                return
+            end
+            local ok = (GLOG.SplitExpense and GLOG.SplitExpense(eid, qs)) and true or false
+            if not ok then
+                UI.PopupConfirm(Tr("err_split_failed"))
+                return
+            end
+            if ns and ns.RefreshAll then ns.RefreshAll() end
+        end)
+    end)
+end
+
 local function AttachDeleteExpenseHandler(r, f, d)
     r.btnDelete:SetEnabled(not d.lotId)
     r.btnDelete:SetOnClick(function()
@@ -124,11 +154,16 @@ local function BuildRowFree(r)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
+    r.btnSplit  = UI.Button(f.act, Tr("btn_split"), { size="sm", minWidth=30, tooltip=Tr("hint_split_resource") })
+    r.btnSplit:SetShown(GLOG.IsMaster and GLOG.IsMaster())
+
     r.btnDelete = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=30 })
     r.btnDelete:SetShown(GLOG.IsMaster and GLOG.IsMaster())
-    UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
+
+    UI.AttachRowRight(f.act, { r.btnDelete, r.btnSplit }, 8, -4, { leftPad=8, align="center" })
     return f
 end
+
 
 local function UpdateRowFree(i, r, f, it)
     local d = it.data or it
@@ -146,12 +181,17 @@ local function UpdateRowFree(i, r, f, it)
         f.sel:SetScript("OnClick", nil)
     end
     if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(GLOG.IsMaster and GLOG.IsMaster()) end
+    if r.btnSplit  and r.btnSplit.SetShown  then r.btnSplit:SetShown(GLOG.IsMaster and GLOG.IsMaster()) end
 
     f.qty:SetText(tostring(d.qty or 1))
     f.source:SetText(resolveSourceLabel(d))
     f.amount:SetText(moneyCopper(d.copper))
     UI.SetItemCell(f.item, d)
 
+    -- Mémorise l'ID exact de la dépense pour les handlers
+    r._expenseId = tonumber(d.id or 0)
+
+    AttachSplitExpenseHandler(r, f, d)
     AttachDeleteExpenseHandler(r, f, d)
 end
 

@@ -1176,7 +1176,92 @@ function GLOG._HandleFull(sender, msgType, kv)
         meta.lastModified = (lm >= 0) and lm or now()
         refreshActive()
 
-    -- ➕ Suppression d'une dépense (diffusée par le GM)
+    elseif msgType == "EXP_SPLIT" then
+        if GLOG.Debug then GLOG.Debug("RECV","EXP_SPLIT") end
+
+        -- 🔒 Évite le double-traitement chez l'émetteur (GM) : on ignore notre propre message
+        do
+            local isSelf = false
+            if sender and UnitName then
+                local me, realm = UnitName("player")
+                local norm = GetNormalizedRealmName and GetNormalizedRealmName() or realm
+                local fullRealm = (realm and realm ~= "") and (me.."-"..realm) or me
+                local fullNorm  = (norm  and norm  ~= "") and (me.."-"..norm)  or nil
+                if sender == me or sender == fullRealm or (fullNorm and sender == fullNorm) then
+                    isSelf = true
+                end
+            end
+            if isSelf then
+                if GLOG.Debug then GLOG.Debug("RECV","EXP_SPLIT","ignored self") end
+                return
+            end
+        end
+
+        if not shouldApply() then return end
+        GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
+
+        local id  = safenum(kv.id, 0)
+        local nq  = safenum(kv.nq, 0)
+        local nc  = safenum(kv.nc, 0)
+
+        -- ✅ Supporte message "aplati" et ancien format objet
+        local addId  = safenum(kv.addId, 0);  if addId == 0 and kv.add then addId = safenum(kv.add.id, 0) end
+        local addI   = safenum(kv.addI,  0);  if addI  == 0 and kv.add then addI  = safenum(kv.add.i,  0) end
+        local addQ   = safenum(kv.addQ,  0);  if addQ  == 0 and kv.add then addQ  = safenum(kv.add.q,  0) end
+        local addC   = safenum(kv.addC,  0);  if addC  == 0 and kv.add then addC  = safenum(kv.add.c,  0) end
+        local addSid = safenum(kv.addSid,0);  if addSid== 0 and kv.add then addSid= safenum(kv.add.sid,0) end
+        local addLot = safenum(kv.addLot,0);  if addLot== 0 and kv.add then addLot= safenum(kv.add.l,  0) end
+
+        -- ✏️ Mise à jour + capture méta
+        local baseMeta
+        for _, it in ipairs(GuildLogisticsDB.expenses.list) do
+            if safenum(it.id, 0) == id then
+                it.qty    = nq
+                it.copper = nc
+                baseMeta  = it
+                break
+            end
+        end
+
+        -- ➕ Insertion robuste SANS dépendre d'helpers externes
+        if addId > 0 or addQ > 0 or addC > 0 then
+            -- anti-collision ID
+            local used, maxId = {}, 0
+            for _, x in ipairs(GuildLogisticsDB.expenses.list) do
+                local xid = safenum(x.id, 0)
+                used[xid] = true
+                if xid > maxId then maxId = xid end
+            end
+            local insId = (addId > 0) and addId or (maxId + 1)
+            while used[insId] do insId = insId + 1 end
+
+            -- normalisation
+            local _lot = (addLot ~= 0) and addLot or nil
+            local newLine = {
+                id       = insId,
+                ts       = time(),
+                qty      = (addQ > 0) and addQ or 1,
+                copper   = addC,
+                sourceId = (addSid > 0) and addSid or (baseMeta and baseMeta.sourceId) or nil,
+                itemID   = (addI   > 0) and addI  or (baseMeta and baseMeta.itemID)   or 0,
+                itemLink = baseMeta and baseMeta.itemLink or nil,
+                itemName = baseMeta and baseMeta.itemName or nil,
+                lotId    = _lot,
+            }
+            table.insert(GuildLogisticsDB.expenses.list, newLine)
+
+            local nextId = safenum(GuildLogisticsDB.expenses.nextId, 1)
+            if (insId + 1) > nextId then GuildLogisticsDB.expenses.nextId = insId + 1 end
+        else
+            if GLOG.Debug then GLOG.Debug("EXP_SPLIT","add-part manquante (id/q/c)") end
+        end
+
+        meta.rev = (rv >= 0) and rv or myrv
+        meta.lastModified = (lm >= 0) and lm or now()
+        refreshActive()
+        if ns.Emit then ns.Emit("expenses:changed") end
+
+        -- ➕ Suppression d'une dépense (diffusée par le GM)
     elseif msgType == "EXP_REMOVE" then
         if not shouldApply() then return end
         local id = safenum(kv.id, 0)
@@ -2121,13 +2206,89 @@ function GLOG.BroadcastExpenseAdd(p)
         i   = safenum(p.i, 0),
         q   = safenum(p.q, 1),
         c   = safenum(p.c, 0),
-        src = p.src or p.s,             -- compat : étiquette lisible
-        sid = safenum(p.sid, 0),        -- <-- nouvel ID de source stable
+        src = p.src or p.s,
+        sid = safenum(p.sid, 0),
         l   = safenum(p.l, 0),
         rv  = rv,
         lm  = GuildLogisticsDB.meta.lastModified,
     })
 
+end
+
+function GLOG.BroadcastExpenseSplit(p)
+    -- Ne bloque plus sur IsMaster : l'appelant côté UI est déjà restreint
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.meta     = GuildLogisticsDB.meta     or {}
+    GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
+
+    local nowF = now or time
+    local rv = safenum((GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) + 1
+    GuildLogisticsDB.meta.rev = rv
+    GuildLogisticsDB.meta.lastModified = nowF()
+
+    -- ✅ Supporte p.add (objet) ET champs "aplatis" pour compat réseau
+    local add      = p.add or {}
+    local addId    = safenum(p.addId, 0);   if addId == 0 then addId = safenum(add.id, 0) end
+    local addI     = safenum(p.addI,  0);   if addI  == 0 then addI  = safenum(add.i,  0) end
+    local addQ     = safenum(p.addQ,  0);   if addQ  == 0 then addQ  = safenum(add.q,  0) end
+    local addC     = safenum(p.addC,  0);   if addC  == 0 then addC  = safenum(add.c,  0) end
+    local addSid   = safenum(p.addSid,0);   if addSid== 0 then addSid= safenum(add.sid,0) end
+    local addLot   = safenum(p.addLot,0);   if addLot== 0 then addLot= safenum(add.l,  0) end
+
+    if GLOG and GLOG.Debug then
+        GLOG.Debug("SEND","EXP_SPLIT","id=", p and p.id, "addId=", addId, "q=", addQ, "c=", addC)
+    end
+
+    -- 📦 Message "aplati" (pas d'objet imbriqué) pour éviter add=[]
+    GLOG.Comm_Broadcast("EXP_SPLIT", {
+        id     = safenum(p.id, 0),
+        nq     = safenum(p.nq, 0),
+        nc     = safenum(p.nc, 0),
+        addId  = addId,
+        addI   = addI,
+        addQ   = addQ,
+        addC   = addC,
+        addSid = addSid,
+        addLot = addLot,
+        rv     = rv,
+        lm     = GuildLogisticsDB.meta.lastModified,
+    })
+end
+
+-- ➕ Utils split/sync (copie et normalisation sûres)
+local function _ensureUniqueExpenseId(list, id)
+    local used, maxId = {}, 0
+    for _, x in ipairs(list or {}) do
+        local xid = tonumber(x.id or 0) or 0
+        used[xid] = true
+        if xid > maxId then maxId = xid end
+    end
+    local nid = tonumber(id or 0) or 0
+    if nid <= 0 then nid = maxId + 1 end
+    while used[nid] do nid = nid + 1 end
+    return nid
+end
+
+local function _cloneExpenseWithMeta(src, override)
+    local t = {}
+    t.id       = override and override.id       or src.id
+    t.ts       = override and override.ts       or (src.ts or time())
+    t.qty      = override and override.qty      or src.qty
+    t.copper   = override and override.copper   or src.copper
+    t.sourceId = override and override.sourceId or src.sourceId
+    t.itemID   = override and override.itemID   or src.itemID
+    t.itemLink = override and override.itemLink or src.itemLink
+    t.itemName = override and override.itemName or src.itemName
+    t.lotId    = override and override.lotId    or src.lotId
+    return t
+end
+
+local function _deepcopyExpenses(e)
+    local out = { list = {}, nextId = tonumber((e and e.nextId) or 1) or 1 }
+    for i, it in ipairs((e and e.list) or {}) do
+        out.list[i] = _cloneExpenseWithMeta(it)
+    end
+    return out
 end
 
 -- ➕ Diffusion GM : suppression d'une dépense
