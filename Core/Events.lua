@@ -13,9 +13,17 @@ f:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE")
 
 -- ➕ Clé M+: recalcul/émission sur évènements pertinents
 f:RegisterEvent("BAG_UPDATE_DELAYED")
+-- ➕ plus robustes quand la clé est donnée par un PNJ / lootée
+f:RegisterEvent("ITEM_PUSH")
+f:RegisterEvent("CHAT_MSG_LOOT")
+f:RegisterEvent("GOSSIP_CLOSED")
+-- ➕ utile quand on insère/enlève la clé dans le réceptacle
+f:RegisterEvent("CHALLENGE_MODE_KEYSTONE_SLOTTED")
+
 f:RegisterEvent("CHALLENGE_MODE_START")
 f:RegisterEvent("CHALLENGE_MODE_COMPLETED")
 f:RegisterEvent("CHALLENGE_MODE_RESET")
+
 
 -- ➕ Throttle + garde-fou : on ne refresh que si l’UI est visible
 local _pendingUIRefresh = false
@@ -81,10 +89,22 @@ f:SetScript("OnEvent", function(self, event, name)
         if GLOG.UpdateOwnIlvlIfMain then GLOG.UpdateOwnIlvlIfMain() end
 
     elseif event == "BAG_UPDATE_DELAYED"
+        or event == "ITEM_PUSH"
+        or event == "CHAT_MSG_LOOT"
+        or event == "GOSSIP_CLOSED"
+        or event == "CHALLENGE_MODE_KEYSTONE_SLOTTED"
         or event == "CHALLENGE_MODE_START"
         or event == "CHALLENGE_MODE_COMPLETED"
         or event == "CHALLENGE_MODE_RESET" then
-        if GLOG.UpdateOwnKeystoneIfMain then GLOG.UpdateOwnKeystoneIfMain() end
+
+        if GLOG.UpdateOwnKeystoneIfMain then
+            -- Petit décalage après fermeture du PNJ pour laisser l’état des sacs / API se stabiliser
+            if event == "GOSSIP_CLOSED" and ns and ns.Util and ns.Util.After then
+                ns.Util.After(0.25, function() GLOG.UpdateOwnKeystoneIfMain() end)
+            else
+                GLOG.UpdateOwnKeystoneIfMain()
+            end
+        end
 
     elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
 
