@@ -18,6 +18,15 @@ function UI.ListView(parent, cols, opts)
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
 
+    -- Forçage d’affichage/masquage de l’entête (utilisé pour les listes repliables)
+    lv._forceHeaderHidden = false
+    function lv:SetHeaderForceHidden(hidden)
+        self._forceHeaderHidden = hidden and true or false
+        if self.header then
+            if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
+        end
+    end
+
     -- Ancrage bas optionnel (ex : footer) pour limiter la hauteur de scroll
     lv._bottomAnchor = opts.bottomAnchor
     if lv._bottomAnchor and lv._bottomAnchor.HookScript then
@@ -123,7 +132,7 @@ function UI.ListView(parent, cols, opts)
         self.header:SetPoint("TOPLEFT",  self.parent, "TOPLEFT",   0,  -(2 + top))
         self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)), -(2 + top))
         UI.LayoutHeader(self.header, resolved, self.hLabels)
-        self.header:Show()
+        if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
 
         self.scroll:ClearAllPoints()
         self.scroll:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 0, -4)

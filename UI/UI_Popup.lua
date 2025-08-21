@@ -45,9 +45,11 @@ function UI.CreatePopup(opts)
         f.title:SetPoint("CENTER", drag, "CENTER", 0, -85)
     end
 
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
-    close:SetScript("OnClick", function() f:Hide() end)
+    if not opts.enforceAction then
+        local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+        close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
+        close:SetScript("OnClick", function() f:Hide() end)
+    end
 
     -- Zones contenu / footer avec gap supplémentaire (popup sans onglets)
     local POP_SIDE  = UI.POPUP_SIDE_PAD        or 6   -- marge G/D
@@ -74,15 +76,60 @@ function UI.CreatePopup(opts)
 
     -- Raccourcis clavier
     f._defaultBtn = nil
+    local allowEsc = not opts.enforceAction
     f:EnableKeyboard(true)
     f:SetScript("OnKeyDown", function(self, key)
         if key == "ENTER" and self._defaultBtn and self._defaultBtn:IsEnabled() then
             self._defaultBtn:Click()
-        elseif key == "ESCAPE" then
+        elseif key == "ESCAPE" and allowEsc then
             self:Hide()
         end
     end)
-    if UISpecialFrames then table.insert(UISpecialFrames, f:GetName()) end
+    if UISpecialFrames and allowEsc then table.insert(UISpecialFrames, f:GetName()) end
+
+    -- ➕ Overlay plein écran tant que la popup est active (seulement si enforceAction)
+    if opts.enforceAction then
+        -- La popup doit être au-dessus de tout
+        f:SetFrameStrata("FULLSCREEN_DIALOG")
+
+        -- Overlay qui recouvre tout l'écran et absorbe les clics
+        -- ⚠️ Strate volontairement PLUS BASSE que la popup pour garantir l'ordre
+        local overlay = CreateFrame("Frame", nil, UIParent)
+        overlay:SetAllPoints(UIParent)
+        overlay:SetFrameStrata("FULLSCREEN") -- était "FULLSCREEN_DIALOG"
+        overlay:SetToplevel(false)
+        overlay:SetFrameLevel(1)
+        overlay:EnableMouse(true)
+        if overlay.SetPropagateKeyboardInput then overlay:SetPropagateKeyboardInput(false) end
+        overlay:Show()
+
+        -- Fond semi-transparent
+        local tex = overlay:CreateTexture(nil, "BACKGROUND")
+        tex:SetAllPoints(overlay)
+        tex:SetColorTexture(0, 0, 0, 0.75)
+        overlay._bg = tex
+
+        -- Consomme les clics pour empêcher toute interaction derrière
+        overlay:SetScript("OnMouseDown", function() end)
+        overlay:SetScript("OnMouseUp", function() end)
+        overlay:EnableMouseWheel(true)
+        overlay:SetScript("OnMouseWheel", function() end)
+
+        -- Garde l’overlay SOUS la popup même si quelque chose modifie les strates/niveaux
+        f:HookScript("OnShow", function(self)
+            overlay:Show()
+            -- On réaffirme les strates correctes à chaque affichage
+            overlay:SetFrameStrata("FULLSCREEN")
+            self:SetFrameStrata("FULLSCREEN_DIALOG")
+            -- Niveau laissé bas par sécurité même si la strate suffit
+            overlay:SetFrameLevel(1)
+        end)
+        f:HookScript("OnHide", function()
+            overlay:Hide()
+        end)
+
+        f._overlay = overlay
+    end
 
     -- Message simple multi-ligne
     function f:SetMessage(text)
@@ -438,3 +485,65 @@ function UI.PopupPromptText(title, label, onAccept, opts)
     return dlg
 end
 
+-- ➕ Popup spécialisée : invitations calendrier en attente
+function UI.PopupPendingCalendarInvites(items)
+    local dlg = UI.CreatePopup({
+        title  = "pending_invites_title",
+        width  = 560,
+        height = 360,
+    })
+
+    local Tr = ns and ns.Tr or function(s) return s end
+
+    -- Marges autour du texte
+    local msg = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    msg:SetJustifyH("LEFT"); msg:SetJustifyV("TOP")
+    msg:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 10, -10)
+    msg:SetPoint("RIGHT",   dlg.content, "RIGHT",   -10, 0)
+    msg:SetText(Tr("pending_invites_message_fmt"):format(#(items or {})))
+
+    local listHost = CreateFrame("Frame", nil, dlg.content)
+    listHost:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  10, -70)
+    listHost:SetPoint("BOTTOMRIGHT", dlg.content, "BOTTOMRIGHT", -10, -10)
+
+    local cols = UI.NormalizeColumns({
+        { key="when",  title=Tr("col_when"),  w=180 },
+        { key="title", title=Tr("col_event"), flex=1, min=200 },
+    })
+    local lv = UI.ListView(listHost, cols, { emptyText = "lbl_no_data" })
+    dlg._lv = lv
+
+    local function weekdayName(ts)
+        local w = tonumber(date("%w", ts))
+        if w == 0 then return Tr("weekday_sun")
+        elseif w == 1 then return Tr("weekday_mon")
+        elseif w == 2 then return Tr("weekday_tue")
+        elseif w == 3 then return Tr("weekday_wed")
+        elseif w == 4 then return Tr("weekday_thu")
+        elseif w == 5 then return Tr("weekday_fri")
+        else return Tr("weekday_sat") end
+    end
+    local function fmtWhen(it)
+        return string.format("%s %02d/%02d %02d:%02d",
+            weekdayName(it.when), it.day or 0, it.month or 0, it.hour or 0, it.minute or 0)
+    end
+
+    local function buildRow(r) local f = {}; f.when = UI.Label(r); f.title = UI.Label(r); return f end
+    local function updateRow(i, r, f, it)
+        f.when:SetText(fmtWhen(it))
+        f.title:SetText(it.loc or it.title or "?")
+    end
+
+    lv.opts.buildRow  = buildRow
+    lv.opts.updateRow = updateRow
+    lv:SetData(items or {})
+
+    dlg:SetButtons({
+        { text = "btn_open_calendar", default = true, w = 180, onClick = function()
+            if ToggleCalendar then ToggleCalendar() elseif Calendar_Toggle then Calendar_Toggle() end
+            if dlg.Hide then dlg:Hide() end -- ✏️ fermeture via action
+        end },
+    })
+    dlg:Show()
+    return dlg
+end

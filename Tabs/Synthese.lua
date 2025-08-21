@@ -5,6 +5,10 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
 local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS
 
+-- État d’affichage de la section "Joueurs en réserve" (réduite par défaut)
+local reserveCollapsed = true
+local reserveToggleBtn
+
 local cols = UI.NormalizeColumns({
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
     { key="name",   title=Tr("col_name"),    min=180, flex=1 },
@@ -235,32 +239,86 @@ local function UpdateRow(i, r, f, data)
 end
 
 -- Layout
+-- Layout
 local function Layout()
     if not (activeArea and reserveArea) then return end
     local panelH = panel:GetHeight()
     local footerH = (UI.FOOTER_H or 36)
     local gap = 10
 
+    -- Hauteur utile entre le haut du panel et le footer
     local usableH = panelH - footerH - (gap * 3)
     local hTop = math.floor(usableH * 0.60)
 
     activeArea:ClearAllPoints()
-    activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
-    activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
-    activeArea:SetHeight(hTop)
-
     reserveArea:ClearAllPoints()
-    reserveArea:SetPoint("TOPLEFT",  activeArea, "BOTTOMLEFT", 0, -gap)
-    reserveArea:SetPoint("TOPRIGHT", activeArea, "BOTTOMRIGHT", 0, -gap)
-    reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, (UI.FOOTER_H or 36) + gap)
-    reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, (UI.FOOTER_H or 36) + gap)
+
+    if reserveCollapsed then
+        -- 1) La zone "active" occupe toute la hauteur disponible (au-dessus du header "réserve")
+        reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
+        reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
+        reserveArea:SetHeight((UI.SECTION_HEADER_H or 26)) -- seulement l’entête visible
+
+        activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
+        activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
+        activeArea:SetPoint("BOTTOMLEFT", reserveArea, "TOPLEFT",  0, gap)
+        activeArea:SetPoint("BOTTOMRIGHT", reserveArea, "TOPRIGHT", 0, gap)
+    else
+        -- 2) Layout original (60% / 40%)
+        activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
+        activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
+        activeArea:SetHeight(hTop)
+
+        reserveArea:SetPoint("TOPLEFT",  activeArea, "BOTTOMLEFT", 0, -gap)
+        reserveArea:SetPoint("TOPRIGHT", activeArea, "BOTTOMRIGHT", 0, -gap)
+        reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
+        reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
+    end
 
     if lvActive  and lvActive.Layout  then lvActive:Layout()  end
     if lvReserve and lvReserve.Layout then lvReserve:Layout() end
 end
 
+-- Met à jour l’UI du pliage/dépliage de la réserve
+local function UpdateReserveCollapseUI()
+    -- Bouton + / -
+    if reserveToggleBtn then
+        reserveToggleBtn:SetText(reserveCollapsed and "+" or "-")
+
+        -- Ajustement d’alignement : décale légèrement le bouton vers la gauche et vers le haut (appliqué une seule fois)
+        if not reserveToggleBtn._nudgeApplied then
+            local p, relTo, relP, x, y = reserveToggleBtn:GetPoint(1)
+            reserveToggleBtn:ClearAllPoints()
+            reserveToggleBtn:SetPoint(p or "LEFT", relTo, relP, (x or 0) - 8, (y or 0) + 10)
+            reserveToggleBtn._nudgeApplied = true
+
+            -- Agrandit un peu la zone cliquable côté gauche pour compenser le décalage
+            if reserveToggleBtn.SetHitRectInsets then
+                reserveToggleBtn:SetHitRectInsets(-6, -2, -2, -2)
+            end
+        end
+    end
+
+    -- Masque/affiche le contenu de la ListView "réserve" (et force l’état de l’entête)
+    if lvReserve and lvReserve.scroll then
+        if lvReserve.SetHeaderForceHidden then
+            lvReserve:SetHeaderForceHidden(reserveCollapsed)
+        end
+        if reserveCollapsed then
+            lvReserve.scroll:Hide()
+        else
+            lvReserve.scroll:Show()
+        end
+    end
+
+    -- Recalcule la mise en page liée à l’état
+    if Layout then Layout() end
+end
+
+
 -- Refresh
 local function Refresh()
+
     local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
     local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve()) or {}
 
@@ -322,7 +380,18 @@ local function Build(container)
     reserveArea = CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(activeArea,  Tr("lbl_active_roster"),      { topPad = 2 })
-    UI.SectionHeader(reserveArea, Tr("lbl_reserved_players"),{ topPad = 2 })
+    -- L’entête de la réserve garde un padding à gauche pour le petit bouton +/-
+    UI.SectionHeader(reserveArea, Tr("lbl_reserved_players"),   { topPad = 2, padLeft = 18 })
+
+    -- Petit bouton + / - à gauche du texte d’entête de la réserve
+    reserveToggleBtn = CreateFrame("Button", nil, reserveArea, "UIPanelButtonTemplate")
+    reserveToggleBtn:SetSize(20, 20)
+    reserveToggleBtn:SetPoint("TOPLEFT", reserveArea, "TOPLEFT", 0, -(4 + 4))
+    reserveToggleBtn:SetText("+")
+    reserveToggleBtn:SetScript("OnClick", function()
+        reserveCollapsed = not reserveCollapsed
+        UpdateReserveCollapseUI()
+    end)
 
     lvActive = UI.ListView(activeArea, cols, {
         buildRow = function(r) return BuildRow(r, "active") end,
@@ -366,6 +435,9 @@ local function Build(container)
 
     local isGM = GLOG.IsMaster and GLOG.IsMaster()
     BuildFooterButtons(footer, isGM)
+
+    -- Applique l’état par défaut (“réserve” repliée) et ajuste la mise en page
+    UpdateReserveCollapseUI()
 end
 
 UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout)

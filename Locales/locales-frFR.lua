@@ -228,3 +228,19 @@ L["lbl_status_present_colored"]  = "|cff40ff40Présent|r"
 L["lbl_status_deleted_colored"]  = "|cffff7070Supprimé|r"
 L["lbl_db_version_prefix"]       = "DB v"
 L["lbl_id_prefix"]               = "ID "
+
+-- ➕ Invitations calendrier
+L["pending_invites_title"]       = "Invitations en attente"
+L["pending_invites_message_fmt"] = "Vous avez %d invitation(s) dans le calendrier sans réponse.\nMerci d'y répondre.\nCette fenêtre réapparaîtra à chaque connexion tant qu'il restera des invitations en attente."
+L["btn_open_calendar"]           = "Ouvrir le calendrier"
+L["col_when"]                    = "Quand"
+L["col_event"]                   = "Événement"
+
+-- ➕ Jours de la semaine (minuscule)
+L["weekday_mon"] = "lundi"
+L["weekday_tue"] = "mardi"
+L["weekday_wed"] = "mercredi"
+L["weekday_thu"] = "jeudi"
+L["weekday_fri"] = "vendredi"
+L["weekday_sat"] = "samedi"
+L["weekday_sun"] = "dimanche"
