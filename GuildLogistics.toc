@@ -30,6 +30,7 @@ Tabs/Depense.lua
 Tabs/Joueurs.lua
 Tabs/Demandes.lua
 Tabs/Debug.lua
-Core/Calendar.lua
+Tabs/Options.lua
 
+Core/Calendar.lua
 Core/Events.lua

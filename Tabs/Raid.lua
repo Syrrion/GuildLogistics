@@ -241,8 +241,14 @@ local function Build(container)
                         if not seen and ns.UI and ns.UI.PopupRaidDebit then
                             -- ✅ Fallback GM : lit le solde réellement en DB (pas de re-soustraction)
                             local after = (GLOG.GetSolde and GLOG.GetSolde(meFull)) or 0
-                            ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
+                            -- Respecte l’option "Notification de participation à un raid"
+                            local _sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or GuildLogisticsUI or {}
+                            _sv.popups = _sv.popups or {}
+                            if _sv.popups.raidParticipation ~= false then
+                                ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
+                            end
                         end
+
                     end)
                 end
             end

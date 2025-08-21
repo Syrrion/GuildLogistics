@@ -1157,7 +1157,12 @@ function GLOG._HandleFull(sender, msgType, kv)
                             end
                         end
 
-                        ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
+                        -- Respecte l’option "Notification de participation à un raid"
+                        local _sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or GuildLogisticsUI or {}
+                        _sv.popups = _sv.popups or {}
+                        if _sv.popups.raidParticipation ~= false then
+                            ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
+                        end
                         if ns.Emit then ns.Emit("raid:popup-shown", meFull) end
                         break
                     end
