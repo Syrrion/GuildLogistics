@@ -1,8 +1,8 @@
-## Interface: 112500
+## Interface: 112000
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 1.0.0
+## Version: 1.1.0
 ## SavedVariables: GuildLogisticsDB, GuildLogisticsUI
 ## IconTexture: Interface\AddOns\GuildLogistics\Ressources\Media\LogoAddonWoW256.tga
 ## Dependencies: LibDeflate

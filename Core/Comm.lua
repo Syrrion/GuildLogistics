@@ -2,6 +2,9 @@ local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
 local GLOG, UI = ns.GLOG, ns.UI
 
+-- ➕ première synchro: flag session
+local _FirstSyncRebroadcastDone = false
+
 -- ➕ Garde-fou : attache les helpers UID exposés par Helper.lua (et fallback ultime)
 GLOG.GetOrAssignUID = GLOG.GetOrAssignUID or (ns.Util and ns.Util.GetOrAssignUID)
 GLOG.GetNameByUID   = GLOG.GetNameByUID   or (ns.Util and ns.Util.GetNameByUID)
@@ -1694,6 +1697,29 @@ function GLOG._HandleFull(sender, msgType, kv)
                 C_Timer.After(0.2, function()
                     GLOG.Comm_Broadcast("HELLO", { hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
                 end)
+
+                -- ➕ Après la toute première synchro FULL reçue: diffuse mon iLvl et ma clé M+ (GUILD)
+                if not _FirstSyncRebroadcastDone then
+                    _FirstSyncRebroadcastDone = true
+                    C_Timer.After(0.5, function()
+                        -- iLvl actuel équipé
+                        if GLOG.ReadOwnEquippedIlvl and GLOG.BroadcastIlvlUpdate then
+                            local il = GLOG.ReadOwnEquippedIlvl()
+                            if il and il > 0 then
+                                local meNow = playerFullName and playerFullName() or me
+                                GLOG.BroadcastIlvlUpdate(meNow, il, time(), meNow)
+                            end
+                        end
+                        -- Clé Mythique détenue
+                        if GLOG.ReadOwnedKeystone and GLOG.BroadcastMKeyUpdate then
+                            local mid, lvl, map = GLOG.ReadOwnedKeystone()
+                            if (tonumber(mid) or 0) > 0 and (tonumber(lvl) or 0) > 0 then
+                                local meNow = playerFullName and playerFullName() or me
+                                GLOG.BroadcastMKeyUpdate(meNow, tonumber(mid) or 0, tonumber(lvl) or 0, tostring(map or ""), time(), meNow)
+                            end
+                        end
+                    end)
+                end
             end
 
             if not _ok then

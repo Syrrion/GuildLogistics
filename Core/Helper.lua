@@ -321,3 +321,82 @@ function GLOG.GetAddonIconTexture()
     -- Fallback : icône livre par défaut (ne dépend pas de fichiers de l'addon)
     return "Interface\\Icons\\INV_Misc_Book_09"
 end
+
+-- ➕ ====== Groupe & Raid: helpers ======
+function GLOG.GetRaidSubgroupOf(name)
+    if not name or name == "" then return nil end
+    if not (IsInRaid and IsInRaid()) then return nil end
+
+    local nf = (ns.Util and ns.Util.NormalizeFull) or function(n, r)
+        if n and r and r ~= "" then return (tostring(n) .. "-" .. tostring(r):gsub("%s+",""):gsub("'","")) end
+        local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+        realm = tostring(realm):gsub("%s+",""):gsub("'","")
+        if realm ~= "" then return tostring(n or "") .. "-" .. realm end
+        return tostring(n or "")
+    end
+
+    local target = nf(name)
+    if target == "" then return nil end
+    local N = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+    for i = 1, N do
+        local unit = "raid"..i
+        local rn, rr = UnitFullName and UnitFullName(unit)
+        local full = nf(rn, rr)
+        if full ~= "" and full:lower() == target:lower() then
+            local _, _, subgroup = GetRaidRosterInfo(i)
+            return tonumber(subgroup or 0) or 0
+        end
+    end
+    return nil
+end
+
+function GLOG.GetMyRaidSubgroup()
+    if not (IsInRaid and IsInRaid()) then return nil end
+    local me = playerFullName and playerFullName() or nil
+    if not me or me == "" then return nil end
+    return GLOG.GetRaidSubgroupOf(me)
+end
+
+function GLOG.IsInMyParty(name)
+    if not name or name == "" then return false end
+    if IsInRaid and IsInRaid() then return false end
+    if not (IsInGroup and IsInGroup()) then return false end
+
+    local nf = (ns.Util and ns.Util.NormalizeFull) or function(n, r)
+        if n and r and r ~= "" then return (tostring(n) .. "-" .. tostring(r):gsub("%s+",""):gsub("'","")) end
+        local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+        realm = tostring(realm):gsub("%s+",""):gsub("'","")
+        if realm ~= "" then return tostring(n or "") .. "-" .. realm end
+        return tostring(n or "")
+    end
+
+    local target = nf(name)
+    if target == "" then return false end
+
+    -- le joueur lui-même
+    local pn, pr = UnitFullName and UnitFullName("player")
+    local pfull = nf(pn, pr)
+    if pfull:lower() == target:lower() then return true end
+
+    for i = 1, 4 do
+        local unit = "party"..i
+        if UnitExists and UnitExists(unit) then
+            local n, r = UnitFullName(unit)
+            local full = nf(n, r)
+            if full ~= "" and full:lower() == target:lower() then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function GLOG.IsInMySubgroup(name)
+    -- En raid: même sous-groupe; en groupe: même party; sinon false
+    if IsInRaid and IsInRaid() then
+        local mine = GLOG.GetMyRaidSubgroup()
+        local his  = GLOG.GetRaidSubgroupOf(name)
+        return (tonumber(mine or 0) > 0) and (tonumber(mine or 0) == tonumber(his or -1))
+    end
+    return GLOG.IsInMyParty(name)
+end

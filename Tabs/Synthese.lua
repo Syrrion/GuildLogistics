@@ -162,12 +162,12 @@ local function BuildRow(r, context)
 
     r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=90 })
     r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"), { size="sm", variant="ghost", minWidth=90 })
-    r.btnDelete   = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=28, padX=12 })
+    r.btnDelete   = UI.Button(f.act, Tr("btn_delete_short"),  { size="sm", variant="danger", minWidth=28, padX=12 })
 
     local buttons = { r.btnDeposit, r.btnWithdraw, r.btnDelete }
 
     if context == "active" then
-        r.btnReserve = UI.Button(f.act, Tr("btn_to_reserve"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_reserve")})
+        r.btnReserve = UI.Button(f.act, Tr("btn_to_reserve"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_reserve") })
         table.insert(buttons, 1, r.btnReserve)
     elseif context == "reserve" then
         r.btnRoster = UI.Button(f.act, Tr("btn_to_roster"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_roster") })
@@ -175,6 +175,16 @@ local function BuildRow(r, context)
     end
 
     UI.AttachRowRight(f.act, buttons, 8, -4, { leftPad = 8, align = "center" })
+
+    -- ✨ surlignage si même groupe/sous-groupe de raid
+    if not r._highlight then
+        local hl = r:CreateTexture(nil, "BACKGROUND")
+        hl:SetAllPoints(r)
+        hl:SetColorTexture(1, 0.90, 0, 0.08) -- jaune très léger
+        hl:Hide()
+        r._highlight = hl
+    end
+
     return f
 end
 
@@ -198,29 +208,52 @@ local function UpdateRow(i, r, f, data)
         f.lvl:SetText(gi.level and tostring(gi.level) or "")
     end
 
+    -- 🔧 M+ : afficher la clé en grisé pour les joueurs déconnectés s'ils en ont une
     if f.mkey then
         local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
         if gi.online then
             f.mkey:SetText(mkeyTxt or "")
         else
-            f.mkey:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            if mkeyTxt ~= "" then
+                f.mkey:SetText("|cffaaaaaa"..mkeyTxt.."|r")
+            else
+                f.mkey:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            end
         end
     end
 
+    -- 🔧 iLvl : même logique que M+ — afficher l'ilvl en grisé si hors-ligne et connu
     if f.ilvl then
         local ilvl = (GLOG.GetIlvl and GLOG.GetIlvl(data.name)) or nil
-        local txt = ""
         if gi.online then
-            txt = (ilvl and ilvl > 0) and tostring(ilvl) or "|cffaaaaaa"..Tr("status_unknown").."|r"
+            if ilvl and ilvl > 0 then
+                f.ilvl:SetText(tostring(ilvl))
+            else
+                f.ilvl:SetText("|cffaaaaaa"..Tr("status_unknown").."|r")
+            end
         else
-            txt = "|cffaaaaaa"..Tr("status_empty").."|r"
+            if ilvl and ilvl > 0 then
+                f.ilvl:SetText("|cffaaaaaa"..tostring(ilvl).."|r")
+            else
+                f.ilvl:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            end
         end
-        f.ilvl:SetText(txt)
     end
 
-    f.solde:SetText(money(GetSolde(data)))
+    -- ✨ Surlignage : même groupe (party) ou même sous-groupe de raid que moi
+    if r._highlight then
+        local hl = false
+        if GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name) then
+            hl = true
+        end
+        if hl then r._highlight:Show() else r._highlight:Hide() end
+    end
 
-    local canAct, isMaster = CanActOn(data.name)
+    f.solde:SetText(money(GetSolde(data.name)))
+
+    -- Autorisations & boutons
+    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+    local canAct   = isMaster
 
     if r.btnDeposit then
         r.btnDeposit:SetEnabled(canAct)
@@ -439,5 +472,12 @@ local function Build(container)
     -- Applique l’état par défaut (“réserve” repliée) et ajuste la mise en page
     UpdateReserveCollapseUI()
 end
+
+-- ➕ Surveille les changements de groupe pour mettre à jour le surlignage
+local _GL_RosterGroupWatcher = CreateFrame("Frame")
+_GL_RosterGroupWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+_GL_RosterGroupWatcher:SetScript("OnEvent", function()
+    if Refresh then Refresh() end
+end)
 
 UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout)
