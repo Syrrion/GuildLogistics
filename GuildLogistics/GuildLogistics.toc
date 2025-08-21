@@ -2,7 +2,7 @@
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 1.1.5
+## Version: 1.1.6
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariables: GuildLogisticsDB, GuildLogisticsUI
