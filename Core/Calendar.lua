@@ -78,15 +78,30 @@ local function _canShowPopupNow()
     return true
 end
 
+-- ➕ Lecture option (valide par défaut si non paramétrée)
+local function _isPopupEnabled(key)
+    -- Utilise le même stockage que les autres options UI (onglet Debug > Options)
+    local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or GuildLogisticsUI or {}
+    saved.popups = saved.popups or {}
+    local v = saved.popups[key]
+    if v == nil then return true end -- ✅ par défaut, on considère cochée
+    return v and true or false
+end
+
+
 local function _tryShowOrDefer(items)
     if not items or #items == 0 then return end
+    -- ✅ Respecte l’option : Notification d'invitation dans le calendrier
+    if not _isPopupEnabled("calendarInvite") then return end
+
     if _canShowPopupNow() then
-        showPendingInvitesPopup(items)  -- la fonction est bien résolue maintenant
+        showPendingInvitesPopup(items)
         _markSeen(items)
         shownThisSession = true
         pendingCache = nil
         _deferredItems = nil
     else
+        -- Mémorise pour un affichage dès que les conditions sont favorables
         _deferredItems = items
     end
 end
@@ -321,14 +336,13 @@ f:SetScript("OnEvent", function(self, event, ...)
                 if items and #items > 0 then
                     local newItems = _extractNewInvites(items)
                     if #newItems > 0 then
-                        -- Respecte les conditions (combat/instance) et déferre si besoin
+                        -- Respecte option + conditions (combat/instance) et déferre si besoin
                         _tryShowOrDefer(items)
                         pendingCache   = nil
                         calPollActive  = false
                         return
                     end
                 end
-
 
                 if calPollTries < (CAL_POLL_MAX or 12) and C_Timer and C_Timer.After then
                     C_Timer.After(CAL_POLL_DELAY or 0.5, step)

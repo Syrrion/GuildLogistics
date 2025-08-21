@@ -616,16 +616,50 @@ local function BuildOptions(panel)
     makeRadioV(themeRadios, "HORDE",    Tr("opt_horde"))
     makeRadioV(themeRadios, "NEUTRAL",  Tr("opt_neutral"))
 
-    -- === Section 2 : Ouverture auto ===
+        -- === Section 2 : Ouverture auto ===
     local headerH2 = UI.SectionHeader(content, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH2 + 8
 
     makeRadioV(autoRadios, "YES", Tr("opt_yes"))
     makeRadioV(autoRadios, "NO",  Tr("opt_no"))
 
-    -- === Section 3 : Activer le débug ===
-    local headerH3 = UI.SectionHeader(content, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    -- === Section 3 : Affichage des popups ===
+    local headerH3 = UI.SectionHeader(content, Tr("options_notifications_title"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH3 + 8
+
+    local savedForPop = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
+    savedForPop.popups = savedForPop.popups or {}
+
+    local function makeCheck(key, labelText)
+        local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
+        cb:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        -- Assure l’existence du label, certains templates le fournissent déjà
+        local label = cb.Text or cb:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        if not cb.Text then
+            label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
+            cb.Text = label
+        end
+        label:SetText(Tr(labelText))
+
+        local v = savedForPop.popups[key]
+        if v == nil then v = true end -- ✅ par défaut cochée
+        cb:SetChecked(v)
+
+        cb:SetScript("OnClick", function(btn)
+            savedForPop.popups[key] = btn:GetChecked() and true or false
+        end)
+
+        y = y + (cb:GetHeight() or 24) + 6
+        return cb
+    end
+
+    -- Cases à cocher demandées
+    makeCheck("calendarInvite",      Tr("opt_popup_calendar_invite"))
+    makeCheck("raidParticipation",   Tr("opt_popup_raid_participation"))
+
+    -- === Section 4 : Activer le débug ===
+    local headerH4 = UI.SectionHeader(content, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    y = y + headerH4 + 8
 
     makeRadioV(debugRadios, "YES", Tr("opt_yes"))
     makeRadioV(debugRadios, "NO",  Tr("opt_no"))

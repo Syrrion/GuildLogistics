@@ -245,3 +245,7 @@ L["weekday_thu"] = "Thursday"
 L["weekday_fri"] = "Friday"
 L["weekday_sat"] = "Saturday"
 L["weekday_sun"] = "Sunday"
+
+L["options_notifications_title"] = "Popup display"
+L["opt_popup_calendar_invite"]   = "Calendar invitation notification"
+L["opt_popup_raid_participation"]= "Raid participation notification"
