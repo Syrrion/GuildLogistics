@@ -7,31 +7,40 @@ local panel, lv
 
 -- Colonnes normalisées
 local cols = UI.NormalizeColumns({
-    { key="main",  title=Tr("col_player"),             min=420, flex=1 },
-    { key="last",  title=Tr("col_last_seen"), w=180 },
-    { key="count", title=Tr("col_rerolls"),            w=120 },
-    { key="act",   title="",                   w=220 },
+    { key="alias",    title=Tr("col_alias"),              w=80 },
+    { key="main",     title=Tr("col_player"),             min=180, flex=1 },
+    { key="last",     title=Tr("col_last_seen"),          w=100 },
+    { key="count",    title=Tr("col_rerolls"),            w=60 },
+    { key="actAlias", title="",                           w=90 }, -- ➕ Colonne dédiée au bouton "Alias…"
+    { key="act",      title="",                           w=180 }, -- ✏️ Actions roster (bouton Ajouter / libellés)
 })
 
+-- Construction d’une ligne
 -- Construction d’une ligne
 local function BuildRow(r)
     local f = {}
 
     -- Widgets pour "data"
+    f.alias = UI.Label(r)
     f.main  = UI.CreateNameTag(r)
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.count = UI.Label(r)
 
-    -- Cellule d'actions = conteneur + bouton + libellé "dans le roster"
-    f.act     = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
+    -- Cellule d'actions ROSTER (bouton Ajouter / libellés)
+    f.act      = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     f.inRoster = UI.Label(f.act)
-    f.btnAdd  = UI.Button(f.act, Tr("btn_add_to_roster"), { size="sm", minWidth=160 })
+    f.btnAdd   = UI.Button(f.act, Tr("btn_add_to_roster"), { size="sm", minWidth=120 })
     f.inRoster:SetText(Tr("lbl_in_roster"))
-
     f.inRoster:SetJustifyH("CENTER")
     f.inRoster:Hide()
 
-    UI.AttachRowRight(f.act, { f.btnAdd }, 8, -4, { leftPad = 8, align = "center" })
+    -- ✅ Cellule d'actions ALIAS séparée — clé alignée sur la colonne "actAlias"
+    f.actAlias  = CreateFrame("Frame", nil, r); f.actAlias:SetHeight(UI.ROW_H)
+    f.btnAlias  = UI.Button(f.actAlias, Tr("btn_set_alias"), { size="sm", variant="ghost", minWidth=80 })
+
+    -- Positionnements
+    UI.AttachRowRight(f.actAlias, { f.btnAlias }, 8, -4, { leftPad = 8, align = "center" })
+    UI.AttachRowRight(f.act,      { f.btnAdd   }, 8, -4, { leftPad = 8, align = "center" })
 
     -- Widgets pour "sep"
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
@@ -56,9 +65,11 @@ local function UpdateRow(i, r, f, it)
     f.sepBG:SetShown(isSep); f.sepTop:SetShown(isSep); f.sepLabel:SetShown(isSep)
     if isSep then
         if f.main and f.main.text then f.main.text:SetText("") end
+        if f.alias then f.alias:SetText("") end
         if f.last then f.last:SetText("") end
         if f.count then f.count:SetText("") end
         if f.act then f.act:Hide() end
+        if f.actAlias then f.actAlias:Hide() end -- ✅ masquer la cellule de la bonne colonne
         f.sepLabel:ClearAllPoints()
         f.sepLabel:SetPoint("LEFT", r, "LEFT", 8, 0)
         f.sepLabel:SetText(it.label or "")
@@ -66,36 +77,47 @@ local function UpdateRow(i, r, f, it)
     end
 
     if f.act then f.act:Show() end
+    if f.actAlias then f.actAlias:Show() end
     f.sepLabel:SetText("")
 
+    -- Alias
+    if f.alias then
+        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(it.main)) or ""
+        f.alias:SetText(a or "")
+    end
+
+    -- Nom principal
     UI.SetNameTag(f.main, it.main or "")
+
+    -- Compte de rerolls
     f.count:SetText(it.count or 0)
+
+    -- Statut / dernière connexion
     if it.onlineCount and it.onlineCount > 0 then
-        local txt = (it.onlineCount > 1) and ("|cff40ff40"..Tr("status_online")..("..it.onlineCount..").."|r") or "|cff40ff40"..Tr("status_online").."|r"
+        local txt = (it.onlineCount > 1)
+            and ("|cff40ff40"..Tr("status_online").." ("..it.onlineCount..")|r")
+            or  ("|cff40ff40"..Tr("status_online").."|r")
         f.last:SetText(txt)
     else
         f.last:SetText(ns.Format.LastSeen(it.days or it.lastSeenDays, it.hours or it.lastSeenHours))
     end
 
-    local inRoster = (ns.GLOG.HasPlayer and ns.GLOG.HasPlayer(it.main)) or false
+    -- Droits et état roster
+    local inRoster  = (ns.GLOG.HasPlayer  and ns.GLOG.HasPlayer(it.main)) or false
     local isReserve = (ns.GLOG.IsReserved and ns.GLOG.IsReserved(it.main)) or false
-    local canAdd = (ns.GLOG.IsMaster and ns.GLOG.IsMaster()) and true or false
+    local canAdd    = (ns.GLOG.IsMaster   and ns.GLOG.IsMaster()) and true or false
 
     if inRoster then
         if f.btnAdd then f.btnAdd:Hide() end
         if f.inRoster then
-            -- Montre explicitement le statut de réserve si applicable
             f.inRoster:SetText(isReserve and Tr("lbl_in_reserve") or Tr("lbl_in_roster"))
             f.inRoster:Show()
             f.inRoster:ClearAllPoints()
             f.inRoster:SetPoint("CENTER", f.act, "CENTER", 0, 0)
         end
-
     elseif not canAdd then
-        -- Non-GM : pas de bouton et pas de message "Réservé au GM" -> on laisse vide
         if f.btnAdd then f.btnAdd:Hide() end
         if f.inRoster then f.inRoster:Hide() end
-
     else
         if f.inRoster then f.inRoster:Hide() end
         if f.btnAdd then
@@ -107,8 +129,24 @@ local function UpdateRow(i, r, f, it)
         end
     end
 
-    if f.act and f.act._applyRowActionsLayout then f.act._applyRowActionsLayout() end
+    -- Bouton "Alias…" (GM) dans sa colonne dédiée
+    if f.btnAlias then
+        local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+        f.btnAlias:SetShown(isMaster)
+        if isMaster then
+            f.btnAlias:SetScript("OnClick", function()
+                ns.UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
+                    ns.GLOG.GM_SetAlias(it.main, val)
+                end, { strata = "FULLSCREEN_DIALOG" })
+            end)
+        end
+    end
+
+    -- Relayout des deux colonnes d'actions si nécessaire
+    if f.actAlias and f.actAlias._applyRowActionsLayout then f.actAlias._applyRowActionsLayout() end
+    if f.act      and f.act._applyRowActionsLayout      then f.act._applyRowActionsLayout()      end
 end
+
 
 -- Construit un nom complet "Nom-Realm" pour l'affichage/ajout roster
 local function EnsureFullMain(e)

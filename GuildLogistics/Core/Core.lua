@@ -44,7 +44,11 @@ local function EnsureDB()
         requests = {},
         historyNextId = 1,  -- ➕ compteur HID
         debug = {},
+        aliases = {},       -- ➕ Alias par joueur (clé = main normalisé)
     }
+    -- Sécurité si DB déjà existante
+    GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
+
     GuildLogisticsUI = GuildLogisticsUI or {
         point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
         minimap = { hide = false, angle = 215 },
@@ -418,9 +422,11 @@ function GLOG.GM_SetReserved(name, flag)
     GuildLogisticsDB.meta.lastModified = time()
 
     local uid = (GLOG.GetUID and GLOG.GetUID(name)) or (GLOG.FindUIDByName and GLOG.FindUIDByName(name)) or nil
+    local alias = (GLOG.GetAliasFor and GLOG.GetAliasFor(name)) or nil
     if GLOG.Comm_Broadcast then
         GLOG.Comm_Broadcast("ROSTER_RESERVE", {
             uid = uid, name = name, res = flag and 1 or 0,
+            alias = alias,                                        -- ➕ transmettre l’alias
             rv = rv, lm = GuildLogisticsDB.meta.lastModified
         })
     end
@@ -1254,4 +1260,58 @@ function GLOG.Emit(event, ...)
         local ok = pcall(L[i], ...)
         -- on ignore les erreurs pour ne pas casser la chaîne de traitement
     end
+end
+
+-- =========================
+-- ======  ALIAS API  ======
+-- =========================
+
+-- Renvoie la clé "main" normalisée (base du nom sans royaume + lowercase)
+local function _AliasMainKey(name)
+    if not name or name == "" then return nil end
+    local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+    return (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+end
+
+function GLOG.GetAliasFor(name)
+    EnsureDB()
+    local key = _AliasMainKey(name)
+    if not key then return nil end
+    return (GuildLogisticsDB.aliases or {})[key]
+end
+
+function GLOG.SetAliasLocal(name, alias)
+    EnsureDB()
+    GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
+    local key = _AliasMainKey(name); if not key then return end
+    alias = tostring(alias or ""):gsub("^%s+", ""):gsub("%s+$","")
+    if alias == "" then
+        GuildLogisticsDB.aliases[key] = nil
+    else
+        GuildLogisticsDB.aliases[key] = alias
+    end
+    if ns.Emit then ns.Emit("alias:changed", key, alias) end
+    if ns.RefreshAll then ns.RefreshAll() end
+end
+
+-- Action GM : définit l’alias d’un joueur et le diffuse via ROSTER_UPSERT
+function GLOG.GM_SetAlias(name, alias)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then
+        if UIErrorsFrame then
+            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Définition d’alias réservée au GM.", 1, .4, .4)
+        end
+        return false
+    end
+    if not name or name=="" then return false end
+    GLOG.SetAliasLocal(name, alias)
+
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+    GuildLogisticsDB.meta.rev = rv
+    GuildLogisticsDB.meta.lastModified = time()
+
+    if GLOG.BroadcastRosterUpsert then
+        GLOG.BroadcastRosterUpsert(name)  -- inclura l'alias (voir Comm.lua)
+    end
+    return true
 end

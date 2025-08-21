@@ -13,9 +13,10 @@ local lotsDirty = true -- flag d’invalidation des lots
 
 local cols = {
     { key="check", title="",      w=34,  justify="LEFT"  },
-    { key="name",  title=Tr("col_name"),   min=300, flex=1, justify="LEFT" },
+    { key="alias", title=Tr("col_alias"),   w=140, justify="LEFT" }, -- ➕ avant Nom
+    { key="name",  title=Tr("col_name"),    min=300, flex=1, justify="LEFT" },
     { key="solde", title=Tr("col_balance"), w=160, justify="LEFT"  },
-    { key="after", title=Tr("col_after"), w=160, justify="LEFT"  },
+    { key="after", title=Tr("col_after"),   w=160, justify="LEFT"  },
 }
 
 -- ===== Utilitaires =====
@@ -48,16 +49,29 @@ end
 local function BuildRow(r)
     local f = {}
     f.check = CreateFrame("CheckButton", nil, r, "UICheckButtonTemplate")
+    f.alias = UI.Label(r, { justify = "LEFT" })                 -- ➕
     f.name  = UI.CreateNameTag(r)
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.after = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     return f
 end
 
+
 local function UpdateRow(i, r, f, d)
     if includes[d.name] == nil then includes[d.name] = true end
     f.check:SetChecked(includes[d.name])
     f.check:SetScript("OnClick", function(self) includes[d.name] = self:GetChecked() and true or false; ns.RefreshAll() end)
+
+    -- ➕ alias avant Nom
+    if f.alias then
+        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(d.name)) or ""
+        if a and a ~= "" then
+            f.alias:SetText(a)
+        else
+            f.alias:SetText("")
+        end
+    end
+
     UI.SetNameTag(f.name, d.name or "")
     local solde = (d.credit or 0) - (d.debit or 0)
     f.solde:SetText(UI.MoneyText(solde))

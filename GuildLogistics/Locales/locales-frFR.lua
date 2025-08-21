@@ -83,8 +83,8 @@ L["btn_close"]            = "Fermer"
 L["btn_delete_short"]     = "X"
 L["btn_enable_debug"]     = "Activer le débug"
 L["btn_create_bundle"]    = "Créer un lot"
-L["btn_deposit_gold"]     = "Dépôt d’or"
-L["btn_withdraw_gold"]    = "Retrait d’or"
+L["btn_deposit_gold"]     = "Dépôt"
+L["btn_withdraw_gold"]    = "Retrait"
 L["btn_stop_recording"]   = "Stopper l'enregistrement"
 L["btn_start_recording_expenses"] = "Démarrer l'enregistrement des dépenses"
 L["add_guild_member"]     = "Ajouter un membre de la guilde"
@@ -98,6 +98,12 @@ L["btn_confirm"] = "Valider"
 L["btn_cancel"] = "Annuler"
 L["btn_create"] = "Créer"
 L["btn_split"]  = "Scinder"
+
+-- ➕ Alias / UI
+L["col_alias"]            = "Alias"
+L["btn_set_alias"]        = "Alias…"
+L["popup_set_alias_title"]= "Définir un alias"
+L["lbl_alias"]            = "Alias :"
 
 -- Listes / badges / labels
 L["lbl_bundles"]          = "Lots"

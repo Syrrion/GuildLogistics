@@ -100,6 +100,12 @@ L["btn_cancel"]           = "Cancel"
 L["btn_create"]           = "Create"
 L["btn_split"]            = "Split"
 
+-- ➕ Alias / UI
+L["col_alias"]            = "Alias"
+L["btn_set_alias"]        = "Alias…"
+L["popup_set_alias_title"]= "Set an Alias"
+L["lbl_alias"]            = "Alias:"
+
 -- Lists / badges / labels
 L["lbl_bundles"]          = "Bundles"
 L["lbl_in_roster"]        = "In Roster"

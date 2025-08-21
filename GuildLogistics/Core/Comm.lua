@@ -1867,7 +1867,11 @@ function GLOG.BroadcastRosterUpsert(name)
     local rv = safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) + 1
     GuildLogisticsDB.meta.rev = rv
     GuildLogisticsDB.meta.lastModified = now()
-    GLOG.Comm_Broadcast("ROSTER_UPSERT", { uid = uid, name = name, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    local alias = (GLOG.GetAliasFor and GLOG.GetAliasFor(name)) or nil
+    GLOG.Comm_Broadcast("ROSTER_UPSERT", {
+        uid = uid, name = name, alias = alias,   -- ➕ alias (optionnel)
+        rv = rv, lm = GuildLogisticsDB.meta.lastModified
+    })
 end
 
 function GLOG.BroadcastRosterRemove(idOrName)
@@ -2626,4 +2630,27 @@ if not GLOG._autoBootstrap then
         end
     end)
     GLOG._autoBootstrap = true
+end
+
+-- =========================
+-- Patch de réception Alias
+-- =========================
+-- On enveloppe le handler principal pour capter l'alias sans toucher au gros corps de fonction.
+do
+    local _OldHandleFull = GLOG._HandleFull
+    function GLOG._HandleFull(sender, msgType, kv)
+        local ret = _OldHandleFull(sender, msgType, kv)
+        local t = tostring(msgType or ""):upper()
+        if (t == "ROSTER_UPSERT" or t == "ROSTER_RESERVE") and kv then
+            local name = kv.name
+            if (not name or name == "") and kv.uid and GLOG.GetNameByUID then
+                name = GLOG.GetNameByUID(kv.uid)
+            end
+            if name and kv.alias and GLOG.SetAliasLocal then
+                local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+                GLOG.SetAliasLocal(nf(name), kv.alias)
+            end
+        end
+        return ret
+    end
 end

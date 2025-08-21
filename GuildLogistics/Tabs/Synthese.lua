@@ -11,12 +11,13 @@ local reserveToggleBtn
 
 local cols = UI.NormalizeColumns({
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
-    { key="name",   title=Tr("col_name"),    min=180, flex=1 },
-    { key="ilvl",   title=Tr("col_ilvl"),   w=64, justify="CENTER" },
-    { key="mkey",   title=Tr("col_mplus_key"),    w=200, justify="LEFT" },
-    { key="last",   title=Tr("col_attendance"), w=180 },
-    { key="act",    title="", w=200 },
-    { key="solde",  title=Tr("col_balance"),  w=80 },
+    { key="alias",  title=Tr("col_alias"),          w=80, justify="LEFT" },
+    { key="name",   title=Tr("col_name"),           min=180, flex=1 },
+    { key="ilvl",   title=Tr("col_ilvl"),           w=64, justify="CENTER" },
+    { key="mkey",   title=Tr("col_mplus_key"),      w=200, justify="LEFT" },
+    { key="last",   title=Tr("col_attendance"),     w=180 },
+    { key="act",    title="",                        w=200 },
+    { key="solde",  title=Tr("col_balance"),        w=80 },
 })
 
 -- Helpers
@@ -162,8 +163,9 @@ end
 
 -- BuildRow
 local function BuildRow(r, context)
-    local f = {}
+local f = {}
     f.lvl   = UI.Label(r, { justify = "CENTER" })
+    f.alias = UI.Label(r, { justify = "LEFT"  }) 
     f.name  = UI.CreateNameTag(r)
     f.ilvl  = UI.Label(r, { justify = "CENTER" })
     f.mkey  = UI.Label(r, { justify = "LEFT" })
@@ -174,8 +176,8 @@ local function BuildRow(r, context)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
-    r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=90 })
-    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"), { size="sm", variant="ghost", minWidth=90 })
+    r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=70 })
+    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"), { size="sm", variant="ghost", minWidth=70 })
     r.btnDelete   = UI.Button(f.act, Tr("btn_delete_short"),  { size="sm", variant="danger", minWidth=28, padX=12 })
 
     local buttons = { r.btnDeposit, r.btnWithdraw, r.btnDelete }
@@ -205,6 +207,15 @@ end
 -- UpdateRow
 local function UpdateRow(i, r, f, data)
     UI.SetNameTag(f.name, data.name or "")
+
+    if f.alias then
+        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
+        if a and a ~= "" then
+            f.alias:SetText(a)
+        else
+            f.alias:SetText("")
+        end
+    end
 
     local gi = FindGuildInfo(data.name)
 

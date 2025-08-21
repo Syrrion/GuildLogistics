@@ -8,10 +8,13 @@ function UI.CreatePopup(opts)
     opts = opts or {}
     local f = CreateFrame("Frame", "GLOG_Popup_" .. math.random(1e8), UIParent, "BackdropTemplate")
     f:SetSize(opts.width or 460, opts.height or 240)
-    f:SetFrameStrata("DIALOG"); f:SetToplevel(true)
-    f:SetPoint("CENTER")
-    f:SetMovable(true); f:EnableMouse(true)
 
+    -- Strate ajustable (par défaut DIALOG). Ne crée l’overlay que si enforceAction=true.
+    local wantedStrata = opts.strata or ((opts.enforceAction and "FULLSCREEN_DIALOG") or "DIALOG")
+    f:SetFrameStrata(wantedStrata); f:SetToplevel(true)
+    if opts.level and type(opts.level) == "number" then f:SetFrameLevel(opts.level) end
+
+    f:SetPoint("CENTER")
     f:SetMovable(true); f:EnableMouse(true)
     if f.SetClampedToScreen then f:SetClampedToScreen(true) end
 
@@ -450,10 +453,13 @@ end
 
 -- Prompt texte générique (saisie libre)
 function UI.PopupPromptText(title, label, onAccept, opts)
+    opts = opts or {}
     local dlg = UI.CreatePopup({
         title  = title or "Saisie",
-        width  = math.floor(((opts and opts.width)  or 460) * 1.10),
-        height = math.floor(((opts and opts.height) or 220) * 1.20),
+        width  = math.floor((opts.width  or 460) * 1.10),
+        height = math.floor((opts.height or 220) * 1.20),
+        strata = "FULLSCREEN_DIALOG",  -- au-dessus de la popup des membres
+        -- level optionnel si besoin: level = 1000,
     })
 
     local stack = CreateFrame("Frame", nil, dlg.content)
@@ -475,7 +481,7 @@ function UI.PopupPromptText(title, label, onAccept, opts)
     end)
 
     dlg:SetButtons({
-        { text = Tr("btn_confirm"),   default = true, onClick = function()
+        { text = Tr("btn_confirm"), default = true, onClick = function()
             local v = tostring(eb:GetText() or "")
             if onAccept then onAccept(v) end
         end },
