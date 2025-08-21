@@ -171,14 +171,13 @@ if type(U.FindUIDByName) ~= "function" then
     end
 end
 
-if type(U.MapUID) ~= "function" then
-    function U.MapUID(uid, name)
-        local db = EnsureDB()
-        local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
-        db.uids[tostring(uid or "")] = full
-        db.players[full] = db.players[full] or { credit = 0, debit = 0 }
-        return uid
-    end
+function U.MapUID(uid, name)
+    local db = EnsureDB()
+    local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
+    db.uids[tostring(uid or "")] = full
+    -- ⛑️ Création implicite = Réserve
+    db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
+    return uid
 end
 
 if type(U.UnmapUID) ~= "function" then
@@ -202,13 +201,13 @@ if type(U.GetOrAssignUID) ~= "function" then
     end
 end
 
-if type(U.EnsureRosterLocal) ~= "function" then
-    function U.EnsureRosterLocal(name)
-        local db = EnsureDB()
-        local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
-        db.players[full] = db.players[full] or { credit = 0, debit = 0 }
-        return db.players[full]
-    end
+function U.EnsureRosterLocal(name)
+    local db = EnsureDB()
+    local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
+    -- ⛑️ Création implicite = Réserve
+    db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
+    if db.players[full].reserved == nil then db.players[full].reserved = true end
+    return db.players[full]
 end
 
 -- Miroirs compat dans GLOG (si absents)
@@ -251,17 +250,6 @@ if type(U.FindUIDByName) ~= "function" then
     end
 end
 
-if type(U.MapUID) ~= "function" then
-    function U.MapUID(uid, name)
-        local db = EnsureDB()
-        local n = U.NormalizeFull and U.NormalizeFull(name) or tostring(name or "")
-        db.uids[tostring(uid or "")] = n
-        -- optionnel : créer l’entrée joueur si absente
-        db.players[n] = db.players[n] or { credit = 0, debit = 0 }
-        return uid
-    end
-end
-
 if type(U.UnmapUID) ~= "function" then
     function U.UnmapUID(uid)
         local db = EnsureDB()
@@ -280,15 +268,6 @@ if type(U.GetOrAssignUID) ~= "function" then
         db.meta.uidSeq = nextId + 1
         U.MapUID(uid, n)
         return uid
-    end
-end
-
-if type(U.EnsureRosterLocal) ~= "function" then
-    function U.EnsureRosterLocal(name)
-        local db = EnsureDB()
-        local n = U.NormalizeFull and U.NormalizeFull(name) or tostring(name or "")
-        db.players[n] = db.players[n] or { credit = 0, debit = 0 }
-        return db.players[n]
     end
 end
 

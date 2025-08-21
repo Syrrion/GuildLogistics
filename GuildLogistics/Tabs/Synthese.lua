@@ -163,34 +163,26 @@ end
 
 -- BuildRow
 local function BuildRow(r, context)
-local f = {}
+    local f = {}
     f.lvl   = UI.Label(r, { justify = "CENTER" })
-    f.alias = UI.Label(r, { justify = "LEFT"  }) 
+    f.alias = UI.Label(r, { justify = "LEFT"  })
     f.name  = UI.CreateNameTag(r)
     f.ilvl  = UI.Label(r, { justify = "CENTER" })
-    f.mkey  = UI.Label(r, { justify = "LEFT" })
+    f.mkey  = UI.Label(r, { justify = "LEFT"  })
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
+    -- Conteneur d’actions
     f.act = CreateFrame("Frame", nil, r)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
+    -- Actions financières (inchangé)
     r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=70 })
-    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"), { size="sm", variant="ghost", minWidth=70 })
-    r.btnDelete   = UI.Button(f.act, Tr("btn_delete_short"),  { size="sm", variant="danger", minWidth=28, padX=12 })
+    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"),  { size="sm", variant="ghost", minWidth=70 })
 
-    local buttons = { r.btnDeposit, r.btnWithdraw, r.btnDelete }
-
-    if context == "active" then
-        r.btnReserve = UI.Button(f.act, Tr("btn_to_reserve"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_reserve") })
-        table.insert(buttons, 1, r.btnReserve)
-    elseif context == "reserve" then
-        r.btnRoster = UI.Button(f.act, Tr("btn_to_roster"), { size="sm", minWidth=120, tooltip=Tr("lbl_move_to_roster") })
-        table.insert(buttons, 1, r.btnRoster)
-    end
-
-    UI.AttachRowRight(f.act, buttons, 8, -4, { leftPad = 8, align = "center" })
+    -- Alignement des actions sur la droite
+    UI.AttachRowRight(f.act, { r.btnDeposit, r.btnWithdraw, r.btnReserve, r.btnRoster }, 8, -4, { leftPad = 8, align = "center" })
 
     -- ✨ surlignage si même groupe/sous-groupe de raid
     if not r._highlight then
@@ -380,11 +372,16 @@ local function Refresh()
     local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
     local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve()) or {}
 
-    if lvActive  then lvActive:SetData(active) end
+    -- ➕ Uniformisation : mêmes enveloppes { data = ... } pour les deux listes
+    if lvActive then
+        local wrappedA = {}
+        for i, it in ipairs(active) do wrappedA[i] = { data = it, fromActive = true } end
+        lvActive:SetData(wrappedA)
+    end
     if lvReserve then
-        local wrapped = {}
-        for i, it in ipairs(reserve) do wrapped[i] = { data = it, fromReserve = true } end
-        lvReserve:SetData(wrapped)
+        local wrappedR = {}
+        for i, it in ipairs(reserve) do wrappedR[i] = { data = it, fromReserve = true } end
+        lvReserve:SetData(wrappedR)
     end
 
     local total = 0
@@ -454,13 +451,15 @@ local function Build(container)
     lvActive = UI.ListView(activeArea, cols, {
         buildRow = function(r) return BuildRow(r, "active") end,
         updateRow = function(i, r, f, it)
-            UpdateRow(i, r, f, it)
+            local data = it.data or it
+            UpdateRow(i, r, f, data)
             if r.btnReserve then
                 local isMaster = GLOG.IsMaster and GLOG.IsMaster()
                 r.btnReserve:SetShown(isMaster)
+                if r.btnRoster then r.btnRoster:SetShown(false) end
                 if isMaster then
                     r.btnReserve:SetOnClick(function()
-                        if GLOG.GM_SetReserved then GLOG.GM_SetReserved(it.name, true) end
+                        if GLOG.GM_SetReserved then GLOG.GM_SetReserved(data.name, true) end
                     end)
                 end
             end
@@ -476,6 +475,7 @@ local function Build(container)
             if r.btnRoster then
                 local isMaster = GLOG.IsMaster and GLOG.IsMaster()
                 r.btnRoster:SetShown(isMaster)
+                if r.btnReserve then r.btnReserve:SetShown(false) end
                 if isMaster then
                     r.btnRoster:SetOnClick(function()
                         if GLOG.GM_SetReserved then GLOG.GM_SetReserved(data.name, false) end

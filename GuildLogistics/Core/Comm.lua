@@ -28,7 +28,8 @@ if not GLOG.GetOrAssignUID then
         for uid, stored in pairs(db.uids) do if stored == full then return uid end end
         local uid = string.format("P%06d", db.meta.uidSeq); db.meta.uidSeq = db.meta.uidSeq + 1
         db.uids[uid] = full
-        db.players[full] = db.players[full] or { credit = 0, debit = 0 }
+        -- ⛑️ Création implicite = Réserve
+        db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
         return uid
     end
     function GLOG.GetNameByUID(uid)
@@ -38,7 +39,9 @@ if not GLOG.GetOrAssignUID then
     function GLOG.MapUID(uid, name)
         local db = _ensureDB()
         db.uids[tostring(uid or "")] = tostring(name or "")
-        db.players[tostring(name or "")] = db.players[tostring(name or "")] or { credit=0, debit=0 }
+        -- ⛑️ Création implicite = Réserve
+        local key = tostring(name or "")
+        db.players[key] = db.players[key] or { credit=0, debit=0, reserved = true }
         return uid
     end
     function GLOG.UnmapUID(uid)
@@ -48,7 +51,9 @@ if not GLOG.GetOrAssignUID then
     function GLOG.EnsureRosterLocal(name)
         local db = _ensureDB()
         local full = tostring(name or "")
-        db.players[full] = db.players[full] or { credit = 0, debit = 0 }
+        -- ⛑️ Création implicite = Réserve
+        db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
+        if db.players[full].reserved == nil then db.players[full].reserved = true end
         return db.players[full]
     end
 end
@@ -59,7 +64,7 @@ local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
-local OUT_MAX_PER_SEC = 2
+local OUT_MAX_PER_SEC = 1
 
 -- Compression via LibDeflate (obligatoire)
 local LD = assert(LibStub and LibStub:GetLibrary("LibDeflate"),  "LibDeflate requis")
@@ -207,15 +212,16 @@ end
 
 -- ===== Découverte & Sync (HELLO → OFFER → GRANT → FULL → ACK) =====
 -- Paramètres (sans broadcast, sans test de bande passante)
-local HELLO_WAIT_SEC          = 3.0        -- fenêtre collecte OFFERS
+local HELLO_WAIT_SEC          = 4.0        -- ⬆️ fenêtre collecte OFFERS (+1s)
 local OFFER_BACKOFF_MS_MAX    = 600        -- étalement OFFERS (0..600ms)
 local FULL_INHIBIT_SEC        = 15         -- n'offre pas si FULL récent vu
 local OFFER_RATE_LIMIT_SEC    = 10         -- anti-spam OFFERS par initiateur
+local GM_EXTRA_WAIT_SEC       = 1.5        -- ➕ prolongation si GM en ligne mais pas encore d’OFFERS du GM
 
--- Suivi "FULL vu" pour UI/anti-bruit
-local LastFullSentAt  = LastFullSentAt or 0
 local LastFullSeenAt  = LastFullSeenAt or 0
 local LastFullSeenRv  = LastFullSeenRv or -1
+local LastGMFullAt    = LastGMFullAt   or 0
+local LastGMFullRv    = LastGMFullRv   or -1
 
 -- Suivi Debug de la découverte
 local HelloElect      = HelloElect or {}   -- [hid] = { startedAt, endsAt, decided, winner, token, offers, applied }
@@ -296,7 +302,6 @@ end
 
 local function _decideAndGrant(hid)
     local sess = Discovery[hid]
-    -- Autorise une nouvelle décision tant qu'aucun GRANT n'a été émis
     if not sess or sess.grantedTo then return end
     sess.decided = true
 
@@ -321,14 +326,48 @@ local function _decideAndGrant(hid)
     end
 
     local offers = sess.offers or {}
+
+    -- ➕ Si le GM est EN LIGNE mais qu'aucune offre du GM n'est présente, prolonge l'attente une fois
+    local function _isGM(name)
+        if not name or name == "" then return false end
+        if GLOG.IsNameGuildMaster then return GLOG.IsNameGuildMaster(name) end
+        if GLOG.GetGuildMasterCached and GLOG.NormName then
+            local gm = select(1, GLOG.GetGuildMasterCached())
+            if gm and gm ~= "" then return GLOG.NormName(name) == GLOG.NormName(gm) end
+        end
+        return false
+    end
+    local gmOfferPresent = false
+    for _, o in pairs(offers) do
+        if _isGM(o.player) then gmOfferPresent = true; break end
+    end
+    if not gmOfferPresent and (GLOG.IsMasterOnline and GLOG.IsMasterOnline()) and not sess.gmWaitExtended then
+        sess.gmWaitExtended = true
+        HelloElect[hid] = HelloElect[hid] or {}
+        HelloElect[hid].endsAt = (HelloElect[hid].endsAt or now()) + GM_EXTRA_WAIT_SEC
+        if ns.Emit then ns.Emit("debug:changed") end
+        -- ⏳ attend encore un peu pour laisser le GM répondre
+        C_Timer.After(GM_EXTRA_WAIT_SEC, function() _decideAndGrant(hid) end)
+        return
+    end
+
+    -- ✅ Priorité GM si présent dans les offres
     local chosen = nil
     for _, o in pairs(offers) do
-        if not chosen then chosen = o
+        if not chosen then
+            chosen = o
         else
-            if (o.rv > chosen.rv)
-            or (o.rv == chosen.rv and o.est < chosen.est)
-            or (o.rv == chosen.rv and o.est == chosen.est and o.h > chosen.h)
-            then chosen = o end
+            local ogm = _isGM(o.player)
+            local cgm = _isGM(chosen.player)
+            if ogm and not cgm then
+                chosen = o                                -- GM prioritaire
+            elseif (ogm == cgm) then
+                -- tri existant : meilleure révision, puis plus "léger", puis tiebreaker
+                if (o.rv > chosen.rv)
+                or (o.rv == chosen.rv and o.est < chosen.est)
+                or (o.rv == chosen.rv and o.est == chosen.est and o.h > chosen.h)
+                then chosen = o end
+            end
         end
     end
 
@@ -361,23 +400,50 @@ local function _decideAndGrant(hid)
 end
 
 local function _scheduleOfferReply(hid, initiator, rv_init)
-    -- Inhibition si FULL récent ≥ mon rv
-    if (now() - (LastFullSeenAt or 0)) < FULL_INHIBIT_SEC and (LastFullSeenRv or -1) >= safenum(getRev(), 0) then
-        return
+    -- Inhibition si FULL récent ≥ mon rv (⚠️ sauf GM pour priorité absolue)
+    local iAmGM = (GLOG.IsNameGuildMaster and GLOG.IsNameGuildMaster(playerFullName())) or false
+    if not iAmGM then
+        if (now() - (LastFullSeenAt or 0)) < FULL_INHIBIT_SEC and (LastFullSeenRv or -1) >= safenum(getRev(), 0) then
+            return
+        end
     end
-    -- Anti-spam par initiateur
+
+    -- ➕ Règle demandée : n'envoyer un SYNC_OFFER que si la "version" (révision DB) du joueur (HELLO)
+    -- est STRICTEMENT inférieure à celle du GM. Si identique ou supérieure → pas d'OFFER.
+    local gmRv
+    if iAmGM then
+        gmRv = safenum(getRev(), 0)
+    else
+        gmRv = (LastGMFullRv ~= nil) and safenum(LastGMFullRv, -1) or -1
+    end
+    -- Si on n'a aucune info sur le GM et qu'on n'est pas GM nous-même → ne pas répondre.
+    if not iAmGM and (not gmRv or gmRv < 0) then return end
+    -- Si la révision de l'initiateur (rv_init) n'est pas inférieure à celle du GM → ne pas répondre.
+    if safenum(rv_init, 0) >= safenum(gmRv, -1) then return end
+
+    -- Anti-spam par initiateur (conservé même pour GM)
     local k = _norm(initiator)
     local last = OfferCooldown[k] or 0
     if (now() - last) < OFFER_RATE_LIMIT_SEC then return end
     OfferCooldown[k] = now()
 
-    local est = _estimateSnapshotSize()
-    local h   = _hashHint(string.format("%s|%d|%s", playerFullName(), safenum(getRev(),0), hid))
-    local delay = math.random(0, OFFER_BACKOFF_MS_MAX) / 1000.0
+    local est   = _estimateSnapshotSize()
+    local h     = _hashHint(string.format("%s|%d|%s", playerFullName(), safenum(getRev(),0), hid))
+    -- Le GM répond sans jitter pour passer devant tout le monde
+    local delay = iAmGM and 0 or (math.random(0, OFFER_BACKOFF_MS_MAX) / 1000.0)
 
     ns.Util.After(delay, function()
         local rv_peer = safenum(getRev(), 0)
+        -- Ne proposer que si l'on est réellement plus à jour que l'initiateur
         if rv_peer <= safenum(rv_init, 0) then return end
+
+        -- Double-vérif d'inhibition tout près de l'envoi (sauf GM)
+        if not iAmGM then
+            if (now() - (LastFullSeenAt or 0)) < FULL_INHIBIT_SEC and (LastFullSeenRv or -1) >= rv_peer then
+                return
+            end
+        end
+
         GLOG.Comm_Whisper(initiator, "SYNC_OFFER", {
             hid = hid, rv = rv_peer, est = est, h = h, from = playerFullName()
         })
@@ -1077,13 +1143,16 @@ function GLOG._HandleFull(sender, msgType, kv)
             GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
             local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
             local full = nf(kv.name or "")
-            local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0 }
+            local existed = not not GuildLogisticsDB.players[full]
+            local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0, reserved = true }
             local d = safenum(kv.delta, 0)
             if d >= 0 then
                 rec.credit = safenum(rec.credit,0) + d
             else
                 rec.debit  = safenum(rec.debit,0)  + (-d)
             end
+            -- 1er mouvement reçu par le réseau => flag réserve par défaut
+            if not existed and rec.reserved == nil then rec.reserved = true end
             GuildLogisticsDB.players[full] = rec
             applied = true
         end
@@ -1108,12 +1177,15 @@ function GLOG._HandleFull(sender, msgType, kv)
                 local name = N[i] or (GLOG.GetNameByUID and GLOG.GetNameByUID(U[i])) or "?"
                 local full = nf(name)
                 local d = safenum(D[i], 0)
-                local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0 }
+                local existed = not not GuildLogisticsDB.players[full]
+                local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0, reserved = true }
                 if d >= 0 then
                     rec.credit = safenum(rec.credit,0) + d
                 else
                     rec.debit  = safenum(rec.debit,0)  + (-d)
                 end
+                -- 1er mouvement reçu par le réseau => flag réserve par défaut
+                if not existed and rec.reserved == nil then rec.reserved = true end
                 GuildLogisticsDB.players[full] = rec
             end
             done = true
@@ -1637,6 +1709,12 @@ function GLOG._HandleFull(sender, msgType, kv)
         -- Mémoriser la vue du FULL (anti-doublon & inhibitions)
         LastFullSeenAt = now()
         LastFullSeenRv = safenum(kv.rv, -1)
+
+        -- ➕ Si l'émetteur est le GM, mémoriser aussi sa révision
+        if GLOG.IsNameGuildMaster and GLOG.IsNameGuildMaster(sender) then
+            LastGMFullAt = now()
+            LastGMFullRv = safenum(kv.rv, -1)
+        end
 
         -- ⛔ Ignore notre propre FULL (évite de ré-appliquer/vider localement chez le GM)
         do

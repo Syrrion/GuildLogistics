@@ -184,9 +184,11 @@ end
 -- Confirm standard
 function UI.PopupConfirm(text, onAccept, onCancel, opts)
     local dlg = UI.CreatePopup({
-        title  = (opts and opts.title) or "Confirmation",
-        width  = math.floor(((opts and opts.width)  or 460) * 1.10),
-        height = math.floor(((opts and opts.height) or 180) * 1.20),
+        title         = (opts and opts.title) or "Confirmation",
+        width         = math.floor(((opts and opts.width)  or 460) * 1.10),
+        height        = math.floor(((opts and opts.height) or 180) * 1.20),
+        strata        = opts and opts.strata,          -- ➕ passe la strate demandée
+        enforceAction = opts and opts.enforceAction,   -- ➕ force un overlay et priorité
     })
     dlg:SetMessage(text)
     dlg:SetButtons({

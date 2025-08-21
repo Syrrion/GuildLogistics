@@ -441,9 +441,18 @@ end
 
 function UI.SetNameTag(tag, name)
     if not tag then return end
-    local class, r, g, b, coords = nil, 1,1,1,nil
-    if GLOG and GLOG.GetNameStyle then class, r, g, b, coords = GLOG.GetNameStyle(name) end
-    if tag.text then tag.text:SetText(name or "") tag.text:SetTextColor(r or 1, g or 1, b or 1) end
+
+    -- Résoudre le "Nom-Royaume" à partir du cache de guilde (pas d'ajout arbitraire du royaume local)
+    local display = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name or "")
+
+    local class, r, g, b, coords = nil, 1, 1, 1, nil
+    if GLOG and GLOG.GetNameStyle then class, r, g, b, coords = GLOG.GetNameStyle(display) end
+
+    if tag.text then
+        tag.text:SetText(display or "")
+        tag.text:SetTextColor(r or 1, g or 1, b or 1)
+    end
+
     if tag.icon and coords then
         tag.icon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes")
         tag.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])

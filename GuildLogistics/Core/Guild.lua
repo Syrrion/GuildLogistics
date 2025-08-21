@@ -165,6 +165,23 @@ function GLOG.GetGuildRowsCached()
     return GLOG._guildCache and GLOG._guildCache.rows or {}
 end
 
+-- Résout un nom court en "Nom-Royaume" en s'appuyant sur le roster en cache.
+-- Si introuvable, retourne le nom tel quel (aucun ajout de royaume arbitraire).
+function GLOG.ResolveFullName(name)
+    local n = tostring(name or "")
+    if n == "" or n:find("%-") then return n end
+    local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+    local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+    for _, r in ipairs(rows) do
+        local full = r.name_raw or r.name_amb
+        if full and ((GLOG.NormName and GLOG.NormName(full)) or full:lower()) == key then
+            return full
+        end
+    end
+    return n
+end
+
+
 -- ✏️ Est-ce que le GM effectif (rang 0) est en ligne ?
 function GLOG.IsMasterOnline()
     if not GLOG.GetGuildMasterCached then return false end

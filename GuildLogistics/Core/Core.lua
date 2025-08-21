@@ -57,9 +57,9 @@ local function EnsureDB()
     if GuildLogisticsUI.minimap.angle == nil then GuildLogisticsUI.minimap.angle = 215 end
 
     -- ✏️ Par défaut : débug inactif (Non)
-    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = false end
+    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = true end
     -- ➕ Par défaut : ouverture auto désactivée
-    if GuildLogisticsUI.autoOpen == nil then GuildLogisticsUI.autoOpen = false end
+    if GuildLogisticsUI.autoOpen == nil then GuildLogisticsUI.autoOpen = true end
 end
 
 GLOG._EnsureDB = EnsureDB
@@ -75,13 +75,14 @@ end
 -- =========================
 local function GetOrCreatePlayer(name)
     EnsureDB()
-    if not name or name == "" then return { credit=0, debit=0, reserved=false } end
+    if not name or name == "" then return { credit=0, debit=0, reserved=true } end
     local p = GuildLogisticsDB.players[name]
     if not p then
-        p = { credit = 0, debit = 0, reserved = false }  -- ➕ flag de réserve par défaut
+        -- ⛑️ Création implicite = en "Réserve" par défaut
+        p = { credit = 0, debit = 0, reserved = true }
         GuildLogisticsDB.players[name] = p
     else
-        if p.reserved == nil then p.reserved = false end -- compat données anciennes
+        if p.reserved == nil then p.reserved = true end -- compat données anciennes
     end
     return p
 end
@@ -125,45 +126,132 @@ end
 
 -- ➕ Sous-ensembles utiles à l’UI (actif / réserve)
 function GLOG.GetPlayersArrayActive()
-    local src = GLOG.GetPlayersArray()
-    local out = {}
-    for _, r in ipairs(src) do
-        -- ✅ robuste même si un appelant fournit une ligne sans champ 'reserved'
-        local isRes = (r.reserved ~= nil) and r.reserved
-                      or (GLOG.IsReserved and GLOG.IsReserved(r.name)) or false
-        if not isRes then out[#out+1] = r end
+    EnsureDB()
+    local out, agg = {}, {}
+
+    -- 1) Déterminer les MAINS "actifs" (au moins un perso non réservé/bench)
+    local activeSet = {}  -- [mk] = displayName
+    for name, p in pairs(GuildLogisticsDB.players or {}) do
+        local isRes = (GLOG.IsReserved and GLOG.IsReserved(name)) or false
+        if not isRes then
+            local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+            local mk   = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+            if mk and mk ~= "" then
+                local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or main
+                activeSet[mk] = display
+            end
+        end
     end
+
+    -- 2) Agréger les crédits/débits de TOUS les persos appartenant à ces mains actifs
+    for name, p in pairs(GuildLogisticsDB.players or {}) do
+        local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+        local mk   = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+        local display = activeSet[mk]
+        if display then
+            local b = agg[mk]
+            if not b then
+                b = { name = display, credit = 0, debit = 0, reserved = false }
+                agg[mk] = b
+            end
+            b.credit = (b.credit or 0) + (tonumber(p.credit) or 0)
+            b.debit  = (b.debit  or 0) + (tonumber(p.debit)  or 0)
+        end
+    end
+
+    -- 3) Normaliser la sortie
+    for _, v in pairs(agg) do
+        v.solde = (tonumber(v.credit) or 0) - (tonumber(v.debit) or 0)
+        out[#out+1] = v
+    end
+
+    table.sort(out, function(a, b) return (a.name or ""):lower() < (b.name or ""):lower() end)
     return out
 end
 
-
 function GLOG.GetPlayersArrayReserve()
     EnsureDB()
-    local out = {}
-    for name, p in pairs(GuildLogisticsDB.players) do
-        if p.reserved then
-            local credit = tonumber(p.credit) or 0
-            local debit  = tonumber(p.debit) or 0
-            out[#out+1] = {
-                name = name, credit = credit, debit = debit,
-                solde = credit - debit, reserved = true
-            }
+    local out, agg = {}, {}
+
+    -- Ensemble des MAINS déjà ACTIFS (au moins un perso non réservé)
+    local activeSet = {}
+    do
+        local arr = (GLOG.GetPlayersArrayActive and GLOG.GetPlayersArrayActive()) or {}
+        for _, r in ipairs(arr) do
+            local main = (GLOG.GetMainOf and GLOG.GetMainOf(r.name)) or r.name
+            local mk   = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+            if mk and mk ~= "" then activeSet[mk] = true end
         end
     end
-    table.sort(out, function(a,b) return a.name:lower() < b.name:lower() end)
+
+    -- Regroupe par "main" (clé normalisée) et garde un nom d'affichage propre
+    local function ensureBucket(mk, display)
+        if not mk or mk == "" then return nil end
+        if activeSet[mk] then return nil end -- ⛔ ne pas créer de bucket pour un main actif
+        local b = agg[mk]
+        if not b then
+            b = { name = display or mk, credit = 0, debit = 0, reserved = true }
+            agg[mk] = b
+        elseif display and (b.name == "" or b.name == mk) then
+            b.name = display
+        end
+        return b
+    end
+
+    -- 1) BDD locale marquée "réserve" → agrégation par MAIN si connu
+    for name, p in pairs(GuildLogisticsDB.players or {}) do
+        if p and ((GLOG.IsReserved and GLOG.IsReserved(name)) or p.reserved) then
+            local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+            local mk   = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+            if mk and not activeSet[mk] then
+                local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or main
+                local b = ensureBucket(mk, display)
+                if b then
+                    b.credit = (b.credit or 0) + (tonumber(p.credit) or 0)
+                    b.debit  = (b.debit  or 0) + (tonumber(p.debit)  or 0)
+                end
+            end
+        end
+    end
+
+    -- 2) Ajouter les MAINS du roster guilde UNIQUEMENT s’ils ne sont PAS actifs localement
+    local mainsAgg = (GLOG.GetGuildMainsAggregatedCached and GLOG.GetGuildMainsAggregatedCached()) or {}
+    for _, e in ipairs(mainsAgg) do
+        local mk = e.key or (GLOG.NormName and GLOG.NormName(e.main)) or nil
+        if mk and not activeSet[mk] then
+            local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(e.main)) or e.main
+            ensureBucket(mk, display)
+        end
+    end
+
+    -- Sortie normalisée
+    for _, v in pairs(agg) do
+        v.solde = (tonumber(v.credit) or 0) - (tonumber(v.debit) or 0)
+        out[#out+1] = v
+    end
+
+    table.sort(out, function(a, b) return (a.name or ""):lower() < (b.name or ""):lower() end)
     return out
 end
 
 function GLOG.AddPlayer(name)
     if not name or name == "" then return end
+
+    -- Crée l’entrée si besoin (par défaut en Réserve)
     GetOrCreatePlayer(name)
+
+    -- ⚑ Ajout explicite au roster actif
+    if GLOG.GM_SetReserved and GLOG.IsMaster and GLOG.IsMaster() then
+        GLOG.GM_SetReserved(name, false) -- bascule en "Actif" et broadcast le statut
+    end
+
+    -- UID & upsert réseau (nom > uid)
     if GLOG.GetOrAssignUID then GLOG.GetOrAssignUID(name) end
     if GLOG.BroadcastRosterUpsert and GLOG.IsMaster and GLOG.IsMaster() then
         GLOG.BroadcastRosterUpsert(name)
     end
     return true
 end
-
 
 function GLOG.RemovePlayer(name)
     if not (GLOG.IsMaster and GLOG.IsMaster()) then
@@ -201,15 +289,31 @@ function GLOG.IsReserve(name)
 end
 
 function GLOG.Credit(name, amount)
+    EnsureDB()
+    if not name or name == "" then return end
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local existed = not not GuildLogisticsDB.players[name]
+
     local p = GetOrCreatePlayer(name)
     local a = math.floor(tonumber(amount) or 0)
     p.credit = (p.credit or 0) + a
+
+    -- Premier mouvement d’or => apparition en BDD et flag "réserve" par défaut
+    if not existed then p.reserved = true end
 end
 
 function GLOG.Debit(name, amount)
+    EnsureDB()
+    if not name or name == "" then return end
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local existed = not not GuildLogisticsDB.players[name]
+
     local p = GetOrCreatePlayer(name)
     local a = math.floor(tonumber(amount) or 0)
     p.debit = (p.debit or 0) + a
+
+    -- Premier mouvement d’or => apparition en BDD et flag "réserve" par défaut
+    if not existed then p.reserved = true end
 end
 
 function GLOG.GetSolde(name)
@@ -311,14 +415,15 @@ function GLOG.EnsureRosterLocal(name)
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     local created = false
     if not GuildLogisticsDB.players[name] then
-        GuildLogisticsDB.players[name] = { credit = 0, debit = 0, reserved = false }
+        -- ⛑️ Toute matérialisation locale = Réserve par défaut
+        GuildLogisticsDB.players[name] = { credit = 0, debit = 0, reserved = true }
         created = true
     else
         if GuildLogisticsDB.players[name].reserved == nil then
-            GuildLogisticsDB.players[name].reserved = false
+            GuildLogisticsDB.players[name].reserved = true
         end
     end
-    if created then ns.Emit("roster:upsert", name) end
+    if created and ns.Emit then ns.Emit("roster:upsert", name) end
 end
 
 function GLOG.RemovePlayerLocal(name, silent)

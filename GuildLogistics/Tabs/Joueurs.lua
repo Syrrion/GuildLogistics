@@ -5,17 +5,45 @@ local PAD = UI.OUTER_PAD
 
 local panel, lv
 
+-- Rafraîchit immédiatement la popup (si ouverte) et l'UI globale
+local function RefreshAllViews()
+    if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
+    if ns and ns.RefreshAll then ns.RefreshAll() end
+end
+
+-- Helper : suppression d’un joueur du roster avec confirmation (popup au premier plan)
+local function _AttachDeleteHandler(btn, name, isMaster)
+    btn:SetScript("OnClick", function()
+        if not isMaster then return end
+        UI.PopupConfirm(
+            Tr("prefix_delete")..(name or "").." "..Tr("lbl_from_roster_question"),
+            function()
+                if GLOG.RemovePlayer then
+                    GLOG.RemovePlayer(name)
+                elseif GLOG.BroadcastRosterRemove then
+                    local uid = (GLOG.GetUID and GLOG.GetUID(name)) or nil
+                    GLOG.BroadcastRosterRemove(uid or name)
+                end
+                -- 🔁 rafraîchit la popup + l’UI appelante
+                if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
+                if ns and ns.RefreshAll then ns.RefreshAll() end
+            end,
+            nil,
+            { strata = "FULLSCREEN_DIALOG", enforceAction = true } -- ➕ AU PREMIER PLAN
+        )
+    end)
+end
+
 -- Colonnes normalisées
 local cols = UI.NormalizeColumns({
     { key="alias",    title=Tr("col_alias"),              w=80 },
     { key="main",     title=Tr("col_player"),             min=180, flex=1 },
     { key="last",     title=Tr("col_last_seen"),          w=100 },
     { key="count",    title=Tr("col_rerolls"),            w=60 },
-    { key="actAlias", title="",                           w=90 }, -- ➕ Colonne dédiée au bouton "Alias…"
-    { key="act",      title="",                           w=180 }, -- ✏️ Actions roster (bouton Ajouter / libellés)
+    { key="actAlias", title="",                           w=90 },
+    { key="act",      title="",                           w=240 },
 })
 
--- Construction d’une ligne
 -- Construction d’une ligne
 local function BuildRow(r)
     local f = {}
@@ -26,32 +54,31 @@ local function BuildRow(r)
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.count = UI.Label(r)
 
-    -- Cellule d'actions ROSTER (bouton Ajouter / libellés)
-    f.act      = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    f.inRoster = UI.Label(f.act)
-    f.btnAdd   = UI.Button(f.act, Tr("btn_add_to_roster"), { size="sm", minWidth=120 })
-    f.inRoster:SetText(Tr("lbl_in_roster"))
-    f.inRoster:SetJustifyH("CENTER")
-    f.inRoster:Hide()
+    -- Colonne d’actions ROSTER (un seul bouton toggle + un bouton supprimer réservé aux hors-guilde)
+    f.act        = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
+    f.btnToggle  = UI.Button(f.act, Tr("btn_add_to_roster"), { size="sm", minWidth=120, debounce=0.15 })
+    f.btnDelete  = UI.Button(f.act, "X", { size="xs", variant="danger", minWidth=24, debounce=0.15 })
 
-    -- ✅ Cellule d'actions ALIAS séparée — clé alignée sur la colonne "actAlias"
-    f.actAlias  = CreateFrame("Frame", nil, r); f.actAlias:SetHeight(UI.ROW_H)
-    f.btnAlias  = UI.Button(f.actAlias, Tr("btn_set_alias"), { size="sm", variant="ghost", minWidth=80 })
+    -- Colonne « actions alias » séparée pour garder l’ergonomie précédente
+    f.actAlias   = CreateFrame("Frame", nil, r); f.actAlias:SetHeight(UI.ROW_H)
+    f.btnAlias   = UI.Button(f.actAlias, Tr("btn_set_alias"), { size="sm", variant="ghost", minWidth=80 })
 
-    -- Positionnements
+    -- Placement dans les colonnes
+    UI.AttachRowRight(f.act,      { f.btnToggle, f.btnDelete }, 6, -4, { leftPad = 8, align = "center" })
     UI.AttachRowRight(f.actAlias, { f.btnAlias }, 8, -4, { leftPad = 8, align = "center" })
-    UI.AttachRowRight(f.act,      { f.btnAdd   }, 8, -4, { leftPad = 8, align = "center" })
 
     -- Widgets pour "sep"
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
     f.sepBG:SetColorTexture(0.18, 0.18, 0.22, 0.6)
-    f.sepBG:SetPoint("TOPLEFT", r, "TOPLEFT", -2, 0)
-    f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 2, 0)
+    f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",    0,  0)
+    f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT",2,  0)
+
     f.sepTop = r:CreateTexture(nil, "BORDER"); f.sepTop:Hide()
     f.sepTop:SetColorTexture(0.9, 0.8, 0.2, 0.9)
-    f.sepTop:SetPoint("TOPLEFT", f.sepBG, "TOPLEFT", 0, 1)
+    f.sepTop:SetPoint("TOPLEFT",  f.sepBG, "TOPLEFT",  0, 1)
     f.sepTop:SetPoint("TOPRIGHT", f.sepBG, "TOPRIGHT", 0, 1)
     f.sepTop:SetHeight(2)
+
     f.sepLabel = r:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); f.sepLabel:Hide()
     f.sepLabel:SetTextColor(1, 0.95, 0.3)
 
@@ -62,91 +89,118 @@ end
 local function UpdateRow(i, r, f, it)
     local isSep = (it.kind == "sep")
 
+    -- ===== Séparateur de section =====
     f.sepBG:SetShown(isSep); f.sepTop:SetShown(isSep); f.sepLabel:SetShown(isSep)
     if isSep then
+        -- vider les cellules de données + masquer actions
         if f.main and f.main.text then f.main.text:SetText("") end
         if f.alias then f.alias:SetText("") end
         if f.last then f.last:SetText("") end
         if f.count then f.count:SetText("") end
         if f.act then f.act:Hide() end
-        if f.actAlias then f.actAlias:Hide() end -- ✅ masquer la cellule de la bonne colonne
+        if f.actAlias then f.actAlias:Hide() end
+
         f.sepLabel:ClearAllPoints()
         f.sepLabel:SetPoint("LEFT", r, "LEFT", 8, 0)
-        f.sepLabel:SetText(it.label or "")
+        f.sepLabel:SetText(tostring(it.label or ""))
+
         return
     end
 
+    -- ===== Ligne de données =====
+    if f.sepLabel then f.sepLabel:SetText("") end
     if f.act then f.act:Show() end
     if f.actAlias then f.actAlias:Show() end
-    f.sepLabel:SetText("")
 
-    -- Alias
+    local name = tostring(it.main or "")
+    -- Nom + classe
+    if f.main then ns.UI.SetNameTag(f.main, name) end
+
+    -- Alias textuel
     if f.alias then
-        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(it.main)) or ""
-        f.alias:SetText(a or "")
+        local key   = ns.GLOG.NormName and ns.GLOG.NormName(name)
+        local alias = key and GuildLogisticsDB and GuildLogisticsDB.aliases and GuildLogisticsDB.aliases[key]
+        f.alias:SetText(alias or "")
     end
 
-    -- Nom principal
-    UI.SetNameTag(f.main, it.main or "")
+    -- Compteur de rerolls
+    if f.count then f.count:SetText(it.count or 0) end
 
-    -- Compte de rerolls
-    f.count:SetText(it.count or 0)
+    -- Statut "hors guilde" (section dédiée)
+    local isOut = (it.outOfGuild == true)
 
-    -- Statut / dernière connexion
-    if it.onlineCount and it.onlineCount > 0 then
+    -- Colonne "Dernière connexion" / en ligne
+    if isOut then
+        if f.last then f.last:SetText("|cff909090—|r") end
+    elseif it.onlineCount and it.onlineCount > 0 then
         local txt = (it.onlineCount > 1)
             and ("|cff40ff40"..Tr("status_online").." ("..it.onlineCount..")|r")
             or  ("|cff40ff40"..Tr("status_online").."|r")
-        f.last:SetText(txt)
+        if f.last then f.last:SetText(txt) end
     else
-        f.last:SetText(ns.Format.LastSeen(it.days or it.lastSeenDays, it.hours or it.lastSeenHours))
+        if f.last then f.last:SetText(ns.Format.LastSeen(it.days or it.lastSeenDays, it.hours or it.lastSeenHours)) end
     end
 
-    -- Droits et état roster
-    local inRoster  = (ns.GLOG.HasPlayer  and ns.GLOG.HasPlayer(it.main)) or false
-    local isReserve = (ns.GLOG.IsReserved and ns.GLOG.IsReserved(it.main)) or false
-    local canAdd    = (ns.GLOG.IsMaster   and ns.GLOG.IsMaster()) and true or false
+    -- ===== Actions =====
+    local canGM = (ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
 
-    if inRoster then
-        if f.btnAdd then f.btnAdd:Hide() end
-        if f.inRoster then
-            f.inRoster:SetText(isReserve and Tr("lbl_in_reserve") or Tr("lbl_in_roster"))
-            f.inRoster:Show()
-            f.inRoster:ClearAllPoints()
-            f.inRoster:SetPoint("CENTER", f.act, "CENTER", 0, 0)
-        end
-    elseif not canAdd then
-        if f.btnAdd then f.btnAdd:Hide() end
-        if f.inRoster then f.inRoster:Hide() end
-    else
-        if f.inRoster then f.inRoster:Hide() end
-        if f.btnAdd then
-            f.btnAdd:Show()
-            f.btnAdd:SetScript("OnClick", function()
-                ns.GLOG.AddPlayer(it.main)
-                if ns.RefreshAll then ns.RefreshAll() end
-            end)
-        end
-    end
+    -- Détermine le nom complet (Nom-Royaume) si besoin pour interroger la DB
+    local fullName = (EnsureFullMain and EnsureFullMain(it)) or name
 
-    -- Bouton "Alias…" (GM) dans sa colonne dédiée
+    -- Présence dans le roster (clé exacte)
+    local inRoster = (ns.GLOG.HasPlayer and (ns.GLOG.HasPlayer(fullName) or ns.GLOG.HasPlayer(name))) or false
+
+    -- Bouton alias (toujours affiché)
     if f.btnAlias then
-        local isMaster = GLOG.IsMaster and GLOG.IsMaster()
-        f.btnAlias:SetShown(isMaster)
-        if isMaster then
-            f.btnAlias:SetScript("OnClick", function()
-                ns.UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
-                    ns.GLOG.GM_SetAlias(it.main, val)
-                end, { strata = "FULLSCREEN_DIALOG" })
-            end)
+        f.btnAlias:SetShown(true)
+        f.btnAlias:SetOnClick(function()
+            ns.UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
+                if ns.GLOG.GM_SetAlias then ns.GLOG.GM_SetAlias(name, val) end
+                RefreshAllViews()
+            end, { strata = "FULLSCREEN_DIALOG" })
+        end)
+    end
+
+    -- Bouton Add / Remove (toggle unique demandé)
+    if f.btnToggle then
+        if isOut or not canGM then
+            f.btnToggle:Hide()
+        else
+            f.btnToggle:Show()
+            if not inRoster then
+                -- ➕ Ajouter au roster
+                f.btnToggle:SetText(Tr("btn_add_to_roster"))
+                f.btnToggle:SetOnClick(function()
+                    ns.GLOG.AddPlayer(fullName)
+                    RefreshAllViews()
+                end)
+            else
+                -- ➖ Retirer du roster (confirmation)
+                f.btnToggle:SetText(Tr("btn_remove_from_roster"))
+                _AttachDeleteHandler(f.btnToggle, fullName, canGM)
+            end
         end
     end
 
-    -- Relayout des deux colonnes d'actions si nécessaire
+    -- Bouton supprimer : uniquement pour les joueurs hors guilde (et GM)
+    if f.btnDelete then
+        if isOut and canGM then
+            f.btnDelete:Show()
+            f.btnDelete:SetOnClick(function()
+                UI.PopupConfirm(Tr("confirm_delete") or "Supprimer ?", function()
+                    ns.GLOG.RemovePlayer(fullName)
+                    RefreshAllViews()
+                end, nil, { strata = "FULLSCREEN_DIALOG", enforceAction = true })
+            end)
+        else
+            f.btnDelete:Hide()
+        end
+    end
+
+    -- Relayout des groupes d’actions si nécessaire
     if f.actAlias and f.actAlias._applyRowActionsLayout then f.actAlias._applyRowActionsLayout() end
     if f.act      and f.act._applyRowActionsLayout      then f.act._applyRowActionsLayout()      end
 end
-
 
 -- Construit un nom complet "Nom-Realm" pour l'affichage/ajout roster
 local function EnsureFullMain(e)
@@ -176,27 +230,83 @@ local function EnsureFullMain(e)
     return m
 end
 
--- Génère la liste (avec séparateurs)
+-- Regroupe les entrées (actifs / anciens) puis produit la liste (avec séparateurs)
 local function buildItemsFromAgg(agg)
-
+    -- Séparation < 30j / ≥ 30j
     local actives, olds = {}, {}
     for _, e in ipairs(agg or {}) do
         local d = tonumber(e.days) or 999999
         if d < 30 then table.insert(actives, e) else table.insert(olds, e) end
     end
-    table.sort(actives, function(a,b) return a.main:lower() < b.main:lower() end)
-    table.sort(olds,    function(a,b) return a.main:lower() < b.main:lower() end)
+    table.sort(actives, function(a,b) return tostring(a.main):lower() < tostring(b.main):lower() end)
+    table.sort(olds,    function(a,b) return tostring(a.main):lower() < tostring(b.main):lower() end)
 
     local items = {}
+
     if #actives > 0 then
-        table.insert(items, {kind="sep", label=Tr("lbl_recent_online")} )
-        for _, e in ipairs(actives) do table.insert(items, {kind="data", main=EnsureFullMain(e), days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
+        table.insert(items, { kind="sep", label=Tr("lbl_recent_online") })
+        for _, e in ipairs(actives) do
+            table.insert(items, {
+                kind="data",
+                main=e.main, key=e.key,
+                days=e.days, hours=e.hours,
+                count=e.count, onlineCount=e.onlineCount,
+            })
+        end
     end
+
     if #olds > 0 then
-        table.insert(items, {kind="sep", label=Tr("lbl_old_online")} )
-        for _, e in ipairs(olds) do table.insert(items, {kind="data", main=EnsureFullMain(e), days=e.days, hours=e.hours, count=e.count, onlineCount=e.onlineCount}) end
+        table.insert(items, { kind="sep", label=Tr("lbl_old_online") })
+        for _, e in ipairs(olds) do
+            table.insert(items, {
+                kind="data",
+                main=e.main, key=e.key,
+                days=e.days, hours=e.hours,
+                count=e.count, onlineCount=e.onlineCount,
+            })
+        end
     end
-    if #items == 0 then table.insert(items, {kind="sep", label=Tr("lbl_no_player_found")}) end
+
+    -- Ajout : joueurs présents en DB locale mais absents de la guilde
+    local guildSet = {}
+    do
+        local rows = (ns.GLOG.GetGuildRowsCached and ns.GLOG.GetGuildRowsCached()) or {}
+        for _, r in ipairs(rows) do
+            local amb = r.name_amb or r.name_raw
+            local k = amb and (ns.GLOG.NormName and ns.GLOG.NormName(amb)) or nil
+            if k and k ~= "" then guildSet[k] = true end
+        end
+    end
+
+    local outs, seen = {}, {}
+    do
+        local arr = (ns.GLOG.GetPlayersArray and ns.GLOG.GetPlayersArray()) or {}
+        for _, rec in ipairs(arr) do
+            local n = rec.name
+            local k = n and (ns.GLOG.NormName and ns.GLOG.NormName(n)) or nil
+            if k and not guildSet[k] and not seen[k] then
+                table.insert(outs, { main = n, key = k })
+                seen[k] = true
+            end
+        end
+    end
+    table.sort(outs, function(a,b) return tostring(a.main):lower() < tostring(b.main):lower() end)
+
+    if #outs > 0 then
+        table.insert(items, { kind="sep", label=Tr("lbl_out_of_guild") })
+        for _, e in ipairs(outs) do
+            table.insert(items, {
+                kind="data",
+                main = e.main,
+                count = 0,
+                outOfGuild = true, -- drapeau UI (statut, actions)
+            })
+        end
+    end
+
+    if #items == 0 then
+        table.insert(items, { kind="sep", label=Tr("lbl_no_player_found") })
+    end
     return items
 end
 
