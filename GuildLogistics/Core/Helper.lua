@@ -15,10 +15,37 @@ local function normalizeStr(s) s = tostring(s or ""):gsub("%s+",""):gsub("'","")
 -- =========================
 -- === Gestion des noms  ===
 -- =========================
+
+-- ⚙️ Corrige "Nom-Royaume-Royaume-..." -> "Nom-Royaume"
+local function CleanFullName(full)
+    local s = tostring(full or "")
+    local base, tail = s:match("^([^%-]+)%-(.+)$")
+    if not base then return s end
+
+    -- Découpe les segments de royaume (certains clients du dernier patch dupliquent)
+    local parts = {}
+    for p in tail:gmatch("[^%-]+") do
+        if p ~= "" then parts[#parts+1] = p end
+    end
+    if #parts <= 1 then return s end
+
+    -- Si tous identiques (à casse/espaces/accents près), on garde le 1er ; sinon on garde le dernier.
+    local function norm(x) x = tostring(x or ""):gsub("%s+",""):gsub("'",""); return x:lower() end
+    local allSame = true
+    for i = 2, #parts do
+        if norm(parts[i]) ~= norm(parts[1]) then allSame = false; break end
+    end
+    local realm = allSame and parts[1] or parts[#parts]
+    return (base .. "-" .. realm)
+end
+
 local function NormalizeFull(name, realm)
     name  = tostring(name or "?")
-    -- Si déjà "Nom-Royaume", ne pas doubler
-    if name:find("%-") then return name end
+
+    -- Si déjà "Nom-..." on nettoie d'abord les éventuels doublons de royaume
+    if name:find("%-") then
+        return CleanFullName(name)
+    end
 
     local nrm = realm
     if not nrm or nrm == "" then
@@ -28,6 +55,10 @@ local function NormalizeFull(name, realm)
     if nrm ~= "" then return name.."-"..nrm end
     return name
 end
+
+-- 🔁 Exposition util
+U.CleanFullName  = CleanFullName
+U.NormalizeFull  = NormalizeFull
 
 local function SamePlayer(a,b)
     a, b = tostring(a or ""), tostring(b or ""); if a=="" or b=="" then return false end
@@ -282,23 +313,59 @@ function GLOG.GetCurrentGuildName()
     return nil
 end
 
+-- ➕ Nouveau : nom « officiel » de l’addon (TOC Title), avec fallback locales
+function GLOG.GetAddonTitle()
+    local title = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Title"))
+               or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Title"))
+    if type(title) == "string" and title ~= "" then
+        -- Nettoie d’éventuels codes couleur dans le Title
+        title = title:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        return title
+    end
+    local Tr = ns and ns.Tr
+    return (Tr and Tr("app_title"))
+end
+
 function GLOG.BuildMainTitle()
     local g = GLOG.GetCurrentGuildName and GLOG.GetCurrentGuildName()
     if g and g ~= "" then
-        return string.format("%s", g)
+        return g
     end
-    return ""
+    -- ➜ Si pas de guilde : affiche le nom de l’addon
+    return (GLOG.GetAddonTitle and GLOG.GetAddonTitle())
 end
 
+
 function GLOG.GetAddonIconTexture()
-    -- Préfère l'API moderne, sinon rétro-compatibilité
     local icon = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "IconTexture"))
               or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "IconTexture"))
-    if type(icon) == "string" and icon ~= "" then
-        return icon -- ex: "Interface\\AddOns\\MonAddon\\media\\icon.blp" OU une texture Interface\\Icons\\*
-    end
-    -- Fallback : icône livre par défaut (ne dépend pas de fichiers de l'addon)
+    if type(icon) == "string" and icon ~= "" then return icon end
     return "Interface\\Icons\\INV_Misc_Book_09"
+end
+
+-- ➕ Version d’addon (ex: "1.1.7"), via TOC
+function GLOG.GetAddonVersion()
+    local v = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
+          or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version"))
+          or (ns and ns.Version)
+    v = tostring(v or "")
+    return v
+end
+
+-- ➕ Comparaison sémantique a vs b : -1 / 0 / +1
+function ns.Util.CompareVersions(a, b)
+    local function parse(s)
+        local out = {}
+        for n in tostring(s or ""):gmatch("(%d+)") do out[#out+1] = tonumber(n) or 0 end
+        return out
+    end
+    local A, B = parse(a), parse(b)
+    local n = math.max(#A, #B)
+    for i = 1, n do
+        local x, y = A[i] or 0, B[i] or 0
+        if x < y then return -1 elseif x > y then return 1 end
+    end
+    return 0
 end
 
 -- ➕ ====== Groupe & Raid: helpers ======

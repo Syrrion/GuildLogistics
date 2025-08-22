@@ -88,7 +88,7 @@ function BuildOptions(panel)
             savedForPop.popups[key] = btn:GetChecked() and true or false
         end)
 
-        y = y + (cb:GetHeight() or 24) + 8
+        y = y + (cb:GetHeight() or 24) -8
         return cb
     end
 

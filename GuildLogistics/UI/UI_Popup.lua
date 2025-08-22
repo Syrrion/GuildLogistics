@@ -555,3 +555,35 @@ function UI.PopupPendingCalendarInvites(items)
     dlg:Show()
     return dlg
 end
+
+-- ➕ Popup : addon obsolète
+function UI.ShowOutdatedAddonPopup(currentVer, latestVer, fromPlayer)
+    -- Évite de cumuler plusieurs instances à l’écran
+    if UI._obsoleteDlg and UI._obsoleteDlg:IsShown() then return end
+
+    local dlg = UI.CreatePopup({
+        title = Tr("popup_outdated_title"),
+        width = 520, height = 240, enforceAction = false
+    })
+
+    -- Texte informatif
+    local content = dlg.content
+    local msg = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local l1 = string.format(Tr("msg_outdated_line1"), tostring(currentVer or "?"))
+    local l2 = string.format(Tr("msg_outdated_line2"), tostring(latestVer or "?"))
+    local l3 = Tr("msg_outdated_hint")
+    if fromPlayer and fromPlayer ~= "" then
+        l3 = l3 .. "\n" .. string.format(Tr("msg_outdated_from"), tostring(fromPlayer))
+    end
+    msg:SetText(l1.."\n"..l2.."\n\n"..l3)
+    msg:SetJustifyH("LEFT"); msg:SetJustifyV("TOP")
+    msg:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -12)
+    msg:SetPoint("RIGHT", content, "RIGHT", -12, 0)
+
+    dlg:SetButtons({
+        { text = Tr("btn_confirm"), default = true },
+    })
+    dlg:Show()
+    UI._obsoleteDlg = dlg
+    return dlg
+end

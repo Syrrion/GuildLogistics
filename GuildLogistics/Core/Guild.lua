@@ -120,7 +120,7 @@ Scanner:SetScript("OnEvent", function(self, ev)
 
     for _, rr in ipairs(rows) do
         local amb = rr.name_amb or rr.name_raw
-        local kFull = GLOG.NormName(amb)                 -- ex: "aratoryx"
+        local kFull = GLOG.NormName(amb)
         local mainKey = (rr.remark and GLOG.NormName(rr.remark)) or ""
 
         local rec = { class = rr.class, main = mainKey or "" }
@@ -156,31 +156,74 @@ function GLOG.RefreshGuildCache(cb)
     end
 end
 
-
 function GLOG.GetGuildMainsAggregatedCached()
     return (GLOG._guildCache and GLOG._guildCache.mains) or {}
 end
+
+-- Retourne l'inactivité (en jours) pour un MAIN (clé normalisée).
+-- Calcule le "last seen" le plus récent parmi ses personnages.
+function GLOG.GetMainLastSeenDays(mainKey)
+    mainKey = (GLOG.NormName and GLOG.NormName(mainKey)) or nil
+    if not mainKey or mainKey == "" then return 9999 end
+
+    local rows = (GLOG._guildCache and GLOG._guildCache.rows) or {}
+    local minHours = nil
+
+    for _, r in ipairs(rows) do
+        local noteMain = r.remark and strtrim(r.remark) or ""
+        local k = (noteMain ~= "" and GLOG.NormName(noteMain)) or nil
+        if k == mainKey then
+            local h = (r.online and 0) or tonumber(r.hoursDerived) or nil
+            if h then
+                minHours = (not minHours or h < minHours) and h or minHours
+            end
+        end
+    end
+
+    return (minHours and math.floor(minHours / 24)) or 9999
+end
+
 
 function GLOG.GetGuildRowsCached()
     return GLOG._guildCache and GLOG._guildCache.rows or {}
 end
 
 -- Résout un nom court en "Nom-Royaume" en s'appuyant sur le roster en cache.
--- Si introuvable, retourne le nom tel quel (aucun ajout de royaume arbitraire).
+-- Nettoie aussi les doublons de royaume éventuels.
 function GLOG.ResolveFullName(name)
     local n = tostring(name or "")
-    if n == "" or n:find("%-") then return n end
+    if n == "" then return n end
+
+    -- ⚙️ Si on reçoit déjà "Nom-...", on le nettoie (évite "Royaume-Royaume-...")
+    if n:find("%-") then
+        local cleaner = ns and ns.Util and ns.Util.CleanFullName
+        return (cleaner and cleaner(n)) or n
+    end
+
+    -- Sinon, essaie de résoudre via le cache de guilde (sans inventer le royaume local)
     local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
     local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
     for _, r in ipairs(rows) do
-        local full = r.name_raw or r.name_amb
-        if full and ((GLOG.NormName and GLOG.NormName(full)) or full:lower()) == key then
-            return full
+        local full = r.name_raw or r.name_amb or r.name or ""
+        if full ~= "" then
+            local base = (full:match("^([^%-]+)%-") or full)
+            if base and (base:lower() == key) then
+                local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                return (cleaner and cleaner(full)) or full
+            end
         end
     end
     return n
 end
 
+-- ➕ Test d’appartenance guilde via le cache (léger, réutilisable)
+function GLOG.IsGuildCharacter(name)
+    if not name or name == "" then return false end
+    local by = GLOG._guildCache and GLOG._guildCache.byName
+    if not by then return false end
+    local k = (GLOG.NormName and GLOG.NormName(name)) or tostring(name):lower()
+    return (k ~= nil and by[k] ~= nil) and true or false
+end
 
 -- ✏️ Est-ce que le GM effectif (rang 0) est en ligne ?
 function GLOG.IsMasterOnline()

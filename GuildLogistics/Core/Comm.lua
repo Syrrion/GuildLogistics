@@ -234,6 +234,14 @@ local Discovery = Discovery or {}
 local _NonCritSuppress = _NonCritSuppress or {}
 local _NONCRIT_TYPES = { ILVL_UPDATE=true, MKEY_UPDATE=true }
 
+-- Anti-spam version : envoi (1 fois par session) et réception (popup debounce)
+-- [normName] = true  → un avertissement déjà envoyé à cette cible pendant cette session
+local _VersionWarnSentTo   = _VersionWarnSentTo   or {}
+-- (cooldown supprimé : envoi unique par session)
+local _ObsoletePopupUntil  = _ObsoletePopupUntil  or 0   -- anti-popups multiples
+local OBSOLETE_DEBOUNCE_SEC= 10                   -- 10s d’immunité côté client
+
+
 local function _suppressTo(target, seconds)
     if not target or not seconds then return end
     local key = (_norm and _norm(target)) or string.lower(target or "")
@@ -1625,21 +1633,37 @@ function GLOG._HandleFull(sender, msgType, kv)
         -- ======= Handshake & Snapshots =======
     elseif msgType == "HELLO" then
         local hid     = kv.hid or ""
-        -- ⚠️ Comparer des révisions de DB (pas la révision de code addon)
         local rv_me   = safenum(getRev(), 0)
         local rv_them = safenum(kv.rv, -1)
 
-        -- Si on est plus à jour que l'initiateur, préparer le gel des non-critiques vers lui
+        -- ➕ Comparaison de versions d'addon (si fournie)
+        local ver_me   = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+        local ver_them = tostring(kv.ver or "")
+        local cmp = (ns and ns.Util and ns.Util.CompareVersions and ns.Util.CompareVersions(ver_me, ver_them)) or 0
+
         if rv_me > rv_them then
             _suppressTo(sender, (HELLO_WAIT_SEC or 5) + 2)
         end
 
-        -- Programmer éventuellement une OFFER vers l'initiateur
         if hid ~= "" and sender and sender ~= "" then
             _scheduleOfferReply(hid, sender, rv_them)
         end
 
-        -- ✏️ Envoyer mon iLvl/Clé en WHISPER à l'initiateur (seulement si sa DB n'est pas obsolète)
+        -- Si ma version est plus récente → prévenir le joueur obsolète en WHISPER (⚠️ 1 fois par session)
+        if sender and sender ~= "" and cmp > 0 then
+            local k = (_norm and _norm(sender)) or string.lower(sender or "")
+            if not _VersionWarnSentTo[k] then
+                _VersionWarnSentTo[k] = true
+                GLOG.Comm_Whisper(sender, "VERSION_WARN", {
+                    by     = playerFullName(),
+                    latest = ver_me,
+                    yours  = ver_them,
+                    ts     = now(),
+                })
+            end
+        end
+
+        -- iLvl/clé → inchangé (uniquement si sa DB n'est pas obsolète)
         if sender and sender ~= "" and sender ~= playerFullName() and rv_them >= rv_me then
             local me = playerFullName()
             if GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me) then
@@ -1711,6 +1735,23 @@ function GLOG._HandleFull(sender, msgType, kv)
             if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
         end
 
+    elseif msgType == "VERSION_WARN" then
+        -- Reçu par un client obsolète (potentiellement plusieurs fois) → popup unique (debounce)
+        local latest = tostring(kv.latest or "")
+        local mine   = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+
+        -- Anti-popups multiples pendant un court laps de temps
+        if (now() < (_ObsoletePopupUntil or 0)) then return end
+        _ObsoletePopupUntil = now() + (OBSOLETE_DEBOUNCE_SEC or 10)
+
+        local jitter = (math.random(0, 200) / 1000.0)
+        ns.Util.After(jitter, function()
+            if ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                ns.UI.ShowOutdatedAddonPopup(mine, latest, kv.by or "")
+            end
+        end)
+
+        
     elseif msgType == "SYNC_OFFER" then
         -- Côté initiateur : collecter les OFFERS pendant HELLO_WAIT
         local hid = kv.hid or ""
@@ -1805,31 +1846,32 @@ function GLOG._HandleFull(sender, msgType, kv)
                 local me     = playerFullName()
                 local rv_me  = safenum(getRev(), 0)
                 C_Timer.After(0.2, function()
-                    GLOG.Comm_Broadcast("HELLO", { hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
+                    GLOG.Comm_Broadcast("HELLO", {
+                        hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1",
+                        ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+                    })
                 end)
 
-                -- ➕ Après la toute première synchro FULL reçue: diffuse mon iLvl et ma clé M+ (GUILD)
-                if not _FirstSyncRebroadcastDone then
-                    _FirstSyncRebroadcastDone = true
-                    C_Timer.After(0.5, function()
-                        -- iLvl actuel équipé
-                        if GLOG.ReadOwnEquippedIlvl and GLOG.BroadcastIlvlUpdate then
-                            local il = GLOG.ReadOwnEquippedIlvl()
-                            if il and il > 0 then
-                                local meNow = playerFullName and playerFullName() or me
-                                GLOG.BroadcastIlvlUpdate(meNow, il, time(), meNow)
-                            end
+                C_Timer.After(0.5, function()
+                    -- ✅ Assure une entrée roster/réserve locale pour ne pas bloquer la diffusion
+                    local meNow = (playerFullName and playerFullName()) or me
+                    if GLOG.EnsureRosterLocal then GLOG.EnsureRosterLocal(meNow) end
+
+                    -- iLvl actuel équipé
+                    if GLOG.ReadOwnEquippedIlvl and GLOG.BroadcastIlvlUpdate then
+                        local il = GLOG.ReadOwnEquippedIlvl()
+                        if il and il > 0 then
+                            GLOG.BroadcastIlvlUpdate(meNow, il, time(), meNow) -- via GUILD
                         end
-                        -- Clé Mythique détenue
-                        if GLOG.ReadOwnedKeystone and GLOG.BroadcastMKeyUpdate then
-                            local mid, lvl, map = GLOG.ReadOwnedKeystone()
-                            if (tonumber(mid) or 0) > 0 and (tonumber(lvl) or 0) > 0 then
-                                local meNow = playerFullName and playerFullName() or me
-                                GLOG.BroadcastMKeyUpdate(meNow, tonumber(mid) or 0, tonumber(lvl) or 0, tostring(map or ""), time(), meNow)
-                            end
+                    end
+                    -- Clé Mythique détenue
+                    if GLOG.ReadOwnedKeystone and GLOG.BroadcastMKeyUpdate then
+                        local mid, lvl, map = GLOG.ReadOwnedKeystone()
+                        if (tonumber(mid) or 0) > 0 and (tonumber(lvl) or 0) > 0 then
+                            GLOG.BroadcastMKeyUpdate(meNow, tonumber(mid) or 0, tonumber(lvl) or 0, tostring(map or ""), time(), meNow) -- via GUILD
                         end
-                    end)
-                end
+                    end
+                end)
             end
 
             if not _ok then
@@ -2648,7 +2690,11 @@ function GLOG.Sync_RequestHello()
     GLOG._helloSent  = true
     GLOG._lastHelloHid = hid
 
-    GLOG.Comm_Broadcast("HELLO", { hid = hid, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1" })
+    GLOG.Comm_Broadcast("HELLO", {
+        hid = hid, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1",
+        ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+    })
+
 end
 
 

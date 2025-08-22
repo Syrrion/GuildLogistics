@@ -17,10 +17,17 @@ L["tab_settings"]         = "Settings"
 
 -- App / main titles / sync
 L["msg_no_guild"]         = "You are not in any guild on this character"
-L["app_title"]            = "Guild Manager"
+L["app_title"]            = "Guild Logistics"
 L["main_title_guild"]     = "Guild"
 L["sync_data"]            = "Data synchronization in progress"
 L["btn_reload"]           = "Reload"
+
+-- ➕ Outdated version
+L["popup_outdated_title"] = "Outdated version"
+L["msg_outdated_line1"]   = "Your "..L["app_title"].." version (%s) is out of date."
+L["msg_outdated_line2"]   = "A newer version is available: %s."
+L["msg_outdated_hint"]    = "Please update the addon to ensure compatibility."
+L["msg_outdated_from"]    = "Reported by: %s"
 
 -- Columns / labels
 L["col_time"]             = "Time"
@@ -99,6 +106,7 @@ L["btn_confirm"]          = "Confirm"
 L["btn_cancel"]           = "Cancel"
 L["btn_create"]           = "Create"
 L["btn_split"]            = "Split"
+L["btn_show_hidden_reserve"] = "Show hidden reserve"
 
 -- ➕ Alias / UI
 L["col_alias"]            = "Alias"
@@ -183,6 +191,7 @@ L["confirm_delete_history_line_permanent"] = "Permanently delete this history li
 L["hint_no_bundle_for_raid"] = "No bundle has been linked to this raid."
 L["hint_select_resources_bundle"] = "Select resources to create a bundle (frozen content)."
 L["prompt_external_player_name"] = "Name of external player to include in roster"
+L["realm_external"] = "External"
 L["lbl_free_resources"]   = "Free Resources:"
 L["confirm_question"]     = "Confirm?"
 L["confirm_make_free_session"] = "Make this session free for all participants?"

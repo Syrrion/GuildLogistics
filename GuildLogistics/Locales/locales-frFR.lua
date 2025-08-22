@@ -16,10 +16,17 @@ L["tab_settings"]         = "Options"
 
 -- App / main titles / sync
 L["msg_no_guild"]         = "Vous n'appartenez a aucune guilde sur ce personnage"
-L["app_title"]            = "Guild Manager"
+L["app_title"]            = "Guild Logistics"
 L["main_title_guild"]     = "Guilde"
 L["sync_data"]            = "Synchronisation des données en cours"
 L["btn_reload"]           = "Reload"
+
+-- ➕ Obsolescence version
+L["popup_outdated_title"] = "Version obsolète"
+L["msg_outdated_line1"]   = "Votre version de "..L["app_title"].." (%s) est obsolète."
+L["msg_outdated_line2"]   = "Une version plus récente est disponible : %s."
+L["msg_outdated_hint"]    = "Merci de mettre à jour l’addon pour assurer la compatibilité."
+L["msg_outdated_from"]    = "Signalé par : %s"
 
 -- Colonnes / libellés
 L["col_time"]             = "Heure"
@@ -98,6 +105,7 @@ L["btn_confirm"] = "Valider"
 L["btn_cancel"] = "Annuler"
 L["btn_create"] = "Créer"
 L["btn_split"]  = "Scinder"
+L["btn_show_hidden_reserve"] = "Afficher joueurs masqués"
 
 -- ➕ Alias / UI
 L["col_alias"]            = "Alias"
@@ -182,6 +190,7 @@ L["confirm_delete_history_line_permanent"] = "Supprimer définitivement cette li
 L["hint_no_bundle_for_raid"] = "Aucun lot n’a été associé à ce raid."
 L["hint_select_resources_bundle"] = "Sélectionnez des ressources pour créer un lot (contenu figé)."
 L["prompt_external_player_name"] = "Nom du joueur externe à inclure dans le roster"
+L["realm_external"] = "Externe"
 L["lbl_free_resources"]   = "Ressources libres :"
 L["confirm_question"]     = "Confirmer ?"
 L["confirm_make_free_session"] = "Rendre cette session gratuite pour tous les participants ?"

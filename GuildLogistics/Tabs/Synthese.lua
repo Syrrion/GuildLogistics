@@ -8,6 +8,11 @@ local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, noGu
 local reserveCollapsed = true
 local reserveToggleBtn
 
+-- ➕ État d’affichage des joueurs masqués (réserve)
+local _showHiddenReserve = false
+local _btnShowHiddenReserve -- référence bouton footer
+
+
 -- Détecte si le personnage appartient à une guilde
 local function _HasGuild()
     return (IsInGuild and IsInGuild()) and true or false
@@ -362,6 +367,19 @@ local function UpdateReserveCollapseUI()
         end
     end
 
+    -- ➕ Affichage conditionnel du bouton "Afficher joueurs masqués" (GM uniquement)
+    if _btnShowHiddenReserve then
+        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) and true or false
+        local showBtn = (not reserveCollapsed) and isGM
+        _btnShowHiddenReserve:SetShown(showBtn)
+
+        -- Quand on replie la réserve, on réactive le masquage
+        if reserveCollapsed and _showHiddenReserve then
+            _showHiddenReserve = false
+            if ns.RefreshAll then ns.RefreshAll() end
+        end
+    end
+    
     -- Masque/affiche le contenu de la ListView "réserve" (et force l’état de l’entête)
     if lvReserve and lvReserve.scroll then
         if lvReserve.SetHeaderForceHidden then
@@ -411,13 +429,17 @@ local function Refresh()
     end
 
     local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
-    local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve()) or {}
 
-    -- ➕ Applique le tri demandé
+    -- ➕ Masque par défaut les réserves inactives sans solde ;
+    --    si le GM a cliqué "Afficher joueurs masqués", on lève le filtre
+    local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve({
+        showHidden = _showHiddenReserve,  -- false par défaut → masque
+        cutoffDays = 30
+    })) or {}
+
     _SortOnlineFirst(active)
     _SortOnlineFirst(reserve)
 
-    -- ➕ Uniformisation : mêmes enveloppes { data = ... } pour les deux listes
     if lvActive then
         local wrappedA = {}
         for i, it in ipairs(active) do wrappedA[i] = { data = it, fromActive = true } end
@@ -443,13 +465,23 @@ local function BuildFooterButtons(footer, isGM)
     local btnGuild
     local btnHist  = UI.Button(footer, Tr("btn_raids_history"), { size="sm", minWidth=160 })
 
+    -- ➕ Bouton "Afficher joueurs masqués" (GM uniquement, rendu visible selon l'état de la réserve)
+    if isGM then
+        _btnShowHiddenReserve = UI.Button(footer, Tr("btn_show_hidden_reserve"), { size="sm", minWidth=200 })
+        _btnShowHiddenReserve:SetOnClick(function()
+            _showHiddenReserve = true
+            if ns.RefreshAll then ns.RefreshAll() end
+        end)
+        _btnShowHiddenReserve:Hide() -- rendu visible par UpdateReserveCollapseUI
+    end
+
     if isGM then
         btnGuild = UI.Button(footer, Tr("add_guild_member"), { size="sm", minWidth=220 })
         btnGuild:SetOnClick(function()
             if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
         end)
         if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer, { btnHist, btnGuild })
+            UI.AttachButtonsFooterRight(footer, { btnHist, btnGuild, _btnShowHiddenReserve })
         end
     else
         if UI.AttachButtonsFooterRight then

@@ -129,15 +129,61 @@ local function _guessPlaceFromTitle(title)
     return nil
 end
 
--- Collecte les invitations avec statut "Invited" entre maintenant et +rangeDays
+-- ➕ Helper : vérifie que l'évènement (mo,day,idx) provient d'un membre de la guilde
+local function _isEventFromGuildMember(monthOffset, day, index)
+    if not C_Calendar or not C_Calendar.OpenEvent then return false end
+    -- Ouvre les infos de l'évènement (données, pas l’UI)
+    local ok = pcall(C_Calendar.OpenEvent, monthOffset, day, index)
+    if not ok then return false end
+
+    local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo() or nil
+    if not info then return false end
+
+    -- Récupère le meilleur "auteur" disponible
+    local by = info.invitedBy or info.inviter or info.creator or info.organizer or info.owner or ""
+    by = tostring(by or "")
+    if by == "" then
+        -- Évènements système (micro-fêtes, resets…) → sans auteur joueur → ignorer
+        return false
+    end
+
+    -- Normalise/complète le nom (si possible) et teste l'appartenance guilde
+    local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(by)) or by
+    return (GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(full)) or false
+end
+
+-- ➕ Helper : indique si l'évènement (mo, day, idx) a été créé/invité par un membre de la guilde.
+-- Retourne true/false, et "nil" si l'information n'est pas encore disponible (détail non chargé).
+local function _isEventFromGuildMember(monthOffset, day, index)
+    if not C_Calendar or not C_Calendar.OpenEvent then return false end
+    local ok = pcall(C_Calendar.OpenEvent, monthOffset, day, index)
+    if not ok then return nil end
+
+    local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo() or nil
+    if not info then return nil end
+
+    -- Auteur (plusieurs champs possibles selon type d’évènement)
+    local by = info.invitedBy or info.inviter or info.creator or info.organizer or info.owner or ""
+    by = tostring(by or "")
+    if by == "" then
+        -- Cas "évènement système" / auteur inconnu → pas un joueur guilde
+        return false
+    end
+
+    local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(by)) or by
+    local inG  = (GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(full))
+    return inG and true or false
+end
+
+-- Collecte les invitations "Invited" à venir, filtrées "auteur ∈ guilde".
+-- 🔁 Retourne: list, needsRetry (bool) → needsRetry=true si certains auteurs étaient encore "indisponibles".
 local function collectPending(rangeDays)
-    local res = {}
-    if not C_Calendar or not C_Calendar.OpenCalendar then return res end
+    local res, needsRetry = {}, false
+    if not C_Calendar or not C_Calendar.OpenCalendar then return res, needsRetry end
 
     local nowTS   = currentCalendarTS()
     local limitTS = nowTS + (tonumber(rangeDays) or 31) * SECS_PER_DAY
 
-    -- Assure le chargement des données calendrier (chargement des données, pas l'UI)
     C_Calendar.OpenCalendar()
 
     for monthOffset = 0, 1 do
@@ -153,16 +199,23 @@ local function collectPending(rangeDays)
                         local m = ev.minute or (ev.startTime and ev.startTime.minute) or 0
                         local ts = time({ year=year, month=month, day=day, hour=h, min=m, sec=0 })
                         if ts and ts >= nowTS and ts <= limitTS then
-                            -- ❌ Plus d'appel à OpenEvent/GetEventInfo (aucune navigation)
-                            local location = _guessPlaceFromTitle(ev.title)
-
-                            table.insert(res, {
-                                when   = ts,
-                                year   = year, month = month, day = day,
-                                hour   = h,    minute = m,
-                                title  = ev.title or "?",
-                                loc    = location, -- déduit sans ouvrir l'évènement
-                            })
+                            -- ✅ Filtre "auteur guilde", avec détection "détail encore indisponible"
+                            local ok, fromGuild = pcall(_isEventFromGuildMember, monthOffset, day, i)
+                            if not ok then
+                                needsRetry = true
+                            else
+                                if fromGuild == nil then
+                                    needsRetry = true
+                                elseif fromGuild == true then
+                                    local location = _guessPlaceFromTitle(ev.title)
+                                    table.insert(res, {
+                                        when = ts, year=year, month=month, day=day,
+                                        hour = h,  minute = m,
+                                        title = ev.title or "?", loc = location,
+                                    })
+                                end
+                                -- fromGuild == false → ignoré
+                            end
                         end
                     end
                 end
@@ -170,12 +223,14 @@ local function collectPending(rangeDays)
         end
     end
 
-    table.sort(res, function(a, b) return a.when < b.when end)
-    return res
+    table.sort(res, function(a,b) return a.when < b.when end)
+    return res, needsRetry
 end
 
+-- ⚠️ API publique inchangée (compat) : ne retourne QUE la liste
 function M.GetPendingInvites(daysAhead)
-    return collectPending(daysAhead or 31)
+    local list = select(1, collectPending(daysAhead or 31))
+    return list
 end
 
 -- ➕ Utilitaires d'ouverture du calendrier sans le refermer s'il est déjà visible
@@ -332,16 +387,22 @@ f:SetScript("OnEvent", function(self, event, ...)
 
             local function step()
                 calPollTries = calPollTries + 1
-                local items = collectPending(31)
+                local items, needsRetry = collectPending(31)
+
                 if items and #items > 0 then
                     local newItems = _extractNewInvites(items)
                     if #newItems > 0 then
-                        -- Respecte option + conditions (combat/instance) et déferre si besoin
                         _tryShowOrDefer(items)
-                        pendingCache   = nil
-                        calPollActive  = false
+                        pendingCache  = nil
+                        calPollActive = false
                         return
                     end
+                end
+
+                -- 🕒 Si l’auteur n’était pas encore disponible, on re-tente rapidement (limité par CAL_POLL_MAX)
+                if (needsRetry and calPollTries < (CAL_POLL_MAX or 12)) and C_Timer and C_Timer.After then
+                    C_Timer.After(CAL_POLL_DELAY or 0.5, step)
+                    return
                 end
 
                 if calPollTries < (CAL_POLL_MAX or 12) and C_Timer and C_Timer.After then
@@ -351,7 +412,13 @@ f:SetScript("OnEvent", function(self, event, ...)
                 end
             end
 
-            if C_Timer and C_Timer.After then
+            -- 🕒 Si l’auteur n’était pas encore disponible, on re-tente rapidement (limité par CAL_POLL_MAX)
+            if (needsRetry and calPollTries < (CAL_POLL_MAX or 12)) and C_Timer and C_Timer.After then
+                C_Timer.After(CAL_POLL_DELAY or 0.5, step)
+                return
+            end
+
+            if calPollTries < (CAL_POLL_MAX or 12) and C_Timer and C_Timer.After then
                 C_Timer.After(CAL_POLL_DELAY or 0.5, step)
             else
                 calPollActive = false
@@ -362,13 +429,27 @@ f:SetScript("OnEvent", function(self, event, ...)
 
     -- Mises à jour natives du calendrier (nouvelles invitations qui arrivent en cours de session)
     if event == "CALENDAR_UPDATE_EVENT_LIST" or event == "CALENDAR_UPDATE_PENDING_INVITES" then
-        pendingCache = collectPending(31)
+        local needRetry
+        pendingCache, needRetry = collectPending(31)
+
         if pendingCache and #pendingCache > 0 then
             local newItems = _extractNewInvites(pendingCache)
             if #newItems > 0 then
-                -- Affiche immédiatement si possible, sinon mémorise pour plus tard
                 _tryShowOrDefer(pendingCache)
             end
+        end
+
+        -- 🔁 Si l’auteur n’était pas encore résolu, refait une passe très vite pour capter l’invite
+        if needRetry and C_Timer and C_Timer.After then
+            C_Timer.After(0.6, function()
+                local again, _need = collectPending(31)
+                if again and #again > 0 then
+                    local newItems2 = _extractNewInvites(again)
+                    if #newItems2 > 0 then
+                        _tryShowOrDefer(again)
+                    end
+                end
+            end)
         end
     end
 

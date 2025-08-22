@@ -74,7 +74,7 @@ function UI.CreateHeader(parent, cols)
     local labels = {}
     for i, c in ipairs(cols or {}) do
         local fs = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        fs:SetText((Tr and Tr(c.title or "")) or (c.title or ""))
+        fs:SetText((Tr and Tr(c.title or "")) or (c.title or Tr("")))
         fs:SetJustifyH(c.justify or "LEFT")
         labels[i] = fs
     end
@@ -551,16 +551,41 @@ function GLOG.Minimap_Init()
     b:RegisterForDrag("LeftButton")
     b:RegisterForClicks("AnyUp")
 
+    -- Icône centrale (logo uniquement)
     local icon = b:CreateTexture(nil, "ARTWORK")
     icon:SetTexture((GLOG.GetAddonIconTexture and GLOG.GetAddonIconTexture("minimap")) or GLOG.ICON_TEXTURE or "Interface\\Icons\\INV_Misc_Book_09")
     icon:SetSize(20, 20)
-    icon:SetPoint("CENTER", b, "CENTER", 0, 0)
+    icon:SetPoint("CENTER", b, "CENTER", 1, 0)
+    -- Exposer explicitement l’icône (pour les addons « collecteurs »)
+    b.icon = icon
 
+    -- Masque circulaire sur le logo
     local mask = b:CreateMaskTexture()
     mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
     mask:SetAllPoints(icon)
     icon:AddMaskTexture(mask)
 
+    -- ➕ Fond blanc circulaire (derrière le logo, non capté par les addons)
+    local bg = b:CreateTexture(nil, "BACKGROUND")
+    bg:SetColorTexture(1, 1, 1, 1)
+    bg:SetSize(24, 24)
+    bg:SetPoint("CENTER", b, "CENTER", 0, 0)
+    if b.CreateMaskTexture and bg.AddMaskTexture then
+        local bgMask = b:CreateMaskTexture()
+        bgMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
+        bgMask:SetAllPoints(bg)
+        bg:AddMaskTexture(bgMask)
+    end
+    b._decorBG = bg
+
+    -- ➕ Anneau doré autour (décoratif, séparé de l’icône)
+    local ring = b:CreateTexture(nil, "OVERLAY")
+    ring:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    ring:SetSize(60, 60)
+    ring:SetPoint("CENTER", b, "CENTER", 12, -12)
+    b._decorRing = ring
+
+    -- Survol standard
     local hl = b:CreateTexture(nil, "HIGHLIGHT")
     hl:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
     hl:SetBlendMode("ADD")
@@ -570,7 +595,8 @@ function GLOG.Minimap_Init()
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         local title = (GLOG.BuildMainTitle and GLOG.BuildMainTitle()) or Tr("app_title")
-        GameTooltip:SetText(title)
+        GameTooltip:SetText(Tr("app_title"))
+        GameTooltip:AddLine("<"..title..">")
         GameTooltip:AddLine(Tr("tooltip_minimap_left"), 1,1,1)
         GameTooltip:AddLine(Tr("tooltip_minimap_drag"), 1,1,1)
         GameTooltip:Show()

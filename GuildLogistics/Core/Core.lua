@@ -195,7 +195,7 @@ function GLOG.GetPlayersArrayActive()
     return out
 end
 
-function GLOG.GetPlayersArrayReserve()
+function GLOG.GetPlayersArrayReserve(opts)
     EnsureDB()
     local out, agg = {}, {}
 
@@ -213,7 +213,7 @@ function GLOG.GetPlayersArrayReserve()
     -- Regroupe par "main" (clé normalisée) et garde un nom d'affichage propre
     local function ensureBucket(mk, display)
         if not mk or mk == "" then return nil end
-        if activeSet[mk] then return nil end -- ⛔ ne pas créer de bucket pour un main actif
+        if activeSet[mk] then return nil end -- ⛔ pas de bucket pour un main actif
         local b = agg[mk]
         if not b then
             b = { name = display or mk, credit = 0, debit = 0, reserved = true }
@@ -241,12 +241,14 @@ function GLOG.GetPlayersArrayReserve()
     end
 
     -- 2) Ajouter les MAINS du roster guilde UNIQUEMENT s’ils ne sont PAS actifs localement
-    local mainsAgg = (GLOG.GetGuildMainsAggregatedCached and GLOG.GetGuildMainsAggregatedCached()) or {}
-    for _, e in ipairs(mainsAgg) do
-        local mk = e.key or (GLOG.NormName and GLOG.NormName(e.main)) or nil
-        if mk and not activeSet[mk] then
-            local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(e.main)) or e.main
-            ensureBucket(mk, display)
+    do
+        local mainsAgg = (GLOG.GetGuildMainsAggregatedCached and GLOG.GetGuildMainsAggregatedCached()) or {}
+        for _, e in ipairs(mainsAgg) do
+            local mk = e.key or (GLOG.NormName and GLOG.NormName(e.main)) or nil
+            if mk and not activeSet[mk] then
+                local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(e.main)) or e.main
+                ensureBucket(mk, display)
+            end
         end
     end
 
@@ -257,21 +259,54 @@ function GLOG.GetPlayersArrayReserve()
     end
 
     table.sort(out, function(a, b) return (a.name or ""):lower() < (b.name or ""):lower() end)
+
+    -- ➕ Filtrage inactifs (>= cutoffDays) ET solde == 0, si demandé
+    local showHidden = (type(opts) == "table") and (opts.showHidden == true)
+    if not showHidden then
+        local cutoff = (type(opts) == "table" and tonumber(opts.cutoffDays)) or 30
+        local filtered = {}
+        for _, v in ipairs(out) do
+            local mk    = (GLOG.NormName and GLOG.NormName(v.name)) or nil
+            local solde = tonumber(v.solde) or 0
+            local days  = (GLOG.GetMainLastSeenDays and GLOG.GetMainLastSeenDays(mk)) or 9999
+            if not (solde == 0 and days >= cutoff) then
+                filtered[#filtered+1] = v
+            end
+        end
+        out = filtered
+    end
+
     return out
 end
 
 function GLOG.AddPlayer(name)
     if not name or name == "" then return end
 
+    -- Normalise le nom : si aucun suffixe de royaume n’est fourni,
+    -- tenter d’abord de résoudre via la guilde ; sinon suffixer avec "-Externe" localisé.
+    local raw = tostring(name or "")
+    if not raw:find("%-") then
+        local resolved = (GLOG.ResolveFullName and GLOG.ResolveFullName(raw)) or raw
+        if resolved and resolved:find("%-") then
+            name = resolved
+        else
+            local ext = (ns and ns.Tr and ns.Tr("realm_external")) or "Externe"
+            name = raw .. "-" .. ext
+        end
+    else
+        name = raw
+    end
+
     -- Crée l’entrée si besoin (par défaut en Réserve)
     GetOrCreatePlayer(name)
 
-    -- ⚑ Ajout explicite au roster actif
-    if GLOG.GM_SetReserved and GLOG.IsMaster and GLOG.IsMaster() then
+    -- ⚑ N’activer automatiquement que si le joueur appartient à la guilde
+    local inGuild = (GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(name)) or false
+    if inGuild and GLOG.GM_SetReserved and GLOG.IsMaster and GLOG.IsMaster() then
         GLOG.GM_SetReserved(name, false) -- bascule en "Actif" et broadcast le statut
     end
 
-    -- UID & upsert réseau (nom > uid)
+    -- UID & upsert réseau
     if GLOG.GetOrAssignUID then GLOG.GetOrAssignUID(name) end
     if GLOG.BroadcastRosterUpsert and GLOG.IsMaster and GLOG.IsMaster() then
         GLOG.BroadcastRosterUpsert(name)
