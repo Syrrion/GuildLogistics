@@ -1140,9 +1140,20 @@ function GLOG._HandleFull(sender, msgType, kv)
             local _id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
             ui.PopupRequest(kv.who or sender, safenum(kv.delta,0),
                 function()
-                    if GLOG.GM_ApplyAndBroadcastByUID then
+                    -- ⚠️ IMPORTANT : appliquer par NOM (kv.who) et non par UID local (non global)
+                    local who = kv.who or sender
+                    if GLOG.GM_ApplyAndBroadcastEx then
+                        GLOG.GM_ApplyAndBroadcastEx(who, safenum(kv.delta,0), {
+                            reason = "PLAYER_REQUEST",
+                            requester = who,
+                            uid = kv.uid, -- conservé pour audit/debug
+                        })
+                    elseif GLOG.GM_ApplyAndBroadcast then
+                        GLOG.GM_ApplyAndBroadcast(who, safenum(kv.delta,0))
+                    elseif GLOG.GM_ApplyAndBroadcastByUID then
+                        -- Fallback ultime si l’API ci-dessus n’existe pas
                         GLOG.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), {
-                            reason = "PLAYER_REQUEST", requester = kv.who or sender
+                            reason = "PLAYER_REQUEST", requester = who
                         })
                     end
                     if GLOG.ResolveRequest then GLOG.ResolveRequest(_id, true, playerFullName()) end

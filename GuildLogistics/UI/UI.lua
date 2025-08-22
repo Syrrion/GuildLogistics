@@ -416,28 +416,42 @@ end
 
 -- ➕ Visibilité des onglets selon l'appartenance à une guilde
 function UI.ApplyTabsForGuildMembership(inGuild)
-    local keepInfo     = Tr("tab_roster")   -- renommé « Info » via locales
+    local keepInfo     = Tr("tab_roster")     -- renommé « Info » via locales
     local keepSettings = Tr("tab_settings")
     local keepDebug    = Tr("tab_debug")
+    local reqLabel     = Tr("tab_requests")
 
-    if inGuild then
-        for _, def in ipairs(Registered) do
-            local lab = def.label
-            if lab == keepDebug then
-                UI.SetTabVisible(lab, GuildLogisticsUI and GuildLogisticsUI.debugEnabled)
+    -- État GM + nombre de demandes en attente
+    local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
+    local reqCount = 0
+    if isGM and ns.GLOG and ns.GLOG.GetRequests then
+        local t = ns.GLOG.GetRequests()
+        reqCount = (type(t) == "table") and #t or 0
+    end
+
+    for _, def in ipairs(Registered) do
+        local lab = def.label
+        local shown
+
+        if lab == keepDebug then
+            -- Le débug reste contrôlé par l’option UI
+            shown = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
+
+        elseif lab == reqLabel then
+            -- ⚠️ Jamais visible pour un joueur ; visible pour le GM seulement s'il existe des demandes
+            shown = isGM and (reqCount > 0)
+            UI.SetTabBadge(reqLabel, reqCount)
+
+        else
+            -- Visibilité standard selon appartenance à une guilde
+            if inGuild then
+                shown = true
             else
-                UI.SetTabVisible(lab, true)
+                shown = (lab == keepInfo) or (lab == keepSettings)
             end
         end
-    else
-        for _, def in ipairs(Registered) do
-            local lab = def.label
-            local shown = (lab == keepInfo) or (lab == keepSettings)
-            if lab == keepDebug then
-                shown = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
-            end
-            UI.SetTabVisible(lab, shown)
-        end
+
+        UI.SetTabVisible(lab, shown)
     end
 end
 

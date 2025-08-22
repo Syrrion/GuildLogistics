@@ -39,9 +39,22 @@ local function UpdateRow(i, r, f, it)
         if lv and lv.Layout then lv:Layout() end
 
         -- Traitement : appliquer et retirer de la file
-        if GLOG.GM_ApplyAndBroadcastByUID then
-            GLOG.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, { reason = "PLAYER_REQUEST", requester = it.name })
+        local who = it.who or it.name or "?"
+        if GLOG.GM_ApplyAndBroadcastEx then
+            GLOG.GM_ApplyAndBroadcastEx(who, tonumber(it.delta) or 0, {
+                reason = "PLAYER_REQUEST",
+                requester = who,
+                uid = it.uid, -- info annexe pour traçabilité
+            })
+        elseif GLOG.GM_ApplyAndBroadcast then
+            GLOG.GM_ApplyAndBroadcast(who, tonumber(it.delta) or 0)
+        elseif GLOG.GM_ApplyAndBroadcastByUID then
+            -- Fallback si les APIs ci-dessus n’existent pas
+            GLOG.GM_ApplyAndBroadcastByUID(it.uid, tonumber(it.delta) or 0, {
+                reason = "PLAYER_REQUEST", requester = who
+            })
         end
+
         if GLOG.ResolveRequest then GLOG.ResolveRequest(it.id, true, Tr("badge_approved_list")) end
 
         -- Rafraîchit la liste et met à jour le badge/onglet
@@ -79,8 +92,13 @@ local function Refresh()
         return
     end
     for _, r in ipairs(GLOG.GetRequests()) do
-        local display = (GLOG.GetNameByUID and GLOG.GetNameByUID(r.uid)) or r.requester or "?"
-        rows[#rows+1] = { id=r.id, ts=r.ts, uid=r.uid, name=display, delta=r.delta }
+        -- Affichage : préférer le nom « who » transmis par le joueur ; sinon mapping UID → nom
+        local display = r.who or (GLOG.GetNameByUID and GLOG.GetNameByUID(r.uid)) or "?"
+        rows[#rows+1] = {
+            id = r.id, ts = r.ts, uid = r.uid,
+            who = r.who,           -- conserve le demandeur pour l'action d'approbation
+            name = display, delta = r.delta
+        }
     end
     lv:SetData(rows)
     if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end

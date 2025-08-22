@@ -291,8 +291,8 @@ local function UpdateRow(i, r, f, data)
     f.solde:SetText(money(GetSolde(data.name)))
 
     -- Autorisations & boutons
-    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
-    local canAct   = isMaster
+    local isSelf, isMaster = CanActOn(data.name)
+    local canAct           = (isMaster or isSelf)
 
     if r.btnDeposit then
         r.btnDeposit:SetEnabled(canAct)
@@ -303,10 +303,6 @@ local function UpdateRow(i, r, f, data)
         r.btnWithdraw:SetEnabled(canAct)
         r.btnWithdraw:SetAlpha(canAct and 1 or 0.5)
         AttachWithdrawHandler(r.btnWithdraw, data.name, canAct, isMaster)
-    end
-    if r.btnDelete then
-        r.btnDelete:SetShown(isMaster)
-        AttachDeleteHandler(r.btnDelete, data.name, isMaster)
     end
 end
 
