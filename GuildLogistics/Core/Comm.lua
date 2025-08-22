@@ -679,15 +679,16 @@ function GLOG._SnapshotExport()
     GuildLogisticsDB.uids = GuildLogisticsDB.uids or {}
     GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
     GuildLogisticsDB.lots = GuildLogisticsDB.lots or { list = {}, nextId = 1 }
+    GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
 
     local meta = GuildLogisticsDB.meta
     local t = {
         P = {}, I = {}, E = {}, L = {}, H = {}, HL = {},
+        A = {},  -- ➕ aliases (mainNormalisé:alias)
         rv = safenum(meta.rev, 0),
         lm = safenum(meta.lastModified, now()),
         fs = safenum(meta.fullStamp, now()),
     }
-
 
     for name, rec in pairs(GuildLogisticsDB.players) do
         local res = (rec and rec.reserved) and 1 or 0
@@ -698,6 +699,13 @@ function GLOG._SnapshotExport()
     for uid, name in pairs(GuildLogisticsDB.uids) do
         if name and _players[name] ~= nil then
             t.I[#t.I+1] = tostring(uid) .. ":" .. tostring(name)
+        end
+    end
+
+    -- ➕ Export des aliases (clé déjà normalisée côté Core)
+    for key, alias in pairs(GuildLogisticsDB.aliases) do
+        if alias and alias ~= "" then
+            t.A[#t.A+1] = tostring(key) .. ":" .. tostring(alias)
         end
     end
 
@@ -757,15 +765,28 @@ function GLOG._SnapshotApply(kv)
     GuildLogisticsDB.uids = {}
     GuildLogisticsDB.expenses = { list = {}, nextId = 1 }
     GuildLogisticsDB.lots = { list = {}, nextId = 1 }
+    GuildLogisticsDB.aliases = {}  -- ➕ reset aliases (le FULL est autoritatif)
 
     local meta = GuildLogisticsDB.meta
     meta.rev = safenum(kv.rv, 0)
     meta.lastModified = safenum(kv.lm, now())
     meta.fullStamp = safenum(kv.fs, now())
 
+    -- ➕ Import des aliases (A = { "main:alias", ... })
+    for _, s in ipairs(kv.A or {}) do
+        local mainKey, alias = tostring(s):match("^(.-):(.*)$")
+        if mainKey and mainKey ~= "" then
+            if alias == "" then
+                GuildLogisticsDB.aliases[mainKey] = nil
+            else
+                GuildLogisticsDB.aliases[mainKey] = alias
+            end
+        end
+    end
+
     -- (dans function GLOG._SnapshotApply(kv))
     for _, s in ipairs(kv.P or {}) do
-        -- Nouveau format (4 champs) : name:credit:debit:reserved
+    -- Nouveau format (4 champs) : name:credit:debit:reserved
         local name, credit, debit, res = s:match("^(.-):(%-?%d+):(%-?%d+):(%-?%d+)$")
         if name then
             GuildLogisticsDB.players[name] = {
