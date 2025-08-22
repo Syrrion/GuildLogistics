@@ -62,6 +62,46 @@ function UI.MoneyFromCopper(copper)
     if n < 0 then return "|cffff4040-" .. txt .. "|r" else return txt end
 end
 
+-- ========= Couleurs utilitaires =========
+-- Convertit des RGB [0..1] en "rrggbb"
+function UI.RGBHex(r, g, b)
+    local function clamp(x) x = tonumber(x) or 0; if x < 0 then return 0 elseif x > 1 then return 1 else return x end end
+    r, g, b = clamp(r), clamp(g), clamp(b)
+    return string.format("%02x%02x%02x", math.floor(r*255+0.5), math.floor(g*255+0.5), math.floor(b*255+0.5))
+end
+
+-- Entoure un texte avec un code couleur WoW
+function UI.Colorize(text, r, g, b)
+    return "|cff" .. UI.RGBHex(r,g,b) .. tostring(text) .. "|r"
+end
+
+-- Couleur "difficulté de quête" pour un niveau donné (par rapport au joueur)
+function UI.ColorizeLevel(level)
+    local lvl = tonumber(level)
+    if not lvl or lvl <= 0 then return "" end
+
+    local c = GetQuestDifficultyColor and GetQuestDifficultyColor(lvl)
+    if not c or not c.r then
+        -- Fallback simple si l'API n'est pas dispo
+        local pl   = (UnitLevel and UnitLevel("player")) or lvl
+        local diff = (lvl - pl)
+        local greenRange = (GetQuestGreenRange and GetQuestGreenRange()) or 5
+        if diff >= 5 then
+            c = { r=1,   g=0.1, b=0.1 }       -- rouge
+        elseif diff >= 3 then
+            c = { r=1,   g=0.5, b=0.25 }      -- orange
+        elseif diff >= -2 then
+            c = { r=1,   g=0.82, b=0 }        -- jaune
+        elseif diff > -greenRange then
+            c = { r=0.25,g=0.75, b=0.25 }     -- vert
+        else
+            c = { r=0.5, g=0.5,  b=0.5 }      -- gris
+        end
+    end
+    return "|cff" .. UI.RGBHex(c.r,c.g,c.b) .. tostring(lvl) .. "|r"
+end
+
+
 function UI.GetPopupAmountFromSelf(popupSelf)
     if not popupSelf then return 0 end
     local eb = popupSelf.editBox or popupSelf.EditBox

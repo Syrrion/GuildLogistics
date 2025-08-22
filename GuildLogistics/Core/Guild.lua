@@ -160,8 +160,8 @@ function GLOG.GetGuildMainsAggregatedCached()
     return (GLOG._guildCache and GLOG._guildCache.mains) or {}
 end
 
--- Retourne l'inactivité (en jours) pour un MAIN (clé normalisée).
--- Calcule le "last seen" le plus récent parmi ses personnages.
+-- Retourne l'inactivité (en jours) pour un MAIN (clé normalisée ou nom complet).
+-- Prend le "last seen" le plus récent parmi ses personnages dans le cache guilde.
 function GLOG.GetMainLastSeenDays(mainKey)
     mainKey = (GLOG.NormName and GLOG.NormName(mainKey)) or nil
     if not mainKey or mainKey == "" then return 9999 end
@@ -182,7 +182,6 @@ function GLOG.GetMainLastSeenDays(mainKey)
 
     return (minHours and math.floor(minHours / 24)) or 9999
 end
-
 
 function GLOG.GetGuildRowsCached()
     return GLOG._guildCache and GLOG._guildCache.rows or {}

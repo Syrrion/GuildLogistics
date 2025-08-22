@@ -155,15 +155,23 @@ end
 
 
 local function Refresh()
-    -- ✅ seulement le roster ACTIF
-    local players = (GLOG.GetPlayersArrayActive and GLOG.GetPlayersArrayActive()) or GLOG.GetPlayersArray()
-    lv:SetData(players)
+    -- ✅ Actifs + Réserves éligibles (vu <30j OU solde ≠ 0), cases par défaut :
+    --    - Actifs   : cochées
+    --    - Réserves : décochées
+    local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
+    local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve({ showHidden = false, cutoffDays = 30 })) or {}
+
+    -- Concatène en marquant la provenance pour gérer la case par défaut
+    local rows = {}
+    for _, it in ipairs(active)  do rows[#rows+1] = { data = it, fromActive  = true } end
+    for _, it in ipairs(reserve) do rows[#rows+1] = { data = it, fromReserve = true } end
+    lv:SetData(rows)
 
     local selectable = (GLOG.Lot_ListSelectable and GLOG.Lot_ListSelectable()) or {}
-    local rows = {}; for _, l in ipairs(selectable) do rows[#rows+1] = { data = l } end
-    lotsLV:SetData(rows)
+    local rowsLots = {}; for _, l in ipairs(selectable) do rowsLots[#rowsLots+1] = { data = l } end
+    lotsLV:SetData(rowsLots)
 
-    -- recalc montant global si des lots sont cochés
+    -- recalc montant global à partir des lots cochés...
     local total = 0
     for id,_ in pairs(chosenLots) do
         local l = GLOG.Lot_GetById and GLOG.Lot_GetById(id)
@@ -319,10 +327,17 @@ local function Build(container)
 
     -- Liste des joueurs (haut), enfant de topPane
     lv = UI.ListView(topPane, cols, {
-        buildRow   = BuildRow,
-        updateRow  = UpdateRow,
-        topOffset  = (UI.SECTION_HEADER_H or 26),
-        bottomAnchor = lotsPane,  -- ✅ bornée juste au-dessus du panneau des lots
+        buildRow = BuildRow,
+        updateRow = function(i, r, f, it)
+            local d = it.data or it
+            -- ⚑ Par défaut : actifs cochés, réserves décochées
+            if includes[d.name] == nil then
+                includes[d.name] = not (it.fromReserve == true)
+            end
+            UpdateRow(i, r, f, d) -- réutilise la logique existante (alias/nom/solde/handlers)
+        end,
+        topOffset = (UI.SECTION_HEADER_H or 26),
+        bottomAnchor = lotsPane,
     })
 
     -- Titre + trait : lots utilisables

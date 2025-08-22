@@ -195,6 +195,10 @@ function GLOG.GetPlayersArrayActive()
     return out
 end
 
+-- opts (optionnel) :
+--    { showHidden = boolean, cutoffDays = number }
+--    - showHidden = true  -> conserve tout (comportement historique)
+--    - showHidden = false -> masque inactifs >= cutoffDays ET solde == 0
 function GLOG.GetPlayersArrayReserve(opts)
     EnsureDB()
     local out, agg = {}, {}
@@ -210,10 +214,10 @@ function GLOG.GetPlayersArrayReserve(opts)
         end
     end
 
-    -- Regroupe par "main" (clé normalisée) et garde un nom d'affichage propre
+    -- Regroupe par main (clé normalisée), ignore ceux déjà actifs
     local function ensureBucket(mk, display)
         if not mk or mk == "" then return nil end
-        if activeSet[mk] then return nil end -- ⛔ pas de bucket pour un main actif
+        if activeSet[mk] then return nil end
         local b = agg[mk]
         if not b then
             b = { name = display or mk, credit = 0, debit = 0, reserved = true }
@@ -224,7 +228,7 @@ function GLOG.GetPlayersArrayReserve(opts)
         return b
     end
 
-    -- 1) BDD locale marquée "réserve" → agrégation par MAIN si connu
+    -- 1) BDD locale "réserve" → agrégation par main
     for name, p in pairs(GuildLogisticsDB.players or {}) do
         if p and ((GLOG.IsReserved and GLOG.IsReserved(name)) or p.reserved) then
             local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
@@ -240,7 +244,7 @@ function GLOG.GetPlayersArrayReserve(opts)
         end
     end
 
-    -- 2) Ajouter les MAINS du roster guilde UNIQUEMENT s’ils ne sont PAS actifs localement
+    -- 2) Ajoute les mains guilde non actifs localement
     do
         local mainsAgg = (GLOG.GetGuildMainsAggregatedCached and GLOG.GetGuildMainsAggregatedCached()) or {}
         for _, e in ipairs(mainsAgg) do

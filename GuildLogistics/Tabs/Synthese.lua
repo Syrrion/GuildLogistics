@@ -43,8 +43,8 @@ local cols = UI.NormalizeColumns({
     { key="ilvl",   title=Tr("col_ilvl"),           w=64, justify="CENTER" },
     { key="mkey",   title=Tr("col_mplus_key"),      w=200, justify="LEFT" },
     { key="last",   title=Tr("col_attendance"),     w=180 },
-    { key="act",    title="",                        w=200 },
-    { key="solde",  title=Tr("col_balance"),        w=80 },
+    { key="act",    title="",                        w=150 },
+    { key="solde",  title=Tr("col_balance"),        w=70 },
 })
 
 -- Helpers
@@ -205,8 +205,8 @@ local function BuildRow(r, context)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
     -- Actions financières (inchangé)
-    r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=70 })
-    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"),  { size="sm", variant="ghost", minWidth=70 })
+    r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=60 })
+    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"),  { size="sm", variant="ghost", minWidth=60 })
 
     -- Alignement des actions sur la droite
     UI.AttachRowRight(f.act, { r.btnDeposit, r.btnWithdraw, r.btnReserve, r.btnRoster }, 8, -4, { leftPad = 8, align = "center" })
@@ -249,7 +249,12 @@ local function UpdateRow(i, r, f, data)
     end
 
     if f.lvl then
-        f.lvl:SetText(gi.level and tostring(gi.level) or "")
+        if gi.level and gi.level > 0 then
+            -- Colorise comme l’écart de niveau de WoW
+            f.lvl:SetText( (UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level) )
+        else
+            f.lvl:SetText("")
+        end
     end
 
     -- 🔧 M+ : afficher la clé en grisé pour les joueurs déconnectés s'ils en ont une
@@ -297,17 +302,20 @@ local function UpdateRow(i, r, f, data)
 
     -- Autorisations & boutons
     local isSelf, isMaster = CanActOn(data.name)
-    local canAct           = (isMaster or isSelf)
+    local canAct           = (isMaster or isSelf)       -- GM = tout voir/tout faire ; sinon soi-même
 
     if r.btnDeposit then
-        r.btnDeposit:SetEnabled(canAct)
-        r.btnDeposit:SetAlpha(canAct and 1 or 0.5)
+        r.btnDeposit:SetShown(canAct)                   -- ✅ masquer si non autorisé
         AttachDepositHandler(r.btnDeposit, data.name, canAct, isMaster)
     end
     if r.btnWithdraw then
-        r.btnWithdraw:SetEnabled(canAct)
-        r.btnWithdraw:SetAlpha(canAct and 1 or 0.5)
+        r.btnWithdraw:SetShown(canAct)                  -- ✅ masquer si non autorisé
         AttachWithdrawHandler(r.btnWithdraw, data.name, canAct, isMaster)
+    end
+
+    -- Recalcule l’alignement de la barre d’actions (ignore les boutons masqués)
+    if f and f.act and f.act._applyRowActionsLayout then
+        f.act._applyRowActionsLayout()
     end
 end
 

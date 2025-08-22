@@ -186,18 +186,28 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
         anchor._rowActionsPack = pack
     end
 
+    -- Ne compter/positionner que les boutons visibles (évite les "trous")
+    local function countShown()
+        local n = 0
+        for i = 1, #arr do if arr[i]:IsShown() then n = n + 1 end end
+        return n
+    end
+
     local function measureContentWidth()
         local sum = 0
         for i = 1, #arr do
             local b = arr[i]
-            if b.SetScale then b:SetScale(1) end
-            sum = sum + (b:GetWidth() or 0)
+            if b:IsShown() then
+                if b.SetScale then b:SetScale(1) end
+                sum = sum + (b:GetWidth() or 0)
+            end
         end
         return sum
     end
 
     local function measureTotalWidth(g)
-        return measureContentWidth() + math.max(0, (#arr-1)) * g
+        local shown = countShown()
+        return measureContentWidth() + math.max(0, shown - 1) * g
     end
 
     local function layoutWithGapAndScale(g, scale, packW)
@@ -209,18 +219,20 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
         end
         for i = 1, #arr do
             local b = arr[i]
-            b:ClearAllPoints()
-            if not prev then
-                if align == "center" then
-                    b:SetPoint("RIGHT", pack, "RIGHT", dx, 0)
+            if b:IsShown() then
+                b:ClearAllPoints()
+                if not prev then
+                    if align == "center" then
+                        b:SetPoint("RIGHT", pack, "RIGHT", dx, 0)
+                    else
+                        b:SetPoint("RIGHT", host, "RIGHT", dx, 0)
+                    end
                 else
-                    b:SetPoint("RIGHT", host, "RIGHT", dx, 0)
+                    b:SetPoint("RIGHT", prev, "LEFT", -g, 0)
                 end
-            else
-                b:SetPoint("RIGHT", prev, "LEFT", -g, 0)
+                if b.SetScale then b:SetScale(scale) end
+                prev = b
             end
-            if b.SetScale then b:SetScale(scale) end
-            prev = b
         end
     end
 
@@ -234,7 +246,7 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
         -- 1) gap normal
         local total = measureTotalWidth(gap)
         if total <= aw then
-            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0,(#arr-1))*gap) or nil
+            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0, countShown()-1)*gap) or nil
             layoutWithGapAndScale(gap, 1, packW)
             return
         end
@@ -242,16 +254,16 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
         -- 2) gap minimal
         total = measureTotalWidth(minGap)
         if total <= aw then
-            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0,(#arr-1))*minGap) or nil
+            local packW = (align=="center") and (measureContentWidth()*1 + math.max(0, countShown()-1)*minGap) or nil
             layoutWithGapAndScale(minGap, 1, packW)
             return
         end
 
         -- 3) scale
         local contentW = measureContentWidth()
-        local need = contentW + minGap * math.max(0, (#arr-1))
+        local need = contentW + minGap * math.max(0, countShown()-1)
         local scale = math.max(minScale, math.min(1, (aw / math.max(1, need))))
-        local packW = (align=="center") and (contentW*scale + math.max(0,(#arr-1))*minGap) or nil
+        local packW = (align=="center") and (contentW*scale + math.max(0, countShown()-1)*minGap) or nil
         layoutWithGapAndScale(minGap, scale, packW)
     end
 
