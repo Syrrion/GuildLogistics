@@ -230,9 +230,10 @@ local HelloElect      = HelloElect or {}   -- [hid] = { startedAt, endsAt, decid
 -- [hid] = { initiator=me, rv_me, decided=false, endsAt, offers={[normName]={player,rv,est,h}}, grantedTo, token, reason }
 local Discovery = Discovery or {}
 
--- Registre de suppression des envois non-critiques (ILVL/MKEY) par cible
+-- Registre de suppression des envois non-critiques (STATUS_UPDATE) par cible
 local _NonCritSuppress = _NonCritSuppress or {}
-local _NONCRIT_TYPES = { ILVL_UPDATE=true, MKEY_UPDATE=true }
+local _NONCRIT_TYPES = { STATUS_UPDATE=true }
+
 
 -- Anti-spam version : envoi (1 fois par session) et réception (popup debounce)
 -- [normName] = true  → un avertissement déjà envoyé à cette cible pendant cette session
@@ -241,6 +242,9 @@ local _VersionWarnSentTo   = _VersionWarnSentTo   or {}
 local _ObsoletePopupUntil  = _ObsoletePopupUntil  or 0   -- anti-popups multiples
 local OBSOLETE_DEBOUNCE_SEC= 10                   -- 10s d’immunité côté client
 
+-- Anti-doublon : n’émettre qu’un seul STATUS_UPDATE immédiatement après un HELLO (par cible)
+local _HelloStatusSentTo   = _HelloStatusSentTo   or {}  -- [normTarget] = lastTs
+local HELLO_STATUS_CD_SEC  = 3.0
 
 local function _suppressTo(target, seconds)
     if not target or not seconds then return end
@@ -1062,24 +1066,22 @@ function GLOG._HandleFull(sender, msgType, kv)
             meta.lastModified = safenum(kv.lm, now())
             refreshActive()
 
-            -- ✏️ Si l'UPSERT me concerne et que je suis connecté, envoyer iLvl + M+ en broadcast
+            -- ✏️ Si l'UPSERT me concerne et que je suis connecté, envoyer un message unifié
             local me = nf(playerFullName())
             if me == full then
-                -- iLvl : lecture immédiate puis broadcast
-                local ilvl = (GLOG.ReadOwnEquippedIlvl and GLOG.ReadOwnEquippedIlvl()) or nil
-                if ilvl then
-                    GLOG.BroadcastIlvlUpdate(me, ilvl, now(), me)
-                end
-
-                -- Clé mythique : lecture immédiate puis broadcast
+                local ilvl    = (GLOG.ReadOwnEquippedIlvl and GLOG.ReadOwnEquippedIlvl()) or nil
+                local ilvlMax = (GLOG.ReadOwnMaxIlvl     and GLOG.ReadOwnMaxIlvl())       or nil
                 local mid, lvl, map = 0, 0, ""
                 if GLOG.ReadOwnedKeystone then mid, lvl, map = GLOG.ReadOwnedKeystone() end
-                if safenum(lvl, 0) > 0 then
-                    if (not map or map == "" or map == "Clé") and safenum(mid, 0) > 0 and GLOG.ResolveMKeyMapName then
-                        local nm = GLOG.ResolveMKeyMapName(mid)
-                        if nm and nm ~= "" then map = nm end
-                    end
-                    GLOG.BroadcastMKeyUpdate(me, safenum(mid, 0), safenum(lvl, 0), tostring(map or ""), now(), me)
+                if (not map or map == "" or map == "Clé") and safenum(mid, 0) > 0 and GLOG.ResolveMKeyMapName then
+                    local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
+                end
+                if GLOG.BroadcastStatusUpdate then
+                    GLOG.BroadcastStatusUpdate({
+                        ilvl = ilvl, ilvlMax = ilvlMax,
+                        mid = safenum(mid, 0), lvl = safenum(lvl, 0), map = tostring(map or ""),
+                        ts = now(), by = me,
+                    })
                 end
             end
         end
@@ -1414,58 +1416,50 @@ function GLOG._HandleFull(sender, msgType, kv)
 
         if ns.Emit then ns.Emit("expenses:changed") end
 
-    elseif msgType == "ILVL_UPDATE" then
-        -- Acceptation stricte: seule la source (= le main lui-même) fait foi
+    elseif msgType == "STATUS_UPDATE" then
+        -- Unifié : iLvl (+max) et/ou Clé Mythique (mid,lvl,map)
         local pname = tostring(kv.name or "")
         local by    = tostring(kv.by   or sender or "")
         if pname ~= "" and GLOG.NormName and (GLOG.NormName(pname) == GLOG.NormName(by)) then
-            local n_ilvl = safenum(kv.ilvl, -1)
-            local n_ts   = safenum(kv.ts, now())
-            GuildLogisticsDB = GuildLogisticsDB or {}
-            GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-            -- ⚠️ Ne JAMAIS créer de joueur ici : on met à jour uniquement s'il existe déjà (actif ou réserve)
-            local p = GuildLogisticsDB.players[pname]
+            GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+            local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
             if p then
-                local prev = safenum(p.ilvlTs, 0)
-                if n_ilvl >= 0 and n_ts >= prev then
+                local n_ts = safenum(kv.ts, now())
+                local changedIlvl, changedM = false, false
+
+                -- ===== iLvl =====
+                local n_ilvl    = safenum(kv.ilvl, -1)
+                local n_ilvlMax = safenum(kv.ilvlMax, -1)
+                if n_ilvl >= 0 and n_ts >= safenum(p.ilvlTs, 0) then
                     p.ilvl     = math.floor(n_ilvl)
                     p.ilvlTs   = n_ts
                     p.ilvlAuth = by
-                    if ns.Emit then ns.Emit("ilvl:changed", pname) end
-                    if ns.RefreshAll then ns.RefreshAll() end
+                    if n_ilvlMax >= 0 then
+                        p.ilvlMax   = math.floor(n_ilvlMax)
+                        p.ilvlMaxTs = n_ts
+                    end
+                    changedIlvl = true
                 end
-            end
-        end
 
-    -- ➕ Nouvelle mise à jour « Clé mythique »
-    elseif msgType == "MKEY_UPDATE" then
-        local pname = tostring(kv.name or "")
-        local by    = tostring(kv.by   or sender or "")
-        if pname ~= "" and GLOG.NormName and (GLOG.NormName(pname) == GLOG.NormName(by)) then
-            GuildLogisticsDB = GuildLogisticsDB or {}
-            GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-            -- ⚠️ jamais créer de joueur ici
-            local p = GuildLogisticsDB.players[pname]
-            if p then
+                -- ===== M+ =====
                 local n_mid = safenum(kv.mid, 0)
                 local n_lvl = safenum(kv.lvl, 0)
                 local n_map = tostring(kv.map or "")
-                -- Résoudre le nom via résolveur commun
-                if (n_map == "" or n_map == "Clé") and n_mid > 0 then
-                    local nm = GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(n_mid)
-                    if nm and nm ~= "" then n_map = nm end
+                if (n_map == "" or n_map == "Clé") and n_mid > 0 and GLOG.ResolveMKeyMapName then
+                    local nm = GLOG.ResolveMKeyMapName(n_mid); if nm and nm ~= "" then n_map = nm end
                 end
-                local n_ts  = safenum(kv.ts, now())
-                local prev  = safenum(p.mkeyTs, 0)
-                if n_ts >= prev then
+                if n_lvl > 0 and n_ts >= safenum(p.mkeyTs, 0) then
                     p.mkeyMapId = n_mid
                     p.mkeyLevel = n_lvl
                     p.mkeyName  = n_map
                     p.mkeyTs    = n_ts
                     p.mkeyAuth  = by
-                    if ns.Emit then ns.Emit("mkey:changed", pname) end
-                    if ns.RefreshAll then ns.RefreshAll() end
+                    changedM = true
                 end
+
+                if changedIlvl and ns.Emit then ns.Emit("ilvl:changed", pname) end
+                if changedM    and ns.Emit then ns.Emit("mkey:changed", pname) end
+                if (changedIlvl or changedM) and ns.RefreshAll then ns.RefreshAll() end
             end
         end
 
@@ -1663,49 +1657,49 @@ function GLOG._HandleFull(sender, msgType, kv)
             end
         end
 
-        -- iLvl/clé → inchangé (uniquement si sa DB n'est pas obsolète)
+                -- Statut unifié → un seul STATUS_UPDATE si sa DB n'est pas obsolète
         if sender and sender ~= "" and sender ~= playerFullName() and rv_them >= rv_me then
             local me = playerFullName()
             if GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me) then
-                local p    = (GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[me]) or {}
-                local ilvl = safenum(p.ilvl, 0)
-                GLOG.Comm_Whisper(sender, "ILVL_UPDATE", {
-                    name = me,
-                    ilvl = ilvl,
-                    ts   = now(),
-                    by   = me,
-                })
+                local p     = (GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[me]) or {}
+                local ilvl  = safenum(p.ilvl, 0)
+                local ilvMx = safenum(p.ilvlMax or 0, 0)
+                if (ilvMx <= 0) and GLOG.ReadOwnMaxIlvl then ilvMx = safenum(GLOG.ReadOwnMaxIlvl(), 0) end
 
-                -- ➕ Envoie aussi la clé mythique (si dispo, avec fallback API si non stockée)
+                -- Clé mythique (fallback API si non stockée)
                 local mid = safenum(p.mkeyMapId, 0)
                 local lvl = safenum(p.mkeyLevel, 0)
                 local map = tostring(p.mkeyName or "")
-                -- Fallback : lecture live si DB vide / obsolète
                 if (lvl <= 0 or mid <= 0) and GLOG.ReadOwnedKeystone then
                     local _mid, _lvl, _map = GLOG.ReadOwnedKeystone()
                     if safenum(_mid,0) > 0 then mid = safenum(_mid,0) end
                     if safenum(_lvl,0) > 0 then lvl = safenum(_lvl,0) end
-                    if (not map or map == "" or map == "Clé") and _map and _map ~= "" then
-                        map = tostring(_map)
-                    end
+                    if (not map or map == "" or map == "Clé") and _map and _map ~= "" then map = tostring(_map) end
                 end
+                if (map == "" or map == "Clé") and mid > 0 and GLOG.ResolveMKeyMapName then
+                    local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
+                end
+
+                local payload = {
+                    name = me, ts = now(), by = me,
+                    ilvl = ilvl,
+                }
+                if ilvMx > 0 then payload.ilvlMax = ilvMx end
                 if lvl > 0 then
-                    if (map == "" or map == "Clé") and mid > 0 then
-                        local nm = GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(mid)
-                        if nm and nm ~= "" then map = nm end
-                    end
-                    GLOG.Comm_Whisper(sender, "MKEY_UPDATE", {
-                        name = me,
-                        mid  = mid,
-                        lvl  = lvl,
-                        map  = map,
-                        ts   = now(),
-                        by   = me,
-                    })
+                    payload.mid = mid; payload.lvl = lvl
+                    if map ~= "" then payload.map = map end
+                end
+
+                -- Anti-doublon : 1 seul STATUS_UPDATE par cible dans la foulée du HELLO
+                local key  = (_norm and _norm(sender)) or tostring(sender)
+                local last = _HelloStatusSentTo[key] or 0
+                if (now() - last) > (HELLO_STATUS_CD_SEC or 1.0) then
+                    GLOG.Comm_Whisper(sender, "STATUS_UPDATE", payload)
+                    _HelloStatusSentTo[key] = now()
                 end
             end
         end
-        
+
         -- ✏️ Flush TX_REQ si le HELLO vient du GM effectif (tolérant au roster pas encore prêt)
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached())
@@ -1857,19 +1851,20 @@ function GLOG._HandleFull(sender, msgType, kv)
                     local meNow = (playerFullName and playerFullName()) or me
                     if GLOG.EnsureRosterLocal then GLOG.EnsureRosterLocal(meNow) end
 
-                    -- iLvl actuel équipé
-                    if GLOG.ReadOwnEquippedIlvl and GLOG.BroadcastIlvlUpdate then
-                        local il = GLOG.ReadOwnEquippedIlvl()
-                        if il and il > 0 then
-                            GLOG.BroadcastIlvlUpdate(meNow, il, time(), meNow) -- via GUILD
+                    -- Statut unifié (iLvl + M+)
+                    if GLOG.BroadcastStatusUpdate then
+                        local il  = GLOG.ReadOwnEquippedIlvl and GLOG.ReadOwnEquippedIlvl() or nil
+                        local ilM = GLOG.ReadOwnMaxIlvl     and GLOG.ReadOwnMaxIlvl()     or nil
+                        local mid, lvl, map = 0, 0, ""
+                        if GLOG.ReadOwnedKeystone then mid, lvl, map = GLOG.ReadOwnedKeystone() end
+                        if (not map or map == "" or map == "Clé") and safenum(mid,0) > 0 and GLOG.ResolveMKeyMapName then
+                            local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
                         end
-                    end
-                    -- Clé Mythique détenue
-                    if GLOG.ReadOwnedKeystone and GLOG.BroadcastMKeyUpdate then
-                        local mid, lvl, map = GLOG.ReadOwnedKeystone()
-                        if (tonumber(mid) or 0) > 0 and (tonumber(lvl) or 0) > 0 then
-                            GLOG.BroadcastMKeyUpdate(meNow, tonumber(mid) or 0, tonumber(lvl) or 0, tostring(map or ""), time(), meNow) -- via GUILD
-                        end
+                        GLOG.BroadcastStatusUpdate({
+                            ilvl = il, ilvlMax = ilM,
+                            mid = safenum(mid,0), lvl = safenum(lvl,0), map = tostring(map or ""),
+                            ts = time(), by = meNow,
+                        })
                     end
                 end)
             end
@@ -2513,47 +2508,70 @@ function GLOG.GM_RemoveExpense(id)
     GLOG.Comm_Broadcast("EXP_REMOVE", { id = safenum(id,0), rv = rv, lm = GuildLogisticsDB.meta.lastModified })
 end
 
--- Diffusion iLvl du main (léger, hors versionning GM)
-function GLOG.BroadcastIlvlUpdate(name, ilvl, ts, by)
-    local n = tostring(name or "")
-    if n == "" then return end
-    -- 🚫 Bloque l'émission si le joueur n'est pas listé (roster ou réserve)
-    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(n)) then return end
-    GLOG.Comm_Broadcast("ILVL_UPDATE", {
-        name = n,
-        ilvl = math.floor(tonumber(ilvl) or 0),
-        ts   = safenum(ts, now()),
-        by   = tostring(by or n)
-    })
-end
-
--- ➕ Diffusion « Clé mythique »
-function GLOG.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
-    -- ⚠️ on **ignore** le paramètre 'name' et on impose le nom canonique du joueur
+-- ✨ Diffusion unifiée (iLvl + M+) dans un seul message
+-- overrides = { ilvl, ilvlMax, mid, lvl, map, ts, by }
+function GLOG.BroadcastStatusUpdate(overrides)
+    overrides = overrides or {}
     local me = playerFullName()
     local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
     me = nf(me)
 
-    -- 🚫 Bloque l'émission si le joueur n'est pas listé (roster ou réserve)
+    -- 🚫 Stop si pas dans roster/réserve
     if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then return end
 
-    -- ✅ Complète le nom du donjon si vide (à partir de mid)
-    local mapTxt = tostring(mapName or "")
-    local midNum = safenum(mapId, 0)
-    if (mapTxt == "" or mapTxt == "Clé") and midNum > 0 and GLOG.ResolveMKeyMapName then
-        local nm = GLOG.ResolveMKeyMapName(midNum)
-        if nm and nm ~= "" then mapTxt = nm end
+    local ilvl    = overrides.ilvl
+    local ilvlMax = overrides.ilvlMax
+    if ilvl == nil and GLOG.ReadOwnEquippedIlvl then ilvl = GLOG.ReadOwnEquippedIlvl() end
+    if ilvlMax == nil and GLOG.ReadOwnMaxIlvl     then ilvlMax = GLOG.ReadOwnMaxIlvl()     end
+
+    local mid, lvl, map = overrides.mid, overrides.lvl, tostring(overrides.map or "")
+    if (mid == nil or lvl == nil or map == "") and GLOG.ReadOwnedKeystone then
+        local _mid, _lvl, _map = GLOG.ReadOwnedKeystone()
+        if mid == nil then mid = _mid end
+        if lvl == nil then lvl = _lvl end
+        if map == ""  then map = tostring(_map or "") end
+    end
+    if (map == "" or map == "Clé") and safenum(mid, 0) > 0 and GLOG.ResolveMKeyMapName then
+        local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
     end
 
-    GLOG.Comm_Broadcast("MKEY_UPDATE", {
+    local payload = {
         name = me,
-        mid  = midNum,
-        lvl  = safenum(level, 0),
-        map  = mapTxt,
-        ts   = safenum(ts, now()),
-        by   = me,
-    })
+        ts   = safenum(overrides.ts, now()),
+        by   = tostring(overrides.by or me),
+    }
+    if ilvl    ~= nil then payload.ilvl    = math.floor(tonumber(ilvl)    or 0) end
+    if ilvlMax ~= nil then payload.ilvlMax = math.floor(tonumber(ilvlMax) or 0) end
+    if safenum(lvl,0) > 0 then
+        if mid ~= nil then payload.mid = safenum(mid, 0) end
+        payload.lvl = safenum(lvl, 0)
+        if map ~= "" then payload.map = map end
+    end
+
+    GLOG.Comm_Broadcast("STATUS_UPDATE", payload)
 end
+
+-- 🧭 Compat : redirige les anciens appels vers le nouveau message unifié
+function GLOG.BroadcastIlvlUpdate(name, a2, a3, a4, a5)
+    local hasNew  = (a5 ~= nil) -- 5 params → nouvelle signature
+    local ilvl    = math.floor(tonumber(a2) or 0)
+    local ilvlMax = hasNew and math.floor(tonumber(a3) or 0) or nil
+    local ts      = safenum(hasNew and a4 or a3, now())
+    local by      = tostring((hasNew and a5) or a4 or name or "")
+    GLOG.BroadcastStatusUpdate({ ilvl = ilvl, ilvlMax = ilvlMax, ts = ts, by = by })
+end
+
+function GLOG.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
+    local mid = safenum(mapId, 0)
+    local lvl = safenum(level, 0)
+    local map = tostring(mapName or "")
+    if (map == "" or map == "Clé") and mid > 0 and GLOG.ResolveMKeyMapName then
+        local nm = GLOG.ResolveMKeyMapName(mid)
+        if nm and nm ~= "" then map = nm end
+    end
+    GLOG.BroadcastStatusUpdate({ mid = mid, lvl = lvl, map = map, ts = safenum(ts, now()), by = tostring(by or "") })
+end
+
 
 function GLOG.GM_CreateLot(name, sessions, totalCopper, itemIds)
     if not (GLOG.IsMaster and GLOG.IsMaster()) then return end

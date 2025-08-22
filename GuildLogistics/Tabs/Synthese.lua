@@ -40,7 +40,7 @@ local cols = UI.NormalizeColumns({
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
     { key="alias",  title=Tr("col_alias"),          w=80, justify="LEFT" },
     { key="name",   title=Tr("col_name"),           min=180, flex=1 },
-    { key="ilvl",   title=Tr("col_ilvl"),           w=64, justify="CENTER" },
+    { key="ilvl",   title=Tr("col_ilvl"),           w=70, justify="CENTER" },
     { key="mkey",   title=Tr("col_mplus_key"),      w=200, justify="LEFT" },
     { key="last",   title=Tr("col_attendance"),     w=180 },
     { key="act",    title="",                        w=150 },
@@ -271,22 +271,35 @@ local function UpdateRow(i, r, f, data)
         end
     end
 
-    -- 🔧 iLvl : même logique que M+ — afficher l'ilvl en grisé si hors-ligne et connu
+    -- 🔧 iLvl : affiche "actuel |cffaaaaaa(max)|r".
     if f.ilvl then
-        local ilvl = (GLOG.GetIlvl and GLOG.GetIlvl(data.name)) or nil
-        if gi.online then
+        local ilvl    = (GLOG.GetIlvl     and GLOG.GetIlvl(data.name))     or nil
+        local ilvlMax = (GLOG.GetIlvlMax  and GLOG.GetIlvlMax(data.name))  or nil
+
+        local function fmtOnline()
             if ilvl and ilvl > 0 then
-                f.ilvl:SetText(tostring(ilvl))
+                if ilvlMax and ilvlMax > 0 then
+                    return tostring(ilvl).." |cffaaaaaa("..tostring(ilvlMax)..")|r"
+                else
+                    return tostring(ilvl)
+                end
             else
-                f.ilvl:SetText("|cffaaaaaa"..Tr("status_unknown").."|r")
-            end
-        else
-            if ilvl and ilvl > 0 then
-                f.ilvl:SetText("|cffaaaaaa"..tostring(ilvl).."|r")
-            else
-                f.ilvl:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+                return "|cffaaaaaa"..Tr("status_unknown").."|r"
             end
         end
+        local function fmtOffline()
+            if ilvl and ilvl > 0 then
+                if ilvlMax and ilvlMax > 0 then
+                    return "|cffaaaaaa"..tostring(ilvl).." ("..tostring(ilvlMax)..")|r"
+                else
+                    return "|cffaaaaaa"..tostring(ilvl).."|r"
+                end
+            else
+                return "|cffaaaaaa"..Tr("status_empty").."|r"
+            end
+        end
+
+        f.ilvl:SetText( gi.online and fmtOnline() or fmtOffline() )
     end
 
     -- ✨ Surlignage : même groupe (party) ou même sous-groupe de raid que moi

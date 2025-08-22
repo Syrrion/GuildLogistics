@@ -628,8 +628,16 @@ function GLOG.GetIlvl(name)
     return p and tonumber(p.ilvl or nil) or nil
 end
 
+function GLOG.GetIlvlMax(name)
+    if not name or name == "" then return nil end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
+    return p and tonumber(p.ilvlMax or nil) or nil
+end
+
 -- Application locale + signal UI (protégée)
-local function _SetIlvlLocal(name, ilvl, ts, by)
+local function _SetIlvlLocal(name, ilvl, ts, by, ilvlMax)
     if not name or name == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
@@ -641,6 +649,10 @@ local function _SetIlvlLocal(name, ilvl, ts, by)
     local prev_ts = tonumber(p.ilvlTs or 0) or 0
     if nowts >= prev_ts then
         p.ilvl     = math.floor(tonumber(ilvl) or 0)
+        if ilvlMax ~= nil then
+            p.ilvlMax   = math.floor(tonumber(ilvlMax) or 0)
+            p.ilvlMaxTs = nowts
+        end
         p.ilvlTs   = nowts
         p.ilvlAuth = tostring(by or "")
         if ns.Emit then ns.Emit("ilvl:changed", name) end
@@ -660,10 +672,10 @@ function GLOG.UpdateOwnIlvlIfMain()
 
     local name, realm = UnitFullName("player")
     local me = (name or "") .. "-" .. (realm or "")
-    local equipped = nil
+    local equipped, overall = nil, nil
     if GetAverageItemLevel then
-        local overall, equippedRaw = GetAverageItemLevel()
-        equipped = equippedRaw or overall
+        overall, equipped = GetAverageItemLevel() -- Retail: retourne (overall, equipped[, pvp])
+        equipped = equipped or overall
     end
     if not equipped then return end
 
@@ -672,18 +684,48 @@ function GLOG.UpdateOwnIlvlIfMain()
         return
     end
 
-    local ilvl = math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
+    local ilvl    = math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
+    local ilvlMax = (overall and math.max(0, math.floor((tonumber(overall) or 0) + 0.5))) or nil
     local changed = (GLOG._lastOwnIlvl or -1) ~= ilvl
     GLOG._lastOwnIlvl = ilvl
 
-    -- Stocke local + diffuse si variation
     local ts = time()
-    _SetIlvlLocal(me, ilvl, ts, me)
-    if changed and GLOG.BroadcastIlvlUpdate then
-        GLOG.BroadcastIlvlUpdate(me, ilvl, ts, me)
+        _SetIlvlLocal(me, ilvl, ts, me, ilvlMax)
+    if changed and GLOG.BroadcastStatusUpdate then
+        -- Unifié : inclut aussi la clé si dispo
+        local mid, lvl, map = 0, 0, ""
+        if GLOG.ReadOwnedKeystone then mid, lvl, map = GLOG.ReadOwnedKeystone() end
+        if (not map or map == "" or map == "Clé") and mid and mid > 0 and GLOG.ResolveMKeyMapName then
+            local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
+        end
+        GLOG.BroadcastStatusUpdate({
+            ilvl = ilvl, ilvlMax = ilvlMax,
+            mid = mid or 0, lvl = lvl or 0, map = tostring(map or ""),
+            ts = ts, by = me,
+        })
     end
 end
 
+if not GLOG.ReadOwnMaxIlvl then
+    function GLOG.ReadOwnMaxIlvl()
+        if not GetAverageItemLevel then return nil end
+        local overall = (select(1, GetAverageItemLevel()))
+        if not overall then return nil end
+        return math.max(0, math.floor((tonumber(overall) or 0) + 0.5))
+    end
+end
+
+if not GLOG.ReadOwnEquippedIlvl then
+    function GLOG.ReadOwnEquippedIlvl()
+        local equipped
+        if GetAverageItemLevel then
+            local overall, eq = GetAverageItemLevel()
+            equipped = eq or overall
+        end
+        if not equipped then return nil end
+        return math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
+    end
+end
 
 -- ➕ ======  CLÉ MYTHIQUE : stockage local + formatage + diffusion ======
 -- Lecture formatée pour l'UI ("NomDuDonjon +17", avec +X en orange)
@@ -908,10 +950,17 @@ function GLOG.UpdateOwnKeystoneIfMain()
 
     local ts = time()
     _SetMKeyLocal(me, mid or 0, lvl or 0, mapName or "", ts, me)
-    if changed and GLOG.BroadcastMKeyUpdate then
-        GLOG.BroadcastMKeyUpdate(me, mid or 0, lvl or 0, mapName or "", ts, me)
+    if changed and GLOG.BroadcastStatusUpdate then
+        local equipped = GLOG.ReadOwnEquippedIlvl and GLOG.ReadOwnEquippedIlvl() or nil
+        local overall  = GLOG.ReadOwnMaxIlvl     and GLOG.ReadOwnMaxIlvl()     or nil
+        GLOG.BroadcastStatusUpdate({
+            ilvl = equipped, ilvlMax = overall,
+            mid = mid or 0, lvl = lvl or 0, map = tostring(mapName or ""),
+            ts = ts, by = me,
+        })
     end
 end
+
 
 -- =========================
 -- ======  HISTORY    ======
