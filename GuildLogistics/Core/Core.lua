@@ -37,15 +37,29 @@ local function EnsureDB()
     GuildLogisticsDB = GuildLogisticsDB or {
         players = {},
         history = {},
-        expenses = { recording = false, list = {}, nextId = 1 },
-        lots     = { nextId = 1, list = {} },
         ids = { counter=0, byName={}, byId={} },
-        meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
+        meta = { lastModified=0, fullStamp=0, rev=0, master=nil },
         requests = {},
-        historyNextId = 1,  -- ➕ compteur HID
+        historyNextId = 1,
         debug = {},
-        aliases = {},       -- ➕ Alias par joueur (clé = main normalisé)
+        aliases = {},
     }
+
+    -- 🔁 Migration légère : unifier d'anciens flags -> .reserved
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    if not GuildLogisticsDB.meta._migr_reserveFlags_1 then
+        for name, p in pairs(GuildLogisticsDB.players or {}) do
+            if p and p.reserved == nil then
+                local v = p.reserve or p.bench
+                        or ((type(p.status)=="string") and (p.status:upper()=="RESERVE" or p.status:upper()=="RESERVED")) or false
+                if type(v) == "number" then v = (v ~= 0) end
+                if type(v) == "string" then v = (v:lower() ~= "false" and v ~= "") end
+                p.reserved = not not v
+            end
+        end
+        GuildLogisticsDB.meta._migr_reserveFlags_1 = true
+    end
+    
     -- Sécurité si DB déjà existante
     GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
 
@@ -87,21 +101,6 @@ local function GetOrCreatePlayer(name)
     return p
 end
 
--- ➕ Statut « en réserve » (tolérant plusieurs clés héritées)
-function GLOG.IsReserved(name)
-    GuildLogisticsDB = GuildLogisticsDB or {}
-    local p = GuildLogisticsDB.players and GuildLogisticsDB.players[name]
-    if not p then return false end
-    -- Tolère reserved / reserve / bench, ou un status textuel
-    local v = p.reserved
-           or p.reserve
-           or p.bench
-           or ((type(p.status)=="string") and (p.status:upper()=="RESERVE" or p.status:upper()=="RESERVED"))
-    if type(v) == "boolean" then return v end
-    if type(v) == "number"  then return v ~= 0 end
-    if type(v) == "string"  then return v:lower() ~= "false" and v ~= "" end
-    return false
-end
 -- Alias rétro-compatible si jamais du code appelle IsReserve()
 GLOG.IsReserve = GLOG.IsReserved
 
@@ -496,12 +495,23 @@ function GLOG.RemovePlayer(name)
     return true
 end
 
--- ➕ API réserve : lecture + application locale + commande GM + broadcast
+-- IsReserved tolérant les anciens champs (reserved / reserve / bench / status texte)
 function GLOG.IsReserved(name)
-    EnsureDB()
-    local p = name and GuildLogisticsDB.players and GuildLogisticsDB.players[name]
-    return (p and p.reserved) and true or false
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local p = GuildLogisticsDB.players and GuildLogisticsDB.players[name]
+    if not p then return false end
+
+    local v = p.reserved or p.reserve or p.bench
+            or ((type(p.status)=="string") and (p.status:upper()=="RESERVE" or p.status:upper()=="RESERVED"))
+
+    if type(v) == "boolean" then return v end
+    if type(v) == "number"  then return v ~= 0 end
+    if type(v) == "string"  then return v:lower() ~= "false" and v ~= "" end
+    return false
 end
+
+-- Alias rétro-compat
+GLOG.IsReserve = GLOG.IsReserved
 
 local function _SetReservedLocal(name, flag)
     local p = GetOrCreatePlayer(name)

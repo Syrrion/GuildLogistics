@@ -289,35 +289,30 @@ local function UpdateRow(i, r, f, data)
 end
 
 -- Layout
--- Layout
 local function Layout()
     if not (activeArea and reserveArea) then return end
     local panelH = panel:GetHeight()
     local footerH = (UI.FOOTER_H or 36)
     local gap = 10
 
-    -- Hauteur utile entre le haut du panel et le footer
-    local usableH = panelH - footerH - (gap * 3)
-    local hTop = math.floor(usableH * 0.60)
-
     activeArea:ClearAllPoints()
     reserveArea:ClearAllPoints()
 
     if reserveCollapsed then
-        -- 1) La zone "active" occupe toute la hauteur disponible (au-dessus du header "réserve")
+        -- Actif prend toute la hauteur ; Réserve n’affiche que son entête
         reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
         reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
-        reserveArea:SetHeight((UI.SECTION_HEADER_H or 26)) -- seulement l’entête visible
+        reserveArea:SetHeight((UI.SECTION_HEADER_H or 26))
 
         activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
         activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
         activeArea:SetPoint("BOTTOMLEFT", reserveArea, "TOPLEFT",  0, gap)
         activeArea:SetPoint("BOTTOMRIGHT", reserveArea, "TOPRIGHT", 0, gap)
     else
-        -- 2) Layout original (60% / 40%)
+        -- Réserve dépliée : elle prend toute la hauteur ; Actif n’affiche que son entête
         activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
         activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
-        activeArea:SetHeight(hTop)
+        activeArea:SetHeight((UI.SECTION_HEADER_H or 26))
 
         reserveArea:SetPoint("TOPLEFT",  activeArea, "BOTTOMLEFT", 0, -gap)
         reserveArea:SetPoint("TOPRIGHT", activeArea, "BOTTOMRIGHT", 0, -gap)
@@ -395,35 +390,26 @@ end
 
 -- Footer
 local function BuildFooterButtons(footer, isGM)
-    local btnAdd   = UI.Button(footer, Tr("btn_add_player"), { size="sm", variant="primary", minWidth=120 })
-    local btnGuild = UI.Button(footer, isGM and Tr("add_guild_member") or Tr("guild_members"), { size="sm", minWidth=220 })
-    local btnHist  = UI.Button(footer, Tr("btn_raids_history"), { size="sm", minWidth=160})
+    local btnGuild
+    local btnHist  = UI.Button(footer, Tr("btn_raids_history"), { size="sm", minWidth=160 })
 
-    btnAdd:SetOnClick(function()
-        if not isGM then return end
-        UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
-            name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
-            if name == "" then return end
-            if GLOG.AddPlayer and GLOG.AddPlayer(name) then
-                if ns.RefreshAll then ns.RefreshAll() end
-            end
-        end, { width = 460 })
-    end)
-
-    btnGuild:SetOnClick(function()
-        if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
-    end)
+    if isGM then
+        btnGuild = UI.Button(footer, Tr("add_guild_member"), { size="sm", minWidth=220 })
+        btnGuild:SetOnClick(function()
+            if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
+        end)
+        if UI.AttachButtonsFooterRight then
+            UI.AttachButtonsFooterRight(footer, { btnHist, btnGuild })
+        end
+    else
+        if UI.AttachButtonsFooterRight then
+            UI.AttachButtonsFooterRight(footer, { btnHist })
+        end
+    end
 
     btnHist:SetOnClick(function()
         UI.ShowTabByLabel(Tr("tab_history"))
     end)
-
-    if UI.AttachButtonsFooterRight then
-        UI.AttachButtonsFooterRight(footer, { btnHist, btnGuild, btnAdd })
-    end
-
-    if not isGM then btnAdd:Hide() end
-    return btnAdd, btnGuild, btnHist
 end
 
 -- Build panel

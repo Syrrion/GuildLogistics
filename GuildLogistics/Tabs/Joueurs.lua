@@ -3,7 +3,7 @@ local Tr = ns and ns.Tr
 local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD = UI.OUTER_PAD
 
-local panel, lv
+local panel, lv, footer
 
 -- Rafraîchit immédiatement la popup (si ouverte) et l'UI globale
 local function RefreshAllViews()
@@ -11,26 +11,38 @@ local function RefreshAllViews()
     if ns and ns.RefreshAll then ns.RefreshAll() end
 end
 
--- Helper : suppression d’un joueur du roster avec confirmation (popup au premier plan)
+-- Helper : passage en réserve SANS confirmation (action immédiate)
 local function _AttachDeleteHandler(btn, name, isMaster)
     btn:SetScript("OnClick", function()
         if not isMaster then return end
-        UI.PopupConfirm(
-            Tr("prefix_delete")..(name or "").." "..Tr("lbl_from_roster_question"),
-            function()
-                if GLOG.RemovePlayer then
-                    GLOG.RemovePlayer(name)
-                elseif GLOG.BroadcastRosterRemove then
-                    local uid = (GLOG.GetUID and GLOG.GetUID(name)) or nil
-                    GLOG.BroadcastRosterRemove(uid or name)
+
+        -- ✅ On ne supprime pas l'entrée: on passe le joueur en réserve (immédiat)
+        if GLOG.GM_SetReserved then
+            GLOG.GM_SetReserved(name, true)   -- bascule + broadcast (GM only)
+        elseif GLOG.SetReserve then
+            -- rétro-compat très ancienne éventuelle
+            GLOG.SetReserve(name, true)
+        end
+
+        -- Bascule instantanée du bouton -> "Ajouter au roster"
+        if btn and btn.SetText and btn.SetOnClick then
+            btn:SetText(Tr("btn_add_to_roster"))
+            btn:SetOnClick(function()
+                -- ➕ Sort de la réserve (reserve=false)
+                if GLOG.GM_SetReserved then
+                    GLOG.GM_SetReserved(name, false)
+                elseif GLOG.SetReserve then
+                    GLOG.SetReserve(name, false)
                 end
-                -- 🔁 rafraîchit la popup + l’UI appelante
-                if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
-                if ns and ns.RefreshAll then ns.RefreshAll() end
-            end,
-            nil,
-            { strata = "FULLSCREEN_DIALOG", enforceAction = true } -- ➕ AU PREMIER PLAN
-        )
+                -- Re-bascule le bouton en "Retirer du roster"
+                btn:SetText(Tr("btn_remove_from_roster"))
+                _AttachDeleteHandler(btn, name, isMaster)
+                RefreshAllViews()
+            end)
+        end
+
+        if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
+        if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 end
 
@@ -147,8 +159,9 @@ local function UpdateRow(i, r, f, it)
     -- Détermine le nom complet (Nom-Royaume) si besoin pour interroger la DB
     local fullName = (EnsureFullMain and EnsureFullMain(it)) or name
 
-    -- Présence dans le roster (clé exacte)
-    local inRoster = (ns.GLOG.HasPlayer and (ns.GLOG.HasPlayer(fullName) or ns.GLOG.HasPlayer(name))) or false
+    -- "Dans le roster" = présent dans la DB ET pas en réserve
+    local isReserved = (ns.GLOG.IsReserved and (ns.GLOG.IsReserved(fullName) or ns.GLOG.IsReserved(name))) or false
+    local inRoster  = ((ns.GLOG.HasPlayer and (ns.GLOG.HasPlayer(fullName) or ns.GLOG.HasPlayer(name))) and not isReserved) or false
 
     -- Bouton alias (toujours affiché)
     if f.btnAlias then
@@ -161,21 +174,27 @@ local function UpdateRow(i, r, f, it)
         end)
     end
 
-    -- Bouton Add / Remove (toggle unique demandé)
+    -- Bouton Add / Remove (toggle)
     if f.btnToggle then
         if isOut or not canGM then
             f.btnToggle:Hide()
         else
             f.btnToggle:Show()
             if not inRoster then
-                -- ➕ Ajouter au roster
+                -- ➕ Ajouter au roster => sort le joueur de la réserve (reserve=false)
                 f.btnToggle:SetText(Tr("btn_add_to_roster"))
                 f.btnToggle:SetOnClick(function()
-                    ns.GLOG.AddPlayer(fullName)
+                    if ns.GLOG.GM_SetReserved then
+                        ns.GLOG.GM_SetReserved(fullName, false)
+                    elseif ns.GLOG.SetReserve then
+                        ns.GLOG.SetReserve(fullName, false)
+                    end
+                    f.btnToggle:SetText(Tr("btn_remove_from_roster"))
+                    _AttachDeleteHandler(f.btnToggle, fullName, canGM)
                     RefreshAllViews()
                 end)
             else
-                -- ➖ Retirer du roster (confirmation)
+                -- ➖ Retirer du roster => passe le joueur en réserve (reserve=true)
                 f.btnToggle:SetText(Tr("btn_remove_from_roster"))
                 _AttachDeleteHandler(f.btnToggle, fullName, canGM)
             end
@@ -339,18 +358,55 @@ local function Build(container)
     panel = container
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
 
+    -- ✅ Utiliser en priorité le footer hôte (celui qui contient "Close")
+    footer = (panel and panel.footer) or (UI.GetFooter and UI.GetFooter(panel)) or UI.CreateFooter(panel, 36)
+
+    -- Bouton "Ajouter un joueur" (dans le MÊME footer que "Close")
+    btnAdd = UI.Button(footer, Tr("btn_add_player"), { size="sm", variant="primary", minWidth=120 })
+    btnAdd:SetOnClick(function()
+        -- Vérification GM au moment du clic (évite l'effet cache obsolète)
+        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+        if not isGM then return end
+        UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
+            name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+            if name == "" then return end
+            if GLOG.AddPlayer and GLOG.AddPlayer(name) then
+                if RefreshAllViews then RefreshAllViews() end
+            end
+        end, { width = 460 })
+    end)
+
+    -- Ancrage à droite comme ailleurs ; le bouton "Close" reste géré par l'hôte
+    if UI.AttachButtonsFooterRight then
+        UI.AttachButtonsFooterRight(footer, { btnAdd })
+    end
+
+    -- Visibilité dynamique selon le statut GM
+    local function updateAddVisibility()
+        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+        btnAdd:SetShown(isGM)
+    end
+    updateAddVisibility()
+    if panel and panel.HookScript then
+        panel:HookScript("OnShow", updateAddVisibility)
+    elseif panel and panel.SetScript and panel.GetScript and not panel:GetScript("OnShow") then
+        panel:SetScript("OnShow", updateAddVisibility)
+    end
+
+    -- Liste au-dessus du footer hôte
     lv = UI.ListView(panel, cols, {
         buildRow = BuildRow,
         updateRow = UpdateRow,
         rowHeight = UI.ROW_H,
         rowHeightForItem = function(item) return (item.kind == "sep") and (UI.ROW_H + 10) or UI.ROW_H end,
+        bottomAnchor = footer,
     })
 end
+
 
 -- Popup roster à largeur dynamique + auto-refresh à la fin du scan
 function UI.ShowGuildRosterPopup()
     local dlg = UI.CreatePopup({ title = Tr("add_guild_member"), height = 670 })
-
 
     -- Largeur mini des colonnes + scrollbar + marges internes
     local sb  = (UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)
@@ -375,15 +431,27 @@ function UI.ShowGuildRosterPopup()
     -- Fonction d’update spécifique à la popup (utilisée par le callback du scan)
     local function updatePopup()
         if not dlg or not dlg:IsShown() then return end
-        local items = buildItemsFromAgg(GLOG.GetGuildMainsAggregated())
-        pv:SetData(items)
-        pv:Layout()
-    end
-    ns.UI._rosterPopupUpdater = updatePopup
-    dlg:SetScript("OnHide", function() if ns and ns.UI then ns.UI._rosterPopupUpdater = nil end end)
+        local need = not (GLOG.IsGuildCacheReady and GLOG.IsGuildCacheReady())
+        if not need and GLOG.GetGuildCacheTimestamp then
+            local age = time() - GLOG.GetGuildCacheTimestamp()
+            if age > 60 then need = true end
+        end
 
-    -- État initial : cache prêt récent -> data directe, sinon message + scan avec callback local
-    local need = (not GLOG.IsGuildCacheReady or not GLOG.IsGuildCacheReady())
+        if need then
+            pv:SetData({ {kind="sep", label=Tr("lbl_scan_roster_progress")} })
+            GLOG.RefreshGuildCache(updatePopup)
+        else
+            local data = buildItemsFromAgg(GLOG.GetGuildMainsAggregated())
+            pv:SetData(data)
+        end
+    end
+
+    -- Expose l’update pour un refresh externe
+    ns.UI = ns.UI or {}
+    ns.UI._rosterPopupUpdater = updatePopup
+
+    -- Premier affichage
+    local need = not (GLOG.IsGuildCacheReady and GLOG.IsGuildCacheReady())
     if not need and GLOG.GetGuildCacheTimestamp then
         local age = time() - GLOG.GetGuildCacheTimestamp()
         if age > 60 then need = true end
@@ -396,6 +464,29 @@ function UI.ShowGuildRosterPopup()
         updatePopup()
     end
 
-    dlg:SetButtons({ { text = CLOSE, default = true } })
+    -- Footer: Close + (optionnel) Ajouter un joueur comme dans l'onglet Joueurs
+    local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local btns = {}
+    table.insert(btns, { text = CLOSE, default = true })
+    if isGM then
+        table.insert(btns, {
+            text    = "btn_add_player",
+            variant = "primary",
+            width   = 140,
+            close   = false, -- ne pas fermer la popup
+            onClick = function()
+                UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
+                    name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+                    if name == "" then return end
+                    if GLOG.AddPlayer and GLOG.AddPlayer(name) then
+                        -- Rafraîchir la popup + l'UI globale
+                        if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
+                        if ns and ns.RefreshAll then ns.RefreshAll() end
+                    end
+                end, { width = 460 })
+            end,
+        })
+    end
+    dlg:SetButtons(btns)
     dlg:Show()
 end
