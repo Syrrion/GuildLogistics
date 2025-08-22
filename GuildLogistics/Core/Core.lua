@@ -756,8 +756,10 @@ function GLOG.GetMKeyText(name)
     if not name or name == "" then return "" end
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+
     local p = GuildLogisticsDB.players[name]
     if not p then return "" end
+
     local lvl = tonumber(p.mkeyLevel or 0) or 0
     if lvl <= 0 then return "" end
 
@@ -768,10 +770,9 @@ function GLOG.GetMKeyText(name)
     end
     if label == "" then label = "Clé" end
 
-    -- ✨ Coloration orange du niveau
     local levelText = string.format("|cffffa500+%d|r", lvl)
-
-    return string.format("%s %s", label, levelText)
+    -- Niveau AVANT le nom du donjon
+    return string.format("%s %s", levelText, label)
 end
 
 -- Application locale (sans créer d’entrée ; timestamp dominant)
@@ -1633,4 +1634,94 @@ function GLOG.GM_SetAlias(name, alias)
         GLOG.BroadcastRosterUpsert(name)  -- inclura l'alias (voir Comm.lua)
     end
     return true
+end
+
+-- Stocke la version d’addon au niveau du MAIN (fallback: émetteur), avec cache léger.
+function GLOG.SetPlayerAddonVersion(name, ver, ts, by)
+    if not name or name == "" then return end
+    ver = tostring(ver or "")
+    if ver == "" then return end
+
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
+    GuildLogisticsDB.meta.versions = GuildLogisticsDB.meta.versions or {}
+
+    local now  = (time and time()) or 0
+    local when = tonumber(ts) or now
+
+    local main   = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+    local kMain  = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+    local fullS  = (GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name)
+    local fullM  = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or tostring(main)
+
+    -- 1) Met à jour la fiche du MAIN si elle existe
+    do
+        local p = GuildLogisticsDB.players[fullM]
+        if p then
+            local prev = tonumber(p.addonVerTs or 0) or 0
+            if when >= prev then
+                p.addonVer     = ver
+                p.addonVerTs   = when
+                p.addonVerAuth = tostring(by or "")
+            end
+        end
+    end
+    -- 2) Met à jour la fiche du personnage émetteur si elle existe (utile en Debug)
+    do
+        local p = GuildLogisticsDB.players[fullS]
+        if p then
+            local prev = tonumber(p.addonVerTs or 0) or 0
+            if when >= prev then
+                p.addonVer     = ver
+                p.addonVerTs   = when
+                p.addonVerAuth = tostring(by or "")
+            end
+        end
+    end
+    -- 3) Cache léger par MAIN pour l’onglet Joueurs (si pas d’entrée joueurs)
+    do
+        local e = GuildLogisticsDB.meta.versions[kMain] or {}
+        local prev = tonumber(e.ts or 0) or 0
+        if when >= prev then
+            e.ver  = ver
+            e.ts   = when
+            e.by   = tostring(by or "")
+            e.name = main
+            GuildLogisticsDB.meta.versions[kMain] = e
+        end
+    end
+end
+
+-- Récupère la version d’addon affichée par l’onglet Joueurs (clé MAIN prioritaire)
+function GLOG.GetPlayerAddonVersion(name)
+    if not name or name == "" then return "" end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
+
+    local main   = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+    local kMain  = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+    local fullM  = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or tostring(main)
+    local fullS  = (GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name)
+
+    -- 1) DB.players[fullMain]
+    do
+        local p = GuildLogisticsDB.players[fullM]
+        local v = p and p.addonVer
+        if v and v ~= "" then return tostring(v) end
+    end
+    -- 2) Cache meta.versions[kMain]
+    do
+        local e = GuildLogisticsDB.meta.versions and GuildLogisticsDB.meta.versions[kMain]
+        local v = e and e.ver
+        if v and v ~= "" then return tostring(v) end
+    end
+    -- 3) Fallback: fiche du personnage émetteur si fournie
+    do
+        local p = GuildLogisticsDB.players[fullS]
+        local v = p and p.addonVer
+        if v and v ~= "" then return tostring(v) end
+    end
+    return ""
 end

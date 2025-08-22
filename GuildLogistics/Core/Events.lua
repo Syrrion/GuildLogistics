@@ -45,8 +45,17 @@ f:SetScript("OnEvent", function(self, event, name)
         if GLOG._EnsureDB then GLOG._EnsureDB() end
         if GLOG.ClearDebugLogs then GLOG.ClearDebugLogs() end
 
-        -- Slash /cdz
-        SLASH_GLOG1 = "/cdz"
+        -- STATUS_UPDATE automatique toutes les 3 minutes (rafraîchit localement iLvl/Clé/Côte via la fonction existante)
+        if not GLOG._statusAutoTicker and C_Timer and C_Timer.NewTicker then
+            GLOG._statusAutoTicker = C_Timer.NewTicker(180, function()
+                if GLOG and GLOG.BroadcastStatusUpdate then
+                    GLOG.BroadcastStatusUpdate()
+                end
+            end)
+        end
+
+        -- Slash /glog
+        SLASH_GLOG1 = "/glog"
         SlashCmdList.GLOG = function()
             if ns.ToggleUI then ns.ToggleUI() end
         end

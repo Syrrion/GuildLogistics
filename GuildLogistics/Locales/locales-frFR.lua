@@ -69,7 +69,7 @@ L["col_mplus_score"]      = "Côte M+"
 L["col_mplus_key"]        = "Clé Mythique +"
 L["col_state"]            = "État"
 L["col_request"]          = "Demande"
-
+L["col_version"]          = "Version Addon"
 -- Boutons / actions
 L["btn_view"]             = "Voir"
 L["btn_purge_debug"]      = "Purger Debug"

@@ -70,7 +70,7 @@ L["col_mplus_score"]      = "Mythic+ Score"
 L["col_mplus_key"]        = "Mythic+ Key"
 L["col_state"]            = "State"
 L["col_request"]          = "Request"
-
+L["col_version"]          = "Addon Version" 
 -- Buttons / actions
 L["btn_view"]             = "View"
 L["btn_purge_debug"]      = "Purge Debug"

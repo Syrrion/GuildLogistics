@@ -310,6 +310,66 @@ function UI.PopupText(title, text)
     return dlg
 end
 
+-- ✅ Nouveau : popup large avec deux zones de texte sélectionnables (formaté / brut)
+function UI.PopupDualText(title, topLabel, topText, bottomLabel, bottomText, opts)
+    opts = opts or {}
+    local dlg = UI.CreatePopup({
+        title  = (Tr and Tr(title or "popup_info_title")) or (title or "Information"),
+        width  = opts.width or 820,
+        height = opts.height or 560,
+    })
+    local content = dlg.content
+
+    -- Label supérieur
+    local lblTop = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lblTop:SetText((Tr and Tr(topLabel or "")) or (topLabel or ""))
+    lblTop:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -8)
+
+    -- Zone supérieure (scroll + EditBox sélectionnable)
+    local sfTop = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
+    sfTop:SetPoint("TOPLEFT", lblTop, "BOTTOMLEFT", 0, -4)
+    sfTop:SetPoint("RIGHT", content, "RIGHT", -12, 0)
+    sfTop:SetPoint("BOTTOM", content, "CENTER", 0, -8)
+
+    local ebTop = CreateFrame("EditBox", nil, sfTop)
+    ebTop:SetMultiLine(true); ebTop:SetAutoFocus(false)
+    ebTop:SetFontObject("ChatFontNormal")
+    ebTop:SetJustifyH("LEFT"); ebTop:SetJustifyV("TOP")
+    ebTop:SetText(topText or ""); ebTop:ClearFocus(); ebTop:SetCursorPosition(0)
+    sfTop:SetScrollChild(ebTop)
+
+    -- Label inférieur
+    local lblBottom = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    lblBottom:SetText((Tr and Tr(bottomLabel or "")) or (bottomLabel or ""))
+    lblBottom:SetPoint("TOPLEFT", sfTop, "BOTTOMLEFT", 0, -10)
+
+    -- Zone inférieure (scroll + EditBox sélectionnable)
+    local sfBottom = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
+    sfBottom:SetPoint("TOPLEFT",  lblBottom, "BOTTOMLEFT", 0, -4)
+    sfBottom:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -12, 12)
+
+    local ebBottom = CreateFrame("EditBox", nil, sfBottom)
+    ebBottom:SetMultiLine(true); ebBottom:SetAutoFocus(false)
+    ebBottom:SetFontObject("ChatFontNormal")
+    ebBottom:SetJustifyH("LEFT"); ebBottom:SetJustifyV("TOP")
+    ebBottom:SetText(bottomText or ""); ebBottom:ClearFocus(); ebBottom:SetCursorPosition(0)
+    sfBottom:SetScrollChild(ebBottom)
+
+    -- Ajuste la largeur des EditBox quand la fenêtre change de taille
+    local function syncWidth(scroll, edit)
+        local function apply() edit:SetWidth(scroll:GetWidth() - 8) end
+        scroll:HookScript("OnSizeChanged", apply)
+        dlg:HookScript("OnShow", apply)
+        apply()
+    end
+    syncWidth(sfTop, ebTop)
+    syncWidth(sfBottom, ebBottom)
+
+    dlg:SetButtons({ { text = Tr("btn_close"), default = true } })
+    dlg:Show()
+    return dlg
+end
+
 function UI.PopupRaidDebit(name, deducted, after, ctx)
     -- Hauteur augmentée pour accueillir le détail des composants
     local dlg = UI.CreatePopup({ title = (Tr and Tr("popup_raid_ok")) or "Participation au raid validée !", width = 660, height = 400 })

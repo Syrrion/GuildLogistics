@@ -48,12 +48,13 @@ end
 
 -- Colonnes normalisées
 local cols = UI.NormalizeColumns({
-    { key="alias",    title=Tr("col_alias"),              w=80 },
-    { key="main",     title=Tr("col_player"),             min=180, flex=1 },
-    { key="last",     title=Tr("col_last_seen"),          w=100 },
-    { key="count",    title=Tr("col_rerolls"),            w=60 },
-    { key="actAlias", title="",                           w=90 },
-    { key="act",      title="",                           w=240 },
+    { key="alias",    title=Tr("col_alias"),     w=80 },
+    { key="main",     title=Tr("col_player"),    min=180, flex=1 },
+    { key="last",     title=Tr("col_last_seen"), w=100 },
+    { key="count",    title=Tr("col_rerolls"),   w=60 },
+    { key="ver",      title=Tr("col_version"),   w=90, justify="CENTER" }, -- ➕ Version après Rerolls
+    { key="actAlias", title="",                  w=90 },
+    { key="act",      title="",                  w=240 },
 })
 
 -- Construction d’une ligne
@@ -65,6 +66,7 @@ local function BuildRow(r)
     f.main  = UI.CreateNameTag(r)
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.count = UI.Label(r)
+    f.ver = UI.Label(r, { justify = "CENTER" })
 
     -- Colonne d’actions ROSTER (un seul bouton toggle + un bouton supprimer réservé aux hors-guilde)
     f.act        = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
@@ -137,6 +139,12 @@ local function UpdateRow(i, r, f, it)
 
     -- Compteur de rerolls
     if f.count then f.count:SetText(it.count or 0) end
+
+    if f.ver then
+        local name = tostring(it.main or "")
+        local ver  = (ns.GLOG.GetPlayerAddonVersion and ns.GLOG.GetPlayerAddonVersion(name)) or ""
+        f.ver:SetText((ver ~= "" and ver) or "—")
+    end
 
     -- Statut "hors guilde" (section dédiée)
     local isOut = (it.outOfGuild == true)

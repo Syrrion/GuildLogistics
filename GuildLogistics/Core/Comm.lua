@@ -659,29 +659,36 @@ local function _send(typeName, channel, target, kv)
 end
 
 function GLOG.Comm_Broadcast(typeName, kv)
+    kv = kv or {}
+    -- Injecter la version sur TOUTES les transactions sortantes (guilde)
+    if kv.ver == nil then
+        local ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+        if ver ~= "" then kv.ver = ver end
+    end
     _send(typeName, "GUILD", nil, kv)
 end
 
 function GLOG.Comm_Whisper(target, msgType, data)
-    -- Bloque l'émission des updates non-critiques vers une cible en cours de handshake
-    if _NONCRIT_TYPES[msgType] and _isSuppressedTo(target) then
-        return -- ne rien envoyer
+    if _NONCRIT_TYPES and _isSuppressedTo and _NONCRIT_TYPES[msgType] and _isSuppressedTo(target) then
+        return
+    end
+
+    data = data or {}
+    -- Injecter la version sur TOUT whisper sortant
+    if data.ver == nil then
+        local ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+        if ver ~= "" then data.ver = ver end
     end
 
     _send(msgType, "WHISPER", target, data)
 
-    -- Dès qu'on propose un SYNC_OFFER, on "gèle" les non-critiques vers cette cible
-    if msgType == "SYNC_OFFER" then
+    if msgType == "SYNC_OFFER" and _suppressTo then
         _suppressTo(target, (HELLO_WAIT_SEC or 5) + 2)
-    elseif msgType == "SYNC_GRANT" then
-        -- Petit gel après un GRANT pour laisser passer le FULL proprement
+    elseif msgType == "SYNC_GRANT" and _suppressTo then
         _suppressTo(target, 2)
     end
-
     return true
 end
-
-
 
 -- ===== Application snapshot (import/export compact) =====
 function GLOG._SnapshotExport()
@@ -1420,6 +1427,10 @@ function GLOG._HandleFull(sender, msgType, kv)
         -- Unifié : iLvl (+max) / Clé Mythique (mid,lvl,map) / ✨ Côte M+ (score)
         local pname = tostring(kv.name or "")
         local by    = tostring(kv.by   or sender or "")
+        
+        local v_status = tostring(kv.ver or "")
+        if v_status ~= "" and GLOG.SetPlayerAddonVersion then GLOG.SetPlayerAddonVersion(pname or sender, v_status, tonumber(kv.ts) or time(), sender) end
+
         if pname ~= "" and GLOG.NormName and (GLOG.NormName(pname) == GLOG.NormName(by)) then
             GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
             local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
@@ -1667,7 +1678,10 @@ function GLOG._HandleFull(sender, msgType, kv)
             end
         end
 
-                -- Statut unifié → un seul STATUS_UPDATE si sa DB n'est pas obsolète
+        local v_hello = tostring(kv.ver or "")
+        if v_hello ~= "" and GLOG.SetPlayerAddonVersion then GLOG.SetPlayerAddonVersion(sender, v_hello, tonumber(kv.ts) or time(), sender) end
+
+        -- Statut unifié → un seul STATUS_UPDATE si sa DB n'est pas obsolète
         if sender and sender ~= "" and sender ~= playerFullName() and rv_them >= rv_me then
             local me = playerFullName()
             if GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me) then
@@ -1928,6 +1942,26 @@ function GLOG._HandleFull(sender, msgType, kv)
         if hid ~= "" then
             -- no-op
         end
+    end
+end
+
+do
+    local _PrevHandleFull = GLOG._HandleFull
+    function GLOG._HandleFull(sender, msgType, kv)
+        local v = tostring((kv and kv.ver) or "")
+        if v ~= "" and GLOG.SetPlayerAddonVersion then
+            local prev = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(sender)) or ""
+            local ts = tonumber(kv and kv.ts) or (time and time()) or 0
+            GLOG.SetPlayerAddonVersion(sender, v, ts, sender)
+            if prev ~= v then
+                if ns and ns.UI and ns.UI.RefreshActive then
+                    ns.UI.RefreshActive()
+                elseif ns and ns.RefreshAll then
+                    ns.RefreshAll()
+                end
+            end
+        end
+        return _PrevHandleFull(sender, msgType, kv)
     end
 end
 

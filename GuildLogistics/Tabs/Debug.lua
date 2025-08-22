@@ -179,7 +179,16 @@ local function UpdateRow(i, r, f, it)
             :format(it.type or "?", tostring(kv.rv or it.rv or "?"), tostring(kv.lm or "?"), it.chan or "", emitter or "")
         local body = (#decoded>0) and table.concat(decoded, "\n") or Tr("lbl_empty_payload")
         local raw  = it.fullRaw or it.fullPayload or Tr("lbl_empty_raw")
-        ns.UI.PopupText(title, head.."\n\n"..body.."\n\n— "..Tr("lbl_raw").." —\n"..raw)
+
+        -- Nouveau popup : deux blocs séparés (formaté / brut), plus grand et sélectionnable
+        ns.UI.PopupDualText(
+            title,
+            "Données formatées",
+            head.."\n\n"..body,
+            "Données brutes",
+            raw,
+            { width = 900, height = 620 }
+        )
     end)
 end
 
