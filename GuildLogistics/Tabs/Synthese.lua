@@ -3,11 +3,33 @@ local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS
-
--- État d’affichage de la section "Joueurs en réserve" (réduite par défaut)
+local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, noGuildMsg
+-- État d’affichage ...
 local reserveCollapsed = true
 local reserveToggleBtn
+
+-- Détecte si le personnage appartient à une guilde
+local function _HasGuild()
+    return (IsInGuild and IsInGuild()) and true or false
+end
+
+-- Affiche un message centré si aucune guilde, et masque les listes + footer
+local function _UpdateNoGuildUI()
+    local hasGuild = _HasGuild()
+    local showMsg = not hasGuild
+
+    if noGuildMsg then noGuildMsg:SetShown(showMsg) end
+    if activeArea  then activeArea:SetShown(not showMsg) end
+    if reserveArea then reserveArea:SetShown(not showMsg) end
+    if footer      then footer:SetShown(not showMsg) end
+    if reserveToggleBtn then reserveToggleBtn:SetShown(not showMsg) end
+
+    -- Ajuste la navigation globale (onglets)
+    if UI and UI.ApplyTabsForGuildMembership then
+        UI.ApplyTabsForGuildMembership(hasGuild)
+    end
+end
+
 
 local cols = UI.NormalizeColumns({
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
@@ -361,11 +383,43 @@ local function UpdateReserveCollapseUI()
 end
 
 
--- Refresh
+-- Tri: en ligne d'abord (ordre alpha à l'intérieur), puis hors-ligne (ordre alpha)
+local function _SortOnlineFirst(arr)
+    if not arr or #arr == 0 then return end
+    table.sort(arr, function(a, b)
+        -- a/b sont des enregistrements { name=..., ... } (mains agrégés)
+        local na = (a.name or ""):lower()
+        local nb = (b.name or ""):lower()
+
+        local giA = FindGuildInfo(a.name) or {}
+        local giB = FindGuildInfo(b.name) or {}
+        local oa  = giA.online and 1 or 0
+        local ob  = giB.online and 1 or 0
+        if oa ~= ob then
+            return oa > ob            -- 1 (en ligne) doit passer avant 0 (hors-ligne)
+        end
+        return na < nb                -- sinon, simple alpha par Nom
+    end)
+end
+
 local function Refresh()
+
+    -- Mode « sans guilde » : message centré, pas de listes ni footer
+    _UpdateNoGuildUI()
+    if not _HasGuild() then
+        if lvActive then lvActive:SetData({}) end
+        if lvReserve then lvReserve:SetData({}) end
+        if lvActive and lvActive.Layout then lvActive:Layout() end
+        if lvReserve and lvReserve.Layout then lvReserve:Layout() end
+        return
+    end
 
     local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
     local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve()) or {}
+
+    -- ➕ Applique le tri demandé
+    _SortOnlineFirst(active)
+    _SortOnlineFirst(reserve)
 
     -- ➕ Uniformisation : mêmes enveloppes { data = ... } pour les deux listes
     if lvActive then
@@ -480,8 +534,17 @@ local function Build(container)
     local isGM = GLOG.IsMaster and GLOG.IsMaster()
     BuildFooterButtons(footer, isGM)
 
+    if not noGuildMsg then
+        noGuildMsg = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        noGuildMsg:SetPoint("CENTER", panel, "CENTER", 0, 0)
+        noGuildMsg:SetJustifyH("CENTER"); noGuildMsg:SetJustifyV("MIDDLE")
+        noGuildMsg:SetText(Tr("msg_no_guild"))
+        noGuildMsg:Hide()
+    end
+
     -- Applique l’état par défaut (“réserve” repliée) et ajuste la mise en page
     UpdateReserveCollapseUI()
+    _UpdateNoGuildUI()
 end
 
 -- ➕ Surveille les changements de groupe pour mettre à jour le surlignage

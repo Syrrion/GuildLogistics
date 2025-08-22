@@ -16,6 +16,7 @@ L["tab_debug"]            = "Debug"
 L["tab_settings"]         = "Settings"
 
 -- App / main titles / sync
+L["msg_no_guild"]         = "You are not in any guild on this character"
 L["app_title"]            = "Guild Manager"
 L["main_title_guild"]     = "Guild"
 L["sync_data"]            = "Data synchronization in progress"

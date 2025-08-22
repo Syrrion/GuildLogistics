@@ -15,6 +15,7 @@ L["tab_debug"]            = "Debug"
 L["tab_settings"]         = "Options"
 
 -- App / main titles / sync
+L["msg_no_guild"]         = "Vous n'appartenez a aucune guilde sur ce personnage"
 L["app_title"]            = "Guild Manager"
 L["main_title_guild"]     = "Guilde"
 L["sync_data"]            = "Synchronisation des données en cours"

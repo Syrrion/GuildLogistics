@@ -4,8 +4,8 @@ local GLOG = ns.GLOG
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
--- ➕ Rafraîchissements asynchrones (icônes de classe, noms d’objets)
 f:RegisterEvent("GUILD_ROSTER_UPDATE")
+f:RegisterEvent("PLAYER_GUILD_UPDATE")  -- ➕ changement appartenance guilde
 f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 -- ➕ iLvl: mise à jour auto du main
 f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
@@ -52,7 +52,11 @@ f:SetScript("OnEvent", function(self, event, name)
         end
 
         if ns.UI and ns.UI.Finalize then ns.UI.Finalize() end
+        if ns.UI and ns.UI.ApplyTabsForGuildMembership then
+            ns.UI.ApplyTabsForGuildMembership((IsInGuild and IsInGuild()) and true or false)
+        end
         if ns.UI and ns.UI.RefreshTitle then ns.UI.RefreshTitle() end
+
         if ns.UI and ns.UI.UpdateRequestsBadge then ns.UI.UpdateRequestsBadge() end
         if GLOG.Minimap_Init then GLOG.Minimap_Init() end
 

@@ -34,33 +34,51 @@ end
 -- ======  DATABASE   ======
 -- =========================
 local function EnsureDB()
+    -- ➕ 1) Bascule SV « par personnage » + migration one-shot depuis l’ancienne base compte
+    GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
+    GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
+
+    -- Migration DB (compte -> personnage) si pas encore faite sur ce perso
+    if not GuildLogisticsDB_Char._migr_perchar_1 then
+        if type(GuildLogisticsDB) == "table" and next(GuildLogisticsDB) ~= nil then
+            -- Copie superficielle suffisante ici (les sous-tables sont réutilisées telles quelles)
+            for k, v in pairs(GuildLogisticsDB) do
+                GuildLogisticsDB_Char[k] = v
+            end
+            GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
+            GuildLogisticsDB_Char.meta.migrFromAccount = true
+            GuildLogisticsDB_Char.meta.migrAt = (time and time()) or 0
+        end
+        GuildLogisticsDB_Char._migr_perchar_1 = true
+    end
+
+    -- Migration UI (compte -> personnage) si pas encore faite
+    if not GuildLogisticsUI_Char._migr_perchar_1 then
+        if type(GuildLogisticsUI) == "table" and next(GuildLogisticsUI) ~= nil then
+            for k, v in pairs(GuildLogisticsUI) do
+                GuildLogisticsUI_Char[k] = v
+            end
+        end
+        GuildLogisticsUI_Char._migr_perchar_1 = true
+    end
+
+    -- ➕ 2) Alias runtime : le code existant continue d'utiliser GuildLogisticsDB/UI
+    GuildLogisticsDB = GuildLogisticsDB_Char
+    GuildLogisticsUI = GuildLogisticsUI_Char
+
+    -- ➕ 3) Initialisation habituelle (désormais sur la base « par personnage »)
     GuildLogisticsDB = GuildLogisticsDB or {
         players = {},
         history = {},
+        expenses = { recording = false, list = {}, nextId = 1 },
+        lots     = { nextId = 1, list = {} },
         ids = { counter=0, byName={}, byId={} },
-        meta = { lastModified=0, fullStamp=0, rev=0, master=nil },
+        meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
         requests = {},
-        historyNextId = 1,
+        historyNextId = 1,  -- ➕ compteur HID
         debug = {},
-        aliases = {},
+        aliases = {},       -- ➕ Alias par joueur (clé = main normalisé)
     }
-
-    -- 🔁 Migration légère : unifier d'anciens flags -> .reserved
-    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-    if not GuildLogisticsDB.meta._migr_reserveFlags_1 then
-        for name, p in pairs(GuildLogisticsDB.players or {}) do
-            if p and p.reserved == nil then
-                local v = p.reserve or p.bench
-                        or ((type(p.status)=="string") and (p.status:upper()=="RESERVE" or p.status:upper()=="RESERVED")) or false
-                if type(v) == "number" then v = (v ~= 0) end
-                if type(v) == "string" then v = (v:lower() ~= "false" and v ~= "") end
-                p.reserved = not not v
-            end
-        end
-        GuildLogisticsDB.meta._migr_reserveFlags_1 = true
-    end
-    
-    -- Sécurité si DB déjà existante
     GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
 
     GuildLogisticsUI = GuildLogisticsUI or {
@@ -70,11 +88,20 @@ local function EnsureDB()
     GuildLogisticsUI.minimap = GuildLogisticsUI.minimap or { hide=false, angle=215 }
     if GuildLogisticsUI.minimap.angle == nil then GuildLogisticsUI.minimap.angle = 215 end
 
-    -- ✏️ Par défaut : débug inactif (Non)
+    -- ✏️ Par défaut : debug/autoOpen
     if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = true end
-    -- ➕ Par défaut : ouverture auto désactivée
-    if GuildLogisticsUI.autoOpen == nil then GuildLogisticsUI.autoOpen = true end
+    if GuildLogisticsUI.autoOpen   == nil then GuildLogisticsUI.autoOpen   = true  end
+
+    -- ➕ 4) Marqueur d’identification du profil (utile en debug et pour éviter les confusions)
+    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    do
+        local n, r = (UnitFullName and UnitFullName("player"))
+        local gName = (GetGuildInfo and GetGuildInfo("player")) or nil
+        GuildLogisticsDB.meta.character = (n and r) and (n.."-"..r) or (n or "?")
+        GuildLogisticsDB.meta.guildName = gName
+    end
 end
+
 
 GLOG._EnsureDB = EnsureDB
 

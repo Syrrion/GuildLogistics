@@ -1,11 +1,12 @@
-## Interface: 110205, 110107, 110200
+## Interface: 110205, 110200, 110107
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 1.1.6
+## Version: 1.1.7
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
-## SavedVariables: GuildLogisticsDB, GuildLogisticsUI
+## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char
+
 ## IconTexture: Interface\AddOns\GuildLogistics\Ressources\Media\LogoAddonWoW256.tga
 ## Dependencies: LibDeflate
 

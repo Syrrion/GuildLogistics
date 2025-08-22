@@ -414,6 +414,33 @@ function UI.SetTabVisible(label, shown)
     UI.RelayoutTabs()
 end
 
+-- ➕ Visibilité des onglets selon l'appartenance à une guilde
+function UI.ApplyTabsForGuildMembership(inGuild)
+    local keepInfo     = Tr("tab_roster")   -- renommé « Info » via locales
+    local keepSettings = Tr("tab_settings")
+    local keepDebug    = Tr("tab_debug")
+
+    if inGuild then
+        for _, def in ipairs(Registered) do
+            local lab = def.label
+            if lab == keepDebug then
+                UI.SetTabVisible(lab, GuildLogisticsUI and GuildLogisticsUI.debugEnabled)
+            else
+                UI.SetTabVisible(lab, true)
+            end
+        end
+    else
+        for _, def in ipairs(Registered) do
+            local lab = def.label
+            local shown = (lab == keepInfo) or (lab == keepSettings)
+            if lab == keepDebug then
+                shown = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
+            end
+            UI.SetTabVisible(lab, shown)
+        end
+    end
+end
+
 -- ➕ Bascule « débug » centralisée (persistance + visibilité)
 function UI.SetDebugEnabled(enabled)
     GuildLogisticsUI = GuildLogisticsUI or {}
