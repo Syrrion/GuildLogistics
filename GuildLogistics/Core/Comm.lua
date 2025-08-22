@@ -1417,7 +1417,7 @@ function GLOG._HandleFull(sender, msgType, kv)
         if ns.Emit then ns.Emit("expenses:changed") end
 
     elseif msgType == "STATUS_UPDATE" then
-        -- Unifié : iLvl (+max) et/ou Clé Mythique (mid,lvl,map)
+        -- Unifié : iLvl (+max) / Clé Mythique (mid,lvl,map) / ✨ Côte M+ (score)
         local pname = tostring(kv.name or "")
         local by    = tostring(kv.by   or sender or "")
         if pname ~= "" and GLOG.NormName and (GLOG.NormName(pname) == GLOG.NormName(by)) then
@@ -1425,7 +1425,7 @@ function GLOG._HandleFull(sender, msgType, kv)
             local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
             if p then
                 local n_ts = safenum(kv.ts, now())
-                local changedIlvl, changedM = false, false
+                local changedIlvl, changedM, changedScore = false, false, false
 
                 -- ===== iLvl =====
                 local n_ilvl    = safenum(kv.ilvl, -1)
@@ -1457,9 +1457,19 @@ function GLOG._HandleFull(sender, msgType, kv)
                     changedM = true
                 end
 
+                -- ✨ ===== Côte M+ =====
+                local n_score = safenum(kv.score, -1)
+                if n_score >= 0 and n_ts >= safenum(p.mplusTs, 0) then
+                    p.mplusScore = n_score
+                    p.mplusTs    = n_ts
+                    p.mplusAuth  = by
+                    changedScore = true
+                end
+
                 if changedIlvl and ns.Emit then ns.Emit("ilvl:changed", pname) end
                 if changedM    and ns.Emit then ns.Emit("mkey:changed", pname) end
-                if (changedIlvl or changedM) and ns.RefreshAll then ns.RefreshAll() end
+                if changedScore and ns.Emit then ns.Emit("mplus:changed", pname) end
+                if (changedIlvl or changedM or changedScore) and ns.RefreshAll then ns.RefreshAll() end
             end
         end
 
@@ -1685,9 +1695,46 @@ function GLOG._HandleFull(sender, msgType, kv)
                     ilvl = ilvl,
                 }
                 if ilvMx > 0 then payload.ilvlMax = ilvMx end
+
+                -- ✨ Côte M+ depuis DB ou API si manquante
+                local score = safenum((p and p.mplusScore) or 0, 0)
+                if score <= 0 and GLOG.ReadOwnMythicPlusScore then
+                    score = safenum(GLOG.ReadOwnMythicPlusScore(), 0)
+                end
+                if score > 0 then payload.score = score end
+
                 if lvl > 0 then
                     payload.mid = mid; payload.lvl = lvl
                     if map ~= "" then payload.map = map end
+                end
+
+                -- ✅ Appliquer aussi localement à moi (sans créer d'entrée)
+                do
+                    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+                    local p  = GuildLogisticsDB.players[me]
+                    local ts = now()
+                    local changed = false
+                    if p then
+                        if ilvl > 0 and ts >= safenum(p.ilvlTs, 0) then
+                            p.ilvl   = ilvl
+                            if ilvMx > 0 then p.ilvlMax = ilvMx; p.ilvlMaxTs = ts end
+                            p.ilvlTs = ts; p.ilvlAuth = me
+                            changed = true
+                            if ns.Emit then ns.Emit("ilvl:changed", me) end
+                        end
+                        if lvl > 0 and ts >= safenum(p.mkeyTs, 0) then
+                            p.mkeyMapId = mid; p.mkeyLevel = lvl; p.mkeyName = map
+                            p.mkeyTs = ts; p.mkeyAuth = me
+                            changed = true
+                            if ns.Emit then ns.Emit("mkey:changed", me) end
+                        end
+                        if safenum(score, -1) >= 0 and ts >= safenum(p.mplusTs, 0) then
+                            p.mplusScore = score; p.mplusTs = ts; p.mplusAuth = me
+                            changed = true
+                            if ns.Emit then ns.Emit("mplus:changed", me) end
+                        end
+                        if changed and ns.RefreshAll then ns.RefreshAll() end
+                    end
                 end
 
                 -- Anti-doublon : 1 seul STATUS_UPDATE par cible dans la foulée du HELLO
@@ -2516,14 +2563,15 @@ function GLOG.BroadcastStatusUpdate(overrides)
     local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
     me = nf(me)
 
-    -- 🚫 Stop si pas dans roster/réserve
     if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then return end
 
+    -- iLvl
     local ilvl    = overrides.ilvl
     local ilvlMax = overrides.ilvlMax
     if ilvl == nil and GLOG.ReadOwnEquippedIlvl then ilvl = GLOG.ReadOwnEquippedIlvl() end
     if ilvlMax == nil and GLOG.ReadOwnMaxIlvl     then ilvlMax = GLOG.ReadOwnMaxIlvl()     end
 
+    -- Clé M+
     local mid, lvl, map = overrides.mid, overrides.lvl, tostring(overrides.map or "")
     if (mid == nil or lvl == nil or map == "") and GLOG.ReadOwnedKeystone then
         local _mid, _lvl, _map = GLOG.ReadOwnedKeystone()
@@ -2535,13 +2583,61 @@ function GLOG.BroadcastStatusUpdate(overrides)
         local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
     end
 
+    -- ✨ Côte M+
+    local score = overrides.score
+    if score == nil and GLOG.ReadOwnMythicPlusScore then score = GLOG.ReadOwnMythicPlusScore() end
+    score = safenum(score, 0)
+
+    local ts = safenum(overrides.ts, now())
+    local by = tostring(overrides.by or me)
+
+    -- ✅ Application locale systématique (si pas déjà appliquée en amont)
+    if not overrides.localApplied then
+        GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+        local p = GuildLogisticsDB.players[me]   -- ⚠️ ne crée pas d'entrée
+        local changed = false
+        if p then
+            -- iLvl (+ Max)
+            if ilvl ~= nil and ts >= safenum(p.ilvlTs, 0) then
+                p.ilvl   = math.floor(tonumber(ilvl) or 0)
+                if ilvlMax ~= nil then
+                    p.ilvlMax   = math.floor(tonumber(ilvlMax) or 0)
+                    p.ilvlMaxTs = ts
+                end
+                p.ilvlTs   = ts
+                p.ilvlAuth = by
+                changed = true
+                if ns.Emit then ns.Emit("ilvl:changed", me) end
+            end
+            -- Clé M+
+            if safenum(lvl, 0) > 0 and ts >= safenum(p.mkeyTs, 0) then
+                p.mkeyMapId = safenum(mid, 0)
+                p.mkeyLevel = safenum(lvl, 0)
+                p.mkeyName  = tostring(map or "")
+                p.mkeyTs    = ts
+                p.mkeyAuth  = by
+                changed = true
+                if ns.Emit then ns.Emit("mkey:changed", me) end
+            end
+            -- Côte M+
+            if safenum(score, -1) >= 0 and ts >= safenum(p.mplusTs, 0) then
+                p.mplusScore = safenum(score, 0)
+                p.mplusTs    = ts
+                p.mplusAuth  = by
+                changed = true
+                if ns.Emit then ns.Emit("mplus:changed", me) end
+            end
+            if changed and ns.RefreshAll then ns.RefreshAll() end
+        end
+    end
+
+    -- ✉️ Diffusion réseau
     local payload = {
-        name = me,
-        ts   = safenum(overrides.ts, now()),
-        by   = tostring(overrides.by or me),
+        name = me, ts = ts, by = by,
     }
     if ilvl    ~= nil then payload.ilvl    = math.floor(tonumber(ilvl)    or 0) end
     if ilvlMax ~= nil then payload.ilvlMax = math.floor(tonumber(ilvlMax) or 0) end
+    if score > 0 then payload.score = score end
     if safenum(lvl,0) > 0 then
         if mid ~= nil then payload.mid = safenum(mid, 0) end
         payload.lvl = safenum(lvl, 0)

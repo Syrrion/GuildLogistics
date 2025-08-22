@@ -38,12 +38,13 @@ end
 
 local cols = UI.NormalizeColumns({
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
-    { key="alias",  title=Tr("col_alias"),          w=80, justify="LEFT" },
+    { key="alias",  title=Tr("col_alias"),          w=100, justify="LEFT" },
     { key="name",   title=Tr("col_name"),           min=180, flex=1 },
-    { key="ilvl",   title=Tr("col_ilvl"),           w=70, justify="CENTER" },
-    { key="mkey",   title=Tr("col_mplus_key"),      w=200, justify="LEFT" },
-    { key="last",   title=Tr("col_attendance"),     w=180 },
-    { key="act",    title="",                        w=150 },
+    { key="ilvl",   title=Tr("col_ilvl"),           w=80, justify="CENTER" },
+    { key="mplus",  title=Tr("col_mplus_score"),    w=80, justify="CENTER" },
+    { key="mkey",   title=Tr("col_mplus_key"),      w=220, justify="LEFT" },
+    { key="last",   title=Tr("col_attendance"),     w=100 },
+    { key="act",    title="",                        w=120 },
     { key="solde",  title=Tr("col_balance"),        w=70 },
 })
 
@@ -195,6 +196,7 @@ local function BuildRow(r, context)
     f.alias = UI.Label(r, { justify = "LEFT"  })
     f.name  = UI.CreateNameTag(r)
     f.ilvl  = UI.Label(r, { justify = "CENTER" })
+    f.mplus = UI.Label(r, { justify = "CENTER" })
     f.mkey  = UI.Label(r, { justify = "LEFT"  })
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -258,6 +260,25 @@ local function UpdateRow(i, r, f, data)
     end
 
     -- 🔧 M+ : afficher la clé en grisé pour les joueurs déconnectés s'ils en ont une
+    -- ✨ Côte M+
+    if f.mplus then
+        local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
+        if gi.online then
+            if score and score > 0 then
+                f.mplus:SetText(tostring(score))
+            else
+                f.mplus:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            end
+        else
+            if score and score > 0 then
+                f.mplus:SetText("|cffaaaaaa"..tostring(score).."|r")
+            else
+                f.mplus:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            end
+        end
+    end
+
+    -- Clé Mythique (inchangé)
     if f.mkey then
         local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
         if gi.online then

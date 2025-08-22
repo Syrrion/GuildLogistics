@@ -660,8 +660,14 @@ local function _SetIlvlLocal(name, ilvl, ts, by, ilvlMax)
     end
 end
 
+-- Déclarations anticipées pour les setters locaux utilisés ci-dessous
+-- (évite qu'ils soient vus comme des globals nil à la compilation)
+local _SetMKeyLocal
+local _SetMPlusScoreLocal
+
 -- ✨ Fusion : calcule iLvl (équipé + max) + Clé M+ et envoie un UNIQUE STATUS_UPDATE si changement
 function GLOG.UpdateOwnStatusIfMain()
+
     if not (GLOG.IsConnectedMain and GLOG.IsConnectedMain()) then return end
 
     -- Throttle anti-spam (fusionné)
@@ -687,6 +693,12 @@ function GLOG.UpdateOwnStatusIfMain()
     local changedIlvl = (ilvl ~= nil) and ((GLOG._lastOwnIlvl or -1) ~= ilvl) or false
     if ilvl ~= nil then GLOG._lastOwnIlvl = ilvl end
 
+    -- ✨ ===== Côte M+ =====
+    local score = GLOG.ReadOwnMythicPlusScore and GLOG.ReadOwnMythicPlusScore() or nil
+    if score ~= nil then score = math.max(0, math.floor((tonumber(score) or 0) + 0.5)) end
+    local changedScore = (score ~= nil) and ((GLOG._lastOwnMPlusScore or -1) ~= score) or false
+    if score ~= nil then GLOG._lastOwnMPlusScore = score end
+
     -- ===== Clé M+ =====
     local mid, lvl, map = 0, 0, ""
     if GLOG.ReadOwnedKeystone then mid, lvl, map = GLOG.ReadOwnedKeystone() end
@@ -700,18 +712,22 @@ function GLOG.UpdateOwnStatusIfMain()
     -- ===== Écriture locale + diffusion unifiée =====
     local ts = time()
     if ilvl ~= nil then _SetIlvlLocal(me, ilvl, ts, me, ilvlMax) end
+    if score ~= nil then _SetMPlusScoreLocal(me, score, ts, me) end
     if (mid or 0) > 0 or (lvl or 0) > 0 or (tostring(map or "") ~= "") then
         _SetMKeyLocal(me, mid or 0, lvl or 0, tostring(map or ""), ts, me)
     end
 
-    if (changedIlvl or changedM) and GLOG.BroadcastStatusUpdate then
+    if (changedIlvl or changedM or changedScore) and GLOG.BroadcastStatusUpdate then
         GLOG.BroadcastStatusUpdate({
             ilvl = ilvl, ilvlMax = ilvlMax,
+            score = score,
             mid = mid or 0, lvl = lvl or 0, map = tostring(map or ""),
             ts = ts, by = me,
+            localApplied = true,   -- ✅ déjà appliqué en local dans cette fonction
         })
     end
 end
+
 
 if not GLOG.ReadOwnMaxIlvl then
     function GLOG.ReadOwnMaxIlvl()
@@ -759,7 +775,7 @@ function GLOG.GetMKeyText(name)
 end
 
 -- Application locale (sans créer d’entrée ; timestamp dominant)
-local function _SetMKeyLocal(name, mapId, level, mapName, ts, by)
+_SetMKeyLocal = function(name, mapId, level, mapName, ts, by)
     if not name or name == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
@@ -776,6 +792,44 @@ local function _SetMKeyLocal(name, mapId, level, mapName, ts, by)
         p.mkeyAuth  = tostring(by or "")
         if ns.Emit then ns.Emit("mkey:changed", name) end
         if ns.RefreshAll then ns.RefreshAll() end
+    end
+end
+
+-- ✨ M+ Score : getter + setter local protégés
+function GLOG.GetMPlusScore(name)
+    if not name or name == "" then return nil end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
+    return p and tonumber(p.mplusScore or nil) or nil
+end
+
+_SetMPlusScoreLocal = function(name, score, ts, by)
+    if not name or name == "" then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
+    if not p then return end
+
+    local nowts   = tonumber(ts) or time()
+    local prev_ts = tonumber(p.mplusTs or 0) or 0
+    if nowts >= prev_ts then
+        p.mplusScore = math.max(0, tonumber(score) or 0)
+        p.mplusTs    = nowts
+        p.mplusAuth  = tostring(by or "")
+        if ns.Emit then ns.Emit("mplus:changed", name) end
+        if ns.RefreshAll then ns.RefreshAll() end
+    end
+end
+
+-- ✨ Lecture immédiate de ma Côte M+ (Retail)
+if not GLOG.ReadOwnMythicPlusScore then
+    function GLOG.ReadOwnMythicPlusScore()
+        if C_ChallengeMode and C_ChallengeMode.GetOverallDungeonScore then
+            local s = C_ChallengeMode.GetOverallDungeonScore()
+            if s and s > 0 then return math.floor(s) end
+        end
+        return nil
     end
 end
 
@@ -1106,45 +1160,73 @@ function GLOG.DeleteHistory(idx)
 end
 
 function GLOG.WipeAllData()
+    EnsureDB()  -- garantit la bascule _Char et les alias
     -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)
     local isMaster = (GLOG.IsMaster and GLOG.IsMaster())
         or (IsInGuild and IsInGuild() and select(3, GetGuildInfo("player")) == 0)
         or false
-    local oldRev     = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev) or 0
+    local oldRev     = (GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.rev) or 0
     local keepRev    = isMaster and oldRev or 0
-    local keepMaster = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.master) or nil
-    GuildLogisticsDB = {
-        players  = {},
-        history  = {},
-        expenses = { recording = false, list = {}, nextId = 1 },
-        lots     = { nextId = 1, list = {} },
-        ids      = { counter=0, byName={}, byId={} },
-        meta     = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
-        requests = {},
-        debug    = {},
+    local keepMaster = (GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.master) or nil
+
+    -- ⚠️ Purge la SV par personnage (et pas seulement l’alias runtime)
+    GuildLogisticsDB_Char = {
+        players       = {},
+        history       = {},
+        expenses      = { recording = false, list = {}, nextId = 1 },
+        lots          = { nextId = 1, list = {} },
+        ids           = { counter=0, byName={}, byId={} },
+        meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
+        requests      = {},
+        historyNextId = 1,
+        debug         = {},
+        aliases       = {},
+        _migr_perchar_1 = true, -- évite toute re-migration depuis l’ancienne DB compte
     }
+    -- Rebind des alias runtime
+    GuildLogisticsDB = GuildLogisticsDB_Char
 end
 
 -- Purge complète : DB + préférences UI
 function GLOG.WipeAllSaved()
+    EnsureDB()
     -- Conserver la version uniquement pour le GM (joueurs : réinitialiser à 0)
     local isMaster = (GLOG.IsMaster and GLOG.IsMaster())
         or (IsInGuild and IsInGuild() and select(3, GetGuildInfo("player")) == 0)
         or false
-    local oldRev     = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev) or 0
+    local oldRev     = (GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.rev) or 0
     local keepRev    = isMaster and oldRev or 0
-    local keepMaster = (GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.master) or nil
-    GuildLogisticsDB = {
-        players  = {},
-        history  = {},
-        expenses = { recording = false, list = {}, nextId = 1 },
-        lots     = { nextId = 1, list = {} },
-        ids      = { counter=0, byName={}, byId={} },
-        meta     = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
-        requests = {},
-        debug    = {},
+    local keepMaster = (GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.master) or nil
+
+    -- ⚠️ Purge les 2 SV par personnage
+    GuildLogisticsDB_Char = {
+        players       = {},
+        history       = {},
+        expenses      = { recording = false, list = {}, nextId = 1 },
+        lots          = { nextId = 1, list = {} },
+        ids           = { counter=0, byName={}, byId={} },
+        meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
+        requests      = {},
+        historyNextId = 1,
+        debug         = {},
+        aliases       = {},
+        _migr_perchar_1 = true,
     }
-    GuildLogisticsUI = { point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680, minimap = { hide=false, angle=215 } }
+    GuildLogisticsUI_Char = {
+        point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
+        minimap = { hide=false, angle=215 },
+        _migr_perchar_1 = true,
+        -- ✏️ Par défaut : options pratiques
+        debugEnabled = true, autoOpen = true,
+    }
+
+    -- Rebind des alias runtime pour la session courante
+    GuildLogisticsDB = GuildLogisticsDB_Char
+    GuildLogisticsUI = GuildLogisticsUI_Char
+
+    -- Optionnel : nettoyer quelques caches mémoire visibles avant le ReloadUI
+    GLOG._guildCache = {}
+    GLOG._lastOwnIlvl, GLOG._lastOwnMPlusScore, GLOG._lastOwnMKeyId, GLOG._lastOwnMKeyLvl = nil, nil, nil, nil
 end
 
 function GLOG.GetRev()
