@@ -660,44 +660,51 @@ local function _SetIlvlLocal(name, ilvl, ts, by, ilvlMax)
     end
 end
 
--- Calcul & diffusion : uniquement si le perso connecté EST le main
-function GLOG.UpdateOwnIlvlIfMain()
+-- ✨ Fusion : calcule iLvl (équipé + max) + Clé M+ et envoie un UNIQUE STATUS_UPDATE si changement
+function GLOG.UpdateOwnStatusIfMain()
     if not (GLOG.IsConnectedMain and GLOG.IsConnectedMain()) then return end
 
-    -- Throttle anti-spam
-    local tnow = GetTimePreciseSec and GetTimePreciseSec() or (debugprofilestop and (debugprofilestop()/1000)) or 0
-    GLOG._ilvlNextSendAt = GLOG._ilvlNextSendAt or 0
-    if tnow < GLOG._ilvlNextSendAt then return end
-    GLOG._ilvlNextSendAt = tnow + 5.0
+    -- Throttle anti-spam (fusionné)
+    local nowp = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
+    GLOG._statusNextSendAt = GLOG._statusNextSendAt or 0
+    if nowp < GLOG._statusNextSendAt then return end
+    GLOG._statusNextSendAt = nowp + 5.0
 
-    local name, realm = UnitFullName("player")
-    local me = (name or "") .. "-" .. (realm or "")
-    local equipped, overall = nil, nil
-    if GetAverageItemLevel then
-        overall, equipped = GetAverageItemLevel() -- Retail: retourne (overall, equipped[, pvp])
-        equipped = equipped or overall
+    -- Nom canonique du joueur
+    local n, r = UnitFullName and UnitFullName("player")
+    local me = ((n or "") .. "-" .. (r or ""))
+    if ns and ns.Util and ns.Util.NormalizeFull then me = ns.Util.NormalizeFull(me) end
+
+    -- 🚫 Stop si pas dans roster/réserve (ne crée PAS d’entrée)
+    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then return end
+
+    -- ===== iLvl =====
+    local ilvl, ilvlMax = nil, nil
+    if GLOG.ReadOwnEquippedIlvl then ilvl = GLOG.ReadOwnEquippedIlvl() end
+    if GLOG.ReadOwnMaxIlvl     then ilvlMax = GLOG.ReadOwnMaxIlvl()   end
+    if ilvl    ~= nil then ilvl    = math.max(0, math.floor((tonumber(ilvl)    or 0) + 0.5)) end
+    if ilvlMax ~= nil then ilvlMax = math.max(0, math.floor((tonumber(ilvlMax) or 0) + 0.5)) end
+    local changedIlvl = (ilvl ~= nil) and ((GLOG._lastOwnIlvl or -1) ~= ilvl) or false
+    if ilvl ~= nil then GLOG._lastOwnIlvl = ilvl end
+
+    -- ===== Clé M+ =====
+    local mid, lvl, map = 0, 0, ""
+    if GLOG.ReadOwnedKeystone then mid, lvl, map = GLOG.ReadOwnedKeystone() end
+    if (not map or map == "" or map == "Clé") and mid and mid > 0 and GLOG.ResolveMKeyMapName then
+        local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
     end
-    if not equipped then return end
+    local changedM = ((GLOG._lastOwnMKeyId or -1) ~= (mid or 0)) or ((GLOG._lastOwnMKeyLvl or -1) ~= (lvl or 0))
+    GLOG._lastOwnMKeyId  = mid or 0
+    GLOG._lastOwnMKeyLvl = lvl or 0
 
-    -- 🚫 Stop si pas dans roster/réserve
-    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then
-        return
-    end
-
-    local ilvl    = math.max(0, math.floor((tonumber(equipped) or 0) + 0.5))
-    local ilvlMax = (overall and math.max(0, math.floor((tonumber(overall) or 0) + 0.5))) or nil
-    local changed = (GLOG._lastOwnIlvl or -1) ~= ilvl
-    GLOG._lastOwnIlvl = ilvl
-
+    -- ===== Écriture locale + diffusion unifiée =====
     local ts = time()
-        _SetIlvlLocal(me, ilvl, ts, me, ilvlMax)
-    if changed and GLOG.BroadcastStatusUpdate then
-        -- Unifié : inclut aussi la clé si dispo
-        local mid, lvl, map = 0, 0, ""
-        if GLOG.ReadOwnedKeystone then mid, lvl, map = GLOG.ReadOwnedKeystone() end
-        if (not map or map == "" or map == "Clé") and mid and mid > 0 and GLOG.ResolveMKeyMapName then
-            local nm = GLOG.ResolveMKeyMapName(mid); if nm and nm ~= "" then map = nm end
-        end
+    if ilvl ~= nil then _SetIlvlLocal(me, ilvl, ts, me, ilvlMax) end
+    if (mid or 0) > 0 or (lvl or 0) > 0 or (tostring(map or "") ~= "") then
+        _SetMKeyLocal(me, mid or 0, lvl or 0, tostring(map or ""), ts, me)
+    end
+
+    if (changedIlvl or changedM) and GLOG.BroadcastStatusUpdate then
         GLOG.BroadcastStatusUpdate({
             ilvl = ilvl, ilvlMax = ilvlMax,
             mid = mid or 0, lvl = lvl or 0, map = tostring(map or ""),

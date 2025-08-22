@@ -1829,10 +1829,10 @@ function GLOG._HandleFull(sender, msgType, kv)
             -- ➕ Fin de synchro (ok/erreur)
             if ns and ns.Emit then ns.Emit("sync:end", "full", _ok) end
 
-            -- ➕ Après application réussie du FULL : recalcul iLvl local du joueur
+            -- ➕ Après application réussie du FULL : recalcul statut local du joueur
             if _ok then
                 C_Timer.After(0.15, function()
-                    if GLOG.UpdateOwnIlvlIfMain then GLOG.UpdateOwnIlvlIfMain() end
+                    if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
                 end)
 
                 -- ➕ Puis rebroadcast d'un HELLO (GUILD)

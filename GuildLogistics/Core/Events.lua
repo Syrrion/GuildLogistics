@@ -80,17 +80,13 @@ f:SetScript("OnEvent", function(self, event, name)
         if GLOG.RefreshGuildCache then
             ns.Util.After(3.0, function() GLOG.RefreshGuildCache() end)
         end
-        -- ➕ déclenche aussi l’envoi d’ilvl si on est sur le main
-        if GLOG.UpdateOwnIlvlIfMain then
-            ns.Util.After(5.0, function() GLOG.UpdateOwnIlvlIfMain() end)
-        end
-        -- ➕ déclenche la remontée de la clé (léger décalage)
-        if GLOG.UpdateOwnKeystoneIfMain then
-            ns.Util.After(7.0, function() GLOG.UpdateOwnKeystoneIfMain() end)
+        -- ✨ déclenche le statut unifié si on est sur le main
+        if GLOG.UpdateOwnStatusIfMain then
+            ns.Util.After(5.0, function() GLOG.UpdateOwnStatusIfMain() end)
         end
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
-        if GLOG.UpdateOwnIlvlIfMain then GLOG.UpdateOwnIlvlIfMain() end
+        if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
 
     elseif event == "BAG_UPDATE_DELAYED"
         or event == "ITEM_PUSH"
@@ -101,12 +97,11 @@ f:SetScript("OnEvent", function(self, event, name)
         or event == "CHALLENGE_MODE_COMPLETED"
         or event == "CHALLENGE_MODE_RESET" then
 
-        if GLOG.UpdateOwnKeystoneIfMain then
-            -- Petit décalage après fermeture du PNJ pour laisser l’état des sacs / API se stabiliser
+        if GLOG.UpdateOwnStatusIfMain then
             if event == "GOSSIP_CLOSED" and ns and ns.Util and ns.Util.After then
-                ns.Util.After(0.25, function() GLOG.UpdateOwnKeystoneIfMain() end)
+                ns.Util.After(0.25, function() GLOG.UpdateOwnStatusIfMain() end)
             else
-                GLOG.UpdateOwnKeystoneIfMain()
+                GLOG.UpdateOwnStatusIfMain()
             end
         end
 
