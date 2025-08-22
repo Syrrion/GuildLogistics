@@ -317,7 +317,7 @@ local function Layout()
     reserveArea:ClearAllPoints()
 
     if reserveCollapsed then
-        -- Actif prend toute la hauteur ; Réserve n’affiche que son entête
+        -- Actif plein écran ; Réserve : entête seule
         reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
         reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
         reserveArea:SetHeight((UI.SECTION_HEADER_H or 26))
@@ -326,14 +326,13 @@ local function Layout()
         activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
         activeArea:SetPoint("BOTTOMLEFT", reserveArea, "TOPLEFT",  0, gap)
         activeArea:SetPoint("BOTTOMRIGHT", reserveArea, "TOPRIGHT", 0, gap)
+        activeArea:Show()
     else
-        -- Réserve dépliée : elle prend toute la hauteur ; Actif n’affiche que son entête
-        activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
-        activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
-        activeArea:SetHeight((UI.SECTION_HEADER_H or 26))
+        -- Réserve dépliée : elle prend toute la hauteur ; Actif complètement masqué
+        activeArea:Hide()
 
-        reserveArea:SetPoint("TOPLEFT",  activeArea, "BOTTOMLEFT", 0, -gap)
-        reserveArea:SetPoint("TOPRIGHT", activeArea, "BOTTOMRIGHT", 0, -gap)
+        reserveArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
+        reserveArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
         reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
         reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
     end
@@ -341,6 +340,7 @@ local function Layout()
     if lvActive  and lvActive.Layout  then lvActive:Layout()  end
     if lvReserve and lvReserve.Layout then lvReserve:Layout() end
 end
+
 
 -- Met à jour l’UI du pliage/dépliage de la réserve
 local function UpdateReserveCollapseUI()
