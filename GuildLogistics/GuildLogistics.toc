@@ -1,8 +1,8 @@
-## Interface: 110200
+## Interface: 110205, 110200, 110107
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 1.2.0
+## Version: 1.2.1
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char

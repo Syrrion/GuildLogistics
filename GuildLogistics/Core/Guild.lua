@@ -2,13 +2,32 @@ local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
+-- Mémoïseur léger (faible empreinte mémoire)
+GLOG._normCache = GLOG._normCache or setmetatable({}, { __mode = "kv" })
+
+-- Hot path: normalisation de nom ultra-fréquente → on mémorise
 function GLOG.NormName(name)
-    if not name then return nil end
-    local amb = Ambiguate(name, "none")
+    if not name or name == "" then return nil end
+    local key = tostring(name)
+
+    local cached = GLOG._normCache[key]
+    if cached ~= nil then return cached end
+
+    local amb = Ambiguate(key, "none")
     amb = strtrim(amb or "")
-    local p = amb:find("-")
+    if amb == "" then
+        GLOG._normCache[key] = nil
+        return nil
+    end
+
+    local p = amb:find("-", 1, true)
     local base = p and amb:sub(1, p-1) or amb
-    return base:lower()
+    local out  = base:lower()
+
+    -- on mémorise à la fois l’entrée brute et l’ambiguée
+    GLOG._normCache[key] = out
+    if amb ~= key then GLOG._normCache[amb] = out end
+    return out
 end
 
 -- --------- Cache guilde ---------
@@ -119,9 +138,13 @@ Scanner:SetScript("OnEvent", function(self, ev)
     GLOG._guildCache.byName     = {}
 
     for _, rr in ipairs(rows) do
-        local amb = rr.name_amb or rr.name_raw
-        local kFull = GLOG.NormName(amb)
-        local mainKey = (rr.remark and GLOG.NormName(rr.remark)) or ""
+        local amb     = rr.name_amb or rr.name_raw
+        -- ➕ Pré-calcule et stocke les clés normalisées pour réutilisation UI
+        rr.name_key   = rr.name_key   or (amb and GLOG.NormName(amb)) or nil
+        rr.main_key   = rr.main_key   or ((rr.remark and GLOG.NormName(rr.remark)) or "")
+
+        local kFull   = rr.name_key
+        local mainKey = rr.main_key
 
         local rec = { class = rr.class, main = mainKey or "" }
         if kFull and kFull ~= "" then GLOG._guildCache.byName[kFull] = rec end

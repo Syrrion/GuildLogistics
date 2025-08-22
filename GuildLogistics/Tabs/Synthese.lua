@@ -80,7 +80,8 @@ function FindGuildInfo(playerName)
 
     -- Conserve idx/level du main uniquement (ne pas toucher aux autres éléments)
     for _, gr in ipairs(guildRows) do
-        if NormName and NormName(gr.name_amb or gr.name_raw) == mainKey then
+        -- ➕ Réutilise les clés pré-calculées (fallback sur NormName pour compat)
+        if ((gr.name_key) or (NormName and NormName(gr.name_amb or gr.name_raw))) == mainKey then
             info.idx = gr.idx
             if GetGuildRosterInfo and gr.idx then
                 local _, _, _, level = GetGuildRosterInfo(gr.idx)
@@ -93,8 +94,8 @@ function FindGuildInfo(playerName)
     -- Agrège la présence sur tous les rerolls rattachés au main
     local anyOnline, minDays, minHours = false, nil, nil
     for _, gr in ipairs(guildRows) do
-        local rowNameKey = NormName and NormName(gr.name_amb or gr.name_raw)
-        local rowMainKey = (gr.remark and NormName and NormName(strtrim(gr.remark))) or nil
+        local rowNameKey = gr.name_key or (NormName and NormName(gr.name_amb or gr.name_raw))
+        local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(strtrim(gr.remark))) or nil)
 
         -- Appartient au même main si :
         --  - la note de guilde pointe vers ce main (reroll),
