@@ -154,7 +154,7 @@ function UI.ListView(parent, cols, opts)
                 r:SetWidth(cW)
                 r:ClearAllPoints()
                 r:SetPoint("TOPLEFT", self.list, "TOPLEFT", 0, -y)
-                y = y + r:GetHeight() + 4
+                y = y + r:GetHeight() + 3
                 UI.LayoutRow(r, resolved, r._fields or {})
             end
         end
@@ -178,6 +178,32 @@ function UI.ListView(parent, cols, opts)
     end
 
     -- Données
+    -- Wrapper propre qui ne recolorie PLUS le fond : il se contente de décorer les lignes
+    do
+        local _OrigListView = UI.ListView
+        function UI.ListView(...)
+            local lv = _OrigListView(...)
+            -- Décore les lignes déjà existantes
+            if lv and lv.rows then
+                for i, row in ipairs(lv.rows) do
+                    if not row._bg then UI.DecorateRow(row) end
+                end
+            end
+            -- Décore toute nouvelle ligne créée
+            if lv and lv.CreateRow and not lv._decorateCR then
+                local _oldCR = lv.CreateRow
+                function lv:CreateRow(i)
+                    local r = _oldCR(self, i)
+                    UI.DecorateRow(r)
+                    return r
+                end
+                lv._decorateCR = true
+            end
+            return lv
+        end
+    end
+
+    -- SetData ne touche qu'au gradient & séparateurs, JAMAIS au SetColorTexture du fond
     function lv:SetData(data)
         data = data or {}
 
@@ -190,7 +216,10 @@ function UI.ListView(parent, cols, opts)
             self.rows[i] = r
         end
 
-        -- Alimente les lignes et cache le surplus
+        -- Première ligne visible (pour masquer son séparateur TOP)
+        local firstVisible = nil
+        for i = 1, #data do if data[i] then firstVisible = i break end end
+
         local shown = 0
         for i = 1, #self.rows do
             local r  = self.rows[i]
@@ -198,14 +227,23 @@ function UI.ListView(parent, cols, opts)
             if it then
                 r:Show()
                 shown = shown + 1
-                if self.opts.updateRow then self.opts.updateRow(i, r, r._fields, it) end
+
+                -- Dégradé vertical pair/impair
+                if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
+
+                -- Séparateur TOP : tout sauf la première visible
+                if r._sepTop then r._sepTop:SetShown(not firstVisible or i ~= firstVisible) end
+
+                if self.opts.updateRow then
+                    self.opts.updateRow(i, r, r._fields, it)
+                end
             else
                 r:Hide()
+                if r._sepTop then r._sepTop:Hide() end
             end
         end
 
         self:Layout()
-        -- Affiche le “empty state” si aucune ligne
         self:_SetEmptyShown(shown == 0)
     end
 

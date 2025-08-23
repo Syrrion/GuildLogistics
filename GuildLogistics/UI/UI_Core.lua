@@ -12,7 +12,7 @@ UI.OUTER_PAD       = UI.OUTER_PAD       or 16
 UI.SCROLLBAR_W     = UI.SCROLLBAR_W     or 20
 UI.SCROLLBAR_INSET = UI.SCROLLBAR_INSET or 10 
 UI.GUTTER          = UI.GUTTER          or 8
-UI.ROW_H           = UI.ROW_H           or 28
+UI.ROW_H           = UI.ROW_H           or 10
 UI.SECTION_HEADER_H = UI.SECTION_HEADER_H or 26
 UI.FONT_YELLOW = UI.FONT_YELLOW or {1, 0.82, 0}
 UI.WHITE       = UI.WHITE       or {1,1,1}
@@ -114,12 +114,127 @@ function UI.LayoutRow(row, cols, fields)
     end
 end
 
--- ===== Décor & Scroll =====
+-- Déco de base d'une ligne : dégradé vertical + hover + séparateur TOP 1px (pixel-perfect)
+-- + liseré gauche (caché par défaut) pour marquer "même groupe"
 function UI.DecorateRow(r)
-    local bg = r:CreateTexture(nil, "BACKGROUND")
-    bg:SetColorTexture(1,1,1,0.03)
+    local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {
+        oddTop={r=.13,g=.13,b=.13,a=.35}, oddBottom={r=.08,g=.08,b=.08,a=.35},
+        evenTop={r=.15,g=.15,b=.15,a=.35}, evenBottom={r=.10,g=.10,b=.10,a=.35},
+        hover={r=1,g=.82,b=0,a=.06}, sep={r=1,g=1,b=1,a=.10}, accent={r=1,g=.82,b=0,a=.90},
+    }
+    local WHITE = "Interface\\Buttons\\WHITE8x8"
+
+    local function OnePixel()
+        local _, ph = GetPhysicalScreenSize()
+        ph = (ph and ph > 0) and ph or 768
+        local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+        if scale <= 0 then scale = 1 end
+        return 768 / ph / scale
+    end
+    local function snap(tex)
+        if tex and tex.SetSnapToPixelGrid then
+            tex:SetSnapToPixelGrid(true)
+            tex:SetTexelSnappingBias(0)
+        end
+    end
+    local function pxSetHeight(region, h)
+        if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(region, h) else region:SetHeight(h) end
+    end
+    local function pxSetWidth(region, w)
+        if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(region, w) else region:SetWidth(w) end
+    end
+    local function pxSetPoint(region, a, rel, ra, x, y)
+        if PixelUtil and PixelUtil.SetPoint then PixelUtil.SetPoint(region, a, rel, ra, x, y) else region:SetPoint(a, rel, ra, x, y) end
+    end
+
+    -- Fond (texture blanche + gradient ensuite)
+    local bg = r:CreateTexture(nil, "BACKGROUND", nil, -8)
     bg:SetAllPoints(r)
+    bg:SetTexture(WHITE)  -- requis pour SetGradient/SetGradientAlpha
+    snap(bg)
     r._bg = bg
+
+    -- Overlay hover
+    local hov = r:CreateTexture(nil, "BACKGROUND", nil, -7)
+    hov:SetAllPoints(r)
+    hov:SetTexture(WHITE)
+    hov:SetVertexColor(st.hover.r, st.hover.g, st.hover.b, st.hover.a)
+    hov:Hide()
+    snap(hov)
+    r._hover = hov
+
+    -- Séparateur TOP 1px
+    local sepTop = r:CreateTexture(nil, "BORDER", nil, 0)
+    sepTop:SetTexture(WHITE)
+    pxSetPoint(sepTop, "TOPLEFT",  r, "TOPLEFT",  0, 0)
+    pxSetPoint(sepTop, "TOPRIGHT", r, "TOPRIGHT", 0, 0)
+    pxSetHeight(sepTop, OnePixel())
+    sepTop:SetVertexColor(st.sep.r, st.sep.g, st.sep.b, st.sep.a)
+    snap(sepTop)
+    r._sepTop = sepTop
+
+    -- Liseré gauche (2 px réels) — caché par défaut
+    local acc = r:CreateTexture(nil, "ARTWORK", nil, 1)
+    acc:SetTexture(WHITE)
+    pxSetPoint(acc, "TOPLEFT",    r, "TOPLEFT",    0, 0)
+    pxSetPoint(acc, "BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
+    pxSetWidth(acc, OnePixel() * 2)
+    acc:SetVertexColor(st.accent.r, st.accent.g, st.accent.b, st.accent.a)
+    acc:Hide()
+    snap(acc)
+    r._accentLeft = acc
+
+    -- Hover show/hide
+    if r.HookScript then
+        r:HookScript("OnEnter", function() if r._hover then r._hover:Show() end end)
+        r:HookScript("OnLeave", function() if r._hover then r._hover:Hide() end end)
+    end
+
+    -- Dégradé par défaut (sera actualisé pair/impair dans SetData)
+    if UI.ApplyRowGradient then UI.ApplyRowGradient(r, true) end
+end
+
+-- Applique le dégradé vertical pair/impair sur la texture de fond d'une ligne
+function UI.ApplyRowGradient(row, isEven)
+    if not (row and row._bg) then return end
+    local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {}
+    local top    = (isEven and (st.evenTop or st.even)) or (st.oddTop or st.odd)
+    local bottom = (isEven and (st.evenBottom or st.even)) or (st.oddBottom or st.odd)
+    if not (top and bottom) then return end
+
+    local tex = row._bg
+    tex:SetTexture("Interface\\Buttons\\WHITE8x8") -- sécurité
+
+    -- Retail 11.x : SetGradient(Color, Color) ; fallback : SetGradientAlpha
+    if tex.SetGradient and type(CreateColor) == "function" then
+        tex:SetGradient("VERTICAL",
+            CreateColor(top.r, top.g, top.b, top.a),
+            CreateColor(bottom.r, bottom.g, bottom.b, bottom.a)
+        )
+    elseif tex.SetGradientAlpha then
+        tex:SetGradientAlpha("VERTICAL",
+            top.r, top.g, top.b, top.a,
+            bottom.r, bottom.g, bottom.b, bottom.a
+        )
+    else
+        tex:SetVertexColor(
+            (top.r+bottom.r)/2, (top.g+bottom.g)/2, (top.b+bottom.b)/2, (top.a+bottom.a)/2
+        )
+    end
+end
+
+-- API : contrôle du liseré gauche (même groupe)
+function UI.SetRowAccent(row, shown, r, g, b, a)
+    if not row then return end
+    local acc = row._accentLeft
+    if not acc then
+        UI.DecorateRow(row) ; acc = row._accentLeft
+    end
+    if not acc then return end
+    if r and g and b then
+        acc:SetVertexColor(tonumber(r) or 1, tonumber(g) or .82, tonumber(b) or 0, tonumber(a) or .9)
+    end
+    acc:SetShown(shown and true or false)
 end
 
 function UI.CreateScroll(parent)

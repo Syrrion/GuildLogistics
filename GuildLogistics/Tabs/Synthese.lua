@@ -37,14 +37,14 @@ end
 
 
 local cols = UI.NormalizeColumns({
+    { key="alias",  title=Tr("col_alias"),          w=90, justify="LEFT" },
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
-    { key="alias",  title=Tr("col_alias"),          w=100, justify="LEFT" },
-    { key="name",   title=Tr("col_name"),           min=180, flex=1 },
-    { key="ilvl",   title=Tr("col_ilvl"),           w=80, justify="CENTER" },
-    { key="mplus",  title=Tr("col_mplus_score"),    w=80, justify="CENTER" },
-    { key="mkey",   title=Tr("col_mplus_key"),      w=220, justify="LEFT" },
-    { key="last",   title=Tr("col_attendance"),     w=100 },
-    { key="act",    title="",                        w=120 },
+    { key="name",   title=Tr("col_name"),           min=200, flex=1 },
+    { key="ilvl",   title=Tr("col_ilvl"),           w=85, justify="CENTER" },
+    { key="mplus",  title=Tr("col_mplus_score"),    w=85, justify="CENTER" },
+    { key="mkey",   title=Tr("col_mplus_key"),      w=250, justify="LEFT" },
+    { key="last",   title=Tr("col_attendance"),     w=80 },
+    { key="act",    title="",                       w=80 },
     { key="solde",  title=Tr("col_balance"),        w=70 },
 })
 
@@ -67,21 +67,23 @@ local function CanActOn(name)
     return isSelf, isMaster
 end
 
+-- Retourne des infos d'agrégation par MAIN + le reroll en ligne (nom + classe)
 function FindGuildInfo(playerName)
     local guildRows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
     local NormName = GLOG.NormName
     if not playerName or playerName == "" then return {} end
 
-    -- Détermine le main (si reroll), sinon le nom lui-même
+    -- Détermine le main affiché et sa clé
     local mainName = (GLOG.GetMainOf and GLOG.GetMainOf(playerName)) or playerName
     local mainKey  = NormName and NormName(mainName)
+    local mainBase = (tostring(mainName):match('^([^%-]+)') or tostring(mainName))
 
     local info = {}
 
     -- Conserve idx/level du main uniquement (ne pas toucher aux autres éléments)
     for _, gr in ipairs(guildRows) do
-        -- ➕ Réutilise les clés pré-calculées (fallback sur NormName pour compat)
-        if ((gr.name_key) or (NormName and NormName(gr.name_amb or gr.name_raw))) == mainKey then
+        local rowKey = (gr.name_key) or (NormName and NormName(gr.name_amb or gr.name_raw))
+        if rowKey == mainKey then
             info.idx = gr.idx
             if GetGuildRosterInfo and gr.idx then
                 local _, _, _, level = GetGuildRosterInfo(gr.idx)
@@ -94,18 +96,37 @@ function FindGuildInfo(playerName)
     -- Agrège la présence sur tous les rerolls rattachés au main
     local anyOnline, minDays, minHours = false, nil, nil
     for _, gr in ipairs(guildRows) do
-        local rowNameKey = gr.name_key or (NormName and NormName(gr.name_amb or gr.name_raw))
+        local rowNameKey = (gr.name_key) or ((NormName and NormName(gr.name_amb or gr.name_raw)) or nil)
         local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(strtrim(gr.remark))) or nil)
 
-        -- Appartient au même main si :
-        --  - la note de guilde pointe vers ce main (reroll),
-        --  - ou c’est la fiche du main lui-même (pas de note ou note vide)
+        -- Appartenance au même main
         local belongsToMain =
             (rowMainKey and rowMainKey == mainKey)
             or ((rowMainKey == nil or rowMainKey == "") and rowNameKey == mainKey)
 
         if belongsToMain then
             if gr.online then anyOnline = true end
+
+            -- Si un reroll (différent du main) est en ligne, capture son nom + classe
+            if gr.online then
+                local full = gr.name_amb or gr.name_raw or ""
+                local base = tostring(full):match("^([^%-]+)") or tostring(full)
+                if base ~= "" and base:lower() ~= tostring(mainBase or ""):lower() then
+                    info.onlineAltBase = base      -- "Altruis"
+                    info.onlineAltFull = full      -- "Altruis-KirinTor"
+                    info.onlineAltIdx  = gr.idx
+
+                    -- Classe du reroll via roster guilde
+                    local classTag = nil
+                    if GetGuildRosterInfo and gr.idx then
+                        classTag = select(11, GetGuildRosterInfo(gr.idx))  -- classFileName (ex: "DEMONHUNTER")
+                    end
+                    -- Fallbacks éventuels selon votre cache
+                    classTag = classTag or gr.classFile or gr.classTag or gr.class
+                    info.onlineAltClassTag = classTag
+                end
+            end
+
             local d = gr.online and 0 or tonumber(gr.daysDerived)
             local h = gr.online and 0 or tonumber(gr.hoursDerived)
             if d ~= nil then minDays  = (minDays  == nil or d < minDays)  and d or minDays end
@@ -191,6 +212,7 @@ local function AttachDeleteHandler(btn, name, isMaster)
 end
 
 -- BuildRow
+-- Construit une ligne de la ListView (actifs/réserve)
 local function BuildRow(r, context)
     local f = {}
     f.lvl   = UI.Label(r, { justify = "CENTER" })
@@ -200,6 +222,9 @@ local function BuildRow(r, context)
     f.mplus = UI.Label(r, { justify = "CENTER" })
     f.mkey  = UI.Label(r, { justify = "LEFT"  })
     f.last  = UI.Label(r, { justify = "CENTER" })
+    -- ➕ cellule "Version"
+    f.ver   = UI.Label(r, { justify = "CENTER" })
+    -- Solde (fontstring simple pour compat thèmes)
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
     -- Conteneur d’actions
@@ -207,40 +232,70 @@ local function BuildRow(r, context)
     f.act:SetHeight(UI.ROW_H)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
-    -- Actions financières (inchangé)
+    -- Actions financières
     r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=60 })
     r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"),  { size="sm", variant="ghost", minWidth=60 })
 
-    -- Alignement des actions sur la droite
-    UI.AttachRowRight(f.act, { r.btnDeposit, r.btnWithdraw, r.btnReserve, r.btnRoster }, 8, -4, { leftPad = 8, align = "center" })
-
-    -- ✨ surlignage si même groupe/sous-groupe de raid
-    if not r._highlight then
-        local hl = r:CreateTexture(nil, "BACKGROUND")
-        hl:SetAllPoints(r)
-        hl:SetColorTexture(1, 0.90, 0, 0.08) -- jaune très léger
-        hl:Hide()
-        r._highlight = hl
-    end
+    -- Alignement des actions à droite
+    UI.AttachRowRight(f.act, { r.btnDeposit }, 8, -4, { leftPad = 8, align = "center" })
 
     return f
 end
 
 -- UpdateRow
 local function UpdateRow(i, r, f, data)
+    -- Nom (icône/couleur main gérés par CreateNameTag / SetNameTag)
     UI.SetNameTag(f.name, data.name or "")
 
+    -- Alias
     if f.alias then
         local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
-        if a and a ~= "" then
-            f.alias:SetText(a)
-        else
-            f.alias:SetText("")
+        f.alias:SetText((" "..a and a ~= "") and " "..a or "")
+    end
+
+    -- Infos guilde agrégées (online/last seen/level + reroll en ligne)
+    local gi = FindGuildInfo(data.name)
+
+    -- 🎨 Colonne Nom : masque le royaume + ajoute (icône + NomReroll) en gris avec couleur/icone de classe
+    do
+        local function classIconMarkup(classTag, size)
+            size = size or 14
+            if not classTag or classTag == "" then return "" end
+            local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classTag]
+            if not coords then return "" end
+            local l, rTex, t, b = coords[1], coords[2], coords[3], coords[4]
+            local tex = "Interface\\TargetingFrame\\UI-Classes-Circles"
+            local ULx, ULy = math.floor(l * 256), math.floor(t * 256)
+            local LRx, LRy = math.floor(rTex * 256), math.floor(b * 256)
+            return string.format("|T%s:%d:%d:0:0:256:256:%d:%d:%d:%d|t", tex, size, size, ULx, LRx, ULy, LRy)
+        end
+
+        local baseText = (f.name and f.name.text and f.name.text:GetText()) or ""
+        baseText = baseText:gsub("%-[^%s|]+", "") -- supprime "-Royaume" sans toucher aux balises
+
+        if gi and gi.onlineAltBase and gi.onlineAltBase ~= "" then
+            local altClass = gi.onlineAltClassTag
+            local colorStr = (altClass and RAID_CLASS_COLORS and RAID_CLASS_COLORS[altClass] and RAID_CLASS_COLORS[altClass].colorStr) or nil
+            local altNameColored = colorStr and ("|c" .. colorStr .. gi.onlineAltBase .. "|r") or gi.onlineAltBase
+            local icon = classIconMarkup(altClass, 14)
+            local altPart = ("|cffaaaaaa(|r%s%s|cffaaaaaa)|r"):format((icon ~= "" and (icon .. " ") or ""), altNameColored)
+            baseText = baseText .. " " .. altPart
+        end
+
+        if f.name and f.name.text then
+            f.name.text:SetText(baseText)
         end
     end
 
-    local gi = FindGuildInfo(data.name)
+    -- ➕ Liseré "même groupe/sous-groupe"
+    do
+        local same = (GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name)) or false
+        local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {}
+        local c  = st.accent or { r = 1, g = 0.82, b = 0.00, a = 0.90 }
+        if UI.SetRowAccent then UI.SetRowAccent(r, same, c.r, c.g, c.b, c.a) end
+    end
 
+    -- Présence
     if f.last then
         if gi.online then
             f.last:SetText("|cff40ff40"..Tr("status_online").."|r")
@@ -251,49 +306,36 @@ local function UpdateRow(i, r, f, data)
         end
     end
 
+    -- Niveau
     if f.lvl then
         if gi.level and gi.level > 0 then
-            -- Colorise comme l’écart de niveau de WoW
-            f.lvl:SetText( (UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level) )
+            f.lvl:SetText((UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level))
         else
             f.lvl:SetText("")
         end
     end
 
-    -- 🔧 M+ : afficher la clé en grisé pour les joueurs déconnectés s'ils en ont une
-    -- ✨ Côte M+
+    -- Score M+
     if f.mplus then
         local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
         if gi.online then
-            if score and score > 0 then
-                f.mplus:SetText(tostring(score))
-            else
-                f.mplus:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
-            end
+            f.mplus:SetText(score and score > 0 and tostring(score) or "|cffaaaaaa"..Tr("status_empty").."|r")
         else
-            if score and score > 0 then
-                f.mplus:SetText("|cffaaaaaa"..tostring(score).."|r")
-            else
-                f.mplus:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
-            end
+            f.mplus:SetText(score and score > 0 and ("|cffaaaaaa"..tostring(score).."|r") or "|cffaaaaaa"..Tr("status_empty").."|r")
         end
     end
 
-    -- Clé Mythique (inchangé)
+    -- Clé M+
     if f.mkey then
         local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
         if gi.online then
             f.mkey:SetText(mkeyTxt or "")
         else
-            if mkeyTxt ~= "" then
-                f.mkey:SetText("|cffaaaaaa"..mkeyTxt.."|r")
-            else
-                f.mkey:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
-            end
+            f.mkey:SetText(mkeyTxt ~= "" and ("|cffaaaaaa"..mkeyTxt.."|r") or "|cffaaaaaa"..Tr("status_empty").."|r")
         end
     end
 
-    -- 🔧 iLvl : affiche "actuel |cffaaaaaa(max)|r".
+    -- iLvl
     if f.ilvl then
         local ilvl    = (GLOG.GetIlvl     and GLOG.GetIlvl(data.name))     or nil
         local ilvlMax = (GLOG.GetIlvlMax  and GLOG.GetIlvlMax(data.name))  or nil
@@ -324,6 +366,16 @@ local function UpdateRow(i, r, f, data)
         f.ilvl:SetText( gi.online and fmtOnline() or fmtOffline() )
     end
 
+    -- ➕ Version Addon (si la colonne existe)
+    if f.ver then
+        local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(data.name)) or ""
+        if v == "" then
+            f.ver:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+        else
+            f.ver:SetText(gi.online and v or ("|cffaaaaaa"..v.."|r"))
+        end
+    end
+    
     -- ✨ Surlignage : même groupe (party) ou même sous-groupe de raid que moi
     if r._highlight then
         local hl = false
@@ -340,15 +392,15 @@ local function UpdateRow(i, r, f, data)
     local canAct           = (isMaster or isSelf)       -- GM = tout voir/tout faire ; sinon soi-même
 
     if r.btnDeposit then
-        r.btnDeposit:SetShown(canAct)                   -- ✅ masquer si non autorisé
+        r.btnDeposit:SetShown(canAct)
         AttachDepositHandler(r.btnDeposit, data.name, canAct, isMaster)
     end
     if r.btnWithdraw then
-        r.btnWithdraw:SetShown(canAct)                  -- ✅ masquer si non autorisé
+        r.btnWithdraw:SetShown(canAct)
         AttachWithdrawHandler(r.btnWithdraw, data.name, canAct, isMaster)
     end
 
-    -- Recalcule l’alignement de la barre d’actions (ignore les boutons masqués)
+    -- Recalage du container d’actions
     if f and f.act and f.act._applyRowActionsLayout then
         f.act._applyRowActionsLayout()
     end

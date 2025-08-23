@@ -131,8 +131,6 @@ local function EnsureOverlay(frame)
     return ov
 end
 
-
-
 -- Rognage en pixels d'un atlas, sans étirer (conserve le ratio via targetH)
 local function CropAtlasPx(tex, atlas, cropLeft, cropRight, targetH)
     cropLeft, cropRight = cropLeft or 0, cropRight or 0
@@ -478,3 +476,19 @@ function UI.SetTheme(tag)
     UI.ReskinAllNeutral()
 end
 
+-- Styles de ListView (dégradé vertical, sans liseré)
+function UI.GetListViewStyle()
+    return {
+        -- Lignes impaires
+        oddBottom  = { r = 0.20, g = 0.20, b = 0.20, a = 0.50 },
+        oddTop     = { r = 0.08, g = 0.08, b = 0.08, a = 0.10 },
+        -- Lignes paires
+        evenBottom = { r = 0.25, g = 0.25, b = 0.25, a = 0.50 },
+        evenTop    = { r = 0.10, g = 0.10, b = 0.10, a = 0.10 },
+        -- Survol & séparateur
+        hover      = { r = 1.00, g = 0.82, b = 0.00, a = 0.06 },
+        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.0 },
+        -- ➕ Couleur par défaut du liseré "même groupe"
+        accent     = { r = 1.00, g = 0.82, b = 0.00, a = 0.90 }, -- jaune Blizzard
+    }
+end

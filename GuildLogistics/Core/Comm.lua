@@ -420,18 +420,8 @@ local function _scheduleOfferReply(hid, initiator, rv_init)
         end
     end
 
-    -- ➕ Règle demandée : n'envoyer un SYNC_OFFER que si la "version" (révision DB) du joueur (HELLO)
-    -- est STRICTEMENT inférieure à celle du GM. Si identique ou supérieure → pas d'OFFER.
-    local gmRv
-    if iAmGM then
-        gmRv = safenum(getRev(), 0)
-    else
-        gmRv = (LastGMFullRv ~= nil) and safenum(LastGMFullRv, -1) or -1
-    end
-    -- Si on n'a aucune info sur le GM et qu'on n'est pas GM nous-même → ne pas répondre.
-    if not iAmGM and (not gmRv or gmRv < 0) then return end
-    -- Si la révision de l'initiateur (rv_init) n'est pas inférieure à celle du GM → ne pas répondre.
-    if safenum(rv_init, 0) >= safenum(gmRv, -1) then return end
+    -- ✅ Nouvelle règle : on ne dépend plus du rv du GM.
+    -- On proposera une synchro si (et seulement si) mon rv > rv_init.
 
     -- Anti-spam par initiateur (conservé même pour GM)
     local k = _norm(initiator)
@@ -439,13 +429,15 @@ local function _scheduleOfferReply(hid, initiator, rv_init)
     if (now() - last) < OFFER_RATE_LIMIT_SEC then return end
     OfferCooldown[k] = now()
 
+    local myRv  = safenum(getRev(), 0)
     local est   = _estimateSnapshotSize()
-    local h     = _hashHint(string.format("%s|%d|%s", playerFullName(), safenum(getRev(),0), hid))
+    local h     = _hashHint(string.format("%s|%d|%s", playerFullName(), myRv, hid))
     -- Le GM répond sans jitter pour passer devant tout le monde
     local delay = iAmGM and 0 or (math.random(0, OFFER_BACKOFF_MS_MAX) / 1000.0)
 
     ns.Util.After(delay, function()
         local rv_peer = safenum(getRev(), 0)
+
         -- Ne proposer que si l'on est réellement plus à jour que l'initiateur
         if rv_peer <= safenum(rv_init, 0) then return end
 
@@ -457,7 +449,12 @@ local function _scheduleOfferReply(hid, initiator, rv_init)
         end
 
         GLOG.Comm_Whisper(initiator, "SYNC_OFFER", {
-            hid = hid, rv = rv_peer, est = est, h = h, from = playerFullName()
+            hid  = hid,
+            rv   = rv_peer,
+            est  = est,
+            h    = h,
+            from = playerFullName(),
+            m    = "rv_gap",
         })
     end)
 end
@@ -1664,20 +1661,6 @@ function GLOG._HandleFull(sender, msgType, kv)
             _scheduleOfferReply(hid, sender, rv_them)
         end
 
-        -- Si ma version est plus récente → prévenir le joueur obsolète en WHISPER (⚠️ 1 fois par session)
-        if sender and sender ~= "" and cmp > 0 then
-            local k = (_norm and _norm(sender)) or string.lower(sender or "")
-            if not _VersionWarnSentTo[k] then
-                _VersionWarnSentTo[k] = true
-                GLOG.Comm_Whisper(sender, "VERSION_WARN", {
-                    by     = playerFullName(),
-                    latest = ver_me,
-                    yours  = ver_them,
-                    ts     = now(),
-                })
-            end
-        end
-
         local v_hello = tostring(kv.ver or "")
         if v_hello ~= "" and GLOG.SetPlayerAddonVersion then GLOG.SetPlayerAddonVersion(sender, v_hello, tonumber(kv.ts) or time(), sender) end
 
@@ -1789,23 +1772,6 @@ function GLOG._HandleFull(sender, msgType, kv)
             end
             if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
         end
-
-    elseif msgType == "VERSION_WARN" then
-        -- Reçu par un client obsolète (potentiellement plusieurs fois) → popup unique (debounce)
-        local latest = tostring(kv.latest or "")
-        local mine   = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
-
-        -- Anti-popups multiples pendant un court laps de temps
-        if (now() < (_ObsoletePopupUntil or 0)) then return end
-        _ObsoletePopupUntil = now() + (OBSOLETE_DEBOUNCE_SEC or 10)
-
-        local jitter = (math.random(0, 200) / 1000.0)
-        ns.Util.After(jitter, function()
-            if ns.UI and ns.UI.ShowOutdatedAddonPopup then
-                ns.UI.ShowOutdatedAddonPopup(mine, latest, kv.by or "")
-            end
-        end)
-
         
     elseif msgType == "SYNC_OFFER" then
         -- Côté initiateur : collecter les OFFERS pendant HELLO_WAIT
@@ -1946,24 +1912,35 @@ function GLOG._HandleFull(sender, msgType, kv)
 end
 
 do
-    local _PrevHandleFull = GLOG._HandleFull
+    -- Patch "version-aware": propose une OFFER même avec rv égal si ma version est plus récente
+    local _PrevHandleFull_VSYNC = GLOG._HandleFull
     function GLOG._HandleFull(sender, msgType, kv)
-        local v = tostring((kv and kv.ver) or "")
-        if v ~= "" and GLOG.SetPlayerAddonVersion then
-            local prev = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(sender)) or ""
-            local ts = tonumber(kv and kv.ts) or (time and time()) or 0
-            GLOG.SetPlayerAddonVersion(sender, v, ts, sender)
-            if prev ~= v then
-                if ns and ns.UI and ns.UI.RefreshActive then
-                    ns.UI.RefreshActive()
-                elseif ns and ns.RefreshAll then
-                    ns.RefreshAll()
+        msgType = tostring(msgType or ""):upper()
+
+        if msgType == "HELLO" and kv then
+            local hid      = tostring(kv.hid or "")
+            local rv_them  = safenum(kv.rv, -1)
+            local ver_them = tostring(kv.ver or "")
+
+            -- Enregistre la version de l’émetteur au plus tôt (utile à l’UI et aux comparaisons)
+            if ver_them ~= "" and GLOG.SetPlayerAddonVersion then
+                local ts = tonumber(kv.ts) or (time and time()) or 0
+                GLOG.SetPlayerAddonVersion(sender, ver_them, ts, sender)
+            end
+
+            -- Déclenche une OFFER sensible à la version (4e param) ; le rate-limit évite les doublons
+            if hid ~= "" and sender and sender ~= "" then
+                if _scheduleOfferReply then
+                    _scheduleOfferReply(hid, sender, rv_them, ver_them)
                 end
             end
         end
-        return _PrevHandleFull(sender, msgType, kv)
+
+        -- Laisse l’implémentation existante faire le reste (HELLO inclut l’appel historique)
+        return _PrevHandleFull_VSYNC(sender, msgType, kv)
     end
 end
+
 
 -- ===== Réception bas niveau =====
 local function onAddonMsg(prefix, message, channel, sender)
@@ -2956,5 +2933,77 @@ do
             end
         end
         return ret
+    end
+end
+
+-- ✅ Bloc d’intégration « vérification version » 
+do
+    -- 🔒 Mémoire session : une seule notification MAX par session
+    local _OutdatedNotified = false
+
+    -- Helper : affichage différé (anti burst) si et seulement si hors instance
+    local function _maybeNotifyOutdated(fromPlayer, remoteVer)
+        if _OutdatedNotified then return end
+        remoteVer = tostring(remoteVer or "")
+        if remoteVer == "" then return end
+
+        local mine = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+        if mine == "" then return end
+
+        local cmp = (ns and ns.Util and ns.Util.CompareVersions and ns.Util.CompareVersions(mine, remoteVer)) or 0
+        if cmp >= 0 then return end -- 👈 je suis déjà à jour (0) ou en avance (>0) → rien à faire
+
+        -- Ne pas déranger en instance (donjon/raid)… on retentera au prochain message
+        local inInstance = false
+        if type(IsInInstance) == "function" then
+            inInstance = IsInInstance() and true or false
+        end
+        if inInstance then return end
+
+        -- Petit jitter et anti-double popup court (réutilise _ObsoletePopupUntil/OBSOLETE_DEBOUNCE_SEC si présents)
+        if (now() < (_ObsoletePopupUntil or 0)) then return end
+        _ObsoletePopupUntil = now() + (OBSOLETE_DEBOUNCE_SEC or 10)
+
+        local jitter = (math.random(0, 200) / 1000.0)
+        if ns and ns.Util and ns.Util.After then
+            ns.Util.After(jitter, function()
+                if ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                    ns.UI.ShowOutdatedAddonPopup(mine, remoteVer, tostring(fromPlayer or ""))
+                    _OutdatedNotified = true  -- ✅ une seule fois par session
+                end
+            end)
+        else
+            -- Fallback immédiat si pas de scheduler util
+            if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                ns.UI.ShowOutdatedAddonPopup(mine, remoteVer, tostring(fromPlayer or ""))
+                _OutdatedNotified = true
+            end
+        end
+    end
+
+    -- 🛑 Neutralise l’envoi de VERSION_WARN (mécanique supprimée)
+    local _PrevCommWhisper = GLOG.Comm_Whisper
+    function GLOG.Comm_Whisper(target, msgType, data)
+        if tostring(msgType) == "VERSION_WARN" then
+            -- On ne l’envoie plus. On retourne true pour ne pas perturber l’appelant.
+            return true
+        end
+        return _PrevCommWhisper(target, msgType, data)
+    end
+
+    -- 🌐 Hook central : chaque message reçu avec kv.ver déclenche le contrôle « obsolète »
+    local _PrevEnqueueComplete = enqueueComplete
+    function enqueueComplete(sender, msgType, kv)
+        -- Ignore tout traitement « VERSION_WARN » côté réception (mécanique retirée)
+        if tostring(msgType) == "VERSION_WARN" then
+            return -- no-op
+        end
+
+        -- Utiliser la version portée par la trame pour notifier si besoin
+        if kv and kv.ver and kv.ver ~= "" then
+            _maybeNotifyOutdated(sender, tostring(kv.ver))
+        end
+
+        return _PrevEnqueueComplete(sender, msgType, kv)
     end
 end

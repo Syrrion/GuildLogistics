@@ -14,24 +14,16 @@ local function UpdateDBVersionLabel()
     verFS:SetText(Tr("lbl_db_version_prefix")..tostring(rv))
 end
 
--- ➕ Affiche "GM: Nom-Royaume" (rang 0 du roster)
-local function UpdateMasterLabel()
+-- Affiche la version de l'addon dans le footer 
+local function UpdateAddonVersionLabel()
     if not gmFS then return end
-    local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached())
-    local txt = "GM: " .. (gmName and Ambiguate(gmName, "none") or "—")
-    gmFS:SetText(txt)
+    -- Version locale de l’addon (via TOC, cf. GLOG.GetAddonVersion déjà fourni dans Core/Comm.lua)
+    local ver = (GLOG and GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or (ns and ns.Version) or ""
+    ver = tostring(ver or "")
+    -- Affichage minimaliste, sans clé de locale (ex.: "v1.2.3")
+    gmFS:SetText((ver ~= "" and ("v" .. ver)) or "v ?")
 end
 
--- ➕ Affiche "GM: <Name>" basé sur le roster (rang 0)
-local function UpdateMasterLabel()
-    if not gmFS then return end
-    local gmName, gmRow = nil, nil
-    if GLOG and GLOG.GetGuildMasterCached then
-        gmName, gmRow = GLOG.GetGuildMasterCached()
-    end
-    local txt = gmName and ("GM: " .. Ambiguate(gmName, "short")) or "GM: —"
-    gmFS:SetText(txt)
-end
 
 -- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
 local _normalize    = U.normalizeStr
@@ -392,7 +384,7 @@ local function Build(container)
     -- ➕ Affichage GM (à droite de la version)
     gmFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     gmFS:SetPoint("LEFT", verFS, "RIGHT", 16, 0)
-    if UpdateMasterLabel then UpdateMasterLabel() end
+    if UpdateAddonVersionLabel then UpdateAddonVersionLabel() end
 
     -- ➕ Bouton GM : Forcer ma version (envoi direct d’un SYNC_FULL)
     forceSyncBtn = UI.Button(footer, Tr("btn_force_version_gm"), { size="sm", minWidth=200,

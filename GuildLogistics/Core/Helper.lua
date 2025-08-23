@@ -437,12 +437,67 @@ function GLOG.IsInMyParty(name)
     return false
 end
 
+-- Applique le surlignage « même groupe/sous-groupe » à TOUS les rerolls d’un joueur :
+-- Si n'importe quel perso appartenant au même MAIN que `name` est dans ma party
+-- (ou dans mon sous-groupe de raid), renvoie true.
 function GLOG.IsInMySubgroup(name)
-    -- En raid: même sous-groupe; en groupe: même party; sinon false
-    if IsInRaid and IsInRaid() then
-        local mine = GLOG.GetMyRaidSubgroup()
-        local his  = GLOG.GetRaidSubgroupOf(name)
-        return (tonumber(mine or 0) > 0) and (tonumber(mine or 0) == tonumber(his or -1))
+    if not name or name == "" then return false end
+
+    -- ⚙️ Utilitaires locaux
+    local function normKey(n)  -- clé normalisée sans royaume (cf. GLOG.NormName)
+        return (GLOG.NormName and GLOG.NormName(n)) or (tostring(n or "")):lower()
     end
-    return GLOG.IsInMyParty(name)
+
+    -- Récupère la clé MAIN normalisée pour un nom quelconque
+    local function mainKeyOfName(n)
+        if not n or n == "" then return nil end
+        -- 1) Tente le mapping via le cache guilde (prend la note "main" si dispo)
+        local mk = (GLOG.GetMainOf and GLOG.GetMainOf(n)) or nil
+        if mk and mk ~= "" then return mk end
+        -- 2) Fallback: le perso lui-même est son propre "main"
+        return normKey(n)
+    end
+
+    -- Récupère la clé MAIN normalisée pour une unité raid/party
+    local function mainKeyOfUnit(unitId)
+        if not (UnitExists and UnitExists(unitId)) then return nil end
+        local uName = UnitName and UnitName(unitId)
+        -- NB: GLOG.NormName utilise Ambiguate → le royaume n’est pas requis
+        return mainKeyOfName(uName)
+    end
+
+    -- 🎯 Clé MAIN de la ligne (en Synthèse, `name` est le MAIN affiché)
+    local targetMainKey = mainKeyOfName(name)
+    if not targetMainKey or targetMainKey == "" then return false end
+
+    -- 🛡️ RAID : seulement si même sous-groupe
+    if IsInRaid and IsInRaid() then
+        local mySub = GLOG.GetMyRaidSubgroup and GLOG.GetMyRaidSubgroup()
+        if not (tonumber(mySub or 0) > 0) then return false end
+
+        local N = (GetNumGroupMembers and GetNumGroupMembers()) or 0
+        for i = 1, N do
+            local _, _, subgroup = GetRaidRosterInfo(i)
+            if tonumber(subgroup or -1) == tonumber(mySub) then
+                local unit = "raid"..i
+                if mainKeyOfUnit(unit) == targetMainKey then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    -- 👥 PARTY (non-raid) : n’importe quel membre du groupe (y compris moi)
+    if IsInGroup and IsInGroup() then
+        if mainKeyOfUnit("player") == targetMainKey then return true end
+        for i = 1, 4 do
+            if mainKeyOfUnit("party"..i) == targetMainKey then
+                return true
+            end
+        end
+        return false
+    end
+
+    return false
 end
