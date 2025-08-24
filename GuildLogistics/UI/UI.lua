@@ -661,25 +661,26 @@ local function _CategoryButton(parent, text, iconPath)
     -- Fond
     b.bg = b:CreateTexture(nil, "BACKGROUND")
     b.bg:SetAllPoints(b)
-    b.bg:SetColorTexture(1,1,1,0.04)
+    b.bg:SetColorTexture(1,1,1,0.08)
 
     -- Survol
-    b.hover = b:CreateTexture(nil, "ARTWORK")
-    b.hover:SetAllPoints(b)
+    b.hover = b:CreateTexture(nil, "OVERLAY")
+    b.hover:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+    b.hover:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
     b.hover:SetColorTexture(1,1,1,0.07)
     b.hover:Hide()
 
     -- Sélection (liseré + bande verte)
     b.sel = b:CreateTexture(nil, "OVERLAY")
-    b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
-    b.sel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+    b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+    b.sel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
     b.sel:SetColorTexture(0.16, 0.82, 0.27, 0.22) -- vert doux
     b.sel:Hide()
 
     -- Petite barre gauche accent
     b.bar = b:CreateTexture(nil, "OVERLAY")
-    b.bar:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
-    b.bar:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 2, 2)
+    b.bar:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+    b.bar:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 0)
     b.bar:SetWidth(3)
     b.bar:SetColorTexture(0.16, 0.82, 0.27, 0.85)
     b.bar:Hide()
@@ -743,43 +744,92 @@ function UI.CreateCategorySidebar()
         L,R,T,B = Main._cdzNeutral:GetInsets()
     end
 
-    -- Cadre barre latérale
+    -- === Cadre barre latérale ===
     local bar = CreateFrame("Frame", "GLOG_CategoryBar", Main, "BackdropTemplate")
     UI._catBar = bar
-    bar:SetPoint("TOPLEFT", Main, "TOPLEFT", L + 8, -(T + 40))
-    bar:SetPoint("BOTTOMLEFT", Main, "BOTTOMLEFT", L + 8, B + 8)
-    bar:SetWidth(180)
+    bar:SetPoint("TOPLEFT",     Main, "TOPLEFT",     L + 4, -(T + 22))
+    bar:SetPoint("BOTTOMLEFT",  Main, "BOTTOMLEFT",  L + 4,  B + 2)
+    bar:SetWidth(192)
 
-    -- Réserve l’espace pour la mise en page
-    UI.CATEGORY_BAR_W = bar:GetWidth() + 12
+    -- Bar au-dessus du fond principal
+    bar:SetFrameStrata(Main:GetFrameStrata() or "MEDIUM")
+    bar:SetFrameLevel((Main:GetFrameLevel() or 0) + 1)
+
+    -- === Fond tuilé (BackDrop → plus d'étirement/clamp) ===
+    if UI.ApplyTiledBackdrop then
+        UI.ApplyTiledBackdrop(
+            bar,
+            "Interface\\FrameGeneral\\UIFrameNecrolordBackground",
+            128,     -- taille de tuile 
+            1,       -- alpha
+            { left = 0, right = 1, top = 0, bottom = 0 } -- 1px à droite pour ne pas passer sous le liseré
+        )
+    end
+
+    -- === Liseré séparateur à droite (double trait Blizzard) ===
+    local sepDark = bar:CreateTexture(nil, "BORDER")
+    sepDark:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
+    sepDark:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+    sepDark:SetWidth(1)
+    sepDark:SetColorTexture(0, 0, 0, 0.60)
+
+    local sepLight = bar:CreateTexture(nil, "BORDER")
+    sepLight:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -1, 0)
+    sepLight:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -1, 0)
+    sepLight:SetWidth(1)
+    sepLight:SetColorTexture(1, 1, 1, 0.08)
+
+    -- === Conteneur LISTE pleine hauteur ===
+    local list = CreateFrame("Frame", nil, bar)
+    bar._list = list
+    list:SetPoint("TOPLEFT",     bar, "TOPLEFT",  0, 0)
+    list:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -1, 0)
+    list:SetClipsChildren(false)
+
+    -- Réserve l’espace global
+    UI.CATEGORY_BAR_W = bar:GetWidth() + 1
     UI.TAB_LEFT_PAD   = (UI.CATEGORY_BAR_W or 0) + 12
 
-    -- Construit la liste de catégories effectivement utilisées
+    -- Construit la liste de catégories réellement utilisées
     local hasCat = {}
-    for _, def in ipairs(Registered) do
+    for _, def in ipairs(Registered or {}) do
         local c = def.category
         if c and (def.hidden ~= true) then hasCat[c] = true end
     end
-    local order = _CatOrder()
-    local icons = _CatIcons()
+    local order = _CatOrder and _CatOrder() or {}
+    local icons = _CatIcons and _CatIcons() or {}
 
+    -- === Boutons (lignes pleine largeur) ===
     bar._btns = {}
     local prev
     local firstCat
     for _, catLabel in ipairs(order) do
         if hasCat[catLabel] then
-            if not firstCat then firstCat = catLabel end
-            local b = _CategoryButton(bar, catLabel, icons[catLabel])
+            firstCat = firstCat or catLabel
+
+            local b = _CategoryButton(list, catLabel, icons[catLabel])
             b:ClearAllPoints()
             if not prev then
-                b:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+                b:SetPoint("TOPLEFT",  list, "TOPLEFT",  0, 0)
             else
-                b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -6)
+                b:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT", 0, -1)
             end
+            b:SetPoint("RIGHT", list, "RIGHT", -1, 0)
+
             b:SetScript("OnClick", function() UI.SetActiveCategory(catLabel) end)
+
             table.insert(bar._btns, b)
             prev = b
         end
+    end
+
+    -- Filler visuel si la liste est plus courte que la hauteur
+    if prev then
+        local filler = list:CreateTexture(nil, "BACKGROUND")
+        filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -1)
+        filler:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -1, 0)
+        filler:SetColorTexture(1, 1, 1, 0.04)
+        bar._filler = filler
     end
 
     -- Catégorie par défaut

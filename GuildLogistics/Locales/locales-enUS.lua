@@ -339,6 +339,6 @@ L["msg_no_usage_for_item"] = "No class/spec references this item in the BiS tabl
 L["cat_guild"]    = "Guild"
 L["cat_raids"]    = "Raids"
 L["cat_tools"]    = "Tools"
-L["cat_info"]     = "Info"
+L["cat_info"]     = "Guides"
 L["cat_settings"] = "Options"
 L["cat_debug"]    = "Debug"

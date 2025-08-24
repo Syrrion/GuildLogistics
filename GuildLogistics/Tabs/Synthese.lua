@@ -678,5 +678,5 @@ _GL_RosterGroupWatcher:SetScript("OnEvent", function()
 end)
 
 UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout, {
-    category = Tr("cat_guild"),
+    category = Tr("cat_raids"),
 })

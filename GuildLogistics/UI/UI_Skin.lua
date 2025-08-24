@@ -408,6 +408,50 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
     return skin
 end
 
+-- === Nouveau : fond tuilé générique (répétition horizontale/verticale) ===
+function UI.ApplyTiledBackground(frame, texturePath, tileW, tileH, alpha)
+    if not (frame and texturePath) then return end
+
+    -- Crée/recycle la texture
+    local bg = frame._cdzTiledBG
+    if not (bg and bg.SetTexture) then
+        bg = frame:CreateTexture(nil, "BACKGROUND")
+        frame._cdzTiledBG = bg
+    end
+
+    -- Couche sûre (au-dessus d'autres BACKGROUND éventuels)
+    bg:SetDrawLayer("BACKGROUND", 1)
+    bg:ClearAllPoints()
+    bg:SetAllPoints(frame)
+    bg:SetTexture(texturePath)
+    bg:SetAlpha(alpha or 1)
+
+    -- ⚠️ Appels avec ":" (self passé correctement)
+    if bg.SetHorizTile then bg:SetHorizTile(true) end
+    if bg.SetVertTile  then bg:SetVertTile(true)  end
+
+    -- Taille de tuile (plus “serré” pour éviter l'impression d'étirement)
+    local TW = math.max(8, tonumber(tileW) or 256)
+    local TH = math.max(8, tonumber(tileH) or 256)
+
+    local function UpdateTexCoord()
+        local w = math.max(1, frame:GetWidth()  or 1)
+        local h = math.max(1, frame:GetHeight() or 1)
+        -- >1 déclenche la répétition quand *Tile(true)
+        bg:SetTexCoord(0, w / TW, 0, h / TH)
+    end
+
+    -- Réagit aux changements de taille + 1 passe différée
+    frame:HookScript("OnSizeChanged", UpdateTexCoord)
+    frame:HookScript("OnShow",        UpdateTexCoord)
+    UpdateTexCoord()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, UpdateTexCoord)
+    end
+
+    return bg
+end
+
 -- ➕ Détruit proprement un skin existant (toutes les textures/segments)
 function UI.DestroyNeutralSkin(frame)
     if not (frame and frame._cdzNeutral) then return end
@@ -491,4 +535,22 @@ function UI.GetListViewStyle()
         -- ➕ Couleur par défaut du liseré "même groupe"
         accent     = { r = 1.00, g = 0.82, b = 0.00, a = 0.90 }, -- jaune Blizzard
     }
+end
+
+function UI.ApplyTiledBackdrop(frame, bgFile, tileSize, alpha, insets)
+    if not (frame and frame.SetBackdrop and bgFile) then return end
+
+    local bd = frame._cdzBD or {}
+    bd.bgFile   = bgFile
+    bd.edgeFile = nil
+    bd.tile     = true
+    bd.tileSize = tonumber(tileSize) or 256
+    bd.edgeSize = 0
+    bd.insets   = insets or bd.insets or { left = 0, right = 0, top = 0, bottom = 0 }
+
+    frame._cdzBD = bd
+    frame:SetBackdrop(bd)
+    frame:SetBackdropColor(1, 1, 1, alpha or 1) -- alpha facultatif
+
+    return bd
 end
