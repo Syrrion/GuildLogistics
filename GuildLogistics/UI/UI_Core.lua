@@ -963,3 +963,14 @@ function UI.ResolvePlayerClassSpec()
     return useID, useTag, useSpec
 end
 
+-- Texte Oui/Non coloré, localisé
+function UI.YesNoText(v)
+    local yes = (Tr and Tr("opt_yes")) or "Yes"
+    local no  = (Tr and Tr("opt_no"))  or "No"
+    if v then
+        return "|cff33ff33" .. yes .. "|r"
+    else
+        return "|cffff4040" .. no .. "|r"
+    end
+end
+

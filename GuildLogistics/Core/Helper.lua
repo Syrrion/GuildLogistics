@@ -501,3 +501,83 @@ function GLOG.IsInMySubgroup(name)
 
     return false
 end
+
+-- == BiS / Tiers : constantes & helpers réutilisables ==
+ns.Util.TIER_ORDER = ns.Util.TIER_ORDER or { "S","A","B","C","D","E","F" }
+
+-- Analyse une clé de tier ("S", "A+", "B-minus"/"B-moins") -> base, mod, label
+function ns.Util.ParseTierKey(key)
+    key = type(key) == "string" and key or ""
+    local base = key:match("^([A-Z])")
+    if not base then return nil end
+    local lower = key:lower()
+    local mod
+    if lower:find("plus", 2, true) or lower:find("%+", 2, true) then
+        mod = "plus"
+    elseif lower:find("minus", 2, true) or lower:find("moins", 2, true) or lower:find("%-", 2, true) then
+        mod = "minus"
+    end
+    local label = base
+    if mod == "plus" then
+        label = base .. "+"
+    elseif mod == "minus" then
+        label = base .. "-"
+    end
+    return base, mod, label
+end
+
+-- Donne l'index d'ordre d'un tier (S > A > B ...) pour trier facilement
+function ns.Util.TierIndex(base, order)
+    order = order or ns.Util.TIER_ORDER
+    if not base or not order then return math.huge end
+    for i, v in ipairs(order) do
+        if v == base then return i end
+    end
+    return math.huge
+end
+
+-- Résolution générique de la classe/spé du joueur avec fallback sur une DB { [CLASS_TOKEN] = ... }
+function ns.Util.ResolvePlayerClassSpec(dataByClassTag)
+    local useTag, useID, useSpec
+
+    if UnitClass then
+        local _, token, classID = UnitClass("player")
+        useTag = token and token:upper() or nil
+        if type(classID) == "number" then
+            useID = classID
+        elseif C_CreatureInfo and C_CreatureInfo.GetClassInfo and useTag then
+            for cid = 1, 30 do
+                local ok, info = pcall(C_CreatureInfo.GetClassInfo, cid)
+                if ok and info and info.classFile and info.classFile:upper() == useTag then
+                    useID = cid
+                    break
+                end
+            end
+        end
+    end
+
+    if GetSpecialization and GetSpecializationInfo then
+        local specIndex = GetSpecialization()
+        local id = specIndex and select(1, GetSpecializationInfo(specIndex)) or nil
+        if id and id ~= 0 then useSpec = id end
+    end
+
+    -- Fallback via la DB passée (utile très tôt au chargement si l’API n’est pas prête)
+    if (not useID) and type(dataByClassTag) == "table" then
+        for tag in pairs(dataByClassTag) do
+            useTag = useTag or tag
+            if C_CreatureInfo and C_CreatureInfo.GetClassInfo then
+                for cid = 1, 30 do
+                    local ok, info = pcall(C_CreatureInfo.GetClassInfo, cid)
+                    if ok and info and info.classFile and info.classFile:upper() == tag then
+                        useID = cid
+                        break
+                    end
+                end
+            end
+            if useID then break end
+        end
+    end
+
+    return useID, useTag, useSpec
+end

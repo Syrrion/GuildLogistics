@@ -6,8 +6,6 @@ local GLOG, UI = ns.GLOG, ns.UI
 -- ===           CONSTANTES / COULEURS         === --
 -- ============================================== --
 
--- == Ordre des rangs de BiS utilisé pour le tri == --
-local TIER_ORDER = { "S","A","B","C","D","E","F" }
 
 -- ============================================== --
 -- ===               ETAT LOCAL                === --
@@ -40,124 +38,36 @@ local function _EnsurePlayerSpecSelected()
     end
 end
 
--- == Récupère les informations d'une classe par son ID via l'API sécurisé par pcall == --
-local function _GetClassInfoByID(cid)
-    -- Explication de la sous-fonction: ignore les entrées non numériques
-    if not cid or type(cid) ~= "number" then return nil end
-    -- Explication de la sous-fonction: utilise l'API de WoW si disponible
-    if C_CreatureInfo and C_CreatureInfo.GetClassInfo then
-        local ok, info = pcall(C_CreatureInfo.GetClassInfo, cid)
-        -- Explication de la sous-fonction: ne renvoie des données que si l'appel s'est bien passé
-        if ok then return info end
-    end
-    return nil
-end
-
--- == Retourne l'ID de classe (numérique) à partir d'un token de classe (ex: "WARRIOR") == --
-local function _GetClassIDForToken(token)
-    token = token and token:upper()
-    -- Explication de la sous-fonction: abandonne si aucun token n'est fourni
-    if not token then return nil end
-    for cid = 1, 30 do
-        local info = _GetClassInfoByID(cid)
-        -- Explication de la sous-fonction: compare le classFile uppercased au token ciblé
-        if info and info.classFile and info.classFile:upper() == token then
-            return cid
-        end
-    end
-    return nil
-end
-
--- == Renvoie un nom lisible pour une spécialisation donnée (évite "0") == --
-local function _SpecName(classID, specID)
-    -- Explication de la sous-fonction: si specID absent/0, retourne un libellé générique
-    if not specID or specID == 0 then
-        return Tr("lbl_spec") or "Specialization"
-    end
-    -- Explication de la sous-fonction: tente d'abord par classe (liste des spécialisations disponibles pour cette classe)
-    if classID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
-        local n = GetNumSpecializationsForClassID(classID) or 0
-        for i = 1, n do
-            local id, name = GetSpecializationInfoForClassID(classID, i)
-            -- Explication de la sous-fonction: si l'ID correspond, renvoie le nom
-            if id == specID and name then
-                return name
-            end
-        end
-    end
-    -- Explication de la sous-fonction: sinon, tente d'utiliser la spécialisation active du joueur
-    if GetSpecialization and GetSpecializationInfo then
-        local idx = GetSpecialization()
-        if idx then
-            local id, name = GetSpecializationInfo(idx)
-            -- Explication de la sous-fonction: vérifie la correspondance avec specID ciblé
-            if id == specID and name then
-                return name
-            end
-        end
-    end
-    return Tr("lbl_spec") or "Specialization"
-end
-
--- == Renvoie un nom lisible pour une classe depuis son ID, sinon le tag fourni == --
-local function _ClassName(classID, classTag)
-    -- Explication de la sous-fonction: privilégie les infos issues de l'API si l'ID est fourni
-    if classID then
-        local info = _GetClassInfoByID(classID)
-        if info then return (info.className or info.name or info.classFile) end
-    end
-    return classTag or ""
-end
-
--- == Renvoie le texte coloré Oui/Non selon la possession de l'objet == --
-local function _OwnedText(owned)
-    local yes = (Tr and Tr("opt_yes")) or "Yes"
-    local no  = (Tr and Tr("opt_no"))  or "No"
-    -- Explication de la sous-fonction: choisit la couleur verte pour oui et rouge pour non
-    if owned then return "|cff33ff33"..yes.."|r" else return "|cffff4040"..no.."|r" end
-end
-
 -- == Calcule la classe/spé par défaut du joueur (robuste même si certaines APIs ne sont pas prêtes) == --
 function _ResolvePlayerDefaults()
-    local useTag, useID, useSpec
+    -- 1) D’abord, on laisse l’UI résoudre via l’API du jeu (robuste & centralisé)
+    local useID, useTag, useSpec = UI.ResolvePlayerClassSpec()
 
-    -- Explication de la sous-fonction: récupère le token et l'ID de classe du joueur si possible
-    if UnitClass then
-        local _, token, classID = UnitClass("player")
-        useTag = token and token:upper() or nil
-        useID  = (type(classID) == "number") and classID or _GetClassIDForToken(useTag)
-    end
-
-    -- Explication de la sous-fonction: récupère la spécialisation active du joueur si disponible
-    if GetSpecialization and GetSpecializationInfo then
-        local specIndex = GetSpecialization()
-        useSpec = specIndex and select(1, GetSpecializationInfo(specIndex)) or nil
-    end
-    -- Explication de la sous-fonction: évite un specID = 0 (non valide)
-    if useSpec == 0 then useSpec = nil end
-
-    -- Explication de la sous-fonction: si la classe n'est pas déterminée, tente via les clés du tableau BIS_TRINKETS
+    -- 2) Fallback “domaine BiS” si la classe n’a pas été résolue (ex: API pas prête)
     if not useID then
         for tag in pairs(ns.BIS_TRINKETS or {}) do
             useTag = useTag or tag
-            useID  = _GetClassIDForToken(tag) or useID
-            -- Explication de la sous-fonction: s'arrête dès qu'un ID valide est trouvé
-            if useID then break end
-        end
-    end
-    -- Explication de la sous-fonction: fallback final via itération des classes connues de l'API
-    if not useID then
-        for cid = 1, 30 do
-            local info = _GetClassInfoByID(cid)
-            if info then
-                useID  = cid
-                useTag = info.classFile and info.classFile:upper() or useTag
+            local cid = UI.GetClassIDForToken(tag)
+            if cid then
+                useID = cid
                 break
             end
         end
     end
 
-    -- Explication de la sous-fonction: si la spécialisation est encore inconnue, choisit la première valide de la classe
+    -- 3) Fallback final : on choisit une classe valide connue de l’API si possible
+    if not useID then
+        for cid = 1, 30 do
+            local info = UI.GetClassInfoByID(cid)
+            if info and info.classFile then
+                useID  = cid
+                useTag = info.classFile:upper()
+                break
+            end
+        end
+    end
+
+    -- 4) Si la spé est inconnue, prendre la 1re spé valide de la classe
     if (not useSpec) and useID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
         local n = GetNumSpecializationsForClassID(useID) or 0
         for i=1,n do
@@ -169,34 +79,27 @@ function _ResolvePlayerDefaults()
     return useID, useTag, useSpec
 end
 
+
+
 -- ============================================== --
 -- ===         HELPERS : UI / RENDU LIGNES     === --
 -- ============================================== --
 
 -- == Analyse une clé de rang (ex: "Aplus","Aminus","S") et renvoie base/mod/label == --
 local function _ParseTierKey(key)
-    if type(key) ~= "string" then return nil end
-    local base = key:match("^([A-Z])")
-    -- Explication de la sous-fonction: invalide si aucun préfixe de rang trouvé
-    if not base then return nil end
-    local lower = key:lower()
-    local mod
-    -- Explication de la sous-fonction: détecte la variante "plus"
-    if lower:find("plus", 2, true) then
-        mod = "plus"
-    -- Explication de la sous-fonction: détecte la variante "minus"/"moins"
-    elseif lower:find("minus", 2, true) or lower:find("moins", 2, true) then
-        mod = "minus"
+    if ns and ns.Util and ns.Util.ParseTierKey then
+        return ns.Util.ParseTierKey(key)
     end
-    local label = base
-    -- Explication de la sous-fonction: ajoute le suffixe visuel +/-
-    if mod == "plus" then
-        label = base .. "+"
-    elseif mod == "minus" then
-        label = base .. "-"
-    end
+    -- Fallback minimal (devrait rarement être utilisé)
+    key = type(key) == "string" and key or ""
+    local base = key:match("^([A-Z])"); if not base then return nil end
+    local lower, mod = key:lower()
+    if lower:find("plus", 2, true) or lower:find("%+", 2, true) then mod = "plus"
+    elseif lower:find("minus", 2, true) or lower:find("moins", 2, true) or lower:find("%-", 2, true) then mod = "minus" end
+    local label = base .. ((mod == "plus" and "+") or (mod == "minus" and "-") or "")
     return base, mod, label
 end
+
 
 -- ============================================== --
 -- ===          PREPARATION DES DONNEES        === --
@@ -205,35 +108,36 @@ end
 -- == Construit les données affichables à partir de ns.BIS_TRINKETS et de la classe/spé choisie == --
 local function _BuildData()
     local out = {}
-    local db = ns.BIS_TRINKETS or {}
+
+    local db      = ns.BIS_TRINKETS or {}
     local byClass = (selectedClassTag and db[selectedClassTag]) or nil
     local bySpec  = byClass and byClass[selectedSpecID] or nil
-    -- Explication de la sous-fonction: si aucune donnée pour la spé, retourne une liste vide
     if not bySpec then return out end
 
+    -- Ordre des tiers centralisé
+    local ORDER = (ns and ns.Util and ns.Util.TIER_ORDER) or { "S","A","B","C","D","E","F" }
     local baseOrder = {}
-    for i, t in ipairs(TIER_ORDER) do baseOrder[t] = i end
+    for i, t in ipairs(ORDER) do baseOrder[t] = i end
 
     local tiers = {}
     for key, ids in pairs(bySpec) do
-        -- Explication de la sous-fonction: ne retient que les listes d'items valides
         if type(ids) == "table" then
             local base, mod, label = _ParseTierKey(key)
-            -- Explication de la sous-fonction: si la clé correspond à un rang valide, la prépare pour tri/affichage
             if base then
-                local bidx = baseOrder[base] or 99
-                local midx = (mod == "plus") and -1 or (mod == "minus") and 1 or 0
-                tiers[#tiers+1] = { key = key, ids = ids, base = base, mod = mod, label = label, bidx = bidx, midx = midx }
+                tiers[#tiers+1] = { base = base, mod = mod, label = label, ids = ids }
             end
         end
     end
 
-    table.sort(tiers, function(a,b)
-        -- Explication de la sous-fonction: tri principal par rang de base
-        if a.bidx ~= b.bidx then return a.bidx < b.bidx end
-        -- Explication de la sous-fonction: variantes + avant, - après
-        if a.midx ~= b.midx then return a.midx < b.midx end
-        -- Explication de la sous-fonction: tri alpha sur le label en dernier recours
+    table.sort(tiers, function(a, b)
+        local ai = baseOrder[a.base] or math.huge
+        local bi = baseOrder[b.base] or math.huge
+        if ai ~= bi then return ai < bi end
+        if a.mod ~= b.mod then
+            -- plus > (nil) > minus
+            local order = { plus = 1, ["nil"] = 2, minus = 3 }
+            return (order[a.mod or "nil"] or 99) < (order[b.mod or "nil"] or 99)
+        end
         return tostring(a.label) < tostring(b.label)
     end)
 
@@ -241,17 +145,18 @@ local function _BuildData()
         for _, itemID in ipairs(t.ids) do
             local owned = (GetItemCount and (GetItemCount(itemID, true) or 0) or 0) > 0
             out[#out+1] = {
-                tier       = t.base,
-                mod        = t.mod,
-                tierLabel  = t.label,
-                itemID     = itemID,
-                owned      = owned,
+                tier      = t.base,
+                mod       = t.mod,
+                tierLabel = t.label,
+                itemID    = itemID,
+                owned     = owned,
             }
         end
     end
 
     return out
 end
+
 
 -- == Recharge la liste à partir des données recalculées == --
 function _Refresh()
@@ -262,17 +167,19 @@ end
 -- == Met à jour les libellés des dropdowns selon l'état sélectionné == --
 function _UpdateDropdownTexts()
     if classDD then
-        classDD:SetSelected(selectedClassTag, _ClassName(selectedClassID, selectedClassTag))
+        classDD:SetSelected(
+            selectedClassTag,
+            UI.ClassName(selectedClassID, selectedClassTag)
+        )
     end
     if specDD then
-        local specLabel = _SpecName(selectedClassID, selectedSpecID)
-        -- Explication de la sous-fonction: fallback sur libellé générique si vide
-        if (not specLabel) or specLabel == "" then
-            specLabel = Tr("lbl_spec") or "Specialization"
-        end
+        local specLabel = UI.SpecName(selectedClassID, selectedSpecID)
+            or (Tr and Tr("lbl_spec"))
+            or "Specialization"
         specDD:SetSelected(selectedSpecID or "", specLabel)
     end
 end
+
 
 -- ============================================== --
 -- ===        BUILDERS DE MENUS (DROPDOWN)     === --
@@ -348,12 +255,11 @@ end
 
 
 -- == Met à jour une ligne avec les données (rang, item, possession) == --
-local function UpdateRow(i, r, f, d)
+function UpdateRow(i, r, f, d)
     UI.SetTierBadge(f.tier, d.tier, d.mod, d.tierLabel, UI.Colors and UI.Colors.BIS_TIER_COLORS)
     UI.SetItemCell(f.item, { itemID = d.itemID })
-    f.owned:SetText(_OwnedText(d.owned))
+    f.owned:SetText(UI.YesNoText(d.owned))
 end
-
 
 -- ============================================== --
 -- ===          DIVERS HELPERS D'INTEGRA       === --
@@ -364,18 +270,6 @@ local function _AttachDropdownZFix(dd, host)
     if UI.AttachDropdownZFix then
         UI.AttachDropdownZFix(dd, host)
     end
-end
-
--- == Crée un petit footer local (texte bas-gauche gris) == --
-local function _CreateFooter(parent, text)
-    local f = CreateFrame("Frame", nil, parent)
-    f:SetHeight(16)
-    local lbl = UI.Label(f, { template = "GameFontDisableSmall" })
-    lbl:SetText(text or "")
-    lbl:ClearAllPoints()
-    lbl:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
-    f.label = lbl
-    return f
 end
 
 -- ============================================== --
@@ -403,7 +297,7 @@ local function Build(p)
     introFS:SetJustifyH("LEFT"); introFS:SetJustifyV("TOP")
     if introFS.SetWordWrap then introFS:SetWordWrap(true) end
     if introFS.SetNonSpaceWrap then introFS:SetNonSpaceWrap(true) end
-    introFS:SetText(Tr("bis_intro") or "Cette page liste les bijoux (trinkets) BiS par classe et spécialisation. Les rangs S à F indiquent la priorité (S étant le meilleur). Utilisez les listes déroulantes pour changer la classe et la spécialisation.")
+    introFS:SetText(Tr("bis_intro"))
     do
         local fontPath, fontSize, fontFlags = introFS:GetFont()
         if fontPath and fontSize then
@@ -427,20 +321,20 @@ local function Build(p)
     filtersArea:SetFrameLevel((content:GetFrameLevel() or 0) + 1)
 
     local lblClass = UI.Label(filtersArea, { template="GameFontNormal" })
-    lblClass:SetText(Tr("lbl_class") or "Class")
+    lblClass:SetText(Tr("lbl_class"))
     lblClass:SetPoint("LEFT", filtersArea, "LEFT", 0, 0)
     lblClass:SetPoint("TOP",  filtersArea, "TOP",  0, -2)
 
-    classDD = UI.Dropdown(filtersArea, { width = 200, placeholder = Tr("lbl_class") or "Class" })
+    classDD = UI.Dropdown(filtersArea, { width = 200, placeholder = Tr("lbl_class")})
     classDD:SetPoint("LEFT", lblClass, "RIGHT", 8, -2)
     classDD:SetBuilder(_ClassMenuBuilder)
     _AttachDropdownZFix(classDD, panel)
 
     local lblSpec = UI.Label(filtersArea, { template="GameFontNormal" })
-    lblSpec:SetText(Tr("lbl_spec") or "Specialization")
+    lblSpec:SetText(Tr("lbl_spec"))
     lblSpec:SetPoint("LEFT", classDD, "RIGHT", 24, 2)
 
-    specDD = UI.Dropdown(filtersArea, { width = 220, placeholder = Tr("lbl_spec") or "Specialization" })
+    specDD = UI.Dropdown(filtersArea, { width = 220, placeholder = Tr("lbl_spec") })
     specDD:SetPoint("LEFT", lblSpec, "RIGHT", 8, -2)
     specDD:SetBuilder(_SpecMenuBuilder)
     _AttachDropdownZFix(specDD, panel)
@@ -453,7 +347,7 @@ local function Build(p)
     local sourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     sourceFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     sourceFS:SetJustifyH("LEFT"); sourceFS:SetJustifyV("MIDDLE")
-    sourceFS:SetText(Tr("footer_source_wowhead") or "Source : wowhead.com")
+    sourceFS:SetText(Tr("footer_source_wowhead"))
 
     listArea = CreateFrame("Frame", nil, content)
     listArea:SetPoint("TOPLEFT",     filtersArea, "BOTTOMLEFT",  0, -8)
