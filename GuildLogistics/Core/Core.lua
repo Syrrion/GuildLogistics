@@ -89,8 +89,8 @@ local function EnsureDB()
     if GuildLogisticsUI.minimap.angle == nil then GuildLogisticsUI.minimap.angle = 215 end
 
     -- ✏️ Par défaut : debug/autoOpen
-    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = true end
-    if GuildLogisticsUI.autoOpen   == nil then GuildLogisticsUI.autoOpen   = true  end
+    if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = false end
+    if GuildLogisticsUI.autoOpen   == nil then GuildLogisticsUI.autoOpen   = false  end
 
     -- ➕ 4) Marqueur d’identification du profil (utile en debug et pour éviter les confusions)
     GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}

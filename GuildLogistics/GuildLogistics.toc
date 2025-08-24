@@ -13,6 +13,8 @@
 Locales/locales-enUS.lua
 Locales/locales-frFR.lua
 
+Data/BIS_Trinkets.lua
+
 Core/Core.lua
 Core/Helper.lua
 Core/Comm.lua
@@ -25,10 +27,14 @@ UI/UI.lua
 UI/UI_ListView.lua
 UI/UI_Popup.lua
 UI/UI_Buttons.lua
+UI/UI_Dropdown.lua
+UI/UI_Colors.lua
+UI/UI_Badge.lua
 
 Tabs/Synthese.lua
 Tabs/Raid.lua
 Tabs/Historique.lua
+Tabs/BiS.lua
 Tabs/Depense.lua
 Tabs/Joueurs.lua
 Tabs/Demandes.lua

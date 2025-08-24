@@ -464,6 +464,122 @@ function UI.SetItemCell(cell, item)
     cell.btn._link   = link
 end
 
+-- == Badge cell (generic): colored badge with gloss + optional medal texture ==
+function UI.CreateBadgeCell(parent, opts)
+    opts = opts or {}
+    local w   = tonumber(opts.width)  or 36
+    local h   = tonumber(opts.height) or math.max(20, (UI.ROW_H or 24) - 4)
+
+    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    f:SetSize(w, h)
+
+    -- border + dark base
+    f:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        tile = false, edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    f:SetBackdropColor(0.10, 0.10, 0.10, 1)
+    f:SetBackdropBorderColor(0, 0, 0, 0.90)
+
+    -- colored fill (inset)
+    local fill = f:CreateTexture(nil, "BACKGROUND")
+    fill:SetPoint("TOPLEFT",     f, "TOPLEFT",     1, -1)
+    fill:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1,  1)
+    fill:SetTexture("Interface\\Buttons\\WHITE8x8")
+    fill:SetVertexColor(0.20, 0.20, 0.20, 1)
+
+    -- decorative ring (subtle WoW feel)
+    local medal = f:CreateTexture(nil, "ARTWORK")
+    medal:SetPoint("CENTER", f, "CENTER", 0, 0)
+    medal:SetSize(h * 0.9, h * 0.9)
+    medal:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+    medal:SetAlpha(0.18)
+
+    -- top gloss
+    local gloss = f:CreateTexture(nil, "OVERLAY")
+    gloss:SetPoint("TOPLEFT",  f, "TOPLEFT",  1, -1)
+    gloss:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
+    gloss:SetHeight(math.floor(h * 0.55))
+    gloss:SetTexture("Interface\\Buttons\\WHITE8x8")
+    if gloss.SetGradient and type(CreateColor) == "function" then
+        gloss:SetGradient("VERTICAL",
+            CreateColor(1,1,1,0.18),
+            CreateColor(1,1,1,0.02)
+        )
+    else
+        gloss:SetVertexColor(1,1,1,0.08)
+    end
+
+    -- label
+    local lbl = f:CreateFontString(nil, "OVERLAY", opts.font or "GameFontNormalLarge")
+    lbl:SetPoint("CENTER", f, "CENTER", 0, 0)
+    lbl:SetJustifyH("CENTER")
+    lbl:SetText("")
+    lbl:SetShadowColor(0,0,0,0.9)
+    lbl:SetShadowOffset(1, -1)
+
+    f._fill  = fill
+    f._medal = medal
+    f._label = lbl
+
+    return f
+end
+
+-- Helper: apply +/- variants on a base RGB
+function UI.GetVariantColor(base, mod)
+    local r,g,b = (base and base[1] or 0.6), (base and base[2] or 0.6), (base and base[3] or 0.6)
+    local factor = 1
+    if mod == "plus" then
+        factor = 1.16
+    elseif mod == "doubleplus" then
+        factor = 1.32
+    elseif mod == "minus" then
+        factor = 0.88
+    end
+    r, g, b = r * factor, g * factor, b * factor
+    -- clamp [0,1]
+    r = (r < 0 and 0) or (r > 1 and 1) or r
+    g = (g < 0 and 0) or (g > 1 and 1) or g
+    b = (b < 0 and 0) or (b > 1 and 1) or b
+    return r, g, b
+end
+
+-- Fill a badge cell using a tier definition (base letter + optional mod, label override)
+-- colors: table of base colors, ex: UI.BIS_TIER_COLORS
+function UI.SetTierBadge(cell, tierBase, mod, labelOverride, colors)
+    if not cell then return end
+    local colorKey = tierBase or "?"
+    local base = (colors and colors[colorKey]) or {0.6, 0.6, 0.6}
+    local r, g, b = UI.GetVariantColor(base, mod)
+
+    if cell._fill then
+        if cell._fill.SetColorTexture then
+            cell._fill:SetColorTexture(r, g, b, 1)
+        else
+            cell._fill:SetVertexColor(r, g, b, 1)
+        end
+    end
+
+    if cell._label then
+        cell._label:SetText(labelOverride or tierBase or "?")
+        -- black/white depending on luminance for readability
+        local luma = 0.2126*r + 0.7152*g + 0.0722*b
+        if luma >= 0.80 then
+            cell._label:SetTextColor(0, 0, 0, 1)
+        else
+            cell._label:SetTextColor(1, 1, 1, 1)
+        end
+    end
+
+    -- subtle ring intensity by rank (S a bit brighter)
+    if cell._medal then
+        cell._medal:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+        cell._medal:SetAlpha((tierBase == "S" and 0.28) or (tierBase == "A" and 0.22) or 0.18)
+    end
+end
+
 
 -- ➕ Pastille (badge) réutilisable
 UI.BADGE_BG       = UI.BADGE_BG       or {0.92, 0.22, 0.22, 1.0}  -- rouge un peu plus saturé
@@ -754,3 +870,96 @@ function UI.PositionTitle(frame, anchor, yOffset)
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", anchor, "CENTER", 0, yOffset or -28)
 end
+
+-- Marges internes standardisées pour éviter que le contenu passe sous les bordures.
+UI.SAFE_INSET = UI.SAFE_INSET or { left = 10, right = 10, top = 8, bottom = 10 }
+
+-- Applique deux points (TOPLEFT/BOTTOMRIGHT) avec des insets cohérents.
+-- topOffset: décalage vertical supplémentaire (ex: hauteur des filtres).
+function UI.SafeInsetPoints(frame, parent, topOffset, insets)
+    local ins = insets or UI.SAFE_INSET
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", parent, "TOPLEFT", ins.left, -((topOffset or 0) + ins.top))
+    frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -ins.right, ins.bottom)
+end
+
+-- ========= Classes & Specializations helpers =========
+-- Safe wrapper around C_CreatureInfo.GetClassInfo
+function UI.GetClassInfoByID(cid)
+    if not cid or type(cid) ~= "number" then return nil end
+    if C_CreatureInfo and C_CreatureInfo.GetClassInfo then
+        local ok, info = pcall(C_CreatureInfo.GetClassInfo, cid)
+        if ok then return info end
+    end
+    -- Fallback: nil when not available yet
+    return nil
+end
+
+-- Resolve a classID from a CLASS tag/token (e.g., "MAGE", "WARRIOR")
+function UI.GetClassIDForToken(token)
+    token = token and tostring(token):upper() or nil
+    if not token then return nil end
+    for cid = 1, 30 do
+        local info = UI.GetClassInfoByID(cid)
+        if info and info.classFile and info.classFile:upper() == token then
+            return cid
+        end
+    end
+    return nil
+end
+
+-- Human-readable class name, from classID if available, else falls back to classTag
+function UI.ClassName(classID, classTag)
+    if classID then
+        local info = UI.GetClassInfoByID(classID)
+        if info then return (info.className or info.name or info.classFile) end
+    end
+    return classTag or ""
+end
+
+-- Human-readable specialization name; falls back to generic label if 0/nil
+function UI.SpecName(classID, specID)
+    if not specID or specID == 0 then
+        return (Tr and Tr("lbl_spec")) or "Specialization"
+    end
+    if classID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
+        local n = GetNumSpecializationsForClassID(classID) or 0
+        for i = 1, n do
+            local id, name = GetSpecializationInfoForClassID(classID, i)
+            if id == specID and name then
+                return name
+            end
+        end
+    end
+    if GetSpecialization and GetSpecializationInfo then
+        local idx = GetSpecialization()
+        if idx then
+            local id, name = GetSpecializationInfo(idx)
+            if id == specID and name then return name end
+        end
+    end
+    return (Tr and Tr("lbl_spec")) or "Specialization"
+end
+
+-- Returns the player's (classID, classTag, specID!=0 when possible)
+function UI.ResolvePlayerClassSpec()
+    local useTag, useID, useSpec
+
+    if UnitClass then
+        local _, token, classID = UnitClass("player")
+        useTag = token and token:upper() or nil
+        useID  = (type(classID) == "number") and classID or UI.GetClassIDForToken(useTag)
+    end
+
+    if GetSpecialization and GetSpecializationInfo then
+        local specIndex = GetSpecialization()
+        if specIndex then
+            local id = select(1, GetSpecializationInfo(specIndex))
+            if id and id ~= 0 then useSpec = id end
+        end
+    end
+
+    -- Fallbacks intentionally omitted (no addon-specific tables here)
+    return useID, useTag, useSpec
+end
+

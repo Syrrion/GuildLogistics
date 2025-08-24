@@ -4,9 +4,14 @@ local L = ns.L
 
 
 
+-- ============================================== --
+-- ===           LOCALISATION (enUS)           === --
+-- ============================================== --
 
--- ===== frFR overrides on STABLE KEYS =====
--- Tabs
+
+-- ============================================== --
+-- ===                 ONGLETS                 === --
+-- ============================================== --
 L["tab_roster"]           = "Roster"
 L["tab_start_raid"]       = "Start Raid"
 L["tab_history"]          = "History"
@@ -15,21 +20,27 @@ L["tab_requests"]         = "Requests"
 L["tab_debug"]            = "Debug"
 L["tab_settings"]         = "Settings"
 
--- App / main titles / sync
-L["msg_no_guild"]         = "You are not in any guild on this character"
+
+-- ============================================== --
+-- ===     TITRES / APPLICATION / SYNCHRO      === --
+-- ============================================== --
+L["msg_no_guild"]         = "You don’t belong to any guild on this character"
 L["app_title"]            = "Guild Logistics"
 L["main_title_guild"]     = "Guild"
 L["sync_data"]            = "Data synchronization in progress"
 L["btn_reload"]           = "Reload"
 
--- ➕ Outdated version
+-- ➕ Obsolescence version
 L["popup_outdated_title"] = "Outdated version"
-L["msg_outdated_line1"]   = "Your "..L["app_title"].." version (%s) is out of date."
+L["msg_outdated_line1"]   = "Your version of "..L["app_title"].." (%s) is outdated."
 L["msg_outdated_line2"]   = "A newer version is available: %s."
 L["msg_outdated_hint"]    = "Please update the addon to ensure compatibility."
 L["msg_outdated_from"]    = "Reported by: %s"
 
--- Columns / labels
+
+-- ============================================== --
+-- ===          COLONNES / LIBELLÉS            === --
+-- ============================================== --
 L["col_time"]             = "Time"
 L["col_dir"]              = "Direction"
 L["col_status"]           = "Status"
@@ -49,7 +60,7 @@ L["col_invidual"]         = "Individual"
 L["col_after"]            = "After"
 L["col_remaining"]        = "Remaining"
 L["col_amount"]           = "Amount"
-L["col_unit_amount"]      = "Per item"
+L["col_unit_amount"]      = "Amount/item"
 L["col_qty_short"]        = "Qty"
 L["col_item"]             = "Item"
 L["col_source"]           = "Source"
@@ -64,20 +75,22 @@ L["col_participants"]     = "Participants"
 L["col_value"]            = "Value"
 L["col_price"]            = "Price"
 L["col_total"]            = "Total"
-L["col_last_seen"]        = "Last seen"
+L["col_last_seen"]        = "Last Seen"
 L["col_rerolls"]          = "Rerolls"
-L["col_mplus_score"]      = "Mythic+ Score\rof main"
-L["col_mplus_key"]        = "Mythic+ Key of main"
+L["col_mplus_score"]      = "Main’s M+ Score"
+L["col_mplus_key"]        = "Main’s Mythic+ Key"
 L["col_state"]            = "State"
 L["col_request"]          = "Request"
-L["col_version"]          = "Addon Version" 
+L["col_version"]          = "Addon Version"
 L["lbl_of_main"]          = "of main"
 
--- Buttons / actions
+
+-- ============================================== --
+-- ===           BOUTONS / ACTIONS             === --
+-- ============================================== --
 L["btn_view"]             = "View"
-L["btn_purge_debug"]      = "Purge Debug"
 L["btn_purge_all"]        = "Full Purge"
-L["btn_purge_bundles_exhausted"] = "Purge Bundles & exhausted items"
+L["btn_purge_bundles_exhausted"] = "Purge Bundles & depleted items"
 L["btn_purge_resources"]  = "Purge Resources"
 L["btn_force_version_gm"] = "Force my version (GM)"
 L["btn_approve"]          = "Approve"
@@ -88,8 +101,8 @@ L["btn_back"]             = "< Back"
 L["btn_add_to_roster"]    = "Add to Roster"
 L["btn_remove_from_roster"] = "Remove from Roster"
 L["btn_add_player"]       = "Add Player"
-L["btn_raids_history"]    = "Raids History"
-L["btn_clear_all_free"]   = "Clear All (free)"
+L["btn_raids_history"]    = "Raid History"
+L["btn_clear_all_free"]   = "Clear All (Free)"
 L["btn_close"]            = "Close"
 L["btn_delete_short"]     = "X"
 L["btn_enable_debug"]     = "Enable Debug"
@@ -98,29 +111,35 @@ L["btn_deposit_gold"]     = "Deposit"
 L["btn_withdraw_gold"]    = "Withdraw"
 L["btn_stop_recording"]   = "Stop Recording"
 L["btn_start_recording_expenses"] = "Start Recording Expenses"
-L["add_guild_member"]     = "Manage Members"
+L["add_guild_member"]     = "Member Management"
 L["guild_members"]        = "Guild Members"
-L["btn_purge_debug"]      = "Purge Debug"
 L["btn_purge_full"]       = "Full Purge"
-L["btn_purge_free_items_lots"] = "Purge Bundles & exhausted items"
-L["btn_purge_all_items_lots"]  = "Purge all Bundles & items"
+L["btn_purge_free_items_lots"] = "Purge Bundles & depleted items"
+L["btn_purge_all_items_lots"]  = "Purge all Bundles & Items"
 L["btn_notify_players"]   = "Notify Players"
 L["btn_confirm"]          = "Confirm"
 L["btn_cancel"]           = "Cancel"
 L["btn_create"]           = "Create"
 L["btn_split"]            = "Split"
-L["btn_show_hidden_reserve"] = "Show hidden reserve"
+L["btn_show_hidden_reserve"] = "Show Hidden Players"
+L["btn_purge_debug"]      = "Purge Debug" -- (deduplication: keep 2nd occurrence)
 
--- ➕ Alias / UI
+
+-- ============================================== --
+-- ===               ALIAS / UI               === --
+-- ============================================== --
 L["col_alias"]            = "Alias"
 L["btn_set_alias"]        = "Alias…"
-L["popup_set_alias_title"]= "Set an Alias"
+L["popup_set_alias_title"]= "Set Alias"
 L["lbl_alias"]            = "Alias:"
 
--- Lists / badges / labels
+
+-- ============================================== --
+-- ===      LISTES / BADGES / LIBELLÉS        === --
+-- ============================================== --
 L["lbl_bundles"]          = "Bundles"
-L["lbl_in_roster"]        = "In Roster"
-L["lbl_in_reserve"]       = "In Reserve"
+L["lbl_in_roster"]        = "In roster"
+L["lbl_in_reserve"]       = "In reserve"
 L["lbl_guild_members"]    = "Guild Members"
 L["lbl_usable_bundles"]   = "Usable Bundles"
 L["lbl_used_bundles"]     = "Used Bundles"
@@ -129,9 +148,9 @@ L["lbl_usable_bundles_raids"] = "Usable Bundles for Raids"
 L["lbl_participating_players"] = "Participating Players"
 L["lbl_reserved_players"] = "Reserved Players"
 L["lbl_bundle"]           = "Bundle"
-L["lbl_no_data"]          = "No data..."
+L["lbl_no_data"]          = "No Data..."
 L["opt_ui_theme"]         = "UI Theme"
-L["opt_open_on_login"]    = "Open automatically at login"
+L["opt_open_on_login"]    = "Open automatically on login"
 L["lbl_active_roster"]    = "Active Roster"
 L["lbl_message"]          = "Message"
 L["lbl_message_received"] = "Message Received"
@@ -140,95 +159,106 @@ L["lbl_shop"]             = "Shop"
 L["lbl_ah"]               = "AH"
 L["lbl_incoming_packets"] = "Incoming Packets"
 L["lbl_outcoming_packets"]= "Outgoing Packets"
-L["lbl_pending_packets"]  = "Queued Packets"
+L["lbl_pending_packets"]  = "Pending Packets"
 L["lbl_diffusing_snapshot"] = "Immediately broadcast a full snapshot"
-L["lbl_diffusing_snapshot_confirm"] = "Broadcast and FORCE GM version?"
+L["lbl_diffusing_snapshot_confirm"] = "Broadcast and FORCE GM’s version?"
 L["lbl_status_sent"]      = "SENT"
-L["lbl_status_recieved"]  = "RECEIVED"
 L["lbl_status_waiting"]   = "Waiting"
 L["lbl_status_inprogress"]= "In Progress"
 L["lbl_status_transmitted"]= "Transmitted"
-L["lbl_status_discovering"]= "Discovering..."
+L["lbl_status_discovering"]= "Discovering…"
 L["lbl_status_elected"]   = "Elected: "
 L["lbl_status_assembling"]= "Assembling"
-L["lbl_status_recieved"]  = "Received"
-L["lbl_empty_payload"]    = "(payload empty)"
+L["lbl_empty_payload"]    = "(empty payload)"
 L["lbl_empty_raw"]        = "(raw unavailable)"
 L["lbl_raw"]              = "RAW"
 L["lbl_uses"]             = " uses"
 L["lbl_use"]              = " use"
 L["lbl_lot"]              = "Bundle "
-L["lbl_left_short"]       = "left"
+L["lbl_left_short"]       = "rem."
 L["lbl_refunded"]         = "Refunded"
 L["lbl_closed"]           = "Closed"
-L["lbl_used_charges"]     = "Charges used"
-L["lbl_recent_online"]   = "Seen < 1 month (most recent toon)"
-L["lbl_old_online"]      = "Last seen ≥ 1 month"
-L["lbl_no_player_found"] = "No player found"
-L["lbl_out_of_guild"]    = "Players outside guild"
-L["confirm_delete"]      = "Remove this player from local DB?"
-L["lbl_scan_roster_progress"] = "Scanning roster..."
+L["lbl_used_charges"]     = "Charges Used"
+L["lbl_recent_online"]    = "Online < 1 month (most recent character)"
+L["lbl_old_online"]       = "Last login ≥ 1 month"
+L["lbl_no_player_found"]  = "No player found"
+L["lbl_out_of_guild"]     = "Players outside guild"
+L["confirm_delete"]       = "Delete this player?"
+L["lbl_scan_roster_progress"] = "Scanning roster in progress..."
 L["lbl_from_roster_question"] = "From roster?"
 L["lbl_total_balance"]    = "Total Balances"
+L["lbl_status_recieved"]  = "Received"
 
--- Popups / prompts
+
+-- ============================================== --
+-- ===           POPUPS / PROMPTS             === --
+-- ============================================== --
 L["popup_info_title"]     = "Information"
 L["popup_confirm_title"]  = "Confirmation"
 L["popup_input_title"]    = "Input"
 L["popup_tx_request"]     = "Transaction Request"
 L["popup_raid_ok"]        = "Raid participation confirmed!"
-L["msg_good_raid"]        = "Good raid!"
-L["lbl_total_amount_gold"]= "Global Amount (g):"
+L["msg_good_raid"]        = "Have a good raid!"
+L["lbl_total_amount_gold"] = "Total Amount (g):"
 L["btn_confirm_participants"] = "Confirm Participants"
 L["lbl_bundle_name"]      = "Bundle Name:"
 L["lbl_num_uses"]         = "Number of Uses"
-L["lbl_bundle_contents"]  = "Bundle Contents: "
-L["confirm_clear_free_resources"] = "Clear free resources list? (bundles not affected)"
+L["lbl_bundle_contents"]  = "Bundle Contents:"
+L["confirm_clear_free_resources"] = "Clear the list of free resources? (bundles are not affected)"
 L["confirm_delete_resource_line"] = "Delete this resource line?"
-L["popup_split_title"]            = "Split a resource"
-L["lbl_split_qty"]                = "Quantity to split"
-L["err_split_qty_invalid"]        = "Invalid quantity. It must be between 1 and (quantity - 1)."
-L["hint_split_resource"]          = "Split into two lines"
-L["err_split_failed"] = "Failed to split."
+L["popup_split_title"]    = "Split a Resource"
+L["lbl_split_qty"]        = "Quantity to Split"
+L["err_split_qty_invalid"]= "Invalid quantity. Must be between 1 and (quantity - 1)."
+L["hint_split_resource"]  = "Split into two lines"
+L["err_split_failed"]     = "Unable to perform split."
 L["confirm_delete_history_line_permanent"] = "Permanently delete this history line?"
 L["hint_no_bundle_for_raid"] = "No bundle has been linked to this raid."
-L["hint_select_resources_bundle"] = "Select resources to create a bundle (frozen content)."
-L["prompt_external_player_name"] = "Name of external player to include in roster"
-L["realm_external"] = "External"
+L["hint_select_resources_bundle"] = "Select resources to create a bundle (fixed content)."
+L["prompt_external_player_name"] = "Name of external player to include in the roster"
+L["realm_external"]       = "External"
 L["lbl_free_resources"]   = "Free Resources:"
 L["confirm_question"]     = "Confirm?"
 L["confirm_make_free_session"] = "Make this session free for all participants?"
-L["confirm_cancel_free_session"] = "Cancel free status and revert to initial state?"
+L["confirm_cancel_free_session"] = "Cancel free session and restore initial state?"
 L["lbl_total_amount_gold_alt"] = "Total Amount (g):"
-L["lbl_purge_confirm_all"]= "Purge DB + reset UI then reload?"
-L["lbl_purge_confirm_lots"]= "Delete exhausted bundles and their items?"
-L["lbl_purge_confirm_all_lots"]= "Delete ALL bundles and ALL items?"
-L["lbl_purge_lots_confirm"] = "Purge done: %d bundle(s), %d item(s) deleted."
-L["lbl_purge_all_lots_confirm"] = "Purge done: %d bundle(s), %d item(s) deleted."
+L["lbl_purge_confirm_all"] = "Purge DB + reset UI then reload?"
+L["lbl_purge_confirm_lots"] = "Delete depleted bundles and their items?"
+L["lbl_purge_confirm_all_lots"] = "Delete ALL bundles and ALL items?"
+L["lbl_purge_lots_confirm"] = "Purge completed: %d bundle(s), %d item(s) deleted."
+L["lbl_purge_all_lots_confirm"] = "Purge completed: %d bundle(s), %d item(s) deleted."
 L["lbl_no_res_selected"]  = "No resource selected"
 L["tooltip_remove_history1"] = "Delete this history line"
-L["tooltip_remove_history2"] = "• Deletion without adjusting balances"
-L["tooltip_remove_history3"] = "• If REFUNDED: no debit will be credited back."
+L["tooltip_remove_history2"] = "• Delete without adjusting balances"
+L["tooltip_remove_history3"] = "• If REFUNDED: no debit will be re-credited."
 L["tooltip_remove_history4"] = "• If CLOSED: no refund will be made."
 
--- Tooltips / messages / prefixes & suffixes
+
+-- ============================================== --
+-- ===   TOOLTIPS / MESSAGES / PRÉFIXES       === --
+-- ============================================== --
 L["badge_approved_list"]  = "Approved via list"
 L["badge_refused_list"]   = "Refused via list"
 L["warn_debit_n_players_each"] = "You will debit %d player(s) of %s each."
 L["prefix_add_gold_to"]   = "Add gold to "
 L["prefix_remove_gold_from"] = "Remove gold from "
 L["prefix_delete"]        = "Delete "
-L["tooltip_send_back_active_roster"] = "Send this player back to the active Roster"
-L["tooltip_view_raids_history"]      = "View Raids History"
-L["badge_exhausted"]      = "Exhausted"
-L["suffix_remaining"]     = "left"
+L["tooltip_send_back_active_roster"] = "Send this player back to Active Roster"
+L["tooltip_view_raids_history"]      = "View raid history"
+L["badge_exhausted"]      = "Depleted"
+L["suffix_remaining"]     = "remaining"
 
--- Colored statuses
+
+-- ============================================== --
+-- ===            STATUTS COLORÉS             === --
+-- ============================================== --
 L["status_online"]        = "Online"
 L["status_empty"]         = "-"
 L["status_unknown"]       = "?"
 
--- Options
+
+-- ============================================== --
+-- ===                OPTIONS                 === --
+-- ============================================== --
 L["opt_yes"]              = "Yes"
 L["opt_no"]               = "No"
 L["opt_alliance"]         = "Alliance"
@@ -236,26 +266,35 @@ L["opt_horde"]            = "Horde"
 L["opt_neutral"]          = "Neutral"
 L["opt_auto"]             = "Automatic"
 
--- ===== Added keys for UI/tooltips/prefixes/popups =====
-L["tooltip_minimap_left"]       = "Left-click: Open/close the window"
-L["tooltip_minimap_drag"]       = "Drag: move the icon around the minimap"
-L["btn_ok"]                     = "OK"
-L["popup_tx_request_message"]   = "|cffffd200Applicant:|r %s\n|cffffd200Operation:|r %s %s\n\nApprove?"
-L["popup_deducted_amount_fmt"]  = "|cffffd200Deducted amount:|r %s"
-L["popup_remaining_balance_fmt"]= "|cffffd200Remaining balance:|r %s"
-L["lbl_status_present_colored"] = "|cff40ff40Present|r"
-L["lbl_status_deleted_colored"] = "|cffff7070Deleted|r"
-L["lbl_db_version_prefix"]      = "DB v"
-L["lbl_id_prefix"]              = "ID "
 
--- ➕ Calendar invitations
+-- ============================================== --
+-- ===     NOTIFS / MINIMAP / INDICATEURS     === --
+-- ============================================== --
+L["tooltip_minimap_left"]        = "Left click: Open/close window"
+L["tooltip_minimap_drag"]        = "Drag: move icon around minimap"
+L["btn_ok"]                      = "OK"
+L["popup_tx_request_message"]    = "|cffffd200Requester:|r %s\n|cffffd200Operation:|r %s %s\n\nApprove?"
+L["popup_deducted_amount_fmt"]   = "|cffffd200Deducted Amount:|r %s"
+L["popup_remaining_balance_fmt"] = "|cffffd200Remaining Balance:|r %s"
+L["lbl_status_present_colored"]  = "|cff40ff40Present|r"
+L["lbl_status_deleted_colored"]  = "|cffff7070Deleted|r"
+L["lbl_db_version_prefix"]       = "DB v"
+L["lbl_id_prefix"]               = "ID "
+
+
+-- ============================================== --
+-- ===         INVITATIONS CALENDRIER         === --
+-- ============================================== --
 L["pending_invites_title"]       = "Pending Invitations"
-L["pending_invites_message_fmt"] = "You have %d unanswered invitation(s) in the calendar.\nPlease respond to them.\nThis window will reappear at each login as long as there are pending invitations."
+L["pending_invites_message_fmt"] = "You have %d unanswered calendar invitation(s).\nPlease respond.\nThis window will reappear at each login as long as invitations remain pending."
 L["btn_open_calendar"]           = "Open Calendar"
 L["col_when"]                    = "When"
 L["col_event"]                   = "Event"
 
--- ➕ Weekdays
+
+-- ============================================== --
+-- ===         JOURS DE LA SEMAINE (min)      === --
+-- ============================================== --
 L["weekday_mon"] = "Monday"
 L["weekday_tue"] = "Tuesday"
 L["weekday_wed"] = "Wednesday"
@@ -264,6 +303,24 @@ L["weekday_fri"] = "Friday"
 L["weekday_sat"] = "Saturday"
 L["weekday_sun"] = "Sunday"
 
-L["options_notifications_title"] = "Popup display"
-L["opt_popup_calendar_invite"]   = "Calendar invitation notification"
+
+-- ============================================== --
+-- ===      OPTIONS : NOTIFICATIONS UI        === --
+-- ============================================== --
+L["options_notifications_title"] = "Popup Display"
+L["opt_popup_calendar_invite"]   = "Calendar invite notification"
 L["opt_popup_raid_participation"]= "Raid participation notification"
+
+
+-- ============================================== --
+-- ===           Onglet BiS (Trinkets)        === --
+-- ============================================== --
+L["tab_bis"]         = "Best in Slot"
+L["col_tier"]        = "Tier"
+L["col_owned"]       = "Owned"
+L["lbl_class"]       = "Class"
+L["lbl_spec"]        = "Specialization"
+L["lbl_bis_filters"] = "Filters"
+L["msg_no_data"]     = "No Data"
+L["footer_source_wowhead"] = "Source: wowhead.com"
+L["bis_intro"] = "This tab lists BiS trinkets by class and specialization. Ranks S to F indicate priority (S being best). Use the dropdowns to change class and specialization."

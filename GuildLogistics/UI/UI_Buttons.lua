@@ -271,3 +271,73 @@ function UI.AttachRowRight(anchor, buttons, gap, dx, opts)
     if host.HookScript then host:HookScript("OnSizeChanged", apply) else host:SetScript("OnSizeChanged", apply) end
     anchor._applyRowActionsLayout = apply
 end
+
+-- Dropdown générique (basé sur UIDropDownMenu) pour unifier l'UI des menus déroulants.
+-- UI.Dropdown(parent, { width=, placeholder=, tooltip= })
+--    :SetBuilder(function(self, level) return { info, info, ... } end) -- items au format UIDropDownMenu_CreateInfo()
+--    :SetSelected(value, label)  -- texte affiché + valeur courante
+--    :GetSelected() -> value
+function UI.Dropdown(parent, opts)
+    opts = opts or {}
+    local name = "GL_Dropdown_" .. math.random(1e8)
+    local dd = CreateFrame("Frame", name, parent, "UIDropDownMenuTemplate")
+
+    dd:SetClipsChildren(false)
+    dd:SetFrameStrata("DIALOG") -- s'affiche au-dessus des bordures décoratives
+
+    local width = opts.width or 180
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(dd, width) end
+    if UIDropDownMenu_JustifyText then UIDropDownMenu_JustifyText(dd, "LEFT") end
+    if opts.placeholder and UIDropDownMenu_SetText then
+        UIDropDownMenu_SetText(dd, (Tr and Tr(opts.placeholder)) or opts.placeholder)
+    end
+    if opts.tooltip and UI.SetTooltip then UI.SetTooltip(dd, (Tr and Tr(opts.tooltip)) or opts.tooltip) end
+
+    dd._builder = nil
+    dd._selectedValue = nil
+
+    function dd:SetBuilder(fn)
+        self._builder = fn
+        if UIDropDownMenu_Initialize then
+            UIDropDownMenu_Initialize(self, function(frame, level, menuList)
+                if not self._builder then return end
+                local items = self:_builder(level or 1, menuList)
+                if type(items) ~= "table" then return end
+                for i = 1, #items do
+                    UIDropDownMenu_AddButton(items[i], level)
+                end
+            end)
+        end
+        return self
+    end
+
+    function dd:SetSelected(value, label)
+        self._selectedValue = value
+        if UIDropDownMenu_SetText then
+            UIDropDownMenu_SetText(self, label or tostring(value or ""))
+        end
+        return self
+    end
+
+    function dd:GetSelected()
+        return self._selectedValue
+    end
+
+    function dd:SetWidth(px)
+        if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(self, tonumber(px) or width) end
+        return self
+    end
+
+    -- S'assure que les listes système DropDownListN passent au-dessus des cadres décoratifs
+    dd:SetScript("OnShow", function()
+        for i = 1, 3 do
+            local f = _G["DropDownList"..i]
+            if f then
+                f:SetFrameStrata("TOOLTIP")
+                f:SetFrameLevel(1000)
+            end
+        end
+    end)
+
+    return dd
+end
