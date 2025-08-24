@@ -12,7 +12,7 @@ UI.WHITE = {1,1,1}
 UI.ACCENT = {0.22,0.55,0.95}
 UI.FOOTER_RIGHT_PAD = UI.FOOTER_RIGHT_PAD or 8
 UI.TITLE_SYNC_PAD_RIGHT = UI.TITLE_SYNC_PAD_RIGHT or 40
-
+UI.NAV_SUBSEL_COLOR = { 0.16, 0.82, 0.27, 0.50 } -- r,g,b,a
 -- Style des footers (centralisé)
 UI.FOOTER_H            = UI.FOOTER_H            or 36
 UI.FOOTER_BG           = UI.FOOTER_BG           or {0, 0, 0, 0.22}
@@ -24,6 +24,7 @@ UI.TAB_EXTRA_GAP       = UI.TAB_EXTRA_GAP       or 14
 UI.CONTENT_SIDE_PAD    = UI.CONTENT_SIDE_PAD    or -23
 UI.CONTENT_BOTTOM_LIFT = UI.CONTENT_BOTTOM_LIFT or -20
 UI.TAB_LEFT_PAD        = UI.TAB_LEFT_PAD        or 18
+UI.CATEGORY_GAP_TOP    = UI.CATEGORY_GAP_TOP    or 10
 
 -- Utilitaires : formatage avec séparateur de milliers
 UI.NUM_THOUSANDS_SEP = UI.NUM_THOUSANDS_SEP or " "
@@ -318,11 +319,14 @@ end
 local function ShowPanel(idx)
     for i,p in ipairs(Panels) do p:SetShown(i == idx) end
     UI._current = idx
+
     for i, def in ipairs(Registered) do
         local b = def._btn
         if b then
             local isSel = (i == idx)
-            if b.sel then b.sel:SetShown(isSel) end
+            if b.sel     then b.sel:SetShown(isSel)     end
+            if b.selGrad then b.selGrad:SetShown(isSel) end  -- << dégradé activé sur la sous-sélection
+
             -- Ajuste la mise en forme selon le type de bouton
             if b.txt and b.txt.SetFontObject then
                 b.txt:SetFontObject(isSel and "GameFontHighlightSmall" or "GameFontHighlightSmall")
@@ -376,13 +380,47 @@ local function _SubTabButton(parent, text)
     b.hover:SetColorTexture(1,1,1,0.12)
     b.hover:Hide()
 
-    -- Sélection : barre verticale à gauche
+    -- === Couleur du liseré (source du dégradé) ===
+    local cr, cg, cb, ca = 0.16, 0.82, 0.27, 0.50
+    if UI and UI.NAV_SUBSEL_COLOR then
+        cr = UI.NAV_SUBSEL_COLOR[1] or cr
+        cg = UI.NAV_SUBSEL_COLOR[2] or cg
+        cb = UI.NAV_SUBSEL_COLOR[3] or cb
+        ca = UI.NAV_SUBSEL_COLOR[4] or ca
+    end
+
+    -- Liseré vertical à gauche
     b.sel = b:CreateTexture(nil, "OVERLAY")
     b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", 0,  0)
     b.sel:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 8, 0)
     b.sel:SetWidth(3)
-    b.sel:SetColorTexture(0.16, 0.82, 0.27, 0.5) -- vert doux
+    b.sel:SetColorTexture(cr, cg, cb, ca)
     b.sel:Hide()
+
+    -- Dégradé horizontal (gauche -> droite), même teinte que le liseré,
+    -- qui disparaît vers la droite (alpha 0).
+    b.selGrad = b:CreateTexture(nil, "ARTWORK")
+    b.selGrad:SetTexture("Interface\\Buttons\\WHITE8x8") -- IMPORTANT : base de texture pour le gradient
+    b.selGrad:ClearAllPoints()
+    b.selGrad:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+    b.selGrad:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
+
+    local startAlpha = math.max(0.25, math.min(0.50, (ca or 0.5) * 0.9))
+    if b.selGrad.SetGradient and type(CreateColor) == "function" then
+        b.selGrad:SetGradient("HORIZONTAL",
+            CreateColor(cr, cg, cb, startAlpha),
+            CreateColor(cr, cg, cb, 0)
+        )
+    elseif b.selGrad.SetGradientAlpha then
+        b.selGrad:SetGradientAlpha("HORIZONTAL",
+            cr, cg, cb, startAlpha,
+            cr, cg, cb, 0
+        )
+    else
+        -- Fallback très ancien client
+        b.selGrad:SetColorTexture(cr, cg, cb, startAlpha)
+    end
+    b.selGrad:Hide()
 
     -- Texte (petite taille + indentation pour signifier « sous-élément »)
     b.txt = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -487,6 +525,8 @@ function UI.RelayoutTabs()
         local sub    = bar._subList
         local list   = bar._list
         local active = UI._activeCategory
+        local GAP_CAT = UI.CATEGORY_GAP_TOP or 5  -- espacement conditionnel
+        local GAP_LINE = 1                         -- fin trait / interligne
 
         -- 1) Comptage des sous-onglets "présents" par catégorie (indépendant de la catégorie active)
         local perCatCount = {}
@@ -549,7 +589,7 @@ function UI.RelayoutTabs()
                     if not prev then
                         b:SetPoint("TOPLEFT",  list, "TOPLEFT",  0, 0)
                     else
-                        b:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT", 0, -1)
+                        b:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT", 0, -GAP_LINE)
                     end
                     b:SetPoint("RIGHT", list, "RIGHT", -1, 0)
                     prev = b
@@ -557,14 +597,14 @@ function UI.RelayoutTabs()
             end
             if bar._filler and prev then
                 bar._filler:ClearAllPoints()
-                bar._filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -1)
+                bar._filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -GAP_LINE)
                 bar._filler:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -1, 0)
                 bar._filler:SetColorTexture(1,1,1,0.04)
             end
             return
         end
 
-        -- 6) Positionne la sous-liste & sous-onglets avec des marges uniformes
+        -- 6) Positionne la sous-liste & sous-onglets (PLEINE LARGEUR des sous-éléments)
         local GAP, TOP_PAD, BOTTOM_PAD = 1, 1, 1
 
         -- Sous-liste ancrée juste sous le bouton de catégorie (1 px d’air)
@@ -572,7 +612,7 @@ function UI.RelayoutTabs()
         sub:SetPoint("TOPLEFT",  selCatBtn, "BOTTOMLEFT", 0, -TOP_PAD)
         sub:SetPoint("RIGHT",    bar, "RIGHT", -1, 0)
 
-        -- Disposition des boutons avec 1 px d’interligne + 1 px de marge haute & basse
+        -- Disposition des boutons (pleine largeur : LEFT=0, RIGHT=0)
         local totalH = TOP_PAD + BOTTOM_PAD
         local prevRow
         for i, b in ipairs(visibles) do
@@ -582,7 +622,7 @@ function UI.RelayoutTabs()
             else
                 b:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -GAP)
             end
-            b:SetPoint("RIGHT", sub, "RIGHT", 0, 0)
+            b:SetPoint("RIGHT", sub, "RIGHT", 0, 0) -- << pleine largeur
             prevRow = b
             totalH = totalH + (b:GetHeight() or 24)
             if i > 1 then totalH = totalH + GAP end
@@ -590,16 +630,30 @@ function UI.RelayoutTabs()
         sub:SetHeight(totalH)
         sub:SetShown(#visibles > 0)
 
-        -- 7) Reflow des catégories en réservant exactement la hauteur de la sous-liste
+        -- 7) Reflow des catégories
+        --    * Ajoute GAP_CAT au-dessus de la catégorie active (sauf si première visible)
+        --    * Ajoute GAP_CAT entre la catégorie active (ouverte) et la suivante
         local prev
         for _, b in ipairs(bar._btns or {}) do
             if b:IsShown() then
                 b:ClearAllPoints()
                 if not prev then
+                    -- Première visible : jamais d'espacement au-dessus
                     b:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
                 else
-                    local extra = (prev == selCatBtn and (sub:IsShown() and sub:GetHeight() or 0) or 0)
-                    b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -1 - extra)
+                    local extra = 0
+                    -- si la précédente est la catégorie active : on réserve la sous-liste
+                    if prev == selCatBtn then
+                        extra = (sub:IsShown() and sub:GetHeight() or 0)
+                        -- et on ajoute l'espacement sous la catégorie active ouverte
+                        extra = extra + GAP_CAT
+                    end
+                    -- si la catégorie courante est la catégorie active : espacement au-dessus,
+                    -- sauf si c'est la toute première (déjà gérée par le cas not prev)
+                    if b == selCatBtn then
+                        extra = extra + GAP_CAT
+                    end
+                    b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -(GAP_LINE + extra))
                 end
                 b:SetPoint("RIGHT", list, "RIGHT", -1, 0)
                 prev = b
@@ -609,7 +663,7 @@ function UI.RelayoutTabs()
         -- 8) Filler visuel sous la dernière catégorie
         if bar._filler and prev then
             bar._filler:ClearAllPoints()
-            bar._filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -1)
+            bar._filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -GAP_LINE)
             bar._filler:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -1, 0)
             bar._filler:SetColorTexture(1,1,1,0.04)
         end

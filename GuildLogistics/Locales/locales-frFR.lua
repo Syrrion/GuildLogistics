@@ -338,6 +338,6 @@ L["msg_no_usage_for_item"] = "Aucune classe/spécialisation ne référence cet o
 L["cat_guild"]    = "Guilde"
 L["cat_raids"]    = "Raids"
 L["cat_tools"]    = "Outils"
-L["cat_info"]     = "Guides"
+L["cat_info"]     = "Helpers"
 L["cat_settings"] = "Options"
 L["cat_debug"]    = "Débug"

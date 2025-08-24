@@ -601,6 +601,16 @@ local function Build(container)
     -- L’entête de la réserve garde un padding à gauche pour le petit bouton +/-
     UI.SectionHeader(reserveArea, Tr("lbl_reserved_players"),   { topPad = 2, padLeft = 18 })
 
+    if panel and panel.GetFrameLevel then
+        local base = (panel:GetFrameLevel() or 0)
+        if activeArea and activeArea.SetFrameLevel then
+            activeArea:SetFrameLevel(base + 1)
+        end
+        if reserveArea and reserveArea.SetFrameLevel then
+            reserveArea:SetFrameLevel(base + 1)
+        end
+    end
+
     -- Petit bouton + / - à gauche du texte d’entête de la réserve
     reserveToggleBtn = CreateFrame("Button", nil, reserveArea, "UIPanelButtonTemplate")
     reserveToggleBtn:SetSize(20, 20)
@@ -649,6 +659,39 @@ local function Build(container)
         topOffset = UI.SECTION_HEADER_H or 26,
         bottomAnchor = footer
     })
+
+    -- Masque de fond englobant (header + contenu) pour la ListView des Actifs
+    do
+        -- Cache (par prudence) le containerBG générique si présent pour éviter un double assombrissement
+        if lvActive and lvActive._containerBG and lvActive._containerBG.Hide then
+            lvActive._containerBG:Hide()
+        end
+
+        local col = (UI.GetListViewContainerColor and UI.GetListViewContainerColor()) or { r = 0, g = 0, b = 0, a = 0.20 }
+        local bg = activeArea:CreateTexture(nil, "BACKGROUND")
+        bg:SetColorTexture(col.r or 0, col.g or 0, col.b or 0, col.a or 0.20)
+
+        -- Englobe exactement le header de colonnes + la zone scroll de la ListView
+        if lvActive and lvActive.header and lvActive.scroll then
+            bg:SetPoint("TOPLEFT",     lvActive.header, "TOPLEFT",     0, 0)
+            bg:SetPoint("BOTTOMRIGHT", lvActive.scroll, "BOTTOMRIGHT", 0, 0)
+        end
+
+        -- Si la vue est relayoutée, on recale proprement le masque
+        if lvActive and lvActive.Layout and not lvActive._synth_bg_hook then
+            local _old = lvActive.Layout
+            function lvActive:Layout(...)
+                local res = _old(self, ...)
+                if bg and self.header and self.scroll then
+                    bg:ClearAllPoints()
+                    bg:SetPoint("TOPLEFT",     self.header, "TOPLEFT",     0, 0)
+                    bg:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
+                end
+                return res
+            end
+            lvActive._synth_bg_hook = true
+        end
+    end
 
     footer = UI.CreateFooter(panel, 36)
     totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
