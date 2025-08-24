@@ -129,8 +129,8 @@ function UI.ListView(parent, cols, opts)
 
         -- Header
         self.header:ClearAllPoints()
-        self.header:SetPoint("TOPLEFT",  self.parent, "TOPLEFT",   0,  -(2 + top))
-        self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)), -(2 + top))
+        self.header:SetPoint("TOPLEFT",  self.parent, "TOPLEFT",   0,  -(top))
+        self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)), -(top))
         UI.LayoutHeader(self.header, resolved, self.hLabels)
         if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
 

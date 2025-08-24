@@ -435,4 +435,6 @@ local function Build(container)
     totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 end
 
-UI.RegisterTab(Tr("tab_resources"), Build, Refresh, Layout)
+UI.RegisterTab(Tr("tab_resources"), Build, Refresh, Layout, {
+    category = Tr("cat_raid"),
+})

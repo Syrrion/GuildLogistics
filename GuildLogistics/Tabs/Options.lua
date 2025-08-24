@@ -12,24 +12,22 @@ local function _SetRadioGroupChecked(group, key)
     end
 end
 
-function BuildOptions(panel)
-    optPanel = panel
+function Build(container)
+    panel = container
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
 
-    local PAD = UI.OUTER_PAD or 16
+    optionsPane = CreateFrame("Frame", nil, panel)
+    
     local RADIO_V_SPACING = 8
-    local OUTER_PAD = PAD + 8
-    local INNER_PAD = 16
-
-    local box, content = UI.PaddedBox(panel, { outerPad = OUTER_PAD, pad = INNER_PAD })
-
+    local y = UI.SECTION_HEADER_H
+    
     -- === Section 1 : Thème de l'interface ===
-    local y = 0
-    local headerH = UI.SectionHeader(content, Tr("opt_ui_theme"), { topPad = y }) or (UI.SECTION_HEADER_H or 26)
-    y = y + headerH + 8
+    local headerH1 = UI.SectionHeader(optionsPane, Tr("opt_ui_theme"), { topPad = y })
+    y = y + headerH1 + 8
 
     local function makeRadioV(group, key, text)
-        local b = CreateFrame("CheckButton", nil, content, "UIRadioButtonTemplate")
-        b:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        local b = CreateFrame("CheckButton", nil, optionsPane, "UIRadioButtonTemplate")
+        b:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)
 
         local label = b.Text or b:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         if not b.Text then label:SetPoint("LEFT", b, "RIGHT", 6, 0); b.Text = label end
@@ -60,21 +58,21 @@ function BuildOptions(panel)
     makeRadioV(themeRadios, "NEUTRAL",  Tr("opt_neutral"))
 
     -- === Section 2 : Ouverture auto ===
-    local headerH2 = UI.SectionHeader(content, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH2 + 8
     makeRadioV(autoRadios, "YES", Tr("opt_yes"))
     makeRadioV(autoRadios, "NO",  Tr("opt_no"))
 
     -- === Section 3 : Affichage des popups ===
-    local headerH3 = UI.SectionHeader(content, Tr("options_notifications_title"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    local headerH3 = UI.SectionHeader(optionsPane, Tr("options_notifications_title"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH3 + 8
 
     local savedForPop = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
     savedForPop.popups = savedForPop.popups or {}
 
     local function makeCheck(key, labelKey)
-        local cb = CreateFrame("CheckButton", nil, content, "UICheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        local cb = CreateFrame("CheckButton", nil, optionsPane, "UICheckButtonTemplate")
+        cb:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)
 
         local lbl = cb.Text or cb:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         if not cb.Text then lbl:SetPoint("LEFT", cb, "RIGHT", 6, 0); cb.Text = lbl end
@@ -97,7 +95,7 @@ function BuildOptions(panel)
     makeCheck("raidParticipation", "opt_popup_raid_participation")
 
     -- === Section 4 : Activer le débug ===
-    local headerH4 = UI.SectionHeader(content, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    local headerH4 = UI.SectionHeader(optionsPane, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH4 + 8
     makeRadioV(debugRadios, "YES", Tr("opt_yes"))
     makeRadioV(debugRadios, "NO",  Tr("opt_no"))
@@ -116,4 +114,32 @@ function RefreshOptions()
     _SetRadioGroupChecked(debugRadios, (saved.debugEnabled) and "YES" or "NO")
 end
 
-UI.RegisterTab(Tr("tab_settings"), BuildOptions, RefreshOptions)
+
+-- == Point d'extension future : l'agencement est géré par ancres == --
+local function Layout()
+    if not panel or not panel.GetWidth then return end
+    local W = panel:GetWidth() or 0
+    local H = panel:GetHeight() or 0
+    -- Si le panneau n'est pas encore dimensionné, on sort (évite les W/H=0 et les ancrages foireux)
+    if W <= 0 or H <= 0 then return end
+
+    local footerH = (footer and footer:GetHeight() or 0) + 6
+    local availH = math.max(0, H - footerH - (UI.OUTER_PAD*2))
+    local topH   = math.floor(availH * 0.60)
+
+    -- Zone joueurs (haut) : bornée entre le haut du panel et le haut de lotsPane
+    optionsPane:ClearAllPoints()
+    optionsPane:SetPoint("TOPLEFT",  panel,   "TOPLEFT",  UI.OUTER_PAD, -UI.OUTER_PAD)
+    optionsPane:SetPoint("TOPRIGHT", panel,   "TOPRIGHT", -UI.OUTER_PAD, -UI.OUTER_PAD)
+    optionsPane:SetPoint("BOTTOMLEFT", panel, "TOPLEFT",  0,  6)
+    optionsPane:SetPoint("BOTTOMRIGHT", panel, "TOPRIGHT", 0,  6)
+end
+
+-- == Déclenche un rafraîchissement manuel de la liste == --
+local function Refresh()
+    Layout()
+end
+
+UI.RegisterTab(Tr("tab_settings"), Build, Refresh, Layout, {
+    category = Tr("cat_settings"),
+})

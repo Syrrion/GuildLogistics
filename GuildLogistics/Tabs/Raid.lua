@@ -147,7 +147,6 @@ local function Layout()
     topPane:SetPoint("BOTTOMLEFT", lotsPane, "TOPLEFT",  0,  6)
     topPane:SetPoint("BOTTOMRIGHT", lotsPane, "TOPRIGHT", 0,  6)
 
-
     -- Laisse chaque ListView recalculer sa hauteur en fonction de son anchor/bottomAnchor
     if lotsLV and lotsLV.Layout then lotsLV:Layout() end
     if lv and lv.Layout then lv:Layout() end
@@ -187,7 +186,7 @@ end
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     footer = UI.CreateFooter(panel, 36)
 
@@ -362,4 +361,7 @@ local function Build(container)
     end
 end
 
-UI.RegisterTab(Tr("tab_start_raid"), Build, Refresh, Layout, { hidden = not (GLOG.IsMaster and GLOG.IsMaster()) })
+UI.RegisterTab(Tr("tab_start_raid"), Build, Refresh, Layout, {
+    hidden   = not (GLOG.IsMaster and GLOG.IsMaster()),
+    category = Tr("cat_raids"),
+})

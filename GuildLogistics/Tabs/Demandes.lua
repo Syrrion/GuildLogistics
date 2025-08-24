@@ -112,4 +112,7 @@ local function Build(container)
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow })
 end
 
-UI.RegisterTab(Tr("tab_requests"), Build, Refresh, Layout, { hidden = false })
+UI.RegisterTab(Tr("tab_requests"), Build, Refresh, Layout, {
+    hidden = false,
+    category = Tr("cat_guild"),
+})

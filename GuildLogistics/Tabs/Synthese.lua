@@ -677,4 +677,6 @@ _GL_RosterGroupWatcher:SetScript("OnEvent", function()
     if Refresh then Refresh() end
 end)
 
-UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout)
+UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout, {
+    category = Tr("cat_guild"),
+})

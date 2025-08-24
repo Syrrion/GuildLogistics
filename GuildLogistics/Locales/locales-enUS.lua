@@ -323,7 +323,7 @@ L["lbl_spec"]        = "Specialization"
 L["lbl_bis_filters"] = "Filters"
 L["msg_no_data"]     = "No Data"
 L["footer_source_wowhead"] = "Source: wowhead.com"
-L["bis_intro"] = "This tab lists BiS trinkets by class and specialization. Ranks S to F indicate priority (S being best). Use the dropdowns to change class and specialization."
+L["bis_intro"] = "This tab lists BiS trinkets by class and specialization.\nRanks S to F indicate priority (S being best). Use the dropdowns to change class and specialization."
 L["col_useful_for"]    = "Useful for"
 L["btn_useful_for"]    = "Useful for..."
 L["popup_useful_for"]      = "Other classes having this object in their Tier-List"
@@ -331,3 +331,14 @@ L["col_rank"]              = "Rank"
 L["col_class"]             = "Class"
 L["col_spec"]              = "Specialization"
 L["msg_no_usage_for_item"] = "No class/spec references this item in the BiS tables."
+
+
+-- ============================================== --
+-- ===    CATEGORIES (navigation latérale)       ===
+-- ============================================== --
+L["cat_guild"]    = "Guild"
+L["cat_raids"]    = "Raids"
+L["cat_tools"]    = "Tools"
+L["cat_info"]     = "Info"
+L["cat_settings"] = "Options"
+L["cat_debug"]    = "Debug"

@@ -323,7 +323,7 @@ L["lbl_spec"]        = "Spécialisation"
 L["lbl_bis_filters"] = "Filtres"
 L["msg_no_data"]     = "Aucune donnée"
 L["footer_source_wowhead"] = "Source : wowhead.com"
-L["bis_intro"] = "Cet onglet liste les bijoux (trinkets) BiS par classe et spécialisation. Les rangs S à F indiquent la priorité (S étant le meilleur). Utilisez les listes déroulantes pour changer la classe et la spécialisation."
+L["bis_intro"] = "Cet onglet liste les bijoux (trinkets) BiS par classe et spécialisation.\nLes rangs S à F indiquent la priorité (S étant le meilleur). Utilisez les listes déroulantes pour changer la classe et la spécialisation."
 L["col_useful_for"]        = "Utile pour"
 L["btn_useful_for"]        = "Utile pour..."
 L["popup_useful_for"]      = "Autres classes ayant cet objet dans sa Tier-List"
@@ -331,3 +331,13 @@ L["col_rank"]              = "Rang"
 L["col_class"]             = "Classe"
 L["col_spec"]              = "Spécialisation"
 L["msg_no_usage_for_item"] = "Aucune classe/spécialisation ne référence cet objet dans les tableaux BiS."
+
+-- ============================================== --
+-- ===    CATEGORIES (navigation latérale)       ===
+-- ============================================== --
+L["cat_guild"]    = "Guilde"
+L["cat_raids"]    = "Raids"
+L["cat_tools"]    = "Outils"
+L["cat_info"]     = "Infos"
+L["cat_settings"] = "Options"
+L["cat_debug"]    = "Débug"

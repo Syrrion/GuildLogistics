@@ -542,4 +542,7 @@ function GLOG.Debug_TinyDump(v, depth)
     end
 end
 
-UI.RegisterTab(Tr("tab_debug"), Build, Refresh, Layout, { hidden = true })
+UI.RegisterTab(Tr("tab_debug"), Build, Refresh, Layout, {
+    hidden   = true,
+    category = Tr("cat_debug"),
+})

@@ -354,19 +354,20 @@ end
 -- ============================================== --
 
 -- == Construit l'interface de l'onglet BiS (intro, filtres, liste, footer) == --
-local function Build(p)
-    panel = p
-    local content = UI.PaddedBox(panel)
+local function Build(container)
 
+    panel = container
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    
     local INSET   = 12
     local PAD     = UI.OUTER_PAD or 10
     local PAD_LEFT, PAD_RIGHT = 10, 10
     local PAD_TOP, PAD_BOTTOM = 6, 0
 
-    local introArea = CreateFrame("Frame", nil, content)
-    introArea:SetPoint("TOPLEFT",  content, "TOPLEFT",  INSET, -INSET)
-    introArea:SetPoint("TOPRIGHT", content, "TOPRIGHT", -INSET, -INSET)
-    introArea:SetFrameLevel((content:GetFrameLevel() or 0) + 1)
+    local introArea = CreateFrame("Frame", nil, panel)
+    introArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  INSET, -INSET)
+    introArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -INSET, -INSET)
+    introArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     local introFS = introArea:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     introFS:SetPoint("TOPLEFT",  introArea, "TOPLEFT",  PAD_LEFT, -PAD_TOP)
@@ -385,17 +386,17 @@ local function Build(p)
     end
     introArea:SetHeight(math.max(24, (introFS:GetStringHeight() or 16) + PAD_TOP + PAD_BOTTOM))
 
-    local headerArea = CreateFrame("Frame", nil, content)
-    headerArea:SetPoint("TOPLEFT",  introArea, "BOTTOMLEFT",  0, -6)
-    headerArea:SetPoint("TOPRIGHT", introArea, "BOTTOMRIGHT", 0, -6)
+    local headerArea = CreateFrame("Frame", nil, panel)
+    headerArea:SetPoint("TOPLEFT",  introArea, "BOTTOMLEFT",  0, -10)
+    headerArea:SetPoint("TOPRIGHT", introArea, "BOTTOMRIGHT", 0, -10)
     local headerH = UI.SectionHeader(headerArea, Tr("lbl_bis_filters") or "Filters", { topPad = 0 }) or (UI.SECTION_HEADER_H or 26)
     headerArea:SetHeight(headerH)
 
-    local filtersArea = CreateFrame("Frame", nil, content)
+    local filtersArea = CreateFrame("Frame", nil, panel)
     filtersArea:SetPoint("TOPLEFT",  headerArea, "BOTTOMLEFT",  0, -8)
     filtersArea:SetPoint("TOPRIGHT", headerArea, "BOTTOMRIGHT", 0, -8)
     filtersArea:SetHeight(34)
-    filtersArea:SetFrameLevel((content:GetFrameLevel() or 0) + 1)
+    filtersArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     local lblClass = UI.Label(filtersArea, { template="GameFontNormal" })
     lblClass:SetText(Tr("lbl_class"))
@@ -416,22 +417,22 @@ local function Build(p)
     specDD:SetBuilder(_SpecMenuBuilder)
     _AttachDropdownZFix(specDD, panel)
 
-    footer = UI.CreateFooter(content, 22)
+    footer = UI.CreateFooter(panel, 22)
     footer:ClearAllPoints()
-    footer:SetPoint("BOTTOMLEFT",  content, "BOTTOMLEFT",  INSET, INSET)
-    footer:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -INSET, INSET)
+    footer:SetPoint("BOTTOMLEFT",  panel, "BOTTOMLEFT",  INSET, INSET)
+    footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -INSET, INSET)
 
     local sourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     sourceFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     sourceFS:SetJustifyH("LEFT"); sourceFS:SetJustifyV("MIDDLE")
     sourceFS:SetText(Tr("footer_source_wowhead"))
 
-    listArea = CreateFrame("Frame", nil, content)
+    listArea = CreateFrame("Frame", nil, panel)
     listArea:SetPoint("TOPLEFT",     filtersArea, "BOTTOMLEFT",  0, -8)
     listArea:SetPoint("TOPRIGHT",    filtersArea, "BOTTOMRIGHT", 0, -8)
     listArea:SetPoint("BOTTOMLEFT",  footer,      "TOPLEFT",     0,  8)
     listArea:SetPoint("BOTTOMRIGHT", footer,      "TOPRIGHT",    0,  8)
-    listArea:SetFrameLevel((content:GetFrameLevel() or 0) + 1)
+    listArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     lv = UI.ListView(listArea, cols, {
         safeRight    = true,
@@ -462,4 +463,6 @@ local function Layout()
     -- (volontairement vide)
 end
 
-UI.RegisterTab(Tr("tab_bis") or "BiS", Build, Refresh, Layout)
+UI.RegisterTab(Tr("tab_bis") or "BiS", Build, Refresh, Layout, {
+    category = Tr("cat_info"),
+})

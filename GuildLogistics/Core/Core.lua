@@ -2,6 +2,9 @@ local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
+ns.UI = ns.UI or {}
+local UI = ns.UI
+
 -- Icône centrale de l’addon (réutilisable partout, y compris minimap)
 GLOG.ICON_TEXTURE = GLOG.ICON_TEXTURE or "Interface\\AddOns\\GuildLogistics\\Ressources\\Media\\LogoAddonWoW128.tga"
 
@@ -1500,15 +1503,13 @@ end
 -- =========================
 
 function GLOG.GetSavedWindow() EnsureDB(); return GuildLogisticsUI end
-function GLOG.SaveWindow(point, relTo, relPoint, x, y, w, h)
+function GLOG.SaveWindow(point, relTo, relPoint, x, y)
     GuildLogisticsUI = GuildLogisticsUI or {}
     GuildLogisticsUI.point    = point
     GuildLogisticsUI.relTo    = relTo
     GuildLogisticsUI.relPoint = relPoint
     GuildLogisticsUI.x        = x
     GuildLogisticsUI.y        = y
-    GuildLogisticsUI.width    = w
-    GuildLogisticsUI.height   = h
 end
 
 -- =========================

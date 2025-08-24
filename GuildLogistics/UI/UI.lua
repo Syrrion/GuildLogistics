@@ -5,7 +5,7 @@ local GLOG = ns.GLOG
 ns.UI = ns.UI or {}
 local UI = ns.UI
 
-UI.DEFAULT_W, UI.DEFAULT_H = 1160, 680
+UI.DEFAULT_W, UI.DEFAULT_H = 1360, 680
 UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER, UI.ROW_H = 16, 20, 8, 30
 UI.FONT_YELLOW = {1, 0.82, 0}
 UI.WHITE = {1,1,1}
@@ -126,7 +126,7 @@ end
 local Main = CreateFrame("Frame", "GLOG_Main", UIParent, "BackdropTemplate")
 UI.Main = Main
 local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
-Main:SetSize(saved.width or UI.DEFAULT_W, saved.height or UI.DEFAULT_H)
+Main:SetSize(UI.DEFAULT_W, UI.DEFAULT_H)
 Main:SetFrameStrata("HIGH")
 Main:SetMovable(true)
 Main:EnableMouse(true)
@@ -136,18 +136,10 @@ Main:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local point, relTo, relPoint, x, y = self:GetPoint()
     if GLOG.SaveWindow then
-        GLOG.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, self:GetWidth(), self:GetHeight())
+        GLOG.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y)
     end
 end)
-Main:SetResizable(true)
-if Main.SetResizeBounds then Main:SetResizeBounds(980, 600) end
-Main:SetScript("OnSizeChanged", function(self, w, h)
-    if UI._layout then UI._layout() end
-    local point, relTo, relPoint, x, y = self:GetPoint()
-    if GLOG.SaveWindow then
-        GLOG.SaveWindow(point, relTo and relTo:GetName() or nil, relPoint, x, y, w, h)
-    end
-end)
+
 Main:SetPoint(saved.point or "CENTER", UIParent, saved.relPoint or "CENTER", saved.x or 0, saved.y or 0)
 
 -- Habillage atlas Neutral
@@ -302,12 +294,14 @@ UI._tabIndexByLabel = {}
 
 -- UI.RegisterTab(label, build, refresh, layout, opts?) ; opts.hidden pour masquer le bouton d’onglet
 function UI.RegisterTab(label, buildFunc, refreshFunc, layoutFunc, opts)
+    opts = opts or {}
     table.insert(Registered, {
-        label  = label,
-        build  = buildFunc,
-        refresh= refreshFunc,
-        layout = layoutFunc,
-        hidden = opts and opts.hidden or false,
+        label   = label,
+        build   = buildFunc,
+        refresh = refreshFunc,
+        layout  = layoutFunc,
+        hidden  = opts.hidden or false,
+        category= opts.category, -- << NOUVEAU
     })
     UI._tabIndexByLabel[label] = #Registered
 end
@@ -356,6 +350,12 @@ local function CreateTabButton(prevBtn, text)
 end
 
 function UI.Finalize()
+    -- 1) Crée la barre catégories AVANT de construire le contenu, pour que
+    -- ApplySafeContentBounds connaisse la marge gauche.
+    if not UI._catBar and UI.CreateCategorySidebar then
+        UI.CreateCategorySidebar()
+    end
+
     local lastBtn
     for i, def in ipairs(Registered) do
         local panel = CreateFrame("Frame", nil, Main.Content, "BackdropTemplate")
@@ -371,7 +371,12 @@ function UI.Finalize()
 
         if not def.hidden then
             local btn = CreateTabButton(lastBtn, def.label)
-            btn:SetScript("OnClick", function() ShowPanel(i); if def.refresh then def.refresh() end end)
+            btn:SetScript("OnClick", function()
+                -- Bascule auto de catégorie si besoin
+                if UI.SelectCategoryForLabel then UI.SelectCategoryForLabel(def.label) end
+                ShowPanel(i)
+                if def.refresh then def.refresh() end
+            end)
             def._btn = btn
             lastBtn = btn
             table.insert(Tabs, btn)
@@ -379,25 +384,32 @@ function UI.Finalize()
             def._btn = nil
         end
     end
-    UI._layout = function()
-        -- Repositionne l'indicateur après tout reskin/redimensionnement.
-        if PositionSyncIndicator then PositionSyncIndicator() end
-        for i, def in ipairs(Registered) do
-            if Panels[i]:IsShown() and def.layout then def.layout() end
-        end
+
+    -- Applique le filtre catégorie sur les boutons (si la barre existe)
+    if UI._activeCategory and UI.SetActiveCategory then
+        UI.SetActiveCategory(UI._activeCategory)
     end
 end
 
 -- Navigation par label
 function UI.ShowTabByLabel(label)
+    -- Si l'onglet n'est pas visible dans la catégorie courante, on bascule vers la bonne catégorie
+    if UI.SelectCategoryForLabel and UI.SelectCategoryForLabel(label) then
+        -- la catégorie a été ajustée pour révéler cet onglet
+    end
+
     local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
     if idx then
-        ShowPanel(idx)
+        -- Rendre visible le bouton si caché uniquement par le filtre de catégorie
         local def = Registered[idx]
+        if def and def._btn and def._sysShown ~= false then
+            def._btn:Show()
+        end
+        ShowPanel(idx)
         if def and def.refresh then def.refresh() end
+        UI.RelayoutTabs()
     end
 end
-
 
 function UI.RefreshAll()
     local i = UI._current
@@ -437,16 +449,32 @@ end
 
 -- ➕ Masquer/afficher un onglet avec fallback si on masque l'onglet actif
 function UI.SetTabVisible(label, shown)
-    local b, idx = UI.GetTabButton(label)
+    local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
+    if not idx then return end
+    local def = Registered[idx]
+    local b   = def and def._btn
     if not b then return end
+
+    -- Mémorise la visibilité “système” (droits, états, options…)
+    def._sysShown = (shown and true) or false
+
+    -- Filtre par catégorie active
+    local inCat = true
+    local active = UI._activeCategory
+    if active and def.category and (def.category ~= active) then
+        inCat = false
+    end
+
+    local willShow = def._sysShown and inCat
     local wasShown = b:IsShown()
-    b:SetShown(shown and true or false)
-    if (wasShown and not b:IsShown()) and UI._current == idx then
-        -- bascule vers le 1er onglet visible
-        for i, def in ipairs(Registered) do
-            if def._btn and def._btn:IsShown() then
+    b:SetShown(willShow)
+
+    -- Si on masque l’onglet actif, bascule sur le premier visible
+    if wasShown and (not willShow) and UI._current == idx then
+        for i, d in ipairs(Registered) do
+            if d._btn and d._btn:IsShown() then
                 UI.ShowPanel(i)
-                if def.refresh then def.refresh() end
+                if d.refresh then d.refresh() end
                 break
             end
         end
@@ -600,4 +628,216 @@ function UI.RefreshTitle()
     if Main and Main.title and Main.title.SetText then
         Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or Tr("app_title"))
     end
+end
+
+-- ===================== Catégories (sidebar) =====================
+local function _CatIcons()
+    return {
+        [Tr("cat_guild")]    = "Interface\\ICONS\\inv_shirt_guildtabard_01",
+        [Tr("cat_raids")]    = "Interface\\ICONS\\achievement_boss_lichking",
+        [Tr("cat_tools")]    = "Interface\\ICONS\\INV_Hammer_20",
+        [Tr("cat_info")]     = "Interface\\ICONS\\trade_archaeology_draenei_tome",
+        [Tr("cat_settings")] = "Interface\\ICONS\\icon_petfamily_mechanical",
+        [Tr("cat_debug")]    = "Interface\\ICONS\\inv_inscription_pigment_bug04",
+    }
+end
+
+local function _CatOrder()
+    return {
+        Tr("cat_guild"),
+        Tr("cat_raids"),
+        Tr("cat_tools"),
+        Tr("cat_info"),
+        Tr("cat_settings"),
+        Tr("cat_debug"),
+    }
+end
+
+-- Bouton « carrelage » avec icône + survol + sélection (style proche capture)
+local function _CategoryButton(parent, text, iconPath)
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetSize(168, 52)  -- un peu plus haut pour loger l’icône 48x48 confortablement
+
+    -- Fond
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.bg:SetAllPoints(b)
+    b.bg:SetColorTexture(1,1,1,0.04)
+
+    -- Survol
+    b.hover = b:CreateTexture(nil, "ARTWORK")
+    b.hover:SetAllPoints(b)
+    b.hover:SetColorTexture(1,1,1,0.07)
+    b.hover:Hide()
+
+    -- Sélection (liseré + bande verte)
+    b.sel = b:CreateTexture(nil, "OVERLAY")
+    b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+    b.sel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -2, 2)
+    b.sel:SetColorTexture(0.16, 0.82, 0.27, 0.22) -- vert doux
+    b.sel:Hide()
+
+    -- Petite barre gauche accent
+    b.bar = b:CreateTexture(nil, "OVERLAY")
+    b.bar:SetPoint("TOPLEFT", b, "TOPLEFT", 2, -2)
+    b.bar:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 2, 2)
+    b.bar:SetWidth(3)
+    b.bar:SetColorTexture(0.16, 0.82, 0.27, 0.85)
+    b.bar:Hide()
+
+    -- Icône (48x48) + crop 5px + couche forcée
+    b.icon = b:CreateTexture(nil, "OVERLAY", nil, 1)  -- couche haute pour éviter d’être masqué
+    b.icon:SetSize(48, 48)
+    b.icon:SetPoint("LEFT", b, "LEFT", 12, 0)
+
+    if UI and UI.TrySetIcon then
+        UI.TrySetIcon(b.icon, iconPath)
+    else
+        b.icon:SetTexture(iconPath or "Interface\\ICONS\\INV_Misc_QuestionMark")
+    end
+
+    if UI and UI.CropIcon then
+        UI.CropIcon(b.icon, 5)     -- rogne 5px sur chaque bord (icône type 64x64)
+    end
+    if UI and UI.EnsureIconVisible then
+        UI.EnsureIconVisible(b.icon, 1)
+    end
+
+    -- Texte
+    b.txt = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    b.txt:SetPoint("LEFT", b.icon, "RIGHT", 8, 0)
+    b.txt:SetText(text)
+
+    b:SetScript("OnEnter", function(self) self.hover:Show() end)
+    b:SetScript("OnLeave", function(self) self.hover:Hide() end)
+
+    return b
+end
+
+
+-- Déduit la catégorie d’un label d’onglet
+local function _CategoryOfLabel(label)
+    for _, def in ipairs(Registered) do
+        if def.label == label then
+            return def.category
+        end
+    end
+end
+
+-- Public : sélectionne la catégorie pour un label d’onglet (retourne true si bascule)
+function UI.SelectCategoryForLabel(tabLabel)
+    local cat = _CategoryOfLabel(tabLabel)
+    if cat and cat ~= UI._activeCategory then
+        UI.SetActiveCategory(cat)
+        return true
+    end
+    return false
+end
+
+function UI.CreateCategorySidebar()
+    if UI._catBar then return UI._catBar end
+    local Main = UI.Main
+    if not Main then return end
+
+    local L,R,T,B = UI.OUTER_PAD, UI.OUTER_PAD, UI.OUTER_PAD, UI.OUTER_PAD
+    if Main._cdzNeutral and Main._cdzNeutral.GetInsets then
+        L,R,T,B = Main._cdzNeutral:GetInsets()
+    end
+
+    -- Cadre barre latérale
+    local bar = CreateFrame("Frame", "GLOG_CategoryBar", Main, "BackdropTemplate")
+    UI._catBar = bar
+    bar:SetPoint("TOPLEFT", Main, "TOPLEFT", L + 8, -(T + 40))
+    bar:SetPoint("BOTTOMLEFT", Main, "BOTTOMLEFT", L + 8, B + 8)
+    bar:SetWidth(180)
+
+    -- Réserve l’espace pour la mise en page
+    UI.CATEGORY_BAR_W = bar:GetWidth() + 12
+    UI.TAB_LEFT_PAD   = (UI.CATEGORY_BAR_W or 0) + 12
+
+    -- Construit la liste de catégories effectivement utilisées
+    local hasCat = {}
+    for _, def in ipairs(Registered) do
+        local c = def.category
+        if c and (def.hidden ~= true) then hasCat[c] = true end
+    end
+    local order = _CatOrder()
+    local icons = _CatIcons()
+
+    bar._btns = {}
+    local prev
+    local firstCat
+    for _, catLabel in ipairs(order) do
+        if hasCat[catLabel] then
+            if not firstCat then firstCat = catLabel end
+            local b = _CategoryButton(bar, catLabel, icons[catLabel])
+            b:ClearAllPoints()
+            if not prev then
+                b:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+            else
+                b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -6)
+            end
+            b:SetScript("OnClick", function() UI.SetActiveCategory(catLabel) end)
+            table.insert(bar._btns, b)
+            prev = b
+        end
+    end
+
+    -- Catégorie par défaut
+    UI._activeCategory = UI._activeCategory or firstCat
+
+    return bar
+end
+
+function UI.SetActiveCategory(catLabel)
+    UI._activeCategory = catLabel
+
+    -- Visuel boutons
+    if UI._catBar and UI._catBar._btns then
+        for _, b in ipairs(UI._catBar._btns) do
+            local sel = (b.txt:GetText() == catLabel)
+            b.sel:SetShown(sel)
+            b.bar:SetShown(sel)
+        end
+    end
+
+    -- Applique le filtre sur les onglets
+    for _, def in ipairs(Registered) do
+        local b = def._btn
+        if b then
+            local inCat = (not def.category) or (def.category == catLabel)
+            local allow = (def._sysShown ~= false) and inCat
+            b:SetShown(allow)
+        end
+    end
+
+    UI.RelayoutTabs()
+
+    -- Affiche le premier onglet visible de la catégorie
+    for i, d in ipairs(Registered) do
+        if d._btn and d._btn:IsShown() then
+            UI.ShowPanel(i)
+            if d.refresh then d.refresh() end
+            break
+        end
+    end
+
+    if UI._layout then UI._layout() end
+end
+
+-- Ouverture par label, avec bascule catégorie
+function UI.ShowTabByLabel(label)
+    if UI.SelectCategoryForLabel then UI.SelectCategoryForLabel(label) end
+    local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
+    if idx then
+        UI.ShowPanel(idx)
+        if Registered[idx] and Registered[idx].refresh then Registered[idx].refresh() end
+        UI.RelayoutTabs()
+    end
+end
+
+-- Instancie la barre à l’ouverture de la fenêtre (sécurité si Finalize est différé)
+if UI.Main and UI.Main.SetScript then
+    UI.Main:HookScript("OnShow", function()
+        if not UI._catBar then UI.CreateCategorySidebar() end
+    end)
 end

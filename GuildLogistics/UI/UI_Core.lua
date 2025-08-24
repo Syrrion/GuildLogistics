@@ -297,11 +297,10 @@ end
 
 
 -- Cadre utile pour le contenu : respecte les insets de la skin + safe pads
--- opts: { side = number (def 10), bottom = number (def 6), top = number (def 0) }
 function UI.ApplySafeContentBounds(frame, opts)
     opts = opts or {}
     local side  = tonumber(opts.side)   or 10
-    local topEx = tonumber(opts.top)    or 0
+    local topEx = tonumber(opts.top)    or 10
     local botEx = tonumber(opts.bottom) or 6
 
     local parent = frame:GetParent()
@@ -312,9 +311,11 @@ function UI.ApplySafeContentBounds(frame, opts)
         L,R,T,B = skin:GetInsets()
     end
 
+    local extraLeft = tonumber(UI.CATEGORY_BAR_W or 0) or 0
+
     frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT",     parent, "TOPLEFT",     L + side, -(T + topEx))
-    frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -(R + side),  B + botEx)
+    frame:SetPoint("TOPLEFT",     parent, "TOPLEFT",     L + side + extraLeft, -(T + topEx))
+    frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -(R + side),          B + botEx)
 end
 
 -- Normalisation légère des colonnes (justif/tailles par type)
@@ -1028,3 +1029,54 @@ function UI.YesNoText(v)
     end
 end
 
+-- ============================================================
+-- Helpers textures (génériques)
+-- ============================================================
+
+-- UI.CropIcon(texture, px, srcW, srcH)
+-- Rogne 'px' pixels sur chaque bord (par défaut source 64x64).
+function UI.CropIcon(tex, px, srcW, srcH)
+    if not tex or not tex.SetTexCoord then return end
+    local p = tonumber(px) or 0
+    if p <= 0 then tex:SetTexCoord(0,1,0,1); return end
+
+    local w = tonumber(srcW) or 64
+    local h = tonumber(srcH) or w
+
+    -- Clamp pour garder des UV valides quoi qu'il arrive
+    local maxPxW = math.max(0, math.min(p, (w/2) - 1))
+    local maxPxH = math.max(0, math.min(p, (h/2) - 1))
+
+    local u = maxPxW / w
+    local v = maxPxH / h
+    tex:SetTexCoord(u, 1 - u, v, 1 - v)
+end
+
+-- Restaure l’icone pleine (utile en fallback)
+function UI.ResetTexCoord(tex)
+    if not tex or not tex.SetTexCoord then return end
+    tex:SetTexCoord(0,1,0,1)
+end
+
+-- Force la visibilité par couche + alpha, pour éviter d’être masqué par un overlay
+function UI.EnsureIconVisible(tex, subLevel)
+    if not tex then return end
+    tex:SetDrawLayer("OVERLAY", subLevel or 1) -- au-dessus des ARTWORK/hover
+    tex:SetDesaturated(false)
+    tex:SetAlpha(1)
+    tex:Show()
+end
+
+-- Pose une icône depuis un path de fichier, avec fallback atlas si 'iconPath' est un atlas Blizzard
+function UI.TrySetIcon(tex, iconPath)
+    if not tex then return end
+    local function AtlasExists(name)
+        return C_Texture and C_Texture.GetAtlasInfo and name and C_Texture.GetAtlasInfo(name) ~= nil
+    end
+    local path = iconPath or "Interface\\ICONS\\INV_Misc_QuestionMark"
+    tex:SetTexture(path)
+    local ok = tex:GetTexture()
+    if (not ok) and iconPath and AtlasExists(iconPath) then
+        tex:SetAtlas(iconPath, true)
+    end
+end
