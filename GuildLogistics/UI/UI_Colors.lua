@@ -48,3 +48,7 @@ UI.Colors.BIS_TIER_COLORS = UI.Colors.BIS_TIER_COLORS or {
     E = { 0.70, 0.70, 0.70 }, -- pauvre (gris)
     F = { 0.40, 0.40, 0.40 }, -- très faible (gris foncé)
 }
+
+-- Gris utilisé pour les valeurs hors-ligne / placeholders (légèrement plus sombre qu'avant)
+UI.GRAY_OFFLINE      = UI.GRAY_OFFLINE      or { 0.30, 0.30, 0.30 }   -- #999999
+UI.GRAY_OFFLINE_HEX  = UI.GRAY_OFFLINE_HEX  or (UI.RGBHex and UI.RGBHex(0.30, 0.30, 0.30)) or "999999"

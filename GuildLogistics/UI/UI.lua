@@ -76,6 +76,11 @@ function UI.Colorize(text, r, g, b)
     return "|cff" .. UI.RGBHex(r,g,b) .. tostring(text) .. "|r"
 end
 
+function UI.ColorizeOffline(text)
+    local hex = UI.GRAY_OFFLINE_HEX or "999999"
+    return "|cff" .. tostring(hex) .. tostring(text) .. "|r"
+end
+
 -- Couleur "difficulté de quête" pour un niveau donné (par rapport au joueur)
 function UI.ColorizeLevel(level)
     local lvl = tonumber(level)

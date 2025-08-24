@@ -251,14 +251,9 @@ local function Build(container)
     panel = container
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
 
-    footer = UI.CreateFooter(panel, 36)
-    backBtn = UI.Button(footer, Tr("btn_back"), { size="sm", minWidth=110 })
-    backBtn:SetOnClick(function() if UI and UI.ShowTabByLabel then UI.ShowTabByLabel(Tr("tab_roster")) end end)
-    backBtn:ClearAllPoints()
-    backBtn:SetPoint("LEFT", footer, "LEFT", PAD, 0)
-
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow, bottomAnchor = footer })
+    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow})
 end
 
--- Masqué de la barre d’onglets
-UI.RegisterTab(Tr("tab_history"), Build, Refresh, Layout, { hidden = true })
+UI.RegisterTab(Tr("tab_history"), Build, Refresh, Layout, {
+    category = Tr("cat_raids"),
+})

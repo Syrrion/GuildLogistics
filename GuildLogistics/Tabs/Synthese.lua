@@ -244,6 +244,9 @@ end
 
 -- UpdateRow
 local function UpdateRow(i, r, f, data)
+    local GHX = (UI and UI.GRAY_OFFLINE_HEX) or "999999"
+    local function gray(t) return "|cff"..GHX..tostring(t).."|r" end
+
     -- Nom (icône/couleur main gérés par CreateNameTag / SetNameTag)
     UI.SetNameTag(f.name, data.name or "")
 
@@ -256,6 +259,14 @@ local function UpdateRow(i, r, f, data)
     -- Infos guilde agrégées (online/last seen/level + reroll en ligne)
     local gi = FindGuildInfo(data.name)
 
+    -- Alias: griser si le joueur est hors ligne
+    if f.alias then
+        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
+        if a ~= "" and gi and not gi.online then
+            f.alias:SetText(gray(" "..a))
+        end
+    end
+
     -- 🎨 Colonne Nom : masque le royaume + ajoute (icône + NomReroll) en gris avec couleur/icone de classe
     do
         local function classIconMarkup(classTag, size)
@@ -263,20 +274,17 @@ local function UpdateRow(i, r, f, data)
             if not classTag or classTag == "" then return "" end
             local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classTag]
             if not coords then return "" end
-            local l, rTex, t, b = coords[1], coords[2], coords[3], coords[4]
-            local tex = "Interface\\TargetingFrame\\UI-Classes-Circles"
-            local ULx, ULy = math.floor(l * 256), math.floor(t * 256)
-            local LRx, LRy = math.floor(rTex * 256), math.floor(b * 256)
-            return string.format("|T%s:%d:%d:0:0:256:256:%d:%d:%d:%d|t", tex, size, size, ULx, LRx, ULy, LRy)
+            local w, h = size, size
+            return ("|TInterface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES:%d:%d:0:0:256:256:%d:%d:%d:%d|t")
+                :format(w, h, coords[1]*256, coords[2]*256, coords[3]*256, coords[4]*256)
         end
 
-        local baseText = (f.name and f.name.text and f.name.text:GetText()) or ""
-        baseText = baseText:gsub("%-[^%s|]+", "") -- supprime "-Royaume" sans toucher aux balises
+        local name = data.name or ""
+        local mainKey = (ns.Util and ns.Util.NormName) and ns.Util.NormName(name) or name
+        local baseText = (gi and gi.base) or name
+        local altNameColored, altClass = (gi and gi.onlineAltName) or "", (gi and gi.onlineAltClass) or nil
 
-        if gi and gi.onlineAltBase and gi.onlineAltBase ~= "" then
-            local altClass = gi.onlineAltClassTag
-            local colorStr = (altClass and RAID_CLASS_COLORS and RAID_CLASS_COLORS[altClass] and RAID_CLASS_COLORS[altClass].colorStr) or nil
-            local altNameColored = colorStr and ("|c" .. colorStr .. gi.onlineAltBase .. "|r") or gi.onlineAltBase
+        if altNameColored ~= "" then
             local icon = classIconMarkup(altClass, 14)
             local altPart = ("|cffaaaaaa(|r%s%s|cffaaaaaa)|r"):format((icon ~= "" and (icon .. " ") or ""), altNameColored)
             baseText = baseText .. " " .. altPart
@@ -302,14 +310,18 @@ local function UpdateRow(i, r, f, data)
         elseif gi.days or gi.hours then
             f.last:SetText(ns.Format.LastSeen(gi.days, gi.hours))
         else
-            f.last:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            f.last:SetText(gray(Tr("status_empty")))
         end
     end
 
     -- Niveau
     if f.lvl then
         if gi.level and gi.level > 0 then
-            f.lvl:SetText((UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level))
+            if gi.online then
+                f.lvl:SetText((UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level))
+            else
+                f.lvl:SetText(gray(tostring(gi.level)))
+            end
         else
             f.lvl:SetText("")
         end
@@ -319,9 +331,9 @@ local function UpdateRow(i, r, f, data)
     if f.mplus then
         local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
         if gi.online then
-            f.mplus:SetText(score and score > 0 and tostring(score) or "|cffaaaaaa"..Tr("status_empty").."|r")
+            f.mplus:SetText(score and score > 0 and tostring(score) or gray(Tr("status_empty")))
         else
-            f.mplus:SetText(score and score > 0 and ("|cffaaaaaa"..tostring(score).."|r") or "|cffaaaaaa"..Tr("status_empty").."|r")
+            f.mplus:SetText(score and score > 0 and gray(score) or gray(Tr("status_empty")))
         end
     end
 
@@ -331,7 +343,7 @@ local function UpdateRow(i, r, f, data)
         if gi.online then
             f.mkey:SetText(mkeyTxt or "")
         else
-            f.mkey:SetText(mkeyTxt ~= "" and ("|cffaaaaaa"..mkeyTxt.."|r") or "|cffaaaaaa"..Tr("status_empty").."|r")
+            f.mkey:SetText(mkeyTxt ~= "" and gray(mkeyTxt) or gray(Tr("status_empty")))
         end
     end
 
@@ -343,23 +355,24 @@ local function UpdateRow(i, r, f, data)
         local function fmtOnline()
             if ilvl and ilvl > 0 then
                 if ilvlMax and ilvlMax > 0 then
-                    return tostring(ilvl).." |cffaaaaaa("..tostring(ilvlMax)..")|r"
+                    return tostring(ilvl).." ("..tostring(ilvlMax)..")"
                 else
                     return tostring(ilvl)
                 end
             else
-                return "|cffaaaaaa"..Tr("status_unknown").."|r"
+                return gray(Tr("status_empty"))
             end
         end
+
         local function fmtOffline()
             if ilvl and ilvl > 0 then
                 if ilvlMax and ilvlMax > 0 then
-                    return "|cffaaaaaa"..tostring(ilvl).." ("..tostring(ilvlMax)..")|r"
+                    return gray(tostring(ilvl).." ("..tostring(ilvlMax)..")")
                 else
-                    return "|cffaaaaaa"..tostring(ilvl).."|r"
+                    return gray(tostring(ilvl))
                 end
             else
-                return "|cffaaaaaa"..Tr("status_empty").."|r"
+                return gray(Tr("status_empty"))
             end
         end
 
@@ -370,21 +383,17 @@ local function UpdateRow(i, r, f, data)
     if f.ver then
         local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(data.name)) or ""
         if v == "" then
-            f.ver:SetText("|cffaaaaaa"..Tr("status_empty").."|r")
+            f.ver:SetText(gray(Tr("status_empty")))
         else
-            f.ver:SetText(gi.online and v or ("|cffaaaaaa"..v.."|r"))
+            f.ver:SetText(gi.online and v or gray(v))
         end
     end
     
-    -- ✨ Surlignage : même groupe (party) ou même sous-groupe de raid que moi
-    if r._highlight then
-        local hl = false
-        if GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name) then
-            hl = true
-        end
-        if hl then r._highlight:Show() else r._highlight:Hide() end
+    -- Solde banque perso (si affiché)
+    if f.solde then
+        local balance = (GLOG.GetBalance and GLOG.GetBalance(data.name)) or 0
+        f.solde:SetText((UI and UI.MoneyText) and UI.MoneyText(balance) or tostring(balance).." po")
     end
-
     f.solde:SetText(money(GetSolde(data.name)))
 
     -- Autorisations & boutons
@@ -558,7 +567,6 @@ end
 -- Footer
 local function BuildFooterButtons(footer, isGM)
     local btnGuild
-    local btnHist  = UI.Button(footer, Tr("btn_raids_history"), { size="sm", minWidth=160 })
 
     -- ➕ Bouton "Afficher joueurs masqués" (GM uniquement, rendu visible selon l'état de la réserve)
     if isGM then
@@ -576,17 +584,13 @@ local function BuildFooterButtons(footer, isGM)
             if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
         end)
         if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer, { btnHist, btnGuild, _btnShowHiddenReserve })
+            UI.AttachButtonsFooterRight(footer, { btnGuild, _btnShowHiddenReserve })
         end
     else
         if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer, { btnHist })
+            UI.AttachButtonsFooterRight(footer)
         end
     end
-
-    btnHist:SetOnClick(function()
-        UI.ShowTabByLabel(Tr("tab_history"))
-    end)
 end
 
 -- Build panel
