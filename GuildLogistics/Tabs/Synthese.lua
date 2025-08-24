@@ -40,11 +40,9 @@ local cols = UI.NormalizeColumns({
     { key="alias",  title=Tr("col_alias"),          w=90, justify="LEFT" },
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
     { key="name",   title=Tr("col_name"),           min=200, flex=1 },
-    { key="ilvl",   title=Tr("col_ilvl"),           w=85, justify="CENTER" },
-    { key="mplus",  title=Tr("col_mplus_score"),    w=85, justify="CENTER" },
-    { key="mkey",   title=Tr("col_mplus_key"),      w=250, justify="LEFT" },
-    { key="last",   title=Tr("col_attendance"),     w=80 },
-    { key="act",    title="",                       w=80 },
+    { key="ilvl",   title=Tr("col_ilvl"),           w=120, justify="CENTER" },
+    { key="last",   title=Tr("col_attendance"),     w=120 },
+    { key="act",    title="",                       w=120 },
     { key="solde",  title=Tr("col_balance"),        w=70 },
 })
 

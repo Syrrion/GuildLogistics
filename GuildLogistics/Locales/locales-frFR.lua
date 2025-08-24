@@ -19,6 +19,7 @@ L["tab_resources"]        = "Ressources"
 L["tab_requests"]         = "Transactions en attente"
 L["tab_debug"]            = "Diffusion des données"
 L["tab_settings"]         = "Options"
+L["tab_guild_members"]    = "Membres de la guilde"
 
 
 -- ============================================== --
@@ -187,7 +188,9 @@ L["lbl_scan_roster_progress"] = "Scan du roster en cours..."
 L["lbl_from_roster_question"] = "Du roster ?"
 L["lbl_total_balance"]    = "Total soldes"
 L["lbl_status_recieved"]  = "Reçu" 
-
+L["lbl_guild_members"] = "Membres de la guilde"
+L["lbl_sep_online"]  = "Connectés"
+L["lbl_sep_offline"] = "Déconnectés"
 
 -- ============================================== --
 -- ===           POPUPS / PROMPTS             === --

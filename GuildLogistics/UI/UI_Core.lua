@@ -662,6 +662,62 @@ function UI.AttachBadge(frame)
     return b
 end
 
+-- ➕ Icône d'état générique (petit point circulaire coloré)
+-- Usage : local ico = UI.AttachStateIcon(btn); ico:AnchorTo(btn.txt, "LEFT", "RIGHT", 8, 0); ico:SetOn(true)
+function UI.AttachStateIcon(frame, opts)
+    if frame._stateIcon then return frame._stateIcon end
+    opts = opts or {}
+    local size = tonumber(opts.size) or 12
+    local color = opts.color or {0.92, 0.22, 0.22, 1.0} -- rouge par défaut
+
+    local f = CreateFrame("Frame", nil, frame)
+    f:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
+    f:SetFrameLevel((frame:GetFrameLevel() or 0) + 10)
+    f:SetSize(size, size)
+    f:Hide()
+
+    -- Ombre légère
+    f.shadow = f:CreateTexture(nil, "BACKGROUND")
+    f.shadow:SetColorTexture(0, 0, 0, UI.BADGE_SHADOW_A or 0.35)
+
+    -- Disque coloré
+    f.dot = f:CreateTexture(nil, "ARTWORK")
+    f.dot:SetColorTexture(color[1], color[2], color[3], color[4])
+
+    -- Masque circulaire (pour un vrai disque)
+    if f.CreateMaskTexture and f.dot.AddMaskTexture then
+        local mask = f:CreateMaskTexture(nil, "BACKGROUND")
+        mask:SetTexture("Interface/CHARACTERFRAME/TempPortraitAlphaMask")
+        mask:SetAllPoints(f)
+        f.dot.AddMaskTexture(f.dot, mask)
+        f.shadow.AddMaskTexture(f.shadow, mask)
+        f._mask = mask
+    end
+
+    -- API
+    function f:SetOn(on)
+        if on then
+            self.shadow:ClearAllPoints()
+            self.shadow:SetPoint("CENTER", self, "CENTER", 0, 0)
+            self.shadow:SetSize(size + 3, size + 3)
+            self.dot:ClearAllPoints()
+            self.dot:SetAllPoints(self)
+            self:Show()
+        else
+            self:Hide()
+        end
+    end
+
+    function f:AnchorTo(target, point, relativePoint, xOff, yOff)
+        if not (target and target.GetObjectType) then return end
+        self:ClearAllPoints()
+        self:SetPoint(point or "LEFT", target, relativePoint or "RIGHT", xOff or 8, yOff or 0)
+    end
+
+    frame._stateIcon = f
+    return f
+end
+
 -- Nom + icône de classe
 function UI.CreateNameTag(parent)
     local f = CreateFrame("Frame", nil, parent)

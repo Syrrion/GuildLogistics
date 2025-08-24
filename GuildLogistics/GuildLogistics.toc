@@ -32,15 +32,21 @@ UI/UI_Dropdown.lua
 UI/UI_Colors.lua
 UI/UI_Badge.lua
 
+Tabs/Guilde.lua
+
 Tabs/Synthese.lua
-Tabs/Raid.lua
 Tabs/Historique.lua
-Tabs/BiS.lua
+Tabs/Raid.lua
 Tabs/Depense.lua
-Tabs/Joueurs.lua
 Tabs/Demandes.lua
-Tabs/Debug_Packets.lua
+
+Tabs/BiS.lua
+
 Tabs/Options.lua
+
+Tabs/Debug_Packets.lua
+
+Tabs/Joueurs.lua
 
 Core/Calendar.lua
 Core/Events.lua

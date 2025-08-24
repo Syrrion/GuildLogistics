@@ -3,7 +3,7 @@ local Tr = ns and ns.Tr
 local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lv, footer, backBtn
+local panel, lv, footer, backBtn, histPane
 local cols = UI.NormalizeColumns({
     { key="date",  title=Tr("col_date"),         w=140 },
     { key="total", title=Tr("col_total"),        w=100 },
@@ -249,9 +249,39 @@ end
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    -- Padding global, identique aux autres onglets
+    if UI.ApplySafeContentBounds then
+        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
+    end
 
-    lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow})
+    -- Footer + bouton retour (inchangés fonctionnellement)
+    footer = UI.CreateFooter(panel, 36)
+    backBtn = UI.Button(footer, Tr("btn_back"), { size="sm", minWidth=110 })
+    backBtn:SetOnClick(function()
+        if UI and UI.ShowTabByLabel then
+            UI.ShowTabByLabel(Tr("tab_roster"))
+        end
+    end)
+    backBtn:ClearAllPoints()
+    backBtn:SetPoint("LEFT", footer, "LEFT", PAD, 0)
+
+    -- 📦 Conteneur interne paddé (comme Synthese/Guilde)
+    histPane = CreateFrame("Frame", nil, panel)
+    histPane:ClearAllPoints()
+    histPane:SetPoint("TOPLEFT",     panel, "TOPLEFT",     UI.OUTER_PAD, -UI.OUTER_PAD)
+    histPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD,  UI.OUTER_PAD)
+
+    -- 🧩 En-tête de section (même pattern visuel que "Roster actif")
+    -- On réutilise la clé d’onglet pour le titre pour éviter d’ajouter une locale dédiée.
+    UI.SectionHeader(histPane, Tr("tab_history"), { topPad = 2 })
+
+    -- 📋 ListView plein écran dans le conteneur, ancrée sur le footer global
+    lv = UI.ListView(histPane, cols, {
+        buildRow    = BuildRow,
+        updateRow   = UpdateRow,
+        topOffset   = (UI.SECTION_HEADER_H or 26) + 6, -- espace sous le header de section
+        bottomAnchor= footer,                           -- occupe tout jusqu’au footer
+    })
 end
 
 UI.RegisterTab(Tr("tab_history"), Build, Refresh, Layout, {

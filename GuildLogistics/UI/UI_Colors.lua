@@ -50,5 +50,5 @@ UI.Colors.BIS_TIER_COLORS = UI.Colors.BIS_TIER_COLORS or {
 }
 
 -- Gris utilisé pour les valeurs hors-ligne / placeholders (légèrement plus sombre qu'avant)
-UI.GRAY_OFFLINE      = UI.GRAY_OFFLINE      or { 0.30, 0.30, 0.30 }   -- #999999
-UI.GRAY_OFFLINE_HEX  = UI.GRAY_OFFLINE_HEX  or (UI.RGBHex and UI.RGBHex(0.30, 0.30, 0.30)) or "999999"
+UI.GRAY_OFFLINE      = UI.GRAY_OFFLINE      or { 0.30, 0.30, 0.30 }                 
+UI.GRAY_OFFLINE_HEX  = UI.GRAY_OFFLINE_HEX  or (UI.RGBHex and UI.RGBHex(0.45, 0.45, 0.45)) or "999999"

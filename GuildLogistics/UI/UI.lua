@@ -512,6 +512,8 @@ end
 function UI.RefreshAll()
     local i = UI._current
     if i and Registered[i] and Registered[i].refresh then Registered[i].refresh() end
+    -- Rafraîchit les indicateurs globaux (pastilles, icônes d'état, etc.)
+    if UI.RefreshTopIndicators then UI.RefreshTopIndicators() end
 end
 ns.RefreshAll = UI.RefreshAll
 
@@ -854,6 +856,38 @@ function UI.GetCategoryButton(catLabel)
     return nil
 end
 
+-- ➕ Indicateur d’enregistrement « Ressources »
+function UI.UpdateResourcesRecordingIcon()
+    local on = (ns.GLOG and ns.GLOG.IsExpensesRecording and ns.GLOG.IsExpensesRecording()) or false
+
+    -- Sous-onglet « Ressources »
+    local tabBtn = UI.GetTabButton and UI.GetTabButton(Tr("tab_resources")) or nil
+    if tabBtn and UI.AttachStateIcon then
+        local ico = UI.AttachStateIcon(tabBtn, { size = 12 })
+        if tabBtn.txt and ico.AnchorTo then
+            ico:AnchorTo(tabBtn.txt, "LEFT", "RIGHT", 8, 0)
+        end
+        ico:SetOn(on)
+    end
+
+    -- Catégorie mère « Raids »
+    local catBtn = UI.GetCategoryButton and UI.GetCategoryButton(Tr("cat_raids")) or nil
+    if catBtn and UI.AttachStateIcon then
+        local ico = UI.AttachStateIcon(catBtn, { size = 12 })
+        if catBtn.txt and ico.AnchorTo then
+            ico:AnchorTo(catBtn.txt, "LEFT", "RIGHT", 8, 0)
+        end
+        ico:SetOn(on)
+    end
+end
+
+-- ➕ Regroupe les indicateurs globaux à rafraîchir
+function UI.RefreshTopIndicators()
+    if UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
+    if UI.UpdateResourcesRecordingIcon then UI.UpdateResourcesRecordingIcon() end
+end
+
+
 -- ➕ Règle métier pour l'onglet "Demandes"
 function UI.UpdateRequestsBadge()
     local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
@@ -866,15 +900,70 @@ function UI.UpdateRequestsBadge()
     UI.SetTabVisible(Tr("tab_requests"), isGM and cnt > 0)
 end
 
+-- Wrapper sûr : met à jour la pastille "Demandes" si disponible, sinon masque proprement
+function UI.SafeUpdateRequestsBadge()
+    if type(UI.UpdateRequestsBadge) == "function" then
+        UI.UpdateRequestsBadge()
+        return
+    end
+    -- Fallback côté non-GM / chargement partiel : aucune demande visible
+    if UI.SetTabBadge then UI.SetTabBadge(Tr("tab_requests"), 0) end
+    if UI.SetTabVisible then UI.SetTabVisible(Tr("tab_requests"), false) end
+end
+
+-- ➕ Indicateur d’enregistrement « Ressources »
+function UI.UpdateResourcesRecordingIcon()
+    local on = (ns.GLOG and ns.GLOG.IsExpensesRecording and ns.GLOG.IsExpensesRecording()) or false
+
+    -- Sous-onglet « Ressources »
+    local tabBtn = UI.GetTabButton and UI.GetTabButton(Tr("tab_resources")) or nil
+    if tabBtn and UI.AttachStateIcon then
+        local ico = UI.AttachStateIcon(tabBtn, { size = 12 })
+        if tabBtn.txt and ico.AnchorTo then
+            ico:AnchorTo(tabBtn.txt, "LEFT", "RIGHT", 8, 0)
+        end
+        ico:SetOn(on)
+    end
+
+    -- Catégorie mère « Raids »
+    local catBtn = UI.GetCategoryButton and UI.GetCategoryButton(Tr("cat_raids")) or nil
+    if catBtn and UI.AttachStateIcon then
+        local ico = UI.AttachStateIcon(catBtn, { size = 12 })
+        if catBtn.txt and ico.AnchorTo then
+            ico:AnchorTo(catBtn.txt, "LEFT", "RIGHT", 8, 0)
+        end
+        ico:SetOn(on)
+    end
+end
+
+-- ➕ Regroupe les indicateurs globaux à rafraîchir
+function UI.RefreshTopIndicators()
+    if UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
+    if UI.UpdateResourcesRecordingIcon then UI.UpdateResourcesRecordingIcon() end
+end
+
 -- ➕ Hook « RefreshActive » utilisé par Comm.lua
 function UI.RefreshActive()
     local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
+
+    -- Onglet "Démarrer un raid" visible uniquement pour GM
     if UI.SetTabVisible then
         UI.SetTabVisible(Tr("tab_start_raid"), isGM)
     end
-    UI.UpdateRequestsBadge()
-    UI.RefreshAll()
+
+    -- Sécurisé : met à jour/masque la pastille "Demandes" sans crasher
+    if UI.SafeUpdateRequestsBadge then
+        UI.SafeUpdateRequestsBadge()
+    end
+
+    -- Cycle de rafraîchissement global
+    if ns.RefreshAll then
+        ns.RefreshAll()
+    elseif UI.RefreshAll then
+        UI.RefreshAll()
+    end
 end
+
 
 ns.RefreshActive = UI.RefreshActive
 
@@ -1159,9 +1248,13 @@ function UI.CreateCategorySidebar()
 
     -- Catégorie par défaut
     UI._activeCategory = UI._activeCategory or firstCat
+    
+    -- Rafraîchit les indicateurs globaux maintenant que la barre est construite
+    if UI.RefreshTopIndicators then UI.RefreshTopIndicators() end
 
     return bar
 end
+
 
 
 function UI.SetActiveCategory(catLabel)
