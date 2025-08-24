@@ -1,6 +1,8 @@
 local ADDON, ns = ...
 ns.GLOG  = ns.GLOG  or {}
 ns.Util = ns.Util or {}
+ns.UI = ns.UI or {}
+local UI = ns.UI
 
 local GLOG, U = ns.GLOG, ns.Util
 
@@ -326,16 +328,6 @@ function GLOG.GetAddonTitle()
     return (Tr and Tr("app_title"))
 end
 
-function GLOG.BuildMainTitle()
-    local g = GLOG.GetCurrentGuildName and GLOG.GetCurrentGuildName()
-    if g and g ~= "" then
-        return g
-    end
-    -- ➜ Si pas de guilde : affiche le nom de l’addon
-    return (GLOG.GetAddonTitle and GLOG.GetAddonTitle())
-end
-
-
 function GLOG.GetAddonIconTexture()
     local icon = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "IconTexture"))
               or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "IconTexture"))
@@ -580,4 +572,60 @@ function ns.Util.ResolvePlayerClassSpec(dataByClassTag)
     end
 
     return useID, useTag, useSpec
+end
+
+-- Harmonise tout le rendu "1 px" sur n'importe quel scale/moniteur.
+function UI.GetPhysicalPixel()
+    local _, ph = GetPhysicalScreenSize()
+    local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if not ph or ph <= 0 then ph = 768 end
+    if not scale or scale <= 0 then scale = 1 end
+    return 768 / ph / scale
+end
+
+function UI.RoundToPixel(v)
+    local p = UI.GetPhysicalPixel()
+    return math.floor((v / p) + 0.5) * p
+end
+
+function UI.SnapTexture(tex)
+    if tex and tex.SetSnapToPixelGrid then
+        tex:SetSnapToPixelGrid(true)
+        tex:SetTexelSnappingBias(0)
+    end
+    return tex
+end
+
+function UI.SnapRegion(region)
+    if not region then return end
+    -- Taille
+    local w, h = region:GetSize()
+    if w and w > 0 then
+        if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(region, UI.RoundToPixel(w)) else region:SetWidth(UI.RoundToPixel(w)) end
+    end
+    if h and h > 0 then
+        if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(region, UI.RoundToPixel(h)) else region:SetHeight(UI.RoundToPixel(h)) end
+    end
+    -- Points d'ancrage
+    local n = region:GetNumPoints()
+    if n and n > 0 then
+        for i = 1, n do
+            local p, rel, rp, x, y = region:GetPoint(i)
+            if p then
+                local nx, ny = UI.RoundToPixel(x or 0), UI.RoundToPixel(y or 0)
+                if PixelUtil and PixelUtil.SetPoint then
+                    PixelUtil.SetPoint(region, p, rel, rp, nx, ny)
+                else
+                    region:SetPoint(p, rel, rp, nx, ny)
+                end
+            end
+        end
+    end
+end
+
+-- Fixe l'épaisseur d'une ligne à N pixels physiques exacts (par défaut 1).
+function UI.SetPixelThickness(tex, n)
+    n = n or 1
+    local h = UI.GetPhysicalPixel() * n
+    if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(tex, h) else tex:SetHeight(h) end
 end

@@ -120,78 +120,74 @@ function UI.DecorateRow(r)
     local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {
         oddTop={r=.13,g=.13,b=.13,a=.35}, oddBottom={r=.08,g=.08,b=.08,a=.35},
         evenTop={r=.15,g=.15,b=.15,a=.35}, evenBottom={r=.10,g=.10,b=.10,a=.35},
-        hover={r=1,g=.82,b=0,a=.06}, sep={r=1,g=1,b=1,a=.10}, accent={r=1,g=.82,b=0,a=.90},
+        hover={r=1,g=.82,b=0,a=.06}, sep={r=1,g=1,b=1,a=.20}, accent={r=1,g=.82,b=0,a=.90},
     }
     local WHITE = "Interface\\Buttons\\WHITE8x8"
 
-    local function OnePixel()
-        local _, ph = GetPhysicalScreenSize()
-        ph = (ph and ph > 0) and ph or 768
-        local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-        if scale <= 0 then scale = 1 end
-        return 768 / ph / scale
-    end
-    local function snap(tex)
-        if tex and tex.SetSnapToPixelGrid then
-            tex:SetSnapToPixelGrid(true)
-            tex:SetTexelSnappingBias(0)
-        end
-    end
-    local function pxSetHeight(region, h)
-        if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(region, h) else region:SetHeight(h) end
-    end
-    local function pxSetWidth(region, w)
-        if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(region, w) else region:SetWidth(w) end
-    end
-    local function pxSetPoint(region, a, rel, ra, x, y)
-        if PixelUtil and PixelUtil.SetPoint then PixelUtil.SetPoint(region, a, rel, ra, x, y) else region:SetPoint(a, rel, ra, x, y) end
-    end
-
-    -- Fond (texture blanche + gradient ensuite)
+    -- Fond
     local bg = r:CreateTexture(nil, "BACKGROUND", nil, -8)
     bg:SetAllPoints(r)
-    bg:SetTexture(WHITE)  -- requis pour SetGradient/SetGradientAlpha
-    snap(bg)
+    bg:SetTexture(WHITE)
+    UI.SnapTexture(bg)
     r._bg = bg
 
-    -- Overlay hover
+    -- Hover
     local hov = r:CreateTexture(nil, "BACKGROUND", nil, -7)
     hov:SetAllPoints(r)
     hov:SetTexture(WHITE)
     hov:SetVertexColor(st.hover.r, st.hover.g, st.hover.b, st.hover.a)
     hov:Hide()
-    snap(hov)
+    UI.SnapTexture(hov)
     r._hover = hov
 
-    -- Séparateur TOP 1px
-    local sepTop = r:CreateTexture(nil, "BORDER", nil, 0)
+    -- Séparateur haut 1 px (toujours net)
+    local sepTop = r:CreateTexture(nil, "OVERLAY", nil, -1)
     sepTop:SetTexture(WHITE)
-    pxSetPoint(sepTop, "TOPLEFT",  r, "TOPLEFT",  0, 0)
-    pxSetPoint(sepTop, "TOPRIGHT", r, "TOPRIGHT", 0, 0)
-    pxSetHeight(sepTop, OnePixel())
+    UI.SetPixelThickness(sepTop, 1)
+    if PixelUtil and PixelUtil.SetPoint then
+        PixelUtil.SetPoint(sepTop, "TOPLEFT",  r, "TOPLEFT",  0, 0)
+        PixelUtil.SetPoint(sepTop, "TOPRIGHT", r, "TOPRIGHT", 0, 0)
+    else
+        sepTop:SetPoint("TOPLEFT",  r, "TOPLEFT",  0, 0)
+        sepTop:SetPoint("TOPRIGHT", r, "TOPRIGHT", 0, 0)
+    end
     sepTop:SetVertexColor(st.sep.r, st.sep.g, st.sep.b, st.sep.a)
-    snap(sepTop)
+    UI.SnapTexture(sepTop)
     r._sepTop = sepTop
 
-    -- Liseré gauche (2 px réels) — caché par défaut
+    -- Liseré gauche (option)
     local acc = r:CreateTexture(nil, "ARTWORK", nil, 1)
     acc:SetTexture(WHITE)
-    pxSetPoint(acc, "TOPLEFT",    r, "TOPLEFT",    0, 0)
-    pxSetPoint(acc, "BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
-    pxSetWidth(acc, OnePixel() * 2)
+    if PixelUtil and PixelUtil.SetPoint then
+        PixelUtil.SetPoint(acc, "TOPLEFT",    r, "TOPLEFT",    0, 0)
+        PixelUtil.SetPoint(acc, "BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
+    else
+        acc:SetPoint("TOPLEFT",    r, "TOPLEFT",    0, 0)
+        acc:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
+    end
+    local px2 = UI.GetPhysicalPixel() * 2
+    if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(acc, px2) else acc:SetWidth(px2) end
     acc:SetVertexColor(st.accent.r, st.accent.g, st.accent.b, st.accent.a)
     acc:Hide()
-    snap(acc)
+    UI.SnapTexture(acc)
     r._accentLeft = acc
 
     -- Hover show/hide
     if r.HookScript then
         r:HookScript("OnEnter", function() if r._hover then r._hover:Show() end end)
         r:HookScript("OnLeave", function() if r._hover then r._hover:Hide() end end)
+        r:HookScript("OnSizeChanged", function() -- re-quantifie à chaque resize
+            if r._sepTop then UI.SetPixelThickness(r._sepTop, 1) end
+            UI.SnapRegion(r)
+        end)
     end
 
-    -- Dégradé par défaut (sera actualisé pair/impair dans SetData)
+    -- Dégradé pair/impair initial
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, true) end
+
+    -- Première quantification (au cas où Layout ne soit pas encore passé)
+    UI.SnapRegion(r)
+    if r._sepTop then UI.SetPixelThickness(r._sepTop, 1) end
 end
 
 -- Applique le dégradé vertical pair/impair sur la texture de fond d'une ligne
@@ -596,6 +592,7 @@ function UI.AttachBadge(frame)
     local b = CreateFrame("Frame", nil, frame)
     b:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
     b:SetFrameLevel((frame:GetFrameLevel() or 0) + 10)
+    -- Ancrage par défaut : coin haut-droit (compatibilité avec les usages existants)
     b:SetPoint("TOPRIGHT", frame, "TOPRIGHT", UI.BADGE_OFFSET_X, UI.BADGE_OFFSET_Y)
     b:Hide()
 
@@ -613,36 +610,37 @@ function UI.AttachBadge(frame)
         local mask = b:CreateMaskTexture(nil, "BACKGROUND")
         mask:SetTexture("Interface/CHARACTERFRAME/TempPortraitAlphaMask") -- masque rond natif
         mask:SetAllPoints(b)
-
-        b.bg:AddMaskTexture(mask)
-        b.shadow:AddMaskTexture(mask)
+        b.bg.AddMaskTexture(b.bg, mask)
+        b.shadow.AddMaskTexture(b.shadow, mask)
         b._mask = mask
     end
 
     -- Texte lisible (blanc + ombre)
     b.txt = b:CreateFontString(nil, "OVERLAY", UI.BADGE_TEXT)
     b.txt:SetPoint("CENTER", b, "CENTER")
-    if b.txt.SetTextColor then b.txt:SetTextColor(1,1,1) end
-    if b.txt.SetShadowColor then b.txt:SetShadowColor(0,0,0,0.9) end
+    if b.txt.SetTextColor   then b.txt:SetTextColor(1, 1, 1) end
+    if b.txt.SetShadowColor then b.txt:SetShadowColor(0, 0, 0, 0.9) end
     if b.txt.SetShadowOffset then b.txt:SetShadowOffset(1, -1) end
 
+    -- API publique
     function b:SetCount(n)
-        n = tonumber(n) or 0
-        if n <= 0 then self:Hide(); return end
+        local v = tonumber(n) or 0
+        if v <= 0 then self:Hide(); return end
 
-        local max = UI.BADGE_MAX
-        local s = (n > max) and (tostring(max) .. "+") or tostring(n)
-        self.txt:SetText(s)
+        local max = UI.BADGE_MAX or 99
+        if v > max then
+            self.txt:SetText(max .. "+")
+        else
+            self.txt:SetText(v)
+        end
 
+        -- Taille en fonction du contenu (pastille circulaire)
         local pad = UI.BADGE_INSET_X
         local w = math.ceil(self.txt:GetStringWidth()) + pad * 2
         local h = math.ceil(self.txt:GetStringHeight()) + 2
-
-        -- Pastille parfaitement circulaire : diamètre = max(w,h,16)
         local d = math.max(16, w, h)
         self:SetSize(d, d)
 
-        -- Fond + ombre suivent la taille du cadre (ombre légèrement plus large)
         self.bg:ClearAllPoints()
         self.bg:SetAllPoints(self)
 
@@ -653,10 +651,16 @@ function UI.AttachBadge(frame)
         self:Show()
     end
 
+    -- ✅ Nouvelle API : re-ancrage pratique (pour aligner la pastille sur un texte)
+    function b:AnchorTo(target, point, relativePoint, xOff, yOff)
+        if not (target and target.GetObjectType) then return end
+        self:ClearAllPoints()
+        self:SetPoint(point or "LEFT", target, relativePoint or "RIGHT", xOff or 8, yOff or 0)
+    end
+
     frame._badge = b
     return b
 end
-
 
 -- Nom + icône de classe
 function UI.CreateNameTag(parent)

@@ -159,17 +159,46 @@ Main.Content:SetPoint("TOPLEFT",     Main, "TOPLEFT",     L + SIDE, (TAB_Y - TAB
 Main.Content:SetPoint("BOTTOMRIGHT", Main, "BOTTOMRIGHT", -(R + SIDE), B + BOT)
 Main.Content:SetClipsChildren(true)
 
--- Titre centré sur la barre de titre
-Main.title = Main:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+-- 🔶 Titre principal = nom de l’addon (jaune + plus grand)
+Main.title = Main:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+Main.titleAddon = Main.title  -- alias pour compatibilité
+local addonName = (GLOG.GetAddonTitle and GLOG.GetAddonTitle()) or (Tr and Tr("app_title")) or ADDON
+Main.titleAddon:SetText(addonName)
+
 do
-    Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or (Tr and Tr("main_title_guild")))
+    local y = UI.FONT_YELLOW or {1, 0.82, 0}
+    Main.titleAddon:SetTextColor(y[1], y[2], y[3], 1)
+    -- Grossit légèrement par rapport au GameFontHighlightLarge
+    local f, sz, fl = Main.titleAddon:GetFont()
+    if f then Main.titleAddon:SetFont(f, math.floor((sz or 14) * 1.25 + 0.5), fl) end
 end
-Main.title:SetTextColor(0.98, 0.95, 0.80)
+
+-- 🔸 Version à droite du nom (gris, entre parenthèses)
+Main.titleVersion = Main:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+do
+    local ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+    local txt = (ver ~= "" and ("("..ver..")")) or ""
+    Main.titleVersion:SetText(txt)
+    Main.titleVersion:SetTextColor(0.70, 0.70, 0.70, 1)
+    Main.titleVersion:ClearAllPoints()
+    -- collé à droite du nom de l’addon
+    Main.titleVersion:SetPoint("LEFT", Main.titleAddon, "RIGHT", 8, 0)
+    Main.titleVersion:SetShown(txt ~= "")
+end
+
 do
     local _, _, TOP = skin:GetInsets()
-    Main.title:ClearAllPoints()
-    Main.title:SetPoint("TOP", Main, "TOP", 0, -(TOP - 38)) -- visuellement centré sur la frise
+    Main.titleAddon:ClearAllPoints()
+    Main.titleAddon:SetPoint("TOP", Main, "TOP", 0, -(TOP - 36))
 end
+
+-- 🔷 Sous-titre = nom de la guilde (blanc doux)
+Main.titleGuild = Main:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+Main.titleGuild:SetText(GLOG.GetCurrentGuildName and (GLOG.GetCurrentGuildName() or "") or "")
+Main.titleGuild:SetTextColor(0.98, 0.95, 0.90, 1)
+Main.titleGuild:ClearAllPoints()
+Main.titleGuild:SetPoint("TOP", Main.titleAddon, "BOTTOM", 0, -2)
+Main.titleGuild:SetShown((Main.titleGuild:GetText() or "") ~= "")
 
 -- Bouton fermer standard (possibilité d'utiliser l'atlas UI-Frame-Neutral-ExitButtonBorder plus tard)
 local close = CreateFrame("Button", nil, Main, "UIPanelCloseButton")
@@ -188,25 +217,8 @@ reloadBtn:ClearAllPoints()
 reloadBtn:SetPoint("TOPRIGHT", close, "TOPLEFT", -6, 0)
 reloadBtn:SetScript("OnClick", function() ReloadUI() end)
 
--- ➕ Bouton Debug à droite (collé au bouton Reload)
-local debugBtn = CreateFrame("Button", ADDON.."DebugButton", Main, "UIPanelButtonTemplate")
-debugBtn:SetText(Tr("tab_debug"))
--- Même taille/strata/niveau que Reload
-local rw, rh = reloadBtn:GetSize()
-if rw and rh then debugBtn:SetSize(rw, rh) else debugBtn:SetSize(60, 20) end
-debugBtn:SetFrameStrata(reloadBtn:GetFrameStrata())
-debugBtn:SetFrameLevel(reloadBtn:GetFrameLevel())
--- Position : juste à gauche de Reload (même marge que Reload vs Close)
-debugBtn:ClearAllPoints()
-debugBtn:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -6, 0)
--- Action : ouvre directement l'onglet Debug
-debugBtn:SetScript("OnClick", function()
-    if UI.ShowTabByLabel then UI.ShowTabByLabel(Tr("tab_debug")) end
-end)
-
 -- ➕ Expose des références globales pour contrôle de visibilité
 UI.ReloadButton = reloadBtn
-UI.DebugButton  = debugBtn
 
 -- ➕ Indicateur de synchronisation (barre de titre, aligné à droite)
 local syncPanel = CreateFrame("Frame", nil, Main)
@@ -226,9 +238,6 @@ local function PositionSyncIndicator()
     if tr then
         -- Centré verticalement dans le bandeau + collé au bord droit du "TitleRight"
         syncPanel:SetPoint("RIGHT", tr, "RIGHT", -pad, 0)
-    elseif debugBtn and debugBtn.GetObjectType then
-        -- Fallback si la skin n'est pas encore prête
-        syncPanel:SetPoint("TOPRIGHT", debugBtn, "TOPLEFT", -12, 0)
     elseif reloadBtn and reloadBtn.GetObjectType then
         syncPanel:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -12, 0)
     else
@@ -312,12 +321,13 @@ local function ShowPanel(idx)
     for i, def in ipairs(Registered) do
         local b = def._btn
         if b then
-            if i == idx then
-                b.sel:Show()
-                b:SetNormalFontObject("GameFontHighlightLarge")
-            else
-                b.sel:Hide()
-                b:SetNormalFontObject("GameFontHighlight")
+            local isSel = (i == idx)
+            if b.sel then b.sel:SetShown(isSel) end
+            -- Ajuste la mise en forme selon le type de bouton
+            if b.txt and b.txt.SetFontObject then
+                b.txt:SetFontObject(isSel and "GameFontHighlightSmall" or "GameFontHighlightSmall")
+            elseif b.SetNormalFontObject then
+                b:SetNormalFontObject(isSel and "GameFontHighlightLarge" or "GameFontHighlight")
             end
         end
     end
@@ -325,14 +335,17 @@ end
 UI.ShowPanel = ShowPanel
 
 -- Création d’un bouton d’onglet basé sur le précédent visible
-local function CreateTabButton(prevBtn, text)
+-- Remplace : Création d’un bouton d’onglet
+-- Si la barre latérale existe, on fabrique un sous-élément intégré à la sidebar.
+-- Sinon, on retombe sur l’ancien bouton horizontal en haut.
+local function _CreateTopTabButton(prevBtn, text)
     local b = CreateFrame("Button", nil, Main, "UIPanelButtonTemplate")
     b:SetText(text)
     b:SetSize(150, 26)
     if not prevBtn then
         local L = UI.OUTER_PAD
         if Main._cdzNeutral and Main._cdzNeutral.GetInsets then
-            L = (Main._cdzNeutral:GetInsets())  -- récupère L,R,T,B ; on ne garde que L
+            L = (Main._cdzNeutral:GetInsets())
         end
         b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.TAB_LEFT_PAD or 12), -52)
     else
@@ -347,6 +360,48 @@ local function CreateTabButton(prevBtn, text)
     sel:Hide()
     b.sel = sel
     return b
+end
+
+local function _SubTabButton(parent, text)
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetHeight(24) -- plus petit pour marquer la hiérarchie
+
+    -- Fond & hover
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.bg:SetAllPoints(b)
+    b.bg:SetColorTexture(0,0,0,0.50)
+
+    b.hover = b:CreateTexture(nil, "OVERLAY")
+    b.hover:SetAllPoints(b)
+    b.hover:SetColorTexture(1,1,1,0.12)
+    b.hover:Hide()
+
+    -- Sélection : barre verticale à gauche
+    b.sel = b:CreateTexture(nil, "OVERLAY")
+    b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", 0,  0)
+    b.sel:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 8, 0)
+    b.sel:SetWidth(3)
+    b.sel:SetColorTexture(0.16, 0.82, 0.27, 0.5) -- vert doux
+    b.sel:Hide()
+
+    -- Texte (petite taille + indentation pour signifier « sous-élément »)
+    b.txt = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    b.txt:SetPoint("LEFT", b, "LEFT", 18, 0)
+    b.txt:SetJustifyH("LEFT")
+    b.txt:SetText(text)
+
+    b:SetScript("OnEnter", function(self) self.hover:Show() end)
+    b:SetScript("OnLeave", function(self) self.hover:Hide() end)
+
+    return b
+end
+
+local function CreateTabButton(prevBtn, text)
+    if UI._catBar and UI._catBar._subList then
+        return _SubTabButton(UI._catBar._subList, text)
+    else
+        return _CreateTopTabButton(prevBtn, text)
+    end
 end
 
 function UI.Finalize()
@@ -424,17 +479,155 @@ function UI.GetTabButton(label)
     return def and def._btn, idx
 end
 
--- ➕ Reflow des onglets visibles (sans « trous »)
+-- ➕ Reflow des onglets visibles
 function UI.RelayoutTabs()
+    -- Si la barre latérale avec sous-liste existe, on dispose les onglets comme sous-éléments
+    if UI._catBar and UI._catBar._subList then
+        local bar    = UI._catBar
+        local sub    = bar._subList
+        local list   = bar._list
+        local active = UI._activeCategory
+
+        -- 1) Comptage des sous-onglets "présents" par catégorie (indépendant de la catégorie active)
+        local perCatCount = {}
+        for _, def in ipairs(Registered or {}) do
+            local cat = def.category
+            if cat and (def.hidden ~= true) and (def._sysShown ~= false) then
+                perCatCount[cat] = (perCatCount[cat] or 0) + 1
+            end
+        end
+
+        -- 2) Affiche/masque les boutons de catégories selon perCatCount
+        if bar._btns then
+            for _, cb in ipairs(bar._btns) do
+                local label = cb.txt and cb.txt:GetText()
+                local show  = (perCatCount[label] or 0) > 0
+                cb:SetShown(show)
+            end
+        end
+
+        -- 3) Si la catégorie active est vide, bascule vers la première non vide
+        if (not active) or (perCatCount[active] or 0) == 0 then
+            local firstNonEmpty
+            for _, cb in ipairs(bar._btns or {}) do
+                if cb:IsShown() and cb.txt then
+                    firstNonEmpty = cb.txt:GetText()
+                    break
+                end
+            end
+            if firstNonEmpty and UI.SetActiveCategory then
+                UI.SetActiveCategory(firstNonEmpty)
+                return
+            end
+        end
+
+        -- 4) Récupère les sous-onglets visibles (déjà filtrés par SetActiveCategory)
+        local visibles = {}
+        for _, def in ipairs(Registered or {}) do
+            local b = def._btn
+            if b and b:IsShown() and ((not def.category) or def.category == active) then
+                table.insert(visibles, b)
+            end
+        end
+
+        -- 5) Trouve le bouton de catégorie actif
+        local selCatBtn
+        for _, b in ipairs(bar._btns or {}) do
+            if b:IsShown() and b.txt and (b.txt:GetText() == active) then
+                selCatBtn = b
+                break
+            end
+        end
+
+        -- Aucune catégorie visible (toutes vides) : on masque la sous-liste et on compacte
+        if not selCatBtn then
+            sub:Hide()
+            local prev
+            for _, b in ipairs(bar._btns or {}) do
+                if b:IsShown() then
+                    b:ClearAllPoints()
+                    if not prev then
+                        b:SetPoint("TOPLEFT",  list, "TOPLEFT",  0, 0)
+                    else
+                        b:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT", 0, -1)
+                    end
+                    b:SetPoint("RIGHT", list, "RIGHT", -1, 0)
+                    prev = b
+                end
+            end
+            if bar._filler and prev then
+                bar._filler:ClearAllPoints()
+                bar._filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -1)
+                bar._filler:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -1, 0)
+                bar._filler:SetColorTexture(1,1,1,0.04)
+            end
+            return
+        end
+
+        -- 6) Positionne la sous-liste & sous-onglets avec des marges uniformes
+        local GAP, TOP_PAD, BOTTOM_PAD = 1, 1, 1
+
+        -- Sous-liste ancrée juste sous le bouton de catégorie (1 px d’air)
+        sub:ClearAllPoints()
+        sub:SetPoint("TOPLEFT",  selCatBtn, "BOTTOMLEFT", 0, -TOP_PAD)
+        sub:SetPoint("RIGHT",    bar, "RIGHT", -1, 0)
+
+        -- Disposition des boutons avec 1 px d’interligne + 1 px de marge haute & basse
+        local totalH = TOP_PAD + BOTTOM_PAD
+        local prevRow
+        for i, b in ipairs(visibles) do
+            b:ClearAllPoints()
+            if not prevRow then
+                b:SetPoint("TOPLEFT", sub, "TOPLEFT", 0, -TOP_PAD)
+            else
+                b:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, -GAP)
+            end
+            b:SetPoint("RIGHT", sub, "RIGHT", 0, 0)
+            prevRow = b
+            totalH = totalH + (b:GetHeight() or 24)
+            if i > 1 then totalH = totalH + GAP end
+        end
+        sub:SetHeight(totalH)
+        sub:SetShown(#visibles > 0)
+
+        -- 7) Reflow des catégories en réservant exactement la hauteur de la sous-liste
+        local prev
+        for _, b in ipairs(bar._btns or {}) do
+            if b:IsShown() then
+                b:ClearAllPoints()
+                if not prev then
+                    b:SetPoint("TOPLEFT", list, "TOPLEFT", 0, 0)
+                else
+                    local extra = (prev == selCatBtn and (sub:IsShown() and sub:GetHeight() or 0) or 0)
+                    b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -1 - extra)
+                end
+                b:SetPoint("RIGHT", list, "RIGHT", -1, 0)
+                prev = b
+            end
+        end
+
+        -- 8) Filler visuel sous la dernière catégorie
+        if bar._filler and prev then
+            bar._filler:ClearAllPoints()
+            bar._filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -1)
+            bar._filler:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -1, 0)
+            bar._filler:SetColorTexture(1,1,1,0.04)
+        end
+
+        return
+    end
+
+    -- Fallback : ancien layout horizontal en haut (au cas où)
+    local Main = UI.Main
     local lastBtn
-    for i, def in ipairs(Registered) do
+    for _, def in ipairs(Registered or {}) do
         local b = def._btn
         if b then
             b:ClearAllPoints()
             if b:IsShown() then
                 if not lastBtn then
                     local L = UI.OUTER_PAD
-                    if Main._cdzNeutral and Main._cdzNeutral.GetInsets then
+                    if Main and Main._cdzNeutral and Main._cdzNeutral.GetInsets then
                         L = (Main._cdzNeutral:GetInsets())
                     end
                     b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.TAB_LEFT_PAD or 12), -52)
@@ -547,9 +740,59 @@ end
 
 -- ➕ Pastille sur un onglet
 function UI.SetTabBadge(label, count)
-    local b = UI.GetTabButton(label)
+    -- Attache/maj la pastille sur l’onglet concerné
+    local b, idx = UI.GetTabButton(label)
     if not b or not UI.AttachBadge then return end
-    UI.AttachBadge(b):SetCount(tonumber(count) or 0)
+
+    local badge = UI.AttachBadge(b)
+
+    -- ✅ Alignement vertical sur le texte pour les sous-onglets (barre latérale)
+    --    (on n’altère pas la position du texte, on aligne juste la pastille sur son centre Y)
+    if b.txt and UI._catBar and UI._catBar._subList and b:GetParent() == UI._catBar._subList then
+        if badge.AnchorTo then badge:AnchorTo(b.txt, "LEFT", "RIGHT", 8, 0) end
+    end
+
+    badge:SetCount(tonumber(count) or 0)
+
+    -- ✅ Cascade : la catégorie mère affiche la pastille (somme des sous-onglets)
+    UI._tabBadgeCounts = UI._tabBadgeCounts or {}
+    UI._tabBadgeCounts[label] = tonumber(count) or 0
+
+    -- Récupère la catégorie de cet onglet
+    local def = (idx and Registered and Registered[idx]) and Registered[idx] or nil
+    local cat = def and def.category or nil
+    if not cat then return end
+
+    -- Additionne les pastilles de la catégorie
+    local total = 0
+    for _, d in ipairs(Registered or {}) do
+        if d.category == cat then
+            local lab = d.label
+            total = total + (UI._tabBadgeCounts[lab] or 0)
+        end
+    end
+
+    -- Trouve le bouton de catégorie et applique la pastille (alignée au texte)
+    local catBtn = UI.GetCategoryButton and UI.GetCategoryButton(cat) or nil
+    if catBtn and UI.AttachBadge then
+        local catBadge = UI.AttachBadge(catBtn)
+        if catBtn.txt and catBadge.AnchorTo then
+            catBadge:AnchorTo(catBtn.txt, "LEFT", "RIGHT", 8, 0)
+        end
+        catBadge:SetCount(total)
+    end
+end
+
+-- ➕ Récupération du bouton de catégorie par label (sans modifier la création)
+function UI.GetCategoryButton(catLabel)
+    local bar = UI._catBar
+    if not (bar and bar._btns) then return nil end
+    for _, btn in ipairs(bar._btns) do
+        if btn and btn.txt and btn.txt.GetText and (btn.txt:GetText() == catLabel) then
+            return btn
+        end
+    end
+    return nil
 end
 
 -- ➕ Règle métier pour l'onglet "Demandes"
@@ -625,10 +868,35 @@ end)
 
 -- ➕ Met à jour le titre selon la guilde
 function UI.RefreshTitle()
-    if Main and Main.title and Main.title.SetText then
-        Main.title:SetText(GLOG.BuildMainTitle and GLOG.BuildMainTitle() or Tr("app_title"))
+    if not Main then return end
+
+    -- Nom Addon (ligne 1)
+    local addonTitle = (GLOG.GetAddonTitle and GLOG.GetAddonTitle()) or (Tr and Tr("app_title")) or ADDON
+    if Main.titleAddon and Main.titleAddon.SetText then
+        Main.titleAddon:SetText(addonTitle)
+    elseif Main.title and Main.title.SetText then
+        Main.title:SetText(addonTitle) -- compat si titleAddon n’existe pas
+    end
+
+    -- Version (à droite, grise et entre parenthèses)
+    if Main.titleVersion and Main.titleVersion.SetText then
+        local ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+        local txt = (ver ~= "" and ("("..ver..")")) or ""
+        Main.titleVersion:SetText(txt)
+        Main.titleVersion:SetShown(txt ~= "")
+        -- Recalage au cas où la largeur du nom change (locales)
+        Main.titleVersion:ClearAllPoints()
+        Main.titleVersion:SetPoint("LEFT", Main.titleAddon or Main.title, "RIGHT", 6, 0)
+    end
+
+    -- Nom de guilde (ligne 2)
+    if Main.titleGuild and Main.titleGuild.SetText then
+        local g = GLOG.GetCurrentGuildName and GLOG.GetCurrentGuildName() or ""
+        Main.titleGuild:SetText(g or "")
+        Main.titleGuild:SetShown(g ~= "")
     end
 end
+
 
 -- ===================== Catégories (sidebar) =====================
 local function _CatIcons()
@@ -637,7 +905,7 @@ local function _CatIcons()
         [Tr("cat_raids")]    = "Interface\\ICONS\\achievement_boss_lichking",
         [Tr("cat_tools")]    = "Interface\\ICONS\\INV_Hammer_20",
         [Tr("cat_info")]     = "Interface\\ICONS\\trade_archaeology_draenei_tome",
-        [Tr("cat_settings")] = "Interface\\ICONS\\icon_petfamily_mechanical",
+        [Tr("cat_settings")] = "Interface\\ICONS\\trade_engineering",
         [Tr("cat_debug")]    = "Interface\\ICONS\\inv_inscription_pigment_bug04",
     }
 end
@@ -751,22 +1019,18 @@ function UI.CreateCategorySidebar()
     bar:SetPoint("BOTTOMLEFT",  Main, "BOTTOMLEFT",  L + 4,  B + 2)
     bar:SetWidth(192)
 
-    -- Bar au-dessus du fond principal
-    bar:SetFrameStrata(Main:GetFrameStrata() or "MEDIUM")
-    bar:SetFrameLevel((Main:GetFrameLevel() or 0) + 1)
-
-    -- === Fond tuilé (BackDrop → plus d'étirement/clamp) ===
+    -- Fond tuilé (style parchemin Blizzard)
     if UI.ApplyTiledBackdrop then
         UI.ApplyTiledBackdrop(
             bar,
             "Interface\\FrameGeneral\\UIFrameNecrolordBackground",
-            128,     -- taille de tuile 
-            1,       -- alpha
-            { left = 0, right = 1, top = 0, bottom = 0 } -- 1px à droite pour ne pas passer sous le liseré
+            128,
+            1,
+            { left = 0, right = 1, top = 0, bottom = 0 }
         )
     end
 
-    -- === Liseré séparateur à droite (double trait Blizzard) ===
+    -- Liseré de séparation à droite
     local sepDark = bar:CreateTexture(nil, "BORDER")
     sepDark:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
     sepDark:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
@@ -779,7 +1043,7 @@ function UI.CreateCategorySidebar()
     sepLight:SetWidth(1)
     sepLight:SetColorTexture(1, 1, 1, 0.08)
 
-    -- === Conteneur LISTE pleine hauteur ===
+    -- === Conteneur des catégories ===
     local list = CreateFrame("Frame", nil, bar)
     bar._list = list
     list:SetPoint("TOPLEFT",     bar, "TOPLEFT",  0, 0)
@@ -787,7 +1051,7 @@ function UI.CreateCategorySidebar()
     list:SetClipsChildren(false)
 
     -- Réserve l’espace global
-    UI.CATEGORY_BAR_W = bar:GetWidth() + 1
+    UI.CATEGORY_BAR_W = bar:GetWidth() + 3
     UI.TAB_LEFT_PAD   = (UI.CATEGORY_BAR_W or 0) + 12
 
     -- Construit la liste de catégories réellement utilisées
@@ -799,7 +1063,7 @@ function UI.CreateCategorySidebar()
     local order = _CatOrder and _CatOrder() or {}
     local icons = _CatIcons and _CatIcons() or {}
 
-    -- === Boutons (lignes pleine largeur) ===
+    -- === Boutons de catégories ===
     bar._btns = {}
     local prev
     local firstCat
@@ -810,7 +1074,7 @@ function UI.CreateCategorySidebar()
             local b = _CategoryButton(list, catLabel, icons[catLabel])
             b:ClearAllPoints()
             if not prev then
-                b:SetPoint("TOPLEFT",  list, "TOPLEFT",  0, 0)
+                b:SetPoint("TOPLEFT",  list, "TOPLEFT",  0, 1)
             else
                 b:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT", 0, -1)
             end
@@ -823,20 +1087,23 @@ function UI.CreateCategorySidebar()
         end
     end
 
-    -- Filler visuel si la liste est plus courte que la hauteur
-    if prev then
-        local filler = list:CreateTexture(nil, "BACKGROUND")
-        filler:SetPoint("TOPLEFT",     prev, "BOTTOMLEFT", 0, -1)
-        filler:SetPoint("BOTTOMRIGHT", list, "BOTTOMRIGHT", -1, 0)
-        filler:SetColorTexture(1, 1, 1, 0.04)
-        bar._filler = filler
-    end
+    -- === Sous-liste d'onglets (affichée uniquement pour la catégorie active) ===
+    local sub = CreateFrame("Frame", nil, bar)
+    bar._subList = sub
+    sub:Hide()
+    sub:SetClipsChildren(true)
+
+    -- Fond subtil derrière les sous-onglets
+    sub._bg = sub:CreateTexture(nil, "BACKGROUND")
+    sub._bg:SetAllPoints(sub)
+    sub._bg:SetColorTexture(1,1,1,0.06)
 
     -- Catégorie par défaut
     UI._activeCategory = UI._activeCategory or firstCat
 
     return bar
 end
+
 
 function UI.SetActiveCategory(catLabel)
     UI._activeCategory = catLabel

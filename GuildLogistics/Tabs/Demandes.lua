@@ -114,5 +114,5 @@ end
 
 UI.RegisterTab(Tr("tab_requests"), Build, Refresh, Layout, {
     hidden = false,
-    category = Tr("cat_guild"),
+    category = Tr("cat_raids"),
 })

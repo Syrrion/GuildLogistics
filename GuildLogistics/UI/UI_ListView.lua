@@ -154,7 +154,7 @@ function UI.ListView(parent, cols, opts)
                 r:SetWidth(cW)
                 r:ClearAllPoints()
                 r:SetPoint("TOPLEFT", self.list, "TOPLEFT", 0, -y)
-                y = y + r:GetHeight() + 3
+                y = y + r:GetHeight()
                 UI.LayoutRow(r, resolved, r._fields or {})
             end
         end
@@ -189,6 +189,18 @@ function UI.ListView(parent, cols, opts)
                     if not row._bg then UI.DecorateRow(row) end
                 end
             end
+
+            -- ➕ Fond englobant (header + contenu)
+            if lv and not lv._containerBG then
+                local bg = lv.parent:CreateTexture(nil, "BACKGROUND")
+                -- couleur pilotée par la skin (modifiable au même endroit que les styles)
+                local col = (UI.GetListViewContainerColor and UI.GetListViewContainerColor()) or { r=0, g=0, b=0, a=0.10 }
+                bg:SetColorTexture(col.r or 0, col.g or 0, col.b or 0, col.a or 0.10)
+                -- couche très en arrière pour ne pas gêner les lignes/hover
+                if bg.SetDrawLayer then bg:SetDrawLayer("BACKGROUND", -8) end
+                lv._containerBG = bg
+            end
+
             -- Décore toute nouvelle ligne créée
             if lv and lv.CreateRow and not lv._decorateCR then
                 local _oldCR = lv.CreateRow
@@ -199,10 +211,68 @@ function UI.ListView(parent, cols, opts)
                 end
                 lv._decorateCR = true
             end
+
+            -- 🔁 Hook du Layout pour caler le fond sous header+scroll
+            if lv and lv.Layout and not lv._bgLayoutHooked then
+                local _oldLayout = lv.Layout
+                function lv:Layout(...)
+                    local res = _oldLayout(self, ...)
+                    local bg  = self._containerBG
+                    if bg and self.header and self.scroll then
+                        bg:ClearAllPoints()
+                        -- englobe l’entête…
+                        bg:SetPoint("TOPLEFT", self.header, "TOPLEFT", 0, 0)
+                        -- …jusqu’au bas de la zone scroll (respecte offsets/safeRight déjà appliqués)
+                        bg:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
+
+                        -- garde la couleur en phase si le thème change dynamiquement
+                        if UI.GetListViewContainerColor then
+                            local c = UI.GetListViewContainerColor()
+                            if c then bg:SetColorTexture(c.r or 0, c.g or 0, c.b or 0, c.a or 0.10) end
+                        end
+                    end
+                    return res
+                end
+                lv._bgLayoutHooked = true
+            end
+
             return lv
         end
     end
+    
+    -- Étend le hook de Layout pour quantifier lignes et séparateurs à la fin du layout.
+    function UI._AttachListViewPixelSnap(lv)
+        if not lv or lv._snapLayoutHooked then return end
+        if not lv.Layout then return end
 
+        local _oldLayout = lv.Layout
+        function lv:Layout(...)
+            local res = _oldLayout(self, ...)
+            -- Passe "pixel-perfect"
+            if self.rows then
+                local px = UI.GetPhysicalPixel()
+                for _, row in ipairs(self.rows) do
+                    -- Hauteur/points arrondis
+                    UI.SnapRegion(row)
+                    -- Garde le séparateur à 1 px exact et bien ancré
+                    if row._sepTop then
+                        UI.SetPixelThickness(row._sepTop, 1)
+                        if PixelUtil and PixelUtil.SetPoint then
+                            PixelUtil.SetPoint(row._sepTop, "TOPLEFT",  row, "TOPLEFT",  0, 0)
+                            PixelUtil.SetPoint(row._sepTop, "TOPRIGHT", row, "TOPRIGHT", 0, 0)
+                        else
+                            row._sepTop:ClearAllPoints()
+                            row._sepTop:SetPoint("TOPLEFT",  row, "TOPLEFT",  0, 0)
+                            row._sepTop:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+                        end
+                    end
+                end
+            end
+            return res
+        end
+        lv._snapLayoutHooked = true
+    end
+    
     -- SetData ne touche qu'au gradient & séparateurs, JAMAIS au SetColorTexture du fond
     function lv:SetData(data)
         data = data or {}
@@ -210,7 +280,7 @@ function UI.ListView(parent, cols, opts)
         -- Crée les lignes manquantes
         for i = #self.rows + 1, #data do
             local r = CreateFrame("Frame", nil, self.list)
-            r:SetHeight(UI.ROW_H)
+            r:SetHeight(UI.ROW_H + 2)
             UI.DecorateRow(r)
             r._fields = (self.opts.buildRow and self.opts.buildRow(r)) or {}
             self.rows[i] = r
@@ -232,7 +302,7 @@ function UI.ListView(parent, cols, opts)
                 if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
 
                 -- Séparateur TOP : tout sauf la première visible
-                if r._sepTop then r._sepTop:SetShown(not firstVisible or i ~= firstVisible) end
+                if r._sepTop then r._sepTop:SetShown(true) end
 
                 if self.opts.updateRow then
                     self.opts.updateRow(i, r, r._fields, it)
@@ -267,6 +337,10 @@ function UI.ListView(parent, cols, opts)
     -- Relayout sur resize du parent
     if parent and parent.HookScript then
         parent:HookScript("OnSizeChanged", function() if lv and lv.Layout then lv:Layout() end end)
+    end
+
+    if lv and UI._AttachListViewPixelSnap then
+        UI._AttachListViewPixelSnap(lv)
     end
 
     return lv

@@ -524,18 +524,26 @@ end
 function UI.GetListViewStyle()
     return {
         -- Lignes impaires
-        oddBottom  = { r = 0.20, g = 0.20, b = 0.20, a = 0.50 },
-        oddTop     = { r = 0.08, g = 0.08, b = 0.08, a = 0.10 },
+        oddTop        = { r = 0.20, g = 0.20, b = 0.20, a = 0.50 },
+        oddBottom     = { r = 0.20, g = 0.20, b = 0.20, a = 0.10 },
         -- Lignes paires
-        evenBottom = { r = 0.25, g = 0.25, b = 0.25, a = 0.50 },
-        evenTop    = { r = 0.10, g = 0.10, b = 0.10, a = 0.10 },
+        evenTop       = oddTop,
+        evenBottom    = oddBottom,
         -- Survol & séparateur
         hover      = { r = 1.00, g = 0.82, b = 0.00, a = 0.06 },
-        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.0 },
+        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.1 },
         -- ➕ Couleur par défaut du liseré "même groupe"
         accent     = { r = 1.00, g = 0.82, b = 0.00, a = 0.90 }, -- jaune Blizzard
     }
 end
+
+function UI.GetListViewContainerColor()
+    -- Couleur par défaut du fond englobant (header + contenu) des ListViews
+    -- Légèrement opaque, neutre, et cohérent avec les dégradés de lignes.
+    -- Ajustable facilement ici si besoin (théming futur).
+    return { r = 0.0, g = 0.0, b = 0.0, a = 0.20 }
+end
+
 
 function UI.ApplyTiledBackdrop(frame, bgFile, tileSize, alpha, insets)
     if not (frame and frame.SetBackdrop and bgFile) then return end

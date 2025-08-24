@@ -39,7 +39,7 @@ Tabs/BiS.lua
 Tabs/Depense.lua
 Tabs/Joueurs.lua
 Tabs/Demandes.lua
-Tabs/Debug.lua
+Tabs/Debug_Packets.lua
 Tabs/Options.lua
 
 Core/Calendar.lua

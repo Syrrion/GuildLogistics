@@ -436,5 +436,5 @@ local function Build(container)
 end
 
 UI.RegisterTab(Tr("tab_resources"), Build, Refresh, Layout, {
-    category = Tr("cat_raid"),
+    category = Tr("cat_raids"),
 })

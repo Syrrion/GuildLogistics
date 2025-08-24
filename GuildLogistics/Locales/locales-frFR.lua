@@ -16,8 +16,8 @@ L["tab_roster"]           = "Roster"
 L["tab_start_raid"]       = "Démarrer un raid"
 L["tab_history"]          = "Historique"
 L["tab_resources"]        = "Ressources"
-L["tab_requests"]         = "Demandes"
-L["tab_debug"]            = "Debug"
+L["tab_requests"]         = "Transactions en attente"
+L["tab_debug"]            = "Diffusion des données"
 L["tab_settings"]         = "Options"
 
 
@@ -315,7 +315,7 @@ L["opt_popup_raid_participation"]= "Notification de participation à un raid"
 -- ============================================== --
 -- ===           Onglet BiS (Trinkets)        === --
 -- ============================================== --
-L["tab_bis"]         = "Best in Slot"
+L["tab_bis"]         = "Bijoux BiS"
 L["col_tier"]        = "Rang"
 L["col_owned"]       = "Possédé"
 L["lbl_class"]       = "Classe"
