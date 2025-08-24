@@ -13,7 +13,7 @@
 Locales/locales-enUS.lua
 Locales/locales-frFR.lua
 
-Data/BIS_Trinkets.lua
+Data/BiS_Trinkets.lua
 
 Core/Core.lua
 Core/Helper.lua
@@ -22,6 +22,7 @@ Core/Guild.lua
 Core/Expenses.lua
 
 UI/UI_Core.lua
+UI/UI_Cell.lua
 UI/UI_Skin.lua
 UI/UI.lua
 UI/UI_ListView.lua

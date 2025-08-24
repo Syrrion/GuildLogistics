@@ -102,3 +102,13 @@ function UI.SetTierBadge(cell, tierBase, mod, labelOverride, palette)
     local r, g, b = UI.Colors.Variant(base, mod)
     UI.SetBadgeCell(cell, { r, g, b }, labelOverride or tierBase)
 end
+
+-- Parse un label de rang type "S", "S+", "A-", etc. -> (base, mod, pretty)
+function UI.ParseTierLabel(label)
+    local s = tostring(label or "")
+    local base = s:match("([SAFBEDCsa fbedc])") -- lettre S..F (insensible à la casse)
+    base = base and base:upper() or "?"
+    local mod  = s:match("([%+%-])")           -- '+' ou '-'
+    local pretty = base .. (mod or "")
+    return base, mod, pretty
+end

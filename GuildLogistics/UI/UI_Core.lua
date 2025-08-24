@@ -917,11 +917,48 @@ function UI.ClassName(classID, classTag)
     return classTag or ""
 end
 
--- Human-readable specialization name; falls back to generic label if 0/nil
+-- Cache global des spécialisations: specID -> { name=..., classID=... }
+UI._specCache = UI._specCache or nil
+
+-- Construit (une fois) un cache specID -> (name, classID)
+local function _BuildSpecCache()
+    if UI._specCache then return UI._specCache end
+    local cache = {}
+    if GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
+        for cid = 1, 30 do
+            local n = GetNumSpecializationsForClassID(cid)
+            if type(n) == "number" then
+                for i = 1, n do
+                    local id, name = GetSpecializationInfoForClassID(cid, i)
+                    if id and name then
+                        cache[id] = { name = name, classID = cid }
+                    end
+                end
+            end
+        end
+    end
+    UI._specCache = cache
+    return cache
+end
+
+-- Récupère un nom de spé à partir du specID seul (indépendant du joueur)
+function UI.SpecNameBySpecID(specID)
+    local sid = tonumber(specID)
+    if not sid or sid == 0 then
+        return (Tr and Tr("lbl_spec")) or "Specialization"
+    end
+    local cache = _BuildSpecCache()
+    local e = cache[sid]
+    return (e and e.name) or ((Tr and Tr("lbl_spec")) or "Specialization")
+end
+
+-- ⚙️ Human-readable specialization name; robuste pour n'importe quelle classe
 function UI.SpecName(classID, specID)
     if not specID or specID == 0 then
         return (Tr and Tr("lbl_spec")) or "Specialization"
     end
+
+    -- 1) Si la classe est connue : résolution directe via l’API Blizzard
     if classID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
         local n = GetNumSpecializationsForClassID(classID) or 0
         for i = 1, n do
@@ -931,14 +968,31 @@ function UI.SpecName(classID, specID)
             end
         end
     end
-    if GetSpecialization and GetSpecializationInfo then
-        local idx = GetSpecialization()
-        if idx then
-            local id, name = GetSpecializationInfo(idx)
-            if id == specID and name then return name end
+
+    -- 2) Fallback générique : par specID (indépendant du joueur/sa classe)
+    return UI.SpecNameBySpecID(specID)
+end
+
+
+-- Human-readable specialization name; ⚙️ robuste pour n'importe quelle classe
+function UI.SpecName(classID, specID)
+    if not specID or specID == 0 then
+        return (Tr and Tr("lbl_spec")) or "Specialization"
+    end
+
+    -- 1) Si la classe est connue : résolution directe via l’API
+    if classID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
+        local n = GetNumSpecializationsForClassID(classID) or 0
+        for i = 1, n do
+            local id, name = GetSpecializationInfoForClassID(classID, i)
+            if id == specID and name then
+                return name
+            end
         end
     end
-    return (Tr and Tr("lbl_spec")) or "Specialization"
+
+    -- 2) Fallback générique : par specID (indépendant du joueur/sa classe)
+    return UI.SpecNameBySpecID(specID)
 end
 
 -- Returns the player's (classID, classTag, specID!=0 when possible)

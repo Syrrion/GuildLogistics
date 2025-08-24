@@ -239,26 +239,103 @@ end
 
 -- == Définition normalisée des colonnes de la liste == --
 local cols = UI.NormalizeColumns({
-    { key="tier",  title=Tr("col_tier")  or "Tier",    w=40, justify="CENTER" },
-    { key="item",  title=Tr("col_item")  or "Item",    min=320, flex=1 },
-    { key="owned", title=Tr("col_owned") or "Owned",   w=110, justify="CENTER" },
+    { key="tier",  title=Tr("col_tier")       or "Tier",        w=40,  justify="CENTER" },
+    { key="item",  title=Tr("col_item")       or "Item",        min=320, flex=1 },
+    { key="owned", title=Tr("col_owned")      or "Possédé",     w=110, justify="CENTER" },
+    { key="use",   title=Tr("col_useful_for") or "Utile pour",  w=140, justify="CENTER" },
 })
 
--- == Construit les widgets d'une ligne (cellules tier/item/owned) == --
+-- == Construit les widgets d'une ligne (cellules tier/item/owned/use) == --
 local function BuildRow(r)
     local f = {}
     f.tier  = UI.CreateBadgeCell(r, { width = 36, centeredGloss = true, textShadow = false })
     f.item  = UI.CreateItemCell(r, { size = 18, width = 360 })
     f.owned = UI.Label(r, { justify = "CENTER" })
+    f.use   = UI.Button(r, "btn_useful_for", { size = "sm", minWidth = 110, variant = "ghost" })
     return f
 end
 
+-- == Popup : Qui utilise cet objet dans les tableaux de BiS ? == --
+local function _ShowItemUsagePopup(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return end
 
--- == Met à jour une ligne avec les données (rang, item, possession) == --
+    local usages = (ns.FindBiSUsages and ns.FindBiSUsages(itemID)) or {}
+
+    local dlg = UI.CreatePopup({
+        title  = Tr("popup_useful_for") or "Utile pour cet objet",
+        width  = 720,
+        height = 480,
+    })
+
+    local cols = UI.NormalizeColumns({
+        { key="rank",  title=Tr("col_rank")  or "Rang",            w=40,  justify="CENTER" },
+        { key="item",  title=Tr("col_item")  or "Objet",           min=260, flex=1 },
+        { key="class", title=Tr("col_class") or "Classe",          w=180 },
+        { key="spec",  title=Tr("col_spec")  or "Spécialisation",  min=160, flex=1 },
+    })
+
+    local lv2 = UI.ListView(dlg.content, cols, {
+        buildRow = function(row)
+            local ff = {}
+            -- 🎯 Rang : même badge que dans l’onglet BiS
+            ff.rank  = UI.CreateBadgeCell(row, { width = 36, centeredGloss = true, textShadow = false })
+            ff.item  = UI.CreateItemCell(row, { size = 18, width = 300 })
+            -- 🧱 Classe : cellule factorisée (icône + nom colorisé)
+            ff.class = UI.CreateClassCell(row, { iconSize = 16, width = 180 })
+            ff.spec  = UI.Label(row)
+            return ff
+        end,
+        updateRow = function(i2, row, ff, rec)
+            -- Rang (badge identique BiS)
+            local base, mod = UI.ParseTierLabel(rec.rank or "?")
+            UI.SetTierBadge(ff.rank, base, mod, rec.rank, UI.Colors and UI.Colors.BIS_TIER_COLORS)
+
+            -- Objet
+            UI.SetItemCell(ff.item, { itemID = rec.itemID })
+
+            -- Classe : utilise couleurs officielles + icône
+            local cid = rec.classID or (UI.GetClassIDForToken and UI.GetClassIDForToken(rec.classTag)) or nil
+            UI.SetClassCell(ff.class, { classID = cid, classTag = rec.classTag })
+
+            -- Spécialisation : indépendante du joueur (cache specID)
+            local specName = UI.SpecName(cid, rec.specID)
+            ff.spec:SetText(specName)
+        end,
+    })
+
+    -- Données
+    local data = {}
+    for _, u in ipairs(usages) do
+        data[#data+1] = {
+            rank     = u.rankLabel, -- "S", "A+", ...
+            itemID   = itemID,
+            classID  = u.classID,   -- peut être nil -> fallback ci-dessus
+            classTag = u.classTag,  -- "PALADIN", "WARRIOR", ...
+            specID   = u.specID,
+        }
+    end
+
+    if #data == 0 then
+        dlg:SetMessage(Tr("msg_no_usage_for_item") or "Aucune classe/spécialisation ne référence cet objet dans les tableaux BiS.")
+        dlg:SetButtons({ { text = Tr("btn_close") or "Fermer", default = true } })
+    else
+        lv2:SetData(data)
+        dlg:SetButtons({ { text = Tr("btn_close") or "Fermer", default = true } })
+    end
+end
+
+-- == Met à jour une ligne avec les données (rang, item, possession, bouton "Utile pour") == --
 function UpdateRow(i, r, f, d)
     UI.SetTierBadge(f.tier, d.tier, d.mod, d.tierLabel, UI.Colors and UI.Colors.BIS_TIER_COLORS)
     UI.SetItemCell(f.item, { itemID = d.itemID })
     f.owned:SetText(UI.YesNoText(d.owned))
+
+    -- Bouton popup "Utile pour"
+    f.use:SetText(Tr("btn_useful_for") or "Utile pour")
+    f.use:SetOnClick(function()
+        _ShowItemUsagePopup(d.itemID)
+    end)
 end
 
 -- ============================================== --

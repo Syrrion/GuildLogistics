@@ -1,6 +1,7 @@
 local ADDON, ns = ...
 local Tr = ns and ns.Tr
 local GLOG, UI = ns and ns.GLOG, ns and ns.UI
+local UI = ns and ns.UI
 
 -- ============================================== --
 -- ===        DONNÉES – BiS TRINKETS (DB)     === --
@@ -164,3 +165,95 @@ ns.BIS_TRINKETS = {
         },
     },
 }
+
+-- ========================================================= --
+-- ===         INDEX BiS (recherche par itemID)           === --
+-- ========================================================= --
+-- Objectif : fournir une API générique pour retrouver
+-- toutes les classes/spécialisations qui référencent un
+-- item donné dans les tableaux BiS (tous slots confondus).
+-- Conçu pour être réutilisable par d'autres onglets.
+-- ========================================================= --
+
+-- Normalise une clé de rang pour l'affichage (ex: "Sminus" -> "S-")
+local function _normalizeRankLabel(key)
+    key = tostring(key or ""):gsub("^%s+",""):gsub("%s+$","")
+    local k = key:lower()
+    k = k:gsub("plus", "+"):gsub("minus", "-")
+    -- Autorise déjà "S+", "S-", "A+", etc.
+    -- Met en majuscule la lettre de base (premier caractère alphabétique)
+    local base = k:match("([a-z])")
+    if base then
+        local B = base:upper()
+        k = k:gsub(base, B, 1)
+    end
+    return k ~= "" and k or "?"
+end
+
+-- Poids de tri pour un label de rang (S+ < S < S- < A+ < A < ... < F)
+local function _rankWeight(label)
+    label = _normalizeRankLabel(label)
+    local base = label:match("^([SABCDEFG])")
+    local mod  = label:match("([%+%-])") -- '+' ou '-'
+    local baseOrder = ({ S=1, A=2, B=3, C=4, D=5, E=6, F=7 })[base or "F"] or 7
+    local off = (mod == "+") and -0.5 or (mod == "-" and 0.5) or 0
+    return baseOrder + off
+end
+
+-- Itère toutes les tables BiS présentes dans le namespace (clé commençant par "BIS_")
+local function _iterateAllBiSTables()
+    local list = {}
+    for k, v in pairs(ns) do
+        if type(k) == "string" and k:match("^BIS_") and type(v) == "table" then
+            list[#list+1] = v
+        end
+    end
+    return list
+end
+
+-- Retourne une table listant tous les usages BiS d’un itemID
+-- Eléments : { itemID, classTag, classID, specID, rankKey, rankLabel }
+function ns.FindBiSUsages(itemID)
+    itemID = tonumber(itemID)
+    local out = {}
+    if not itemID then return out end
+
+    -- On scanne toutes les tables BiS connues
+    for _, tbl in ipairs(_iterateAllBiSTables()) do
+        for classTag, specs in pairs(tbl or {}) do
+            local classID = UI and UI.GetClassIDForToken and UI.GetClassIDForToken(classTag)
+            for specID, ranks in pairs(specs or {}) do
+                for rankKey, ids in pairs(ranks or {}) do
+                    if type(ids) == "table" then
+                        for _, id in ipairs(ids) do
+                            if tonumber(id) == itemID then
+                                out[#out+1] = {
+                                    itemID    = itemID,
+                                    classTag  = classTag,
+                                    classID   = classID,
+                                    specID    = tonumber(specID) or 0,
+                                    rankKey   = rankKey,
+                                    rankLabel = _normalizeRankLabel(rankKey),
+                                }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Tri : Rang -> Classe -> Spé
+    table.sort(out, function(a, b)
+        local wa, wb = _rankWeight(a.rankLabel), _rankWeight(b.rankLabel)
+        if wa ~= wb then return wa < wb end
+        local ca = (UI and UI.ClassName and UI.ClassName(a.classID, a.classTag)) or tostring(a.classTag or "")
+        local cb = (UI and UI.ClassName and UI.ClassName(b.classID, b.classTag)) or tostring(b.classTag or "")
+        if ca ~= cb then return ca < cb end
+        local sa = (UI and UI.SpecName and UI.SpecName(a.classID, a.specID)) or tostring(a.specID or 0)
+        local sb = (UI and UI.SpecName and UI.SpecName(b.classID, b.specID)) or tostring(b.specID or 0)
+        return tostring(sa) < tostring(sb)
+    end)
+
+    return out
+end
