@@ -301,7 +301,7 @@ function UI.ListView(parent, cols, opts)
 
                 -- Dégradé vertical pair/impair
                 if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
-
+                r._isEven = (i % 2 == 0)
                 -- Hauteur dynamique : on ajoute un "padding" en haut des lignes 'sep'
                 local extraTop = 0
                 if it.kind == "sep" then
@@ -409,54 +409,138 @@ function UI.ListView(parent, cols, opts)
     return lv
 end
 
+function UI._SetRowVisualAlpha(row, a)
+    if not row then return end
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    -- 📌 Le gradient du fond utilise un multiplicateur par-ligne
+    row._alphaMul = a
+    if UI.ApplyRowGradient then
+        local even = (row._isEven ~= nil) and row._isEven or false
+        UI.ApplyRowGradient(row, even)
+    end
+
+    -- 📌 Les séparateurs utilisent alpha_effectif = alpha_base * a
+    if row._sepTop and row._sepTop.SetAlpha then
+        local base = tonumber(row._sepTopBaseA or row._sepTop:GetAlpha() or 1) or 1
+        row._sepTop:SetAlpha(base * a)
+    end
+    if row._sepBot and row._sepBot.SetAlpha then
+        local base = tonumber(row._sepBotBaseA or row._sepBot:GetAlpha() or 1) or 1
+        row._sepBot:SetAlpha(base * a)
+    end
+
+    -- Hover conservé (lisibilité)
+end
+
 function UI.ListView_SetVisualOpacity(lv, a)
-    -- a ∈ [0..1] : applique l'alpha aux éléments "visuels" (fond/header/sep)
+    -- a ∈ [0..1] : applique l'alpha aux éléments "visuels" (fond/header/sep + gradient des lignes)
     if not lv then return end
     a = tonumber(a or 1) or 1
     if a < 0 then a = 0 elseif a > 1 then a = 1 end
 
+    -- Mémorise pour futures rows (CreateRow/SetData)
+    lv._visualAlpha = a
+
     local function SA(x) if x and x.SetAlpha then x:SetAlpha(a) end end
-    local function SAif(t) if t and t.SetAlpha then t:SetAlpha(a) end end
+    local function applyRow(r)
+        if not r then return end
+        if UI and UI._SetRowVisualAlpha then UI._SetRowVisualAlpha(r, a) end
+    end
 
     -- Fond conteneur éventuel
     if lv._containerBG then SA(lv._containerBG) end
 
-    -- Header
+    -- Header (BG + séparateurs du header seulement ; les rows sont traitées à part)
     if lv.header then
-        if lv.header._bg then SA(lv.header._bg) end
-        if lv.header.bg   then SA(lv.header.bg)   end
-        -- lignes/traits du header possibles
-        if lv.header._sepTop    then SAif(lv.header._sepTop)    end
-        if lv.header._sepBottom then SAif(lv.header._sepBottom) end
-        -- évite le texte : rien à faire ici (géré par UI.ApplyTextAlpha)
+        if lv.header._bg        then SA(lv.header._bg)        end
+        if lv.header.bg         then SA(lv.header.bg)         end
+        if lv.header._sepTop    and lv.header._sepTop.SetAlpha    then
+            local base = lv.header._sepTopBaseA or lv.header._sepTop:GetAlpha() or 1
+            lv.header._sepTop:SetAlpha(base * a)
+        end
+        if lv.header._sepBottom and lv.header._sepBottom.SetAlpha then
+            local base = lv.header._sepBottomBaseA or lv.header._sepBottom:GetAlpha() or 1
+            lv.header._sepBottom:SetAlpha(base * a)
+        end
     end
 
-    -- Lignes/rows
-    local function applyRow(r)
-        if not r then return end
-        if r._bg       then SA(r._bg) end
-        if r._sepTop   then SAif(r._sepTop) end
-        if r._sepBot   then SAif(r._sepBot) end
-        if r._stripe   then SAif(r._stripe) end
-        -- ne pas toucher aux FontString / icônes du texte : gérés séparément
-    end
-
-    -- Rows souvent sous scrollChild
-    if lv.scrollChild and lv.scrollChild.GetChildren then
-        local children = { lv.scrollChild:GetChildren() }
-        for _, row in ipairs(children) do
+    -- Rows déjà existantes
+    if lv.rows then
+        for _, row in ipairs(lv.rows) do
             applyRow(row)
         end
     end
 
-    -- Parfois les rows sont attachées directement à lv (fallback)
-    if lv.GetChildren then
-        local children = { lv:GetChildren() }
-        for _, row in ipairs(children) do
-            -- heuristique : frame de row avec champ _bg ou _sepTop
-            if type(row) == "table" and (row._bg or row._sepTop or row._sepBot) then
-                applyRow(row)
+    -- Hook CreateRow : propage l'alpha aux nouvelles lignes
+    if lv.CreateRow and not lv._alphaHookCR then
+        local _oldCR = lv.CreateRow
+        function lv:CreateRow(i)
+            local r = _oldCR(self, i)
+            if UI and UI._SetRowVisualAlpha and self._visualAlpha then
+                UI._SetRowVisualAlpha(r, self._visualAlpha)
+            end
+            return r
+        end
+        lv._alphaHookCR = true
+    end
+
+    -- Hook SetData : réapplique l'alpha APRÈS le (ré)calcul des gradients
+    if lv.SetData and not lv._alphaHookSD then
+        local _oldSD = lv.SetData
+        function lv:SetData(data)
+            _oldSD(self, data)
+            local a2 = self._visualAlpha or 1
+            if self.rows and UI and UI._SetRowVisualAlpha then
+                for _, r in ipairs(self.rows) do
+                    UI._SetRowVisualAlpha(r, a2)
+                end
+            end
+        end
+        lv._alphaHookSD = true
+    end
+end
+
+
+function UI.ListView_SetRowGradientOpacity(lv, a)
+    -- a ∈ [0..1] : multiplicateur appliqué AU DÉGRADÉ des lignes (row._alphaMul)
+    if not lv or not lv.rows then
+        if lv then lv._rowGradAlpha = tonumber(a or 1) or 1 end
+        return
+    end
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    lv._rowGradAlpha = a
+
+    -- Applique immédiatement aux lignes existantes (sans toucher aux séparateurs ici)
+    for i, r in ipairs(lv.rows) do
+        if r then
+            r._alphaMul = a
+            if UI.ApplyRowGradient then
+                UI.ApplyRowGradient(r, r._isEven ~= nil and r._isEven or (i % 2 == 0))
             end
         end
     end
+
+    -- Les nouvelles lignes hériteront du multiplicateur
+    if lv.CreateRow and not lv._rowGradAlphaHook then
+        local _oldCR = lv.CreateRow
+        function lv:CreateRow(i)
+            local r = _oldCR(self, i)
+            if r then
+                if r._alphaMul == nil then r._alphaMul = 1 end
+                r._alphaMul = self._rowGradAlpha or r._alphaMul
+                if UI.ApplyRowGradient then
+                    local isEven = (i % 2 == 0)
+                    r._isEven = isEven
+                    UI.ApplyRowGradient(r, isEven)
+                end
+            end
+            return r
+        end
+        lv._rowGradAlphaHook = true
+    end
 end
+

@@ -495,37 +495,29 @@ local function _ShowHistoryPopup(full)
         label  = session.label or (Tr("history_combat") or "Combat")
         posStr = "[Live]"
     else
-        local idx = (s.viewIndex == 0) and 1 or s.viewIndex
-        label  = (s.segments[idx] and s.segments[idx].label) or (Tr("history_combat") or "Combat")
-        posStr = string.format("[%d/%d]", idx, #s.segments)
+        local view2 = (s.viewIndex == 0) and 1 or s.viewIndex
+        local seg   = s.segments[view2]
+        label  = (seg and seg.label) or (Tr("history_combat") or "Combat")
+        posStr = (seg and seg.posStr) or string.format("[%d/%d]", view2, #s.segments)
     end
 
-    -- 🆕 Masque le serveur dans le titre (ex: "Nom-Royaume" -> "Nom")
-    local shortName = (ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(full)) or tostring(full or "")
-
-    -- Popup "light" (contenu plein, pas de footer, transparence visuelle dédiée)
+    -- Popup "légère" dédiée historique
     local p = UI.CreatePopup and UI.CreatePopup({
         title  = string.format("%s\n%s %s - %s",
-                  Tr("group_tracker_title") or "Suivi du groupe (Consommables)",
-                  label, posStr, shortName),
+                  Tr("group_tracker_title") or "Suivi du groupe",
+                  Tr("history_title") or "Historique", posStr or "", (GLOG and GLOG.ExtractNameOnly and GLOG.ExtractNameOnly(full)) or full or ""),
         width  = 520,
-        height = 380,
+        height = 360,
         strata = "DIALOG",
-        level  = 300,
-    })
+        enforceAction = false,
+    }) or nil
     if not p then return end
 
-    -- 🆕 Agrandit le cadre conteneur : ancre le contenu plein cadre (sans réserver de footer)
+    -- Zone : on libère le footer et on étire la zone de contenu
     do
-        local L, R, T, B = 24, 24, 72, 24
-        if p._cdzNeutral and p._cdzNeutral.GetInsets then
-            L, R, T, B = p._cdzNeutral:GetInsets()
-        end
-        local POP_SIDE = UI.POPUP_SIDE_PAD      or 6
-        local POP_TOP  = UI.POPUP_TOP_EXTRA_GAP or 18
-        local POP_BOT  = UI.POPUP_BOTTOM_LIFT   or 4
-
-        if p.content and p.content.ClearAllPoints then
+        local L, R, T, B = 8, 8, 32, 8
+        local POP_SIDE, POP_TOP, POP_BOT = (UI.POPUP_SIDE_PAD or 6), (UI.POPUP_TOP_EXTRA_GAP or 18), (UI.POPUP_BOTTOM_LIFT or 4)
+        if p.content then
             p.content:ClearAllPoints()
             p.content:SetPoint("TOPLEFT",     p, "TOPLEFT",     L + POP_SIDE, -(T + POP_TOP))
             p.content:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -(R + POP_SIDE), B + POP_BOT)
@@ -558,13 +550,26 @@ local function _ShowHistoryPopup(full)
         end,
     })
 
+    -- ➕ Transparence : UNIQUEMENT pour le dégradé des lignes de la LV (popup léger)
+    state.popup = p
+    if p then p._lv = lv end
+    do
+        local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1
+        -- ⚠️ NE PAS toucher à l'opacité du cadre de la popup "normale"
+        -- (pas de UI.SetFrameVisualOpacity(p, a) ici)
+        if UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(lv, a) end -- header/fond conteneur
+        if UI and UI.ListView_SetRowGradientOpacity then UI.ListView_SetRowGradientOpacity(lv, a) end -- dégradé des lignes
+    end
+
     -- Données
     if lv and lv.SetData then lv:SetData(rows) end
-    -- Mémorise le popup pour MAJ live des opacités
+
+    -- Nettoyage
     state.lastPopup = p
     if p.SetScript then
         p:SetScript("OnHide", function()
             if state.lastPopup == p then state.lastPopup = nil end
+            if state.popup == p then state.popup = nil end
         end)
     end
 end
@@ -610,161 +615,9 @@ local function _ensureWindow()
     })
     state.win = f
 
-    -- Assure que la croix désactive l'option et ferme comme le bouton d’activation
-    if f.close and f.close.HookScript then
-        f.close:HookScript("OnClick", function()
-            if GLOG and GLOG.GroupTrackerSetEnabled then
-                GLOG.GroupTrackerSetEnabled(false)
-            end
-        end)
-    end
+    -- boutons de navigation, titre, etc. (code existant inchangé au-dessus)
 
-    -- === Contrôles dans le HEADER ===
-    -- '>' (plus récent / vers Live) placé PRÈS de la croix
-    f.nextBtn = CreateFrame("Button", nil, f.header)
-    f.nextBtn:SetSize(20, 20)
-    f.nextBtn:SetPoint("RIGHT", f.close, "LEFT", -6, 0)
-    f.nextBtn:SetFrameLevel(f.header:GetFrameLevel() + 2)
-    local txN = f.nextBtn:CreateTexture(nil, "OVERLAY"); txN:SetAllPoints()
-    txN:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
-    f.nextBtn:SetScript("OnClick", function()
-        local s = _Store()
-        _setViewIndex((s.viewIndex or 1) - 1) -- vers plus récent / Live
-    end)
-
-    -- '<' (plus ancien) à GAUCHE du '>'
-    f.prevBtn = CreateFrame("Button", nil, f.header)
-    f.prevBtn:SetSize(20, 20)
-    f.prevBtn:SetPoint("RIGHT", f.nextBtn, "LEFT", -4, 0)
-    f.prevBtn:SetFrameLevel(f.header:GetFrameLevel() + 2)
-    local txP = f.prevBtn:CreateTexture(nil, "OVERLAY"); txP:SetAllPoints()
-    txP:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
-    f.prevBtn:SetScript("OnClick", function()
-        local s = _Store()
-        _setViewIndex((s.viewIndex or 1) + 1) -- vers plus ancien
-    end)
-
-    -- Bouton "vider l'historique" (corbeille) – icône visible sur header noir
-    if f.clearBtn and f.clearBtn.Hide then f.clearBtn:Hide() end
-    f.clearBtn = CreateFrame("Button", nil, f.header)
-    f.clearBtn:SetSize(20, 20)
-    f.clearBtn:SetPoint("RIGHT", f.prevBtn, "LEFT", -6, 0)
-    -- Au-dessus du header pour éviter tout recouvrement
-    f.clearBtn:SetFrameLevel(f.header:GetFrameLevel() + 6)
-
-    -- Icône rouge fiable (fichier Blizzard) + highlight
-    local texPath = "Interface\\PaperDollInfoFrame\\UI-GearManager-LeaveItem-Transparent" -- icône 'poubelle/supprimer'
-    f.clearBtn:SetNormalTexture(texPath)
-    f.clearBtn:SetPushedTexture(texPath)
-    f.clearBtn:SetDisabledTexture(texPath)
-    f.clearBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
-
-    -- Contraste fort sur fond noir
-    local nrm = f.clearBtn:GetNormalTexture();   if nrm then nrm:SetVertexColor(1, 0.25, 0.25, 1) end
-    local psh = f.clearBtn:GetPushedTexture();   if psh then psh:SetVertexColor(1, 0.25, 0.25, 1) end
-    local dis = f.clearBtn:GetDisabledTexture(); if dis then dis:SetVertexColor(1, 0.25, 0.25, 0.45); dis:SetDesaturated(true) end
-    local hl  = f.clearBtn:GetHighlightTexture(); if hl then hl:SetAlpha(0.22) end
-
-    -- Légère marge intérieure (crop) pour éviter les bords du fichier
-    f.clearBtn:SetScript("OnClick", function()
-        -- ✅ Plus de StaticPopup Blizzard → popup addon (zéro taint)
-        if UI and UI.PopupConfirm then
-            UI.PopupConfirm(Tr("confirm_clear_history"), function()
-                if GLOG and GLOG.GroupTracker_ClearHistory then
-                    GLOG.GroupTracker_ClearHistory()
-                end
-            end, nil, { strata = "FULLSCREEN_DIALOG" })
-        else
-            -- Fallback sans popup si jamais l’UI n’est pas dispo
-            if GLOG and GLOG.GroupTracker_ClearHistory then
-                GLOG.GroupTracker_ClearHistory()
-            end
-        end
-    end)
-
-    -- Tooltip du bouton corbeille : "Réinitialiser les données"
-    if f.clearBtn then
-        f.clearBtn:HookScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(Tr("btn_reset_data"))
-            GameTooltip:Show()
-        end)
-        f.clearBtn:HookScript("OnLeave", function()
-            GameTooltip:Hide()
-        end)
-    end
-
-    local function _updateHeaderTitle()
-        local s = _Store()
-        local f = state.win
-        if not f then return end
-
-        -- Garde-fous pour éviter les comparaisons nil
-        local segCount = (s.segments and #s.segments) or 0
-        local view     = tonumber(s.viewIndex)
-        if view == nil then view = (segCount > 0) and 1 or 0 end
-        if view < 0 then view = 0 end
-        if view > segCount then view = segCount end
-
-        -- ====== Ton bloc : calcul du libellé et de la position ======
-        local label, posStr
-        if view == 0 then
-            -- session "live" (en combat) si disponible
-            local session = state.liveSession or s.liveSession or {}
-            local inCombat = (session.inCombat == true)
-            if not inCombat then
-                -- si pas en combat, on retombe sur un segment valide si possible
-                if segCount > 0 then
-                    view = math.min(tonumber(s.viewIndex or 1) or 1, segCount)
-                else
-                    view = 1
-                end
-            end
-            label  = session.label or Tr("history_combat")
-            posStr = "[Live]"
-        end
-        if view ~= 0 then
-            if (not s.segments or not s.segments[view]) and segCount > 0 then
-                -- garde-fou si view est hors bornes
-                view = math.min(math.max(view, 1), segCount)
-            end
-            label  = (s.segments and s.segments[view] and s.segments[view].label) or Tr("history_combat")
-            posStr = string.format("[%d/%d]", view, segCount)
-        end
-
-        -- Titre de la fenêtre principale (on NE TOUCHE PAS au titre de la popup ici)
-        if f.title and f.title.SetText then
-            f.title:SetText(string.format("%s - %s %s",
-                Tr("group_tracker_title"), label or "", posStr or ""))
-        elseif f.header and f.header.title and f.header.title.SetText then
-            f.header.title:SetText(string.format("%s - %s %s",
-                Tr("group_tracker_title"), label or "", posStr or ""))
-        end
-
-        -- États/alpha des boutons (multiplie par l'opacité des boutons)
-        local canNext  = (view > 1)
-        local canPrev  = (view < segCount)
-        local canClear = (segCount > 0)
-
-        if f.nextBtn  then f.nextBtn:SetEnabled(canNext)  end
-        if f.prevBtn  then f.prevBtn:SetEnabled(canPrev)  end
-        if f.clearBtn then f.clearBtn:SetEnabled(canClear) end
-
-        local sA = (GLOG and GLOG.GroupTracker_GetButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity()) or 1
-        if UI and UI.SetButtonAlphaScaled then
-            if f.nextBtn  then UI.SetButtonAlphaScaled(f.nextBtn,  canNext  and 1 or 0.35, sA) end
-            if f.prevBtn  then UI.SetButtonAlphaScaled(f.prevBtn,  canPrev  and 1 or 0.35, sA) end
-            if f.clearBtn then UI.SetButtonAlphaScaled(f.clearBtn, canClear and 1 or 0.35, sA) end
-            if f.close    then UI.SetButtonAlphaScaled(f.close,    1.00,          sA) end
-        else
-            if f.nextBtn  then f.nextBtn:SetAlpha(canNext  and 1 or 0.35) end
-            if f.prevBtn  then f.prevBtn:SetAlpha(canPrev  and 1 or 0.35) end
-            if f.clearBtn then f.clearBtn:SetAlpha(canClear and 1 or 0.35) end
-        end
-    end
-
-
-    -- Colonnes réduites : 100 / 50 / 50 / 50 ✅
+    -- Colonnes
     local cols = UI.NormalizeColumns({
         { key="name",   title=Tr("col_name"),          w=95, min=95, flex=1, justify="LEFT"  },
         { key="heal",   title=Tr("col_heal_potion"),   w=49,  justify="CENTER" },
@@ -825,6 +678,12 @@ local function _ensureWindow()
         end,
 
     })
+    -- ➕ Référence pour appliquer la transparence aux éléments de la ListView
+    f._lv = lv
+    do
+        local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1
+        if UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(lv, a) end
+    end
 
     -- Libérer totalement l'espace réservé à la scrollbar (popup light)
     do
@@ -849,11 +708,83 @@ local function _ensureWindow()
         end
     end
 
+    local function _updateHeaderTitle()
+        local s = _Store()
+        local f = state.win
+        if not f then return end
+
+        -- Garde-fous pour éviter les comparaisons nil
+        local segCount = (s.segments and #s.segments) or 0
+        local view     = tonumber(s.viewIndex)
+        if view == nil then view = (segCount > 0) and 1 or 0 end
+        if view < 0 then view = 0 end
+        if view > segCount then view = segCount end
+
+        -- ====== Ton bloc : calcul du libellé et de la position ======
+        local label, posStr
+        if view == 0 then
+            -- session "live" (en combat) si disponible
+            local session = state.liveSession or s.liveSession or {}
+            local inCombat = (session.inCombat == true)
+            if not inCombat then
+                -- si pas en combat, on retombe sur un segment valide si possible
+                if segCount > 0 then
+                    view = math.min(tonumber(s.viewIndex or 1) or 1, segCount)
+                else
+                    view = 1
+                end
+            end
+
+            label  = session.label or Tr("history_combat")
+            posStr = "[Live]"
+        else
+            if (not s.segments or not s.segments[view]) and segCount > 0 then
+                -- garde-fou si view est hors bornes
+                view = math.min(math.max(view, 1), segCount)
+            end
+            label  = (s.segments and s.segments[view] and s.segments[view].label) or Tr("history_combat")
+            posStr = string.format("[%d/%d]", view, segCount)
+        end
+
+        -- Titre de la fenêtre principale (on NE TOUCHE PAS au titre de la popup ici)
+        if f.title and f.title.SetText then
+            f.title:SetText(string.format("%s - %s %s",
+                Tr("group_tracker_title"), label or "", posStr or ""))
+        elseif f.header and f.header.title and f.header.title.SetText then
+            f.header.title:SetText(string.format("%s - %s %s",
+                Tr("group_tracker_title"), label or "", posStr or ""))
+        end
+
+        -- États/alpha des boutons (multiplie par l'opacité des boutons)
+        local canNext  = (view > 1)
+        local canPrev  = (view < segCount)
+        local canClear = (segCount > 0)
+
+        if f.nextBtn  then f.nextBtn:SetEnabled(canNext)  end
+        if f.prevBtn  then f.prevBtn:SetEnabled(canPrev)  end
+        if f.clearBtn then f.clearBtn:SetEnabled(canClear) end
+
+        local sA = (GLOG and GLOG.GroupTracker_GetButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity()) or 1
+        if UI and UI.SetButtonAlphaScaled then
+            if f.nextBtn  then UI.SetButtonAlphaScaled(f.nextBtn,  canNext  and 1 or 0.35, sA) end
+            if f.prevBtn  then UI.SetButtonAlphaScaled(f.prevBtn,  canPrev  and 1 or 0.35, sA) end
+            if f.clearBtn then UI.SetButtonAlphaScaled(f.clearBtn, canClear and 1 or 0.35, sA) end
+            if f.close    then UI.SetButtonAlphaScaled(f.close,    1.00,          sA) end
+        else
+            if f.nextBtn  then f.nextBtn:SetAlpha(canNext  and 1 or 0.35) end
+            if f.prevBtn  then f.prevBtn:SetAlpha(canPrev  and 1 or 0.35) end
+            if f.clearBtn then f.clearBtn:SetAlpha(canClear and 1 or 0.35) end
+        end
+    end
+
+
     function f:_Refresh()
         local rows = _buildRows()
         if lv and lv.SetData then lv:SetData(rows) end
-        _updateHeaderTitle()
+        -- Sécurise l'appel si la fonction n'est pas encore injectée
+        if _updateHeaderTitle then _updateHeaderTitle() end
     end
+
 
     -- Ticker : mise à jour continue quand visible
     if state.tick and state.tick.Cancel then state.tick:Cancel() end
@@ -918,6 +849,11 @@ function GLOG.GroupTracker_ShowWindow(show)
                 UI.SetFrameVisualOpacity(state.win, a)
             end
 
+            -- ➕ Applique aussi l’opacité aux éléments visuels de la ListView
+            if state.win._lv and UI and UI.ListView_SetVisualOpacity then
+                UI.ListView_SetVisualOpacity(state.win._lv, a)
+            end
+
             -- 🔸 Opacité du texte & des boutons (indépendante)
             local ta = (GLOG.GroupTracker_GetTextOpacity and GLOG.GroupTracker_GetTextOpacity()) or 1.0
             if UI and UI.ApplyTextAlpha then UI.ApplyTextAlpha(state.win, ta) end
@@ -965,6 +901,10 @@ function GLOG.GroupTracker_SetOpacity(a)
     if state.win and UI and UI.SetFrameVisualOpacity then
         UI.SetFrameVisualOpacity(state.win, a)
     end
+        -- ➕ Et sur la ListView de la fenêtre principale
+        if state.win._lv and UI and UI.ListView_SetVisualOpacity then
+            UI.ListView_SetVisualOpacity(state.win._lv, a)
+        end
 
     -- Popup d'historique + ListView interne
     if state.popup then

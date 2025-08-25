@@ -135,15 +135,15 @@ function UI.DecorateRow(r)
     }
     local WHITE = "Interface\\Buttons\\WHITE8x8"
 
-    -- Fond
+    -- Fond (gradient appliqué dans UI.ApplyRowGradient)
     local bg = r:CreateTexture(nil, "BACKGROUND", nil, -8)
     bg:SetAllPoints(r)
     bg:SetTexture(WHITE)
     UI.SnapTexture(bg)
     r._bg = bg
 
-    -- Hover
-    local hov = r:CreateTexture(nil, "BACKGROUND", nil, -7)
+    -- Hover (indépendant de l'opacité réglable pour garder la lisibilité)
+    local hov = r:CreateTexture(nil, "HIGHLIGHT", nil, 0)
     hov:SetAllPoints(r)
     hov:SetTexture(WHITE)
     hov:SetVertexColor(st.hover.r, st.hover.g, st.hover.b, st.hover.a)
@@ -151,7 +151,7 @@ function UI.DecorateRow(r)
     UI.SnapTexture(hov)
     r._hover = hov
 
-    -- Séparateur haut 1 px (toujours net)
+    -- Séparateur haut (1 px)
     local sepTop = r:CreateTexture(nil, "OVERLAY", nil, -1)
     sepTop:SetTexture(WHITE)
     UI.SetPixelThickness(sepTop, 1)
@@ -165,8 +165,9 @@ function UI.DecorateRow(r)
     sepTop:SetVertexColor(st.sep.r, st.sep.g, st.sep.b, st.sep.a)
     UI.SnapTexture(sepTop)
     r._sepTop = sepTop
+    r._sepTopBaseA = st.sep.a or 1  -- 📌 alpha de référence
 
-    -- Liseré gauche (option)
+    -- Liseré gauche (optionnel)
     local acc = r:CreateTexture(nil, "ARTWORK", nil, 1)
     acc:SetTexture(WHITE)
     if PixelUtil and PixelUtil.SetPoint then
@@ -176,30 +177,32 @@ function UI.DecorateRow(r)
         acc:SetPoint("TOPLEFT",    r, "TOPLEFT",    0, 0)
         acc:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
     end
-    local px2 = UI.GetPhysicalPixel() * 2
-    if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(acc, px2) else acc:SetWidth(px2) end
+    UI.SetPixelThickness(acc, 2)
     acc:SetVertexColor(st.accent.r, st.accent.g, st.accent.b, st.accent.a)
     acc:Hide()
-    UI.SnapTexture(acc)
     r._accentLeft = acc
 
-    -- Hover show/hide
-    if r.HookScript then
-        r:HookScript("OnEnter", function() if r._hover then r._hover:Show() end end)
-        r:HookScript("OnLeave", function() if r._hover then r._hover:Hide() end end)
-        r:HookScript("OnSizeChanged", function() -- re-quantifie à chaque resize
-            if r._sepTop then UI.SetPixelThickness(r._sepTop, 1) end
-            UI.SnapRegion(r)
-        end)
-    end
+    -- Séparateur bas (facultatif)
+    local sepBot = r:CreateTexture(nil, "OVERLAY", nil, -1)
+    sepBot:SetTexture(WHITE)
+    UI.SetPixelThickness(sepBot, 1)
+    sepBot:SetPoint("BOTTOMLEFT",  r, "BOTTOMLEFT",  0, 0)
+    sepBot:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 0)
+    local botA = (st.sep.a or 1) * .55
+    sepBot:SetVertexColor(st.sep.r, st.sep.g, st.sep.b, botA)
+    r._sepBot = sepBot
+    r._sepBotBaseA = botA       -- 📌 alpha de référence
 
     -- Dégradé pair/impair initial
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, true) end
+    r._isEven   = true
+    if r._alphaMul == nil then r._alphaMul = 1 end
 
     -- Première quantification (au cas où Layout ne soit pas encore passé)
     UI.SnapRegion(r)
     if r._sepTop then UI.SetPixelThickness(r._sepTop, 1) end
 end
+
 
 -- Applique le dégradé vertical pair/impair sur la texture de fond d'une ligne
 function UI.ApplyRowGradient(row, isEven)
@@ -209,23 +212,23 @@ function UI.ApplyRowGradient(row, isEven)
     local bottom = (isEven and (st.evenBottom or st.even)) or (st.oddBottom or st.odd)
     if not (top and bottom) then return end
 
+    -- 🔸 Multiplicateur d’alpha par ligne (utilisé par le "popup léger")
+    local mul = tonumber(row._alphaMul or 1) or 1
+    if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
+
     local tex = row._bg
     tex:SetTexture("Interface\\Buttons\\WHITE8x8") -- sécurité
 
     -- Retail 11.x : SetGradient(Color, Color) ; fallback : SetGradientAlpha
     if tex.SetGradient and type(CreateColor) == "function" then
         tex:SetGradient("VERTICAL",
-            CreateColor(top.r, top.g, top.b, top.a),
-            CreateColor(bottom.r, bottom.g, bottom.b, bottom.a)
+            CreateColor(top.r, top.g, top.b, (top.a or 1) * mul),
+            CreateColor(bottom.r, bottom.g, bottom.b, (bottom.a or 1) * mul)
         )
     elseif tex.SetGradientAlpha then
         tex:SetGradientAlpha("VERTICAL",
-            top.r, top.g, top.b, top.a,
-            bottom.r, bottom.g, bottom.b, bottom.a
-        )
-    else
-        tex:SetVertexColor(
-            (top.r+bottom.r)/2, (top.g+bottom.g)/2, (top.b+bottom.b)/2, (top.a+bottom.a)/2
+            top.r or 1, top.g or 1, top.b or 1, (top.a or 1) * mul,
+            bottom.r or 1, bottom.g or 1, bottom.b or 1, (bottom.a or 1) * mul
         )
     end
 end
