@@ -601,7 +601,7 @@ local function _ensureWindow()
 
     local f = UI.CreatePlainWindow({
         title   = "group_tracker_title",
-        width   = 420,
+        width   = 275,
         height  = 308,
         headerHeight = 22,
         strata  = "FULLSCREEN_DIALOG",
