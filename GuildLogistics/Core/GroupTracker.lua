@@ -721,6 +721,7 @@ local function _ensureWindow()
 
     local lv = UI.ListView(f.content, cols, {
         topOffset = 0,
+        showSB = false,
         safeRight = false,  -- pas besoin d'espace pour une barre
         rowHeight = 22,
         buildRow = function(r)
@@ -936,47 +937,74 @@ function GLOG.GroupTracker_ShowWindow(show)
     if show then
         state.enabled = true
         _ensureWindow()
-        if state.win then
-            -- 🔸 Opacité des cadres (fonds/bordures), 0..1
-            local a = (GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 0.95
-            if UI and UI.SetFrameVisualOpacity then
-                UI.SetFrameVisualOpacity(state.win, a)
-            end
+        if not state.win then return end
 
-            -- ➕ Applique aussi l’opacité aux éléments visuels de la ListView
-            if state.win._lv and UI and UI.ListView_SetVisualOpacity then
-                UI.ListView_SetVisualOpacity(state.win._lv, a)
-            end
+        local f = state.win
+        -- Applique les réglages actuels
+        local aWin  = (GLOG.GroupTracker_GetOpacity       and GLOG.GroupTracker_GetOpacity())       or 0.95
+        local aText = (GLOG.GroupTracker_GetTextOpacity   and GLOG.GroupTracker_GetTextOpacity())   or 1.00
+        local aBtnS = (GLOG.GroupTracker_GetButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity()) or 1.00
+        local rowH  = (GLOG.GroupTracker_GetRowHeight     and GLOG.GroupTracker_GetRowHeight())     or 22
 
-            -- 🔸 Opacité du texte & des boutons (indépendante)
-            local ta = (GLOG.GroupTracker_GetTextOpacity and GLOG.GroupTracker_GetTextOpacity()) or 1.0
-            if UI and UI.ApplyTextAlpha then UI.ApplyTextAlpha(state.win, ta) end
-            if UI and UI.ApplyButtonsAlpha then UI.ApplyButtonsAlpha(state.win, ta) end
+        if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, aWin) end
+        if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, aText)            end
+        if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, aWin) end
+        if f._lv and UI and UI.ListView_SetRowHeight     then UI.ListView_SetRowHeight(f._lv, rowH)     end
 
-            -- Ancrage par défaut si nécessaire (bord gauche)
-            if not state.win._glog_default_anchored then
-                local hasPoints = (state.win.GetNumPoints and state.win:GetNumPoints() or 0) > 0
-                if not hasPoints then
-                    state.win:ClearAllPoints()
-                    state.win:SetPoint("LEFT", UIParent, "LEFT", 24, 0)
-                end
-                state.win._glog_default_anchored = true
-            end
-
-            state.win:Show()
-
-            -- 🔹 Applique l'opacité des boutons à l'ouverture de la fenêtre
-            if UI and UI.ApplyButtonsOpacity and GLOG and GLOG.GroupTracker_GetButtonsOpacity then
-                UI.ApplyButtonsOpacity(state.win, GLOG.GroupTracker_GetButtonsOpacity())
-            end
-            if state.win._Refresh then state.win:_Refresh() end
+        -- Assure une ancre gauche du titre (déjà fait côté PlainWindow, on sécurise)
+        if f.title and f.header then
+            f.title:ClearAllPoints()
+            f.title:SetPoint("LEFT", f.header, "LEFT", 8, 0)
+            if f.title.SetJustifyH then f.title:SetJustifyH("LEFT") end
         end
+
+        -- Le X ferme toute la fenêtre (sécurisation)
+        if f.close then
+            f.close:SetScript("OnClick", function() f:Hide() end)
+        end
+
+        -- ✅ Demande : survol = opacités 100%, puis restauration en sortie de survol
+        local function _restoreVisual()
+            local _aWin  = (GLOG.GroupTracker_GetOpacity       and GLOG.GroupTracker_GetOpacity())       or 0.95
+            local _aText = (GLOG.GroupTracker_GetTextOpacity   and GLOG.GroupTracker_GetTextOpacity())   or 1.00
+            if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, _aWin) end
+            if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, _aText)            end
+            if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, _aWin) end
+            if f._Refresh then f:_Refresh() end -- réapplique les états/alphas des boutons (prev/next/clear)
+        end
+        local function _fullVisual()
+            if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, 1) end
+            if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, 1)            end
+            if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, 1) end
+            -- Boutons : on force à plein ; la restauration repassera par _Refresh()
+            if UI and UI.SetButtonAlphaScaled then
+                if f.nextBtn  then UI.SetButtonAlphaScaled(f.nextBtn,  1, 1) end
+                if f.prevBtn  then UI.SetButtonAlphaScaled(f.prevBtn,  1, 1) end
+                if f.clearBtn then UI.SetButtonAlphaScaled(f.clearBtn, 1, 1) end
+                if f.close    then UI.SetButtonAlphaScaled(f.close,    1, 1) end
+            end
+        end
+
+        -- Hooks de survol sur le frame principal + zones utiles
+        local function _hookHover(frame)
+            if not frame or not frame.HookScript then return end
+            frame:EnableMouse(true)
+            frame:HookScript("OnEnter", _fullVisual)
+            frame:HookScript("OnLeave", _restoreVisual)
+        end
+        _hookHover(f)
+        _hookHover(f.header)
+        _hookHover(f.content)
+        if f.hctrl then _hookHover(f.hctrl) end
+
+        f:Show()
+        if f._Refresh then f:_Refresh() end
     else
-        if state.win and state.win.Hide then state.win:Hide() end
-        local winShown = state.win and state.win:IsShown()
-        state.enabled = (winShown or s.recording) and true or false
+        state.enabled = false
+        if state.win then state.win:Hide() end
     end
 end
+
 
 function GLOG.GroupTracker_GetOpacity()
     local s = _Store()
@@ -1049,6 +1077,27 @@ function GLOG.GroupTracker_SetButtonsOpacity(a)
     end
 end
 
+-- Hauteur de ligne de la listview (fenêtre minimaliste)
+function GLOG.GroupTracker_GetRowHeight()
+    local s = _Store()
+    local h = tonumber(s.rowHeight or 22) or 22
+    if h < 12 then h = 12 elseif h > 48 then h = 48 end
+    return h
+end
+
+function GLOG.GroupTracker_SetRowHeight(px)
+    local s = _Store()
+    local v = tonumber(px)
+    if not v then return end
+    if v < 12 then v = 12 elseif v > 48 then v = 48 end
+    s.rowHeight = v
+
+    -- Si la fenêtre est ouverte, applique immédiatement
+    if state and state.win and state.win._lv and UI and UI.ListView_SetRowHeight then
+        UI.ListView_SetRowHeight(state.win._lv, v)
+        if state.win._Refresh then state.win:_Refresh() end
+    end
+end
 
 function GLOG.GroupTracker_GetRecordingEnabled()
     local s = _Store()

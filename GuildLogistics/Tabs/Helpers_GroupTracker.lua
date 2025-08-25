@@ -191,6 +191,35 @@ local function Build(container)
             GLOG.GroupTracker_SetButtonsOpacity(a)
         end
     end)
+    y = _RowY(y, 26)
+
+    -- Crée le slider "Hauteur des lignes" s'il n'existe pas encore
+    if slRowHeight and slRowHeight.Hide then slRowHeight:Hide() end
+    slRowHeight = UI.Slider(panel, {
+        label   = Tr("group_tracker_row_height_label"),
+        min     = 10,
+        max     = 64,
+        step    = 1,
+        value   = (GLOG and GLOG.GroupTracker_GetRowHeight and GLOG.GroupTracker_GetRowHeight()) or 22,
+        width   = 360,
+        tooltip = Tr("group_tracker_row_height_tip"),
+        format  = function(v) return tostring(v) .. " px" end,
+        name    = (ADDON or "GL").."_RowHeightSlider",
+    })
+
+    slRowHeight:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    slRowHeight:SetOnValueChanged(function(_, v)
+        local h = math.floor(tonumber(v) or 22)
+        if GLOG and GLOG.GroupTracker_SetRowHeight then
+            GLOG.GroupTracker_SetRowHeight(h)
+        end
+    end)
+
+    -- Sync valeur slider hauteur si déjà présent
+    if slRowHeight and slRowHeight.SetValue and GLOG and GLOG.GroupTracker_GetRowHeight then
+        slRowHeight:SetValue((GLOG.GroupTracker_GetRowHeight() or 22))
+    end
+    
     -- init depuis le store
     if slBtnOpacity and slBtnOpacity.SetValue and GLOG and GLOG.GroupTracker_GetButtonsOpacity then
         local p = math.floor(((GLOG.GroupTracker_GetButtonsOpacity() or 1.0) * 100))
@@ -199,30 +228,6 @@ local function Build(container)
     end
     y = _RowY(y, 26)
 
-    -- 📌 (NOUVEAU) Bouton : Masquer / Afficher le texte du titre (popup)
-    local function _ApplyToggleText(btn)
-        local hidden = (GLOG and GLOG.GroupTracker_IsPopupTitleHidden and GLOG.GroupTracker_IsPopupTitleHidden()) or false
-        if btn and btn.SetText then
-            btn:SetText(hidden and (Tr("group_tracker_popup_title_btn_show") or "Afficher le texte du titre (popup)")
-                               or (Tr("group_tracker_popup_title_btn_hide") or "Masquer le texte du titre (popup)"))
-        end
-    end
-
-    local btnTitle = UI.Button(panel, {
-        text = Tr("group_tracker_popup_title_btn_hide") or "Masquer le texte du titre (popup)",
-        tooltip = Tr("group_tracker_popup_title_btn_tip") or "Bascule l'affichage du texte du titre de la popup d'historique.",
-        width = 360,
-        height = 22,
-    })
-    btnTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
-    btnTitle:SetScript("OnClick", function(self)
-        if GLOG and GLOG.GroupTracker_TogglePopupTitleHidden then
-            GLOG.GroupTracker_TogglePopupTitleHidden()
-            _ApplyToggleText(self)
-        end
-    end)
-    _ApplyToggleText(btnTitle)
-    y = _RowY(y, 24)
 
     -- 📌 Ligne 5 : Astuce /glog track
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -234,18 +239,22 @@ local function Build(container)
     _UpdateButtonsEnabled()
 end
 
-local function Refresh()
+function Refresh()
+    -- Opacité fonds
     if slOpacity and slOpacity.SetValue and GLOG and GLOG.GroupTracker_GetOpacity then
         local p = math.floor((GLOG.GroupTracker_GetOpacity() or 0.95)*100 + 0.5)
         slOpacity:SetValue(p)
     end
+
     if cbRecording then
         local v = (GLOG and GLOG.GroupTracker_GetRecordingEnabled and GLOG.GroupTracker_GetRecordingEnabled()) or false
         if cbRecording.SetChecked then cbRecording:SetChecked(v) end
-        if cbRecording.SetValue then cbRecording:SetValue(v) end
+        if cbRecording.SetValue   then cbRecording:SetValue(v)   end
     end
+
     _UpdateButtonsEnabled()
 end
+
 
 local function Layout() end
 
