@@ -17,6 +17,17 @@ UI.SECTION_HEADER_H = UI.SECTION_HEADER_H or 26
 UI.FONT_YELLOW = UI.FONT_YELLOW or {1, 0.82, 0}
 UI.WHITE       = UI.WHITE       or {1,1,1}
 UI.ACCENT      = UI.ACCENT      or {0.22,0.55,0.95}
+-- Couleur par défaut du libellé des lignes "séparateur" (Joueurs conserve cette couleur)
+UI.SEPARATOR_LABEL_COLOR = UI.SEPARATOR_LABEL_COLOR or { 1, 0.95, 0.3 } -- jaune doux
+
+-- Padding (px) ajouté au-dessus des lignes "séparateur" (déjà utilisé)
+UI.SEPARATOR_TOP_PAD = UI.SEPARATOR_TOP_PAD or 20
+
+function UI.GetSeparatorTopPadding()
+    local v = tonumber(UI.SEPARATOR_TOP_PAD)
+    if not v or v < 0 then v = 0 end
+    return v
+end
 
 -- === Colonnes: w/min/flex
 function UI.ResolveColumns(totalWidth, cols, opts)
@@ -231,6 +242,47 @@ function UI.SetRowAccent(row, shown, r, g, b, a)
         acc:SetVertexColor(tonumber(r) or 1, tonumber(g) or .82, tonumber(b) or 0, tonumber(a) or .9)
     end
     acc:SetShown(shown and true or false)
+end
+
+function UI.SetRowAccentGradient(row, shown, r, g, b, startAlpha)
+    -- Applique/masque un dégradé horizontal sur toute la ligne,
+    -- destiné à compléter le liseré "même groupe".
+    -- startAlpha par défaut ~0.50 pour respecter la demande (50% -> 0%).
+    if not row then return end
+    local sa = tonumber(startAlpha) or 0.50
+
+    -- Crée la texture si nécessaire
+    local grad = row._accentGrad
+    if not grad then
+        -- On la place dans le BACKGROUND, au-dessus du fond mais
+        -- sans gêner le hover et les textes (qui sont en OVERLAY).
+        -- NB: le fond de ligne a de l’opacité, donc ce grad reste visible.
+        grad = row:CreateTexture(nil, "BACKGROUND", nil, -6)
+        row._accentGrad = grad
+        grad:ClearAllPoints()
+        grad:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+        grad:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+        grad:SetTexture("Interface\\Buttons\\WHITE8x8")
+        if UI.SnapTexture then UI.SnapTexture(grad) end
+    end
+
+    -- Couleur et dégradé (HORIZONTAL, sa -> 0)
+    r, g, b = tonumber(r) or 1, tonumber(g) or .82, tonumber(b) or 0
+    if grad.SetGradient and type(CreateColor) == "function" then
+        grad:SetGradient("HORIZONTAL",
+            CreateColor(r, g, b, sa),
+            CreateColor(r, g, b, 0)
+        )
+    elseif grad.SetGradientAlpha then
+        grad:SetGradientAlpha("HORIZONTAL",
+            r, g, b, sa,
+            r, g, b, 0
+        )
+    else
+        grad:SetVertexColor(r, g, b, sa) -- fallback (pas de vrai gradient)
+    end
+
+    grad:SetShown(shown and true or false)
 end
 
 function UI.CreateScroll(parent)

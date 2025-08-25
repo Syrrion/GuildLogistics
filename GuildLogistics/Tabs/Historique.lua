@@ -3,7 +3,7 @@ local Tr = ns and ns.Tr
 local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lv, footer, backBtn, histPane
+local panel, lv, footer, histPane
 local cols = UI.NormalizeColumns({
     { key="date",  title=Tr("col_date"),         w=140 },
     { key="total", title=Tr("col_total"),        w=100 },
@@ -255,15 +255,7 @@ local function Build(container)
     end
 
     -- Footer + bouton retour (inchangés fonctionnellement)
-    footer = UI.CreateFooter(panel, 36)
-    backBtn = UI.Button(footer, Tr("btn_back"), { size="sm", minWidth=110 })
-    backBtn:SetOnClick(function()
-        if UI and UI.ShowTabByLabel then
-            UI.ShowTabByLabel(Tr("tab_roster"))
-        end
-    end)
-    backBtn:ClearAllPoints()
-    backBtn:SetPoint("LEFT", footer, "LEFT", PAD, 0)
+    footer = UI.CreateFooter(panel, 1)
 
     -- 📦 Conteneur interne paddé (comme Synthese/Guilde)
     histPane = CreateFrame("Frame", nil, panel)

@@ -8,6 +8,7 @@ local UI = ns.UI
 UI.DEFAULT_W, UI.DEFAULT_H = 1360, 680
 UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER, UI.ROW_H = 16, 20, 8, 30
 UI.FONT_YELLOW = {1, 0.82, 0}
+UI.MIDGREY = {0.5,0.5,0.5}
 UI.WHITE = {1,1,1}
 UI.ACCENT = {0.22,0.55,0.95}
 UI.FOOTER_RIGHT_PAD = UI.FOOTER_RIGHT_PAD or 8
@@ -229,14 +230,43 @@ UI.ReloadButton = reloadBtn
 -- ➕ Indicateur de synchronisation (barre de titre, aligné à droite)
 local syncPanel = CreateFrame("Frame", nil, Main)
 syncPanel:Hide()
--- Même strata/level que la croix : passe au-dessus de l'overlay du skin
-syncPanel:SetFrameStrata(close:GetFrameStrata())
-syncPanel:SetFrameLevel(close:GetFrameLevel())
+-- ❌ Aucun décor sur le panneau de synchro (seul le texte doit apparaître)
+if syncPanel.SetBackdrop then syncPanel:SetBackdrop(nil) end
+if syncPanel.SetBackdropColor then syncPanel:SetBackdropColor(0,0,0,0) end
+if syncPanel.SetBackdropBorderColor then syncPanel:SetBackdropBorderColor(0,0,0,0) end
 
 -- Positionneur : ancre au bord droit du bandeau rouge (titleRight),
 -- centré verticalement dans ce bandeau, avec un padding configurable.
 local function PositionSyncIndicator()
     syncPanel:ClearAllPoints()
+
+    -- Préférence : afficher dans le pied de la barre latérale (menu catégories)
+    local bar = UI and UI._catBar
+    local footer = bar and bar._footer
+    if footer and footer.GetObjectType then
+        if syncPanel:GetParent() ~= footer then
+            syncPanel:SetParent(footer)
+        end
+        -- Laisse l'indicateur au-dessus du fond du footer
+        syncPanel:SetFrameStrata(footer:GetFrameStrata())
+        syncPanel:SetFrameLevel((footer:GetFrameLevel() or 1) + 1)
+
+        local padL = tonumber(UI.SIDEBAR_FOOTER_PAD_LEFT or 8) or 8
+        syncPanel:SetPoint("LEFT", footer, "LEFT", padL, 0)
+
+        -- Texte aligné à gauche quand il est dans la barre latérale
+        if syncText and syncText.GetObjectType then
+            syncText:ClearAllPoints()
+            syncText:SetPoint("LEFT", syncPanel, "LEFT", 0, 0)
+            syncText:SetJustifyH("LEFT")
+        end
+
+        -- Hauteur discrète pour s'intégrer à la barre latérale
+        syncPanel:SetHeight(18)
+        return
+    end
+
+    -- Fallback : ancien placement (barre de titre à droite)
     local pad = tonumber(UI.TITLE_SYNC_PAD_RIGHT or 12)
 
     local s  = Main._cdzNeutral
@@ -249,7 +279,17 @@ local function PositionSyncIndicator()
     else
         syncPanel:SetPoint("TOPRIGHT", Main, "TOPRIGHT", -64, -2)
     end
+
+    -- Texte aligné à droite pour le fallback historique
+    if syncText and syncText.GetObjectType then
+        syncText:ClearAllPoints()
+        syncText:SetPoint("RIGHT", syncPanel, "RIGHT", 0, 0)
+        syncText:SetJustifyH("RIGHT")
+    end
+
+    syncPanel:SetHeight(20)
 end
+
 PositionSyncIndicator()
 syncPanel:SetHeight(20)
 
@@ -294,14 +334,35 @@ Main:HookScript("OnHide", function()
 end)
 
 -- Branchements : affichage dès réception du 1er fragment, arrêt à la fin
-if ns and ns.On then
+local function RegisterSyncIndicatorHooks()
+    if not (ns and ns.On) then
+        return false
+    end
+    if UI._syncHooksRegistered then
+        return true
+    end
+
     ns.On("sync:begin", function()
-        if UI.SyncIndicatorShow then UI.SyncIndicatorShow("sync_data") end
+        if UI.SyncIndicatorShow then
+            UI.SyncIndicatorShow("sync_data")
+        end
     end)
+
     ns.On("sync:end", function()
-        if UI.SyncIndicatorHide then UI.SyncIndicatorHide() end
+        if UI.SyncIndicatorHide then
+            UI.SyncIndicatorHide()
+        end
     end)
+
+    UI._syncHooksRegistered = true
+    return true
 end
+
+-- Essaie tout de suite, puis re-tente au frame suivant si le bus n'est pas encore prêt
+if not RegisterSyncIndicatorHooks() then
+    C_Timer.After(0, RegisterSyncIndicatorHooks)
+end
+
 
 -- ===================== Tabs =====================
 local Registered, Panels, Tabs = {}, {}, {}
@@ -410,7 +471,7 @@ local function _SubTabButton(parent, text)
     b.selGrad:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
     b.selGrad:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
 
-    local startAlpha = math.max(0.25, math.min(0.50, (ca or 0.5) * 0.9))
+    local startAlpha = math.max(0.25, math.min(0.50, (ca or 0.5) * 0.5))
     if b.selGrad.SetGradient and type(CreateColor) == "function" then
         b.selGrad:SetGradient("HORIZONTAL",
             CreateColor(cr, cg, cb, startAlpha),
@@ -1310,3 +1371,49 @@ if UI.Main and UI.Main.SetScript then
         if not UI._catBar then UI.CreateCategorySidebar() end
     end)
 end
+
+function UI.CreateSidebarSyncFooter()
+    local bar = UI and UI._catBar
+    if not bar then return nil end
+
+    local h = tonumber(UI.SIDEBAR_SYNC_FOOTER_H or 22) or 22
+    local footer = bar._footer
+    if not footer then
+        footer = CreateFrame("Frame", nil, bar, "BackdropTemplate")
+        bar._footer = footer
+        footer:SetPoint("BOTTOMLEFT",  bar, "BOTTOMLEFT",  0, 0)
+        footer:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 0, 0)
+        footer:SetHeight(h)
+    end
+
+    -- ❌ Aucun décor : ni fond, ni bordure, ni ombre/séparateur
+    if footer.SetBackdrop then footer:SetBackdrop(nil) end
+    if footer.SetBackdropColor then footer:SetBackdropColor(0,0,0,0) end
+    if footer.SetBackdropBorderColor then footer:SetBackdropBorderColor(0,0,0,0) end
+    if footer._bg then footer._bg:Hide(); footer._bg:SetTexture(nil); footer._bg = nil end
+    if footer._topDark then footer._topDark:Hide(); footer._topDark:SetTexture(nil); footer._topDark = nil end
+    if footer._topLight then footer._topLight:Hide(); footer._topLight:SetTexture(nil); footer._topLight = nil end
+
+    footer:EnableMouse(false)
+    footer:SetAlpha(1)
+
+    -- Pousse la liste au-dessus du footer (espace réservé pour le texte de sync)
+    if bar._list then
+        bar._list:ClearAllPoints()
+        bar._list:SetPoint("TOPLEFT",      bar,    "TOPLEFT",  0, 0)
+        bar._list:SetPoint("BOTTOMRIGHT",  footer, "TOPRIGHT", -1, 0)
+    end
+
+    -- Repositionne l'indicateur (centre + offset déjà géré dans PositionSyncIndicator)
+    if PositionSyncIndicator then PositionSyncIndicator() end
+    return footer
+end
+
+
+-- Création du footer lors de l'affichage principal et si la barre existe déjà
+if UI.Main and UI.Main.SetScript then
+    UI.Main:HookScript("OnShow", function()
+        if UI and UI.CreateSidebarSyncFooter then UI.CreateSidebarSyncFooter() end
+    end)
+end
+if UI and UI._catBar and UI.CreateSidebarSyncFooter then UI.CreateSidebarSyncFooter() end

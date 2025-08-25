@@ -14,12 +14,14 @@ Locales/locales-enUS.lua
 Locales/locales-frFR.lua
 
 Data/BiS_Trinkets.lua
+Data/Potions.lua
 
 Core/Core.lua
 Core/Helper.lua
 Core/Comm.lua
 Core/Guild.lua
 Core/Expenses.lua
+Core/GroupTracker.lua
 
 UI/UI_Core.lua
 UI/UI_Cell.lua
@@ -31,6 +33,8 @@ UI/UI_Buttons.lua
 UI/UI_Dropdown.lua
 UI/UI_Colors.lua
 UI/UI_Badge.lua
+UI/UI_Float.lua
+UI/UI_PlainWindow.lua
 
 Tabs/Guilde.lua
 
@@ -41,6 +45,7 @@ Tabs/Depense.lua
 Tabs/Demandes.lua
 
 Tabs/BiS.lua
+Tabs/Helpers_GroupTracker.lua
 
 Tabs/Options.lua
 

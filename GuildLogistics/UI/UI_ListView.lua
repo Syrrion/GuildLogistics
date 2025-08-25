@@ -294,6 +294,7 @@ function UI.ListView(parent, cols, opts)
         for i = 1, #self.rows do
             local r  = self.rows[i]
             local it = data[i]
+
             if it then
                 r:Show()
                 shown = shown + 1
@@ -301,11 +302,74 @@ function UI.ListView(parent, cols, opts)
                 -- Dégradé vertical pair/impair
                 if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
 
-                -- Séparateur TOP : tout sauf la première visible
-                if r._sepTop then r._sepTop:SetShown(true) end
+                -- Hauteur dynamique : on ajoute un "padding" en haut des lignes 'sep'
+                local extraTop = 0
+                if it.kind == "sep" then
+                    extraTop = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 0
+                    if extraTop < 0 then extraTop = 0 end
+                end
+                local baseH   = (UI.ROW_H or 30) + 2
+                local targetH = baseH + extraTop
+                if r._targetH ~= targetH then
+                    r._targetH = targetH
+                    r:SetHeight(targetH)
+                end
 
+                -- Masquer la barre de séparation du tout premier item si besoin
+                if r._sepTop then
+                    if firstVisible and i == firstVisible then
+                        r._sepTop:Hide()
+                    else
+                        r._sepTop:Show()
+                    end
+                end
+
+                -- Mise à jour spécifique à la liste (cellules, textes, etc.)
                 if self.opts.updateRow then
                     self.opts.updateRow(i, r, r._fields, it)
+                end
+
+                -- Recalage générique des widgets 'sep' pour respecter le padding haut
+                if it.kind == "sep" and r._fields then
+                    local f   = r._fields
+                    local pad = extraTop
+
+                    -- Le fond de section (sepBG) commence sous le padding
+                    if f.sepBG then
+                        f.sepBG:ClearAllPoints()
+                        f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",     0, -pad)
+                        f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 2,  0)
+                    end
+
+                    -- Le trait supérieur (sepTop) se place en haut de la zone "fond"
+                    if f.sepTop then
+                        f.sepTop:ClearAllPoints()
+                        if f.sepBG then
+                            f.sepTop:SetPoint("TOPLEFT",  f.sepBG, "TOPLEFT",  0, 1)
+                            f.sepTop:SetPoint("TOPRIGHT", f.sepBG, "TOPRIGHT", 0, 1)
+                        else
+                            f.sepTop:SetPoint("TOPLEFT",  r, "TOPLEFT",  0, -pad + 1)
+                            f.sepTop:SetPoint("TOPRIGHT", r, "TOPRIGHT", 0, -pad + 1)
+                        end
+                    end
+
+                    -- Couleur du libellé "séparateur" : opts > défaut global
+                    if f.sepLabel then
+                        local col = self.opts.sepLabelColor or UI.SEPARATOR_LABEL_COLOR or {1, 1, 1}
+                        local cr = col.r or col[1] or 1
+                        local cg = col.g or col[2] or 1
+                        local cb = col.b or col[3] or 1
+                        local ca = col.a or col[4] or 1
+                        f.sepLabel:SetTextColor(cr, cg, cb, ca)
+
+                        -- Ancrage du libellé
+                        f.sepLabel:ClearAllPoints()
+                        if f.sepBG then
+                            f.sepLabel:SetPoint("LEFT", f.sepBG, "LEFT", 8, 0)
+                        else
+                            f.sepLabel:SetPoint("LEFT", r, "LEFT", 8, -math.floor(pad/2))
+                        end
+                    end
                 end
             else
                 r:Hide()
@@ -316,8 +380,7 @@ function UI.ListView(parent, cols, opts)
         self:Layout()
         self:_SetEmptyShown(shown == 0)
     end
-
-
+    
     -- Relayout public
     function lv:Refresh()
         self:Layout()

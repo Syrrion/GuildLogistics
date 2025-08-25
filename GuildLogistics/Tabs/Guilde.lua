@@ -119,11 +119,16 @@ function BuildRow(r)
     -- Widgets pour "sep" (comme dans Joueurs.lua)
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
     f.sepBG:SetColorTexture(0.18, 0.18, 0.22, 0.6)
-    f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",    0,  0)
-    f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT",2,  0)
+
+    -- ✅ Padding haut de 10px (centralisé via UI.GetSeparatorTopPadding)
+    local pad = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 10
+    f.sepBG:ClearAllPoints()
+    f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",     0, -pad)
+    f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 2,  0)
 
     f.sepTop = r:CreateTexture(nil, "BORDER"); f.sepTop:Hide()
     f.sepTop:SetColorTexture(0.9, 0.8, 0.2, 0.9)
+    f.sepTop:ClearAllPoints()
     f.sepTop:SetPoint("TOPLEFT",  f.sepBG, "TOPLEFT",  0, 1)
     f.sepTop:SetPoint("TOPRIGHT", f.sepBG, "TOPRIGHT", 0, 1)
     f.sepTop:SetHeight(2)
@@ -156,6 +161,17 @@ local function UpdateRow(i, r, f, it)
         if f.mkey then f.mkey:SetText("") end
         if f.last then f.last:SetText("") end
 
+        -- 🔒 Empêche tout résidu visuel sur les lignes de séparation :
+        -- 1) Icône de classe
+        if f.name and f.name.icon then
+            f.name.icon:SetTexture(nil)
+            f.name.icon:Hide()
+        end
+        -- 2) Liseré gauche "même groupe"
+        if UI and UI.SetRowAccent then UI.SetRowAccent(r, false) end
+        -- 3) Dégradé horizontal "même groupe"
+        if UI and UI.SetRowAccentGradient then UI.SetRowAccentGradient(r, false) end
+
         if f.sepLabel then
             f.sepLabel:ClearAllPoints()
             f.sepLabel:SetPoint("LEFT", r, "LEFT", 8, 0)
@@ -173,12 +189,18 @@ local function UpdateRow(i, r, f, it)
     -- Nom (icône/couleur main gérés par CreateNameTag / SetNameTag)
     UI.SetNameTag(f.name, data.name or "")
 
-    -- ➕ Liseré "même groupe/sous-groupe"
+    -- ➕ Marquage "même groupe/sous-groupe" : liseré + dégradé horizontal
     do
         local same = (GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name)) or false
         local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {}
         local c  = st.accent or { r = 1, g = 0.82, b = 0.00, a = 0.90 }
-        if UI.SetRowAccent then UI.SetRowAccent(r, same, c.r, c.g, c.b, c.a) end
+
+        if UI.SetRowAccent then
+            UI.SetRowAccent(r, same, c.r, c.g, c.b, c.a)
+        end
+        if UI.SetRowAccentGradient then
+            UI.SetRowAccentGradient(r, same, c.r, c.g, c.b, 0.30)
+        end
     end
     
     -- Alias
@@ -243,7 +265,7 @@ local function UpdateRow(i, r, f, it)
         local function fmtOnline()
             if ilvl and ilvl > 0 then
                 if ilvlMax and ilvlMax > 0 then
-                    return tostring(ilvl).." ("..tostring(ilvlMax)..")"
+                    return tostring(ilvl)..gray(" ("..tostring(ilvlMax)..")")
                 else
                     return tostring(ilvl)
                 end
@@ -330,11 +352,15 @@ local function Build(container)
 
     -- Liste unique, plein écran (pas de footer local -> pleine hauteur)
     lv = UI.ListView(membersPane, cols, {
-        buildRow    = function(r) return BuildRow(r) end,
-        updateRow   = function(i, r, f, it) UpdateRow(i, r, f, it.data or it) end,
-        topOffset   = (UI.SECTION_HEADER_H or 26) + 6,
-        bottomAnchor= nil, -- plein parent => pleine hauteur
+        buildRow     = function(r) return BuildRow(r) end,
+        updateRow    = function(i, r, f, it) UpdateRow(i, r, f, it.data or it) end,
+        topOffset    = (UI.SECTION_HEADER_H or 26) + 6,
+        bottomAnchor = nil, -- plein parent => pleine hauteur
+
+        -- 🎨 Couleur spécifique aux séparateurs pour l’onglet Guilde : BLANC
+        sepLabelColor = UI.MIDGREY,
     })
+
 
     -- Message « pas de guilde »
     if not noGuildMsg then
@@ -401,7 +427,7 @@ function Refresh()
         end
     end
 
-    -- Injecte les séparateurs (comme dans Joueurs.lua)
+    -- Injecte les séparateurs
     local out = {}
     if #online > 0 then
         table.insert(out, { kind = "sep", label = Tr("lbl_sep_online") or Tr("status_online") })

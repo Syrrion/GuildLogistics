@@ -629,3 +629,28 @@ function UI.SetPixelThickness(tex, n)
     local h = UI.GetPhysicalPixel() * n
     if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(tex, h) else tex:SetHeight(h) end
 end
+
+-- ===============================
+-- === Compat API Spell Info  ===
+-- ===============================
+-- Retourne (name, icon) pour un spell id/nom, compatible 11.x (C_Spell) & versions antérieures
+-- icon peut être un fileID (number) ou un chemin (string).
+function ns.Util.SpellInfoCompat(idOrName)
+    local name, icon
+
+    if C_Spell and C_Spell.GetSpellInfo then
+        local si = C_Spell.GetSpellInfo(idOrName)
+        if si then
+            name = si.name
+            icon = si.iconID
+        end
+    end
+
+    if (not name) and GetSpellInfo then
+        local n, _, ic = GetSpellInfo(idOrName)
+        name = name or n
+        icon = icon or ic
+    end
+
+    return name, icon
+end

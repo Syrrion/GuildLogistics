@@ -88,14 +88,14 @@ local function _isPopupEnabled(key)
     return v and true or false
 end
 
-
 local function _tryShowOrDefer(items)
     if not items or #items == 0 then return end
-    -- ✅ Respecte l’option : Notification d'invitation dans le calendrier
+    -- ✅ Respecte l’option existante : Notification d'invitation dans le calendrier
     if not _isPopupEnabled("calendarInvite") then return end
 
     if _canShowPopupNow() then
         showPendingInvitesPopup(items)
+
         _markSeen(items)
         shownThisSession = true
         pendingCache = nil
@@ -129,55 +129,67 @@ local function _guessPlaceFromTitle(title)
     return nil
 end
 
+-- Filtre "évènement système Blizzard" (non joueur)
+-- Renvoie true si l'évènement n’est pas un évènement joueur ("PLAYER"),
+-- ou s’il s’agit d’un "Holiday", d’un reset/lockout, etc.
+local function _isSystemCalendarEvent(ev, info)
+    local calType = (ev and ev.calendarType) or (info and info.calendarType)
+    if type(calType) == "string" and calType ~= "PLAYER" then
+        return true
+    end
+
+    local evType = (ev and ev.eventType) or (info and info.eventType)
+    if evType and Enum and Enum.CalendarEventType and evType == Enum.CalendarEventType.Holiday then
+        return true
+    end
+
+    local isHoliday = (ev and ev.isHoliday) or (info and info.isHoliday)
+    if isHoliday then
+        return true
+    end
+
+    return false
+end
+
 -- ➕ Helper : vérifie que l'évènement (mo,day,idx) provient d'un membre de la guilde
 local function _isEventFromGuildMember(monthOffset, day, index)
     if not C_Calendar or not C_Calendar.OpenEvent then return false end
-    -- Ouvre les infos de l'évènement (données, pas l’UI)
-    local ok = pcall(C_Calendar.OpenEvent, monthOffset, day, index)
-    if not ok then return false end
 
-    local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo() or nil
-    if not info then return false end
-
-    -- Récupère le meilleur "auteur" disponible
-    local by = info.invitedBy or info.inviter or info.creator or info.organizer or info.owner or ""
-    by = tostring(by or "")
-    if by == "" then
-        -- Évènements système (micro-fêtes, resets…) → sans auteur joueur → ignorer
-        return false
-    end
-
-    -- Normalise/complète le nom (si possible) et teste l'appartenance guilde
-    local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(by)) or by
-    return (GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(full)) or false
-end
-
--- ➕ Helper : indique si l'évènement (mo, day, idx) a été créé/invité par un membre de la guilde.
--- Retourne true/false, et "nil" si l'information n'est pas encore disponible (détail non chargé).
-local function _isEventFromGuildMember(monthOffset, day, index)
-    if not C_Calendar or not C_Calendar.OpenEvent then return false end
+    -- Ouvre les infos de l'évènement (data-only, pas l’UI)
     local ok = pcall(C_Calendar.OpenEvent, monthOffset, day, index)
     if not ok then return nil end
 
     local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo() or nil
     if not info then return nil end
 
-    -- Auteur (plusieurs champs possibles selon type d’évènement)
-    local by = info.invitedBy or info.inviter or info.creator or info.organizer or info.owner or ""
-    by = tostring(by or "")
-    if by == "" then
-        -- Cas "évènement système" / auteur inconnu → pas un joueur guilde
+    -- 🛑 Exclure immédiatement les évènements système Blizzard
+    if _isSystemCalendarEvent(nil, info) then
         return false
     end
 
+    -- Tant que le cache de guilde n’est pas prêt, on reporte la décision
+    if GLOG and GLOG.IsGuildCacheReady and not GLOG.IsGuildCacheReady() then
+        return nil
+    end
+
+    -- Auteur de l’évènement (selon le type, le champ diffère)
+    local by = info.invitedBy or info.inviter or info.creator or info.organizer or info.owner or ""
+    by = tostring(by or "")
+    if by == "" then
+        -- Pas d’auteur joueur → ce n’est pas un évènement de guilde
+        return false
+    end
+
+    -- Normalisation & test appartenance guilde
     local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(by)) or by
     local inG  = (GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(full))
+    if inG == nil then return nil end
     return inG and true or false
 end
 
 -- Collecte les invitations "Invited" à venir, filtrées "auteur ∈ guilde".
 -- 🔁 Retourne: list, needsRetry (bool) → needsRetry=true si certains auteurs étaient encore "indisponibles".
-local function collectPending(rangeDays)
+function collectPending(rangeDays)
     local res, needsRetry = {}, false
     if not C_Calendar or not C_Calendar.OpenCalendar then return res, needsRetry end
 
@@ -194,12 +206,15 @@ local function collectPending(rangeDays)
                 local num = (C_Calendar.GetNumDayEvents and C_Calendar.GetNumDayEvents(monthOffset, day)) or 0
                 for i = 1, num do
                     local ev = C_Calendar.GetDayEvent and C_Calendar.GetDayEvent(monthOffset, day, i)
-                    if ev and ev.inviteStatus == Enum.CalendarStatus.Invited then
-                        local h = ev.hour or (ev.startTime and ev.startTime.hour) or 0
-                        local m = ev.minute or (ev.startTime and ev.startTime.minute) or 0
-                        local ts = time({ year=year, month=month, day=day, hour=h, min=m, sec=0 })
+
+                    -- On ne traite que les INVITED non-système (PLAYER uniquement)
+                    if ev and ev.inviteStatus == Enum.CalendarStatus.Invited and not _isSystemCalendarEvent(ev) then
+                        local h  = ev.hour   or (ev.startTime and ev.startTime.hour)   or 0
+                        local m  = ev.minute or (ev.startTime and ev.startTime.minute) or 0
+                        local ts = time({ year = year, month = month, day = day, hour = h, min = m, sec = 0 })
+
                         if ts and ts >= nowTS and ts <= limitTS then
-                            -- ✅ Filtre "auteur guilde", avec détection "détail encore indisponible"
+                            -- Filtre "créé par un membre de la guilde" (avec retry si info pas prête)
                             local ok, fromGuild = pcall(_isEventFromGuildMember, monthOffset, day, i)
                             if not ok then
                                 needsRetry = true
@@ -209,8 +224,8 @@ local function collectPending(rangeDays)
                                 elseif fromGuild == true then
                                     local location = _guessPlaceFromTitle(ev.title)
                                     table.insert(res, {
-                                        when = ts, year=year, month=month, day=day,
-                                        hour = h,  minute = m,
+                                        when = ts, year = year, month = month, day = day,
+                                        hour = h, minute = m,
                                         title = ev.title or "?", loc = location,
                                     })
                                 end
@@ -223,7 +238,7 @@ local function collectPending(rangeDays)
         end
     end
 
-    table.sort(res, function(a,b) return a.when < b.when end)
+    table.sort(res, function(a, b) return a.when < b.when end)
     return res, needsRetry
 end
 
@@ -334,10 +349,11 @@ local loadingScreenActive = true
 local pendingCache = nil
 
 -- ➕ Sonde “arrière-plan” pour récupérer les événements sans ouvrir le calendrier
-local CAL_POLL_MAX   = 12      -- nombre d’essais maximum (12 x 0.5s ≈ 6s)
-local CAL_POLL_DELAY = 0.5     -- délai entre 2 essais (secondes)
+local CAL_POLL_MAX   = 20      -- ↑ fiabilité : 20 x 0.5s ≈ 10s
+local CAL_POLL_DELAY = 0.5
 local calPollActive  = false
 local calPollTries   = 0
+local guildReadyOnce = false
 
 local f = CreateFrame("Frame")
 f:RegisterEvent("PLAYER_LOGIN")
@@ -346,7 +362,7 @@ f:RegisterEvent("LOADING_SCREEN_ENABLED")
 f:RegisterEvent("LOADING_SCREEN_DISABLED")
 f:RegisterEvent("CALENDAR_UPDATE_EVENT_LIST")
 f:RegisterEvent("CALENDAR_UPDATE_PENDING_INVITES")
-
+f:RegisterEvent("GUILD_ROSTER_UPDATE") -- ✅ nouveau : relance quand le cache guilde est prêt
 -- ➕ Pour relancer un affichage différé quand on sort de combat / change de zone (ex: quitte une instance)
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
@@ -371,11 +387,11 @@ f:SetScript("OnEvent", function(self, event, ...)
             C_Calendar.OpenCalendar()
         end
 
-        -- Si on a déjà reçu des données pendant le loading, on notifie (mais en respectant combat/instance)
+        -- Si on a déjà reçu des données pendant le loading, on notifie (en respectant combat/instance)
         if pendingCache and #pendingCache > 0 then
             local newItems = _extractNewInvites(pendingCache)
             if #newItems > 0 then
-                _tryShowOrDefer(pendingCache)   -- ⬅️ remplace l'appel direct
+                _tryShowOrDefer(pendingCache)
                 return
             end
         end
@@ -399,36 +415,24 @@ f:SetScript("OnEvent", function(self, event, ...)
                     end
                 end
 
-                -- 🕒 Si l’auteur n’était pas encore disponible, on re-tente rapidement (limité par CAL_POLL_MAX)
-                if (needsRetry and calPollTries < (CAL_POLL_MAX or 12)) and C_Timer and C_Timer.After then
+                -- 🕒 On retente tant que l’auteur n’était pas encore dispo (limité par CAL_POLL_MAX)
+                if (needsRetry and calPollTries < (CAL_POLL_MAX or 20)) and C_Timer and C_Timer.After then
                     C_Timer.After(CAL_POLL_DELAY or 0.5, step)
                     return
                 end
 
-                if calPollTries < (CAL_POLL_MAX or 12) and C_Timer and C_Timer.After then
+                if calPollTries < (CAL_POLL_MAX or 20) and C_Timer and C_Timer.After then
                     C_Timer.After(CAL_POLL_DELAY or 0.5, step)
                 else
                     calPollActive = false
                 end
             end
 
-            -- 🕒 Si l’auteur n’était pas encore disponible, on re-tente rapidement (limité par CAL_POLL_MAX)
-            if (needsRetry and calPollTries < (CAL_POLL_MAX or 12)) and C_Timer and C_Timer.After then
-                C_Timer.After(CAL_POLL_DELAY or 0.5, step)
-                return
-            end
-
-            if calPollTries < (CAL_POLL_MAX or 12) and C_Timer and C_Timer.After then
-                C_Timer.After(CAL_POLL_DELAY or 0.5, step)
-            else
-                calPollActive = false
-            end
+            step()
         end
         return
-    end
 
-    -- Mises à jour natives du calendrier (nouvelles invitations qui arrivent en cours de session)
-    if event == "CALENDAR_UPDATE_EVENT_LIST" or event == "CALENDAR_UPDATE_PENDING_INVITES" then
+    elseif event == "CALENDAR_UPDATE_EVENT_LIST" or event == "CALENDAR_UPDATE_PENDING_INVITES" then
         local needRetry
         pendingCache, needRetry = collectPending(31)
 
@@ -439,7 +443,7 @@ f:SetScript("OnEvent", function(self, event, ...)
             end
         end
 
-        -- 🔁 Si l’auteur n’était pas encore résolu, refait une passe très vite pour capter l’invite
+        -- 🔁 Si l’auteur n’était pas encore résolu, refait une passe très vite
         if needRetry and C_Timer and C_Timer.After then
             C_Timer.After(0.6, function()
                 local again, _need = collectPending(31)
@@ -451,6 +455,21 @@ f:SetScript("OnEvent", function(self, event, ...)
                 end
             end)
         end
+        return
+
+    elseif event == "GUILD_ROSTER_UPDATE" then
+        -- ✅ Nouveau : relance une collecte dès que le cache guilde devient prêt
+        if (not guildReadyOnce) and GLOG and GLOG.IsGuildCacheReady and GLOG.IsGuildCacheReady() then
+            guildReadyOnce = true
+            local items, _need = collectPending(31)
+            if items and #items > 0 then
+                local newItems = _extractNewInvites(items)
+                if #newItems > 0 then
+                    _tryShowOrDefer(items)
+                end
+            end
+        end
+        return
     end
 
     -- Reprise d'un affichage différé quand on sort de combat / change de zone
@@ -460,5 +479,4 @@ f:SetScript("OnEvent", function(self, event, ...)
         end
         return
     end
-
 end)

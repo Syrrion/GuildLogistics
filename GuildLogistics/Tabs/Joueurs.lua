@@ -84,11 +84,16 @@ local function BuildRow(r)
     -- Widgets pour "sep"
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
     f.sepBG:SetColorTexture(0.18, 0.18, 0.22, 0.6)
-    f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",    0,  0)
-    f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT",2,  0)
+
+    -- ✅ Padding haut de 10px (centralisé via UI.GetSeparatorTopPadding)
+    local pad = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 10
+    f.sepBG:ClearAllPoints()
+    f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",     0, -pad)
+    f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 2,  0)
 
     f.sepTop = r:CreateTexture(nil, "BORDER"); f.sepTop:Hide()
     f.sepTop:SetColorTexture(0.9, 0.8, 0.2, 0.9)
+    f.sepTop:ClearAllPoints()
     f.sepTop:SetPoint("TOPLEFT",  f.sepBG, "TOPLEFT",  0, 1)
     f.sepTop:SetPoint("TOPRIGHT", f.sepBG, "TOPRIGHT", 0, 1)
     f.sepTop:SetHeight(2)
