@@ -7,6 +7,11 @@ ns.Data = ns.Data or {}
 local GLOG, UI, U, Data = ns.GLOG, ns.UI, ns.Util, ns.Data
 local Tr = ns.Tr or function(s) return s end
 
+local _G = _G
+if setfenv then
+    setfenv(1, setmetatable({}, { __index = _G }))
+end
+
 -- =========================
 -- ===   ÉTAT & STORE   ===
 -- =========================
@@ -543,23 +548,6 @@ function GLOG.GroupTracker_ClearHistory()
     if state.win and state.win._Refresh then state.win:_Refresh() end
 end
 
--- StaticPopup de confirmation
-StaticPopupDialogs = StaticPopupDialogs or {}
-StaticPopupDialogs["GLOG_CONFIRM_CLEAR_SEGMENTS"] = {
-    text = Tr("confirm_clear_history"),
-    button1 = OKAY,
-    button2 = CANCEL,
-    OnAccept = function()
-        if GLOG and GLOG.GroupTracker_ClearHistory then
-            GLOG.GroupTracker_ClearHistory()
-        end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
 -- Fenêtre principale (épurée via UI.CreatePlainWindow)
 local function _ensureWindow()
     if state.win and state.win:IsShown() then return state.win end
@@ -637,13 +625,21 @@ local function _ensureWindow()
     local hl  = f.clearBtn:GetHighlightTexture(); if hl then hl:SetAlpha(0.22) end
 
     -- Légère marge intérieure (crop) pour éviter les bords du fichier
-    local function crop(t) if t then t:SetTexCoord(0.07, 0.93, 0.07, 0.93) end end
-    crop(nrm); crop(psh); crop(dis)
-
     f.clearBtn:SetScript("OnClick", function()
-        StaticPopup_Show("GLOG_CONFIRM_CLEAR_SEGMENTS")
+        -- ✅ Plus de StaticPopup Blizzard → popup addon (zéro taint)
+        if UI and UI.PopupConfirm then
+            UI.PopupConfirm(Tr("confirm_clear_history"), function()
+                if GLOG and GLOG.GroupTracker_ClearHistory then
+                    GLOG.GroupTracker_ClearHistory()
+                end
+            end, nil, { strata = "FULLSCREEN_DIALOG" })
+        else
+            -- Fallback sans popup si jamais l’UI n’est pas dispo
+            if GLOG and GLOG.GroupTracker_ClearHistory then
+                GLOG.GroupTracker_ClearHistory()
+            end
+        end
     end)
-
 
     -- Tooltip du bouton corbeille : "Réinitialiser les données"
     if f.clearBtn then

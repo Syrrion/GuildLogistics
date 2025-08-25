@@ -107,13 +107,24 @@ local function Build(container)
     btnClear = UI.Button(panel, "btn_reset_data", { size="sm", variant="danger", minWidth=220 })
     btnClear:SetPoint("LEFT", btnOpen, "RIGHT", 12, 0)
     btnClear:SetOnClick(function()
+        -- Ne rien faire si le suivi n'est pas activé
         if cbRecording and cbRecording.GetChecked and not cbRecording:GetChecked() then return end
-        if StaticPopup_Show then
-            StaticPopup_Show("GLOG_CONFIRM_CLEAR_SEGMENTS")
-        elseif GLOG and GLOG.GroupTracker_ClearHistory then
-            GLOG.GroupTracker_ClearHistory()
+
+        -- Confirmation via popup UI interne (aucun taint)
+        if UI and UI.PopupConfirm then
+            UI.PopupConfirm(Tr("confirm_clear_history"), function()
+                if GLOG and GLOG.GroupTracker_ClearHistory then
+                    GLOG.GroupTracker_ClearHistory()
+                end
+            end, nil, { strata = "FULLSCREEN_DIALOG" })
+        else
+            -- Fallback sans popup
+            if GLOG and GLOG.GroupTracker_ClearHistory then
+                GLOG.GroupTracker_ClearHistory()
+            end
         end
     end)
+
 
     local rowH = math.max(btnOpen:GetHeight() or 28, btnClear:GetHeight() or 24)
     y = _RowY(y, rowH)
