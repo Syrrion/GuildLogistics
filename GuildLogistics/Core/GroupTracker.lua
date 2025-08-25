@@ -479,6 +479,7 @@ local function _ShowHistoryPopup(full)
     for i=1,#arr do rows[i] = arr[i] end
     table.sort(rows, function(a,b) return (a.t or 0) > (b.t or 0) end)
 
+    -- Libellés (segment courant / live)
     local label, posStr
     if session.inCombat and s.viewIndex == 0 then
         label  = session.label or (Tr("history_combat") or "Combat")
@@ -489,21 +490,44 @@ local function _ShowHistoryPopup(full)
         posStr = string.format("[%d/%d]", idx, #s.segments)
     end
 
+    -- 🆕 Masque le serveur dans le titre (ex: "Nom-Royaume" -> "Nom")
+    local shortName = (ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(full)) or tostring(full or "")
+
+    -- Popup "light" (contenu plein, pas de footer, transparence visuelle dédiée)
     local p = UI.CreatePopup and UI.CreatePopup({
         title  = string.format("%s\n%s %s - %s",
                   Tr("group_tracker_title") or "Suivi du groupe (Consommables)",
-                  label, posStr, (full or "")),
+                  label, posStr, shortName),
         width  = 520,
-        height = 360,
+        height = 380,
         strata = "DIALOG",
         level  = 300,
     })
     if not p then return end
 
+    -- 🆕 Agrandit le cadre conteneur : ancre le contenu plein cadre (sans réserver de footer)
+    do
+        local L, R, T, B = 24, 24, 72, 24
+        if p._cdzNeutral and p._cdzNeutral.GetInsets then
+            L, R, T, B = p._cdzNeutral:GetInsets()
+        end
+        local POP_SIDE = UI.POPUP_SIDE_PAD      or 6
+        local POP_TOP  = UI.POPUP_TOP_EXTRA_GAP or 18
+        local POP_BOT  = UI.POPUP_BOTTOM_LIFT   or 4
+
+        if p.content and p.content.ClearAllPoints then
+            p.content:ClearAllPoints()
+            p.content:SetPoint("TOPLEFT",     p, "TOPLEFT",     L + POP_SIDE, -(T + POP_TOP))
+            p.content:SetPoint("BOTTOMRIGHT", p, "BOTTOMRIGHT", -(R + POP_SIDE), B + POP_BOT)
+        end
+        if p.footer and p.footer.Hide then p.footer:Hide() end
+    end
+
+    -- Liste
     local cols = UI.NormalizeColumns({
-        { key="time", title=Tr("col_time"),    w=120,  justify="CENTER" },
-        { key="cat",  title=Tr("col_category"),w=120,  justify="CENTER" },
-        { key="spell",title=Tr("col_spell"),   min=200, flex=1, justify="LEFT" },
+        { key="time",  title=Tr("col_time"),     w=120,  justify="CENTER" },
+        { key="cat",   title=Tr("col_category"), w=120,  justify="CENTER" },
+        { key="spell", title=Tr("col_spell"),    min=200, flex=1, justify="LEFT" },
     })
 
     local lv = UI.ListView(p.content, cols, {
@@ -524,9 +548,22 @@ local function _ShowHistoryPopup(full)
         end,
     })
 
+    -- Données
     if lv and lv.SetData then lv:SetData(rows) end
-    p:Show()
+
+    -- 🆕 Transparence visuelle : fonds/bordures uniquement (texte inchangé)
+    do
+    local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 0.95
+    if UI and UI.SetFrameVisualOpacity then
+        UI.SetFrameVisualOpacity(p, a)
+    end
+        -- Optionnel : légère transparence du fond englobant de la ListView si présent
+        if lv and lv._containerBG and lv._containerBG.SetAlpha then
+            lv._containerBG:SetAlpha(math.max(0, a - 0.05))
+        end
+    end
 end
+
 
 -- ===== Vue & navigation =====
 local function _setViewIndex(idx)
@@ -849,13 +886,12 @@ function GLOG.GroupTracker_ShowWindow(show)
             if state.win._Refresh then state.win:_Refresh() end
         end
     else
-        -- Ferme uniquement la fenêtre. L’enregistrement éventuel reste actif si l’option est cochée.
         if state.win and state.win.Hide then state.win:Hide() end
-        -- Recalcule l’état global d’activation (fenêtre visible OU enregistrement actif)
         local winShown = state.win and state.win:IsShown()
         state.enabled = (winShown or s.recording) and true or false
     end
 end
+
 
 function GLOG.GroupTracker_GetOpacity()
     local s = _Store()
@@ -870,7 +906,7 @@ function GLOG.GroupTracker_SetOpacity(a)
     if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
     s.opacity = a
     if state.win and state.win.SetAlpha then
-        state.win:SetAlpha(a)
+            state.win:SetAlpha(a)
     end
 end
 

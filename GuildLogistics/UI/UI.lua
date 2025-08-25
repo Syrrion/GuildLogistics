@@ -148,6 +148,7 @@ Main:SetScript("OnDragStop", function(self)
 end)
 
 Main:SetPoint(saved.point or "CENTER", UIParent, saved.relPoint or "CENTER", saved.x or 0, saved.y or 0)
+if UI.RegisterEscapeClose then UI.RegisterEscapeClose(Main) end
 
 -- Habillage atlas Neutral
 local skin = UI.ApplyNeutralFrameSkin(Main, { showRibbon = false })
@@ -1088,25 +1089,67 @@ Main:Hide()
 
 -- Ouvrir à l'ouverture du jeu + appliquer le thème et l'état de debug sauvegardés
 local _openAtLogin = CreateFrame("Frame")
+_openAtLogin._done = false
 _openAtLogin:RegisterEvent("PLAYER_LOGIN")
-_openAtLogin:SetScript("OnEvent", function()
-    local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
+_openAtLogin:RegisterEvent("PLAYER_ENTERING_WORLD")
+_openAtLogin:SetScript("OnEvent", function(self)
+    if self._done then return end
+
+    local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
 
     -- Applique le thème stocké (défaut: AUTO) et re-skin global
     if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
 
-    -- ✏️ Applique l'état de debug (défaut : false → boutons masqués)
+    -- Applique l'état de debug (défaut : false → boutons masqués)
     local debugOn = (saved and saved.debugEnabled) == true
     if UI.SetDebugEnabled then UI.SetDebugEnabled(debugOn) end
 
-    -- Ouverture auto uniquement si activée par l'utilisateur
-    if not (saved and saved.autoOpen) then return end
-    if not Main:IsShown() then
-        Main:Show()
-        ShowPanel(1)
-        if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+    -- Ouvre uniquement si activé
+    if not (saved and saved.autoOpen) then
+        self._done = true
+        return
     end
+
+    -- Laisse l'UI finir de s'initialiser (onglets/catégories) avant d'afficher
+    C_Timer.After(0, function()
+        if not Main:IsShown() then
+            if ns and ns.ToggleUI then
+                -- Utilise la logique standard (restaure l'onglet précédent si possible)
+                ns.ToggleUI()
+            else
+                -- Fallback ultra défensif si ToggleUI indisponible
+                Main:Show()
+
+                -- 1) Essaye de restaurer le dernier onglet actif
+                local restored = false
+                local savedLabel = GLOG and GLOG.GetLastActiveTabLabel and GLOG.GetLastActiveTabLabel() or nil
+                if type(savedLabel) == "string" and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[savedLabel] then
+                    if UI.ShowTabByLabel then UI.ShowTabByLabel(savedLabel); restored = true end
+                end
+
+                -- 2) Sinon, premier onglet visible
+                if not restored then
+                    for i, def in ipairs(Registered or {}) do
+                        if def._btn and def._btn.IsShown and def._btn:IsShown() then
+                            ShowPanel(i)
+                            if def.refresh then def.refresh() end
+                            restored = true
+                            break
+                        end
+                    end
+                end
+
+                -- 3) Fallback ultime sur l'index 1
+                if not restored then
+                    ShowPanel(1)
+                    if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+                end
+            end
+        end
+        self._done = true
+    end)
 end)
+
 
 -- ➕ Met à jour le titre selon la guilde
 function UI.RefreshTitle()

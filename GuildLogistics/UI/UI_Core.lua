@@ -1192,3 +1192,32 @@ function UI.TrySetIcon(tex, iconPath)
         tex:SetAtlas(iconPath, true)
     end
 end
+
+function UI.RegisterEscapeClose(frame)
+    -- Ferme 'frame' avec la touche ÉCHAP.
+    -- Si la frame a un nom global, on l’enregistre dans UISpecialFrames (comportement natif Blizzard).
+    -- Sinon, on capte le clavier et on cache manuellement sur ESCAPE.
+    if not frame or type(frame) ~= "table" or not frame.GetObjectType then
+        return
+    end
+
+    local name = frame.GetName and frame:GetName() or nil
+    if name and name ~= "" then
+        -- Évite les doublons
+        for i = 1, #UISpecialFrames do
+            if UISpecialFrames[i] == name then
+                return
+            end
+        end
+        table.insert(UISpecialFrames, name)
+    else
+        -- Fallback si la frame n’a pas de nom (très rare dans ce projet)
+        if frame.EnableKeyboard then frame:EnableKeyboard(true) end
+        if frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(false) end
+        frame:HookScript("OnKeyDown", function(self, key)
+            if key == "ESCAPE" then
+                self:Hide()
+            end
+        end)
+    end
+end

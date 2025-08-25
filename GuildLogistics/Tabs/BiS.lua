@@ -246,14 +246,16 @@ local cols = UI.NormalizeColumns({
 })
 
 -- == Construit les widgets d'une ligne (cellules tier/item/owned/use) == --
-local function BuildRow(r)
+-- == Construit les widgets d'une ligne (cellules tier/item/owned/use) == --
+local function BiS_BuildRow(r)
     local f = {}
     f.tier  = UI.CreateBadgeCell(r, { width = 36, centeredGloss = true, textShadow = false })
-    f.item  = UI.CreateItemCell(r, { size = 18, width = 360 })
-    f.owned = UI.Label(r, { justify = "CENTER" })
+    f.item  = UI.CreateItemCell(r,   { size  = 18,  width = 360 })
+    f.owned = UI.Label(r,            { justify = "CENTER" })
     f.use   = UI.Button(r, "btn_useful_for", { size = "sm", minWidth = 110, variant = "ghost" })
     return f
 end
+
 
 -- == Popup : Qui utilise cet objet dans les tableaux de BiS ? == --
 local function _ShowItemUsagePopup(itemID)
@@ -326,16 +328,50 @@ local function _ShowItemUsagePopup(itemID)
 end
 
 -- == Met à jour une ligne avec les données (rang, item, possession, bouton "Utile pour") == --
-function UpdateRow(i, r, f, d)
-    UI.SetTierBadge(f.tier, d.tier, d.mod, d.tierLabel, UI.Colors and UI.Colors.BIS_TIER_COLORS)
-    UI.SetItemCell(f.item, { itemID = d.itemID })
-    f.owned:SetText(UI.YesNoText(d.owned))
+-- == Met à jour une ligne avec les données (rang, item, possession, bouton "Utile pour") == --
+local function BiS_UpdateRow(i, r, f, d)
+    -- Tolérance : ligne vide ou "séparateur"
+    if not d or d.kind == "sep" then
+        if f and f.tier and UI.SetTierBadge then UI.SetTierBadge(f.tier, nil) end
+        if f and f.item and UI.SetItemCell  then UI.SetItemCell(f.item, nil) end
+        if f and f.owned and f.owned.SetText then f.owned:SetText("") end
+        if f and f.use then
+            f.use:SetText(Tr("btn_useful_for") or "Utile pour")
+            if f.use.SetEnabled then f.use:SetEnabled(false) end
+            if f.use.SetOnClick then f.use:SetOnClick(nil) end
+        end
+        return
+    end
+
+    -- Sécurise/auto-crée les champs si un autre BuildRow global a été appliqué par erreur
+    f = f or {}
+    if not f.tier  then f.tier  = UI.CreateBadgeCell(r, { width = 36, centeredGloss = true, textShadow = false }) end
+    if not f.item  then f.item  = UI.CreateItemCell(r,   { size  = 18,  width = 360 }) end
+    if not f.owned then f.owned = UI.Label(r,            { justify = "CENTER" }) end
+    if not f.use   then f.use   = UI.Button(r, "btn_useful_for", { size = "sm", minWidth = 110, variant = "ghost" }) end
+    r._fields = f  -- s’assure que la LV layoutera bien ces nouveaux widgets
+
+    -- Données
+    if UI.SetTierBadge then
+        UI.SetTierBadge(f.tier, d.tier, d.mod, d.tierLabel, UI.Colors and UI.Colors.BIS_TIER_COLORS)
+    end
+    if UI.SetItemCell then
+        UI.SetItemCell(f.item, { itemID = d.itemID })
+    end
+
+    local ownTxt = (UI.YesNoText and UI.YesNoText(d.owned)) or (d.owned and "Oui" or "Non")
+    if f.owned and f.owned.SetText then f.owned:SetText(ownTxt) end
 
     -- Bouton popup "Utile pour"
-    f.use:SetText(Tr("btn_useful_for") or "Utile pour")
-    f.use:SetOnClick(function()
-        _ShowItemUsagePopup(d.itemID)
-    end)
+    if f.use then
+        f.use:SetText(Tr("btn_useful_for") or "Utile pour")
+        if f.use.SetEnabled then f.use:SetEnabled(true) end
+        if f.use.SetOnClick then
+            f.use:SetOnClick(function()
+                if _ShowItemUsagePopup then _ShowItemUsagePopup(d.itemID) end
+            end)
+        end
+    end
 end
 
 -- ============================================== --
@@ -436,8 +472,8 @@ local function Build(container)
 
     lv = UI.ListView(listArea, cols, {
         safeRight    = true,
-        buildRow     = BuildRow,
-        updateRow    = UpdateRow,
+        buildRow     = BiS_BuildRow,
+        updateRow    = BiS_UpdateRow,
         bottomAnchor = footer,
     })
 

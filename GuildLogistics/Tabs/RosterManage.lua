@@ -503,3 +503,10 @@ function UI.ShowGuildRosterPopup()
     dlg:SetButtons(btns)
     dlg:Show()
 end
+
+-- Nouvel onglet "Gestion des membres" dans la catégorie Raids
+UI.RegisterTab(Tr("add_guild_member"), Build, Refresh, Layout, {
+    -- Comme auparavant le bouton n'était visible que pour le GM, on garde la visibilité conditionnelle :
+    hidden   = not (GLOG.IsMaster and GLOG.IsMaster()),
+    category = Tr("cat_raids"),
+})

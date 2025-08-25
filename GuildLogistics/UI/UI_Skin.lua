@@ -562,3 +562,37 @@ function UI.ApplyTiledBackdrop(frame, bgFile, tileSize, alpha, insets)
 
     return bd
 end
+
+-- Applique une "opacité visuelle" à une frame skinnée (fonds/bordures uniquement)
+-- ⚠ Ne touche PAS au texte : aucune propagation via :SetAlpha() sur la frame mère.
+function UI.SetFrameVisualOpacity(frame, a)
+    a = tonumber(a or 1) or 1
+    if a < 0   then a = 0 end
+    if a > 1   then a = 1 end
+    if not (frame and frame._cdzNeutral) then return end
+    local s = frame._cdzNeutral
+
+    local function SA(x) if x and x.SetAlpha then x:SetAlpha(a) end end
+
+    -- Fond
+    SA(s.bg)
+
+    -- Bordures
+    if s.edges then
+        SA(s.edges.top)
+        SA(s.edges.bottom)
+        if s.edges.left  then SA(s.edges.left)  end
+        if s.edges.right then SA(s.edges.right) end
+    end
+
+    -- Coins
+    if s.corners then
+        for _, t in pairs(s.corners) do SA(t) end
+    end
+
+    -- Éléments facultatifs si présents (selon thème)
+    if s.titleLeft  then SA(s.titleLeft)  end
+    if s.titleMid   then SA(s.titleMid)   end
+    if s.titleRight then SA(s.titleRight) end
+    if s.ribbon     then SA(s.ribbon)     end
+end

@@ -95,6 +95,20 @@ local function playerFullName()
     return short
 end
 
+-- Raccourci d'affichage : "Nom-Royaume" → "Nom" (masque le serveur)
+function ns.Util.ShortenFullName(full)
+    local s = tostring(full or "")
+    if Ambiguate then
+        -- "short" cache le serveur, même inter-royaumes
+        local ok, short = pcall(Ambiguate, s, "short")
+        if ok and type(short) == "string" and short ~= "" then return short end
+    end
+    -- Fallback simple si Ambiguate indispo
+    local base = s:match("^([^%-]+)") or s
+    return base
+end
+
+
 -- =========================
 -- ===  Accès DB / ver.  ===
 -- =========================

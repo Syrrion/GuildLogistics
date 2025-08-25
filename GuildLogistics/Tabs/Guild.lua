@@ -25,16 +25,52 @@ local function _UpdateNoGuildUI()
     end
 end
 
--- ===== Colonnes (sans actions ni solde) =====
-local cols = UI.NormalizeColumns({
-    { key="alias",  title=Tr("col_alias"),          w=90,  justify="LEFT"   },
-    { key="lvl",    title=Tr("col_level_short"),    w=44,  justify="CENTER" },
-    { key="name",   title=Tr("col_name"),           min=200, flex=1         },
-    { key="ilvl",   title=Tr("col_ilvl"),           w=100,  justify="CENTER" },
-    { key="mplus",  title=Tr("col_mplus_score"),    w=100,  justify="CENTER" },
-    { key="mkey",   title=Tr("col_mplus_key"),      w=300, justify="LEFT"   },
-    { key="last",   title=Tr("col_attendance"),     w=100, justify="CENTER" },
-})
+-- ===== Colonnes (dynamiques : ajout de la version en mode debug) =====
+local function _BuildColumns()
+    local base = {
+        { key="alias",  title=Tr("col_alias"),          w=90,  justify="LEFT"   },
+        { key="lvl",    title=Tr("col_level_short"),    w=44,  justify="CENTER" },
+        { key="name",   title=Tr("col_name"),           min=200, flex=1         },
+        { key="ilvl",   title=Tr("col_ilvl"),           w=100,  justify="CENTER" },
+        { key="mplus",  title=Tr("col_mplus_score"),    w=100,  justify="CENTER" },
+        { key="mkey",   title=Tr("col_mplus_key"),      w=300,  justify="LEFT"   },
+        { key="last",   title=Tr("col_attendance"),     w=100,  justify="CENTER" },
+    }
+
+    -- ➕ Ajoute la colonne "Version" uniquement si le mode debug est actif
+    local dbg = (GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) or false
+    if dbg then
+        table.insert(base, { key="ver", title=Tr("col_version_short"), w=70, justify="CENTER" })
+    end
+
+    return UI.NormalizeColumns(base)
+end
+
+-- (Re)création de la ListView avec les colonnes adaptées au mode debug
+local function _RecreateListView()
+    if not membersPane then return end
+
+    local cols = _BuildColumns()
+
+    -- Démonte proprement l'ancienne LV si présente (header + scroll)
+    if lv and lv.header then lv.header:Hide(); lv.header:SetParent(nil) end
+    if lv and lv.scroll then lv.scroll:Hide(); lv.scroll:SetParent(nil) end
+    lv = nil
+
+    -- Nouvelle LV
+    lv = UI.ListView(membersPane, cols, {
+        buildRow     = function(r) return BuildRow(r) end,
+        updateRow    = function(i, r, f, it) UpdateRow(i, r, f, it.data or it) end,
+        topOffset    = (UI.SECTION_HEADER_H or 26) + 6,
+        bottomAnchor = nil, -- plein parent => pleine hauteur
+        -- 🎨 Couleur spécifique des séparateurs pour l’onglet Guilde
+        sepLabelColor = UI.MIDGREY,
+    })
+
+    -- Mémorise la présence de la colonne "ver" pour détecter les bascules de debug
+    lv._hasVerCol = ((GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) or false) and true or false
+end
+
 
 -- Recherche d’infos agrégées guilde (main + rerolls)
 local function FindGuildInfo(playerName)
@@ -115,12 +151,14 @@ function BuildRow(r)
     f.mplus = UI.Label(r, { justify = "CENTER" })
     f.mkey  = UI.Label(r, { justify = "LEFT"   })
     f.last  = UI.Label(r, { justify = "CENTER" })
+    -- ➕ Version (ajoutée uniquement si la colonne existe côté header)
+    f.ver   = UI.Label(r, { justify = "CENTER" })
 
     -- Widgets pour "sep" (comme dans Joueurs.lua)
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
     f.sepBG:SetColorTexture(0.18, 0.18, 0.22, 0.6)
 
-    -- ✅ Padding haut de 10px (centralisé via UI.GetSeparatorTopPadding)
+    -- ✅ Padding haut de 10px
     local pad = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 10
     f.sepBG:ClearAllPoints()
     f.sepBG:SetPoint("TOPLEFT",     r, "TOPLEFT",     0, -pad)
@@ -140,7 +178,7 @@ function BuildRow(r)
 end
 
 -- Mise à jour d’une ligne
-local function UpdateRow(i, r, f, it)
+function UpdateRow(i, r, f, it)
     local GHX = (UI and UI.GRAY_OFFLINE_HEX) or "999999"
     local function gray(t) return "|cff"..GHX..tostring(t).."|r" end
 
@@ -160,16 +198,14 @@ local function UpdateRow(i, r, f, it)
         if f.mplus then f.mplus:SetText("") end
         if f.mkey then f.mkey:SetText("") end
         if f.last then f.last:SetText("") end
+        if f.ver then f.ver:SetText("") end
 
-        -- 🔒 Empêche tout résidu visuel sur les lignes de séparation :
-        -- 1) Icône de classe
+        -- 🔒 Nettoyage visuel
         if f.name and f.name.icon then
             f.name.icon:SetTexture(nil)
             f.name.icon:Hide()
         end
-        -- 2) Liseré gauche "même groupe"
         if UI and UI.SetRowAccent then UI.SetRowAccent(r, false) end
-        -- 3) Dégradé horizontal "même groupe"
         if UI and UI.SetRowAccentGradient then UI.SetRowAccentGradient(r, false) end
 
         if f.sepLabel then
@@ -178,18 +214,17 @@ local function UpdateRow(i, r, f, it)
             f.sepLabel:SetText(tostring(it.label or ""))
         end
         return
-    else
-        if f.sepLabel then f.sepLabel:SetText("") end
-        if f.sepBG then f.sepBG:Hide() end
-        if f.sepTop then f.sepTop:Hide() end
     end
 
-    local data = it -- pour lisibilité conserver le nom utilisé avant
+    -- ===== Ligne de données =====
+    if f.sepLabel then f.sepLabel:SetText("") end
+
+    local data = it -- pour lisibilité
 
     -- Nom (icône/couleur main gérés par CreateNameTag / SetNameTag)
     UI.SetNameTag(f.name, data.name or "")
 
-    -- ➕ Marquage "même groupe/sous-groupe" : liseré + dégradé horizontal
+    -- ➕ Marquage "même groupe/sous-groupe"
     do
         local same = (GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name)) or false
         local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {}
@@ -202,7 +237,7 @@ local function UpdateRow(i, r, f, it)
             UI.SetRowAccentGradient(r, same, c.r, c.g, c.b, 0.30)
         end
     end
-    
+
     -- Alias
     if f.alias then
         local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
@@ -223,11 +258,17 @@ local function UpdateRow(i, r, f, it)
         end
     end
 
+    -- ➕ Version d'addon (uniquement si la colonne existe dans la LV)
+    if f.ver then
+        local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(data.name)) or ""
+        f.ver:SetText((v ~= "" and v) or "—")
+    end
+
     -- Niveau
     if f.lvl then
         if gi.level and gi.level > 0 then
             if gi.online then
-                f.lvl:SetText((UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level))
+                f.lvl:SetText(tostring(gi.level))
             else
                 f.lvl:SetText(gray(tostring(gi.level)))
             end
@@ -334,7 +375,7 @@ local function _SortMembers(items)
 end
 
 -- Build panel
-local function Build(container)
+function Build(container)
     panel = container
     -- Padding global (respecte la sidebar catégorie via CATEGORY_BAR_W)
     if UI.ApplySafeContentBounds then
@@ -347,31 +388,14 @@ local function Build(container)
     membersPane:SetPoint("TOPLEFT",     panel, "TOPLEFT",     UI.OUTER_PAD, -UI.OUTER_PAD)
     membersPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD,  UI.OUTER_PAD)
 
-    -- En-tête de section (comme "Roster actif")
+    -- En-tête de section
     UI.SectionHeader(membersPane, Tr("lbl_guild_members"), { topPad = 2 })
 
-    -- Liste unique, plein écran (pas de footer local -> pleine hauteur)
-    lv = UI.ListView(membersPane, cols, {
-        buildRow     = function(r) return BuildRow(r) end,
-        updateRow    = function(i, r, f, it) UpdateRow(i, r, f, it.data or it) end,
-        topOffset    = (UI.SECTION_HEADER_H or 26) + 6,
-        bottomAnchor = nil, -- plein parent => pleine hauteur
+    -- 🔁 ListView dépend du mode debug → (re)création dédiée
+    _RecreateListView()
 
-        -- 🎨 Couleur spécifique aux séparateurs pour l’onglet Guilde : BLANC
-        sepLabelColor = UI.MIDGREY,
-    })
-
-
-    -- Message « pas de guilde »
-    if not noGuildMsg then
-        noGuildMsg = membersPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-        noGuildMsg:SetPoint("CENTER", membersPane, "CENTER", 0, 0)
-        noGuildMsg:SetJustifyH("CENTER"); noGuildMsg:SetJustifyV("MIDDLE")
-        noGuildMsg:SetText(Tr("msg_no_guild"))
-        noGuildMsg:Hide()
-    end
-
-    _UpdateNoGuildUI()
+    -- 📥 Données initiales
+    Refresh()
 end
 
 -- Layout : laisser la ListView gérer sa taille
@@ -388,6 +412,12 @@ function Refresh()
         return
     end
 
+    -- 🔄 Si le mode debug a changé → (re)crée la LV avec/ss colonne "Ver."
+    local dbgNow = (GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) or false
+    if lv and lv._hasVerCol ~= dbgNow then
+        _RecreateListView()
+    end
+
     -- Rafraîchit le cache guilde si nécessaire
     local need = (not GLOG.IsGuildCacheReady or not GLOG.IsGuildCacheReady())
     if not need and GLOG.GetGuildCacheTimestamp then
@@ -397,18 +427,17 @@ function Refresh()
     if need and GLOG.RefreshGuildCache then
         if lv then lv:SetData({}) end
         GLOG.RefreshGuildCache(function()
-            if ns and ns.RefreshAll then ns.RefreshAll() end
+            if UI.RefreshAll then UI.RefreshAll() end
         end)
         return
     end
 
-    -- Construit la base: TOUS les mains agrégés
+    -- Construit la base : agrégat des mains guilde
     local base = {}
     local agg = (GLOG.GetGuildMainsAggregated and GLOG.GetGuildMainsAggregated()) or
                 (GLOG.GetGuildMainsAggregatedCached and GLOG.GetGuildMainsAggregatedCached()) or {}
 
     for _, e in ipairs(agg or {}) do
-        -- Résout en "Nom-Royaume" pour peupler ilvl / score / clé M+ comme dans Synthese
         local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(e.main)) or e.mostRecentChar or e.main
         table.insert(base, { name = full })
     end
@@ -417,21 +446,17 @@ function Refresh()
     local sorted = _SortMembers(base or {})
 
     -- Sépare Online / Offline
-    local online, offline = {}, {}  -- ✅ corrige l'initialisation
+    local online, offline = {}, {}
     for _, it in ipairs(sorted) do
         local gi = FindGuildInfo(it.name or "")
-        if gi.online then
-            table.insert(online, it)
-        else
-            table.insert(offline, it)
-        end
+        if gi.online then table.insert(online, it) else table.insert(offline, it) end
     end
 
     -- Injecte les séparateurs
     local out = {}
     if #online > 0 then
         table.insert(out, { kind = "sep", label = Tr("lbl_sep_online") or Tr("status_online") })
-        for _, x in ipairs(online) do table.insert(out, x) end
+        for _, x in ipairs(online)  do table.insert(out, x) end
     end
     if #offline > 0 then
         table.insert(out, { kind = "sep", label = Tr("lbl_sep_offline") or "Déconnectés" })

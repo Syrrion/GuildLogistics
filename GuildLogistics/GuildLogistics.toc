@@ -37,22 +37,21 @@ UI/UI_Float.lua
 UI/UI_PlainWindow.lua
 UI/UI_Slider.lua
 
-Tabs/Guilde.lua
+Tabs/Guild.lua
 
-Tabs/Synthese.lua
-Tabs/Historique.lua
-Tabs/Raid.lua
-Tabs/Depense.lua
-Tabs/Demandes.lua
+Tabs/Roster.lua
+Tabs/RosterManage.lua
+Tabs/RaidHistory.lua
+Tabs/RaidStart.lua
+Tabs/Resources.lua
+Tabs/Requests.lua
 
 Tabs/BiS.lua
 Tabs/Helpers_GroupTracker.lua
 
-Tabs/Options.lua
+Tabs/Settings.lua
 
 Tabs/Debug_Packets.lua
-
-Tabs/Joueurs.lua
 
 Core/Calendar.lua
 Core/Events.lua

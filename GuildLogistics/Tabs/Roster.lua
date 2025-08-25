@@ -564,8 +564,6 @@ end
 
 -- Footer
 local function BuildFooterButtons(footer, isGM)
-    local btnGuild
-
     -- ➕ Bouton "Afficher joueurs masqués" (GM uniquement, rendu visible selon l'état de la réserve)
     if isGM then
         _btnShowHiddenReserve = UI.Button(footer, Tr("btn_show_hidden_reserve"), { size="sm", minWidth=200 })
@@ -574,15 +572,10 @@ local function BuildFooterButtons(footer, isGM)
             if ns.RefreshAll then ns.RefreshAll() end
         end)
         _btnShowHiddenReserve:Hide() -- rendu visible par UpdateReserveCollapseUI
-    end
 
-    if isGM then
-        btnGuild = UI.Button(footer, Tr("add_guild_member"), { size="sm", minWidth=220 })
-        btnGuild:SetOnClick(function()
-            if UI.ShowGuildRosterPopup then UI.ShowGuildRosterPopup() end
-        end)
+        -- Aligne à droite uniquement ce bouton (suppression de "Gestion des membres")
         if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer, { btnGuild, _btnShowHiddenReserve })
+            UI.AttachButtonsFooterRight(footer, { _btnShowHiddenReserve })
         end
     else
         if UI.AttachButtonsFooterRight then
@@ -590,6 +583,7 @@ local function BuildFooterButtons(footer, isGM)
         end
     end
 end
+
 
 -- Build panel
 local function Build(container)
