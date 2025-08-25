@@ -75,12 +75,18 @@ function UI.ListView(parent, cols, opts)
 
     -- Mise en page
     function lv:Layout()
-        local sb   = (UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)
+        local sbw  = (UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)
         local top  = tonumber(self.opts.topOffset) or 0
         local pW   = self.parent:GetWidth() or 800
-        local cW   = pW - sb
 
-        -- Résolution de base (pas de safeRight car on a déjà soustrait la scrollbar)
+        -- Réserve-t-on de l'espace à droite ?
+        -- On réserve seulement si la scrollbar est visible ET si safeRight n'est pas désactivé.
+        local showSB     = (self._showScrollbar ~= false) -- nil => true (comportement historique)
+        local wantSafe   = (self.opts.safeRight ~= false)
+        local reserve    = (showSB and wantSafe) and true or false
+        local cW         = pW - (reserve and sbw or 0)
+
+        -- Résolution colonnes (on a déjà retiré l'éventuelle réservation de droite)
         local resolved = UI.ResolveColumns(cW, self.cols, { safeRight = false })
 
         -- Élargissement dynamique de la colonne 'act' selon le besoin réel observé
@@ -95,15 +101,13 @@ function UI.ListView(parent, cols, opts)
                     if n and n > need then need = n end
                 end
             end
-
-            -- Si besoin > largeur allouée, on rogne proportionnellement les colonnes flex (sans passer sous min)
             local current = resolved[actIndex].w or resolved[actIndex].min or 0
             if need > current then
                 local delta = need - current
                 local shrinkable, totalCap = {}, 0
                 for i, rc in ipairs(resolved) do
                     if i ~= actIndex and (rc.flex and rc.flex > 0) then
-                        local w  = rc.w or rc.min or 0
+                        local w   = rc.w or rc.min or 0
                         local cap = math.max(0, w - (rc.min or 0))
                         if cap > 0 then
                             shrinkable[#shrinkable+1] = { i=i, cap=cap }
@@ -129,20 +133,18 @@ function UI.ListView(parent, cols, opts)
 
         -- Header
         self.header:ClearAllPoints()
-        self.header:SetPoint("TOPLEFT",  self.parent, "TOPLEFT",   0,  -(top))
-        self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)), -(top))
+        self.header:SetPoint("TOPLEFT",  self.parent, "TOPLEFT",   0, -(top))
+        self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -(reserve and sbw or 0), -(top))
         UI.LayoutHeader(self.header, resolved, self.hLabels)
         if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
 
+        -- Scroll area
         self.scroll:ClearAllPoints()
         self.scroll:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 0, -4)
 
         local bottomTarget = self._bottomAnchor or self.parent
         local bottomPoint  = self._bottomAnchor and "TOPRIGHT" or "BOTTOMRIGHT"
-
-        local wantSafeRight = (self.opts.safeRight ~= false)
-        local rightOffset   = wantSafeRight and ((UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)) or 0
-
+        local rightOffset  = reserve and sbw or 0
         self.scroll:SetPoint("BOTTOMRIGHT", bottomTarget, bottomPoint, -rightOffset, 0)
 
         self.list:SetWidth(cW)
@@ -165,17 +167,17 @@ function UI.ListView(parent, cols, opts)
             self.header:SetFrameLevel(self.scroll:GetFrameLevel() + 5)
         end
 
-        -- Positionne l'overlay "liste vide" pour qu'il recouvre la zone scroll (pas le header)
+        -- Positionne l'overlay "liste vide" (recouvre la zone scroll, pas le header)
         if self._empty then
             self._empty:ClearAllPoints()
             self._empty:SetPoint("TOPLEFT",     self.scroll, "TOPLEFT",     0, 0)
             self._empty:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
-            -- au-dessus des lignes mais sous le header
             local base = self.scroll:GetFrameLevel() or 0
             self._empty:SetFrameStrata(self.scroll:GetFrameStrata() or "MEDIUM")
             self._empty:SetFrameLevel(base + 3)
         end
     end
+
 
     -- Données
     -- Wrapper propre qui ne recolorie PLUS le fond : il se contente de décorer les lignes
@@ -277,10 +279,15 @@ function UI.ListView(parent, cols, opts)
     function lv:SetData(data)
         data = data or {}
 
-        -- Crée les lignes manquantes
+        -- Hauteur paramétrable (fallback = UI.ROW_H)
+        local baseRowH = tonumber(self.opts and self.opts.rowHeight) or (UI.ROW_H or 30)
+        if baseRowH < 1 then baseRowH = 1 end
+        local baseHWithPad = baseRowH + 2
+
+        -- Crée les lignes manquantes avec la bonne hauteur de base
         for i = #self.rows + 1, #data do
             local r = CreateFrame("Frame", nil, self.list)
-            r:SetHeight(UI.ROW_H + 2)
+            r:SetHeight(baseHWithPad)
             UI.DecorateRow(r)
             r._fields = (self.opts.buildRow and self.opts.buildRow(r)) or {}
             self.rows[i] = r
@@ -301,15 +308,15 @@ function UI.ListView(parent, cols, opts)
 
                 -- Dégradé vertical pair/impair
                 if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
-                r._isEven = (i % 2 == 0)
-                -- Hauteur dynamique : on ajoute un "padding" en haut des lignes 'sep'
+
+                -- Padding supplémentaire pour les lignes 'sep'
                 local extraTop = 0
                 if it.kind == "sep" then
                     extraTop = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 0
                     if extraTop < 0 then extraTop = 0 end
                 end
-                local baseH   = (UI.ROW_H or 30) + 2
-                local targetH = baseH + extraTop
+
+                local targetH = baseHWithPad + extraTop
                 if r._targetH ~= targetH then
                     r._targetH = targetH
                     r:SetHeight(targetH)
@@ -341,7 +348,7 @@ function UI.ListView(parent, cols, opts)
                         f.sepBG:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 2,  0)
                     end
 
-                    -- Le trait supérieur (sepTop) se place en haut de la zone "fond"
+                    -- Le trait supérieur (sepTop) en haut de la zone "fond"
                     if f.sepTop then
                         f.sepTop:ClearAllPoints()
                         if f.sepBG then
@@ -353,7 +360,7 @@ function UI.ListView(parent, cols, opts)
                         end
                     end
 
-                    -- Couleur du libellé "séparateur" : opts > défaut global
+                    -- Couleur du libellé "séparateur"
                     if f.sepLabel then
                         local col = self.opts.sepLabelColor or UI.SEPARATOR_LABEL_COLOR or {1, 1, 1}
                         local cr = col.r or col[1] or 1
@@ -362,7 +369,6 @@ function UI.ListView(parent, cols, opts)
                         local ca = col.a or col[4] or 1
                         f.sepLabel:SetTextColor(cr, cg, cb, ca)
 
-                        -- Ancrage du libellé
                         f.sepLabel:ClearAllPoints()
                         if f.sepBG then
                             f.sepLabel:SetPoint("LEFT", f.sepBG, "LEFT", 8, 0)
@@ -380,7 +386,7 @@ function UI.ListView(parent, cols, opts)
         self:Layout()
         self:_SetEmptyShown(shown == 0)
     end
-    
+
     -- Relayout public
     function lv:Refresh()
         self:Layout()
@@ -544,3 +550,58 @@ function UI.ListView_SetRowGradientOpacity(lv, a)
     end
 end
 
+function UI.ListView_SetScrollbarVisible(lv, show)
+    if not (lv and lv.scroll) then return end
+    if show == nil then show = true end
+
+    lv._showScrollbar = (show and true) or false
+
+    -- Trouver la ScrollBar du ScrollFrame "UIPanelScrollFrameTemplate"
+    local sb = lv.scroll.ScrollBar or lv.scroll.scrollbar
+    if (not sb) and lv.scroll.GetName then
+        local n = lv.scroll:GetName()
+        if n then sb = _G[n .. "ScrollBar"] end
+    end
+
+    if sb then
+        if lv._showScrollbar then
+            sb:Show()
+            if sb.EnableMouse then sb:EnableMouse(true) end
+            if sb.SetAlpha then sb:SetAlpha(1) end
+        else
+            sb:Hide()
+            if sb.EnableMouse then sb:EnableMouse(false) end
+            if sb.SetAlpha then sb:SetAlpha(0) end
+        end
+    end
+
+    -- Si on masque la barre, on retire l'espace "safeRight" sur la droite
+    if lv.opts then
+        if lv._showScrollbar then
+            -- on respecte lv.opts.safeRight existant
+        else
+            lv.opts.safeRight = false
+        end
+    end
+
+    if lv.Layout then lv:Layout() end
+end
+
+function UI.ListView_SetRowHeight(lv, h)
+    if not lv then return end
+    local v = tonumber(h)
+    if not v or v < 1 then return end
+    lv.opts = lv.opts or {}
+    lv.opts.rowHeight = v
+    -- Forcer une ré-application de la hauteur sur les lignes existantes
+    if lv.SetData then
+        -- Re-pousse les mêmes données pour recalculer les hauteurs
+        local data = {}
+        if lv.rows and #lv.rows > 0 and lv.list and lv.list.GetChildren then
+            -- si tu as un buffer de données côté appelant, passe-le directement
+        end
+        -- On suppose que l'appelant rappellera SetData après ce setter dans la plupart des cas.
+        -- À défaut, on provoque au moins un Layout.
+        if lv.Layout then lv:Layout() end
+    end
+end

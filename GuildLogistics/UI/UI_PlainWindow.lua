@@ -40,7 +40,7 @@ function UI.CreatePlainWindow(opts)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:SetResizable(true)
-    if f.SetResizeBounds then f:SetResizeBounds(400, 200) end
+    if f.SetResizeBounds then f:SetResizeBounds(300, 200) end
 
     -- Fond global 25%
     f.bg = f:CreateTexture(nil, "BACKGROUND")

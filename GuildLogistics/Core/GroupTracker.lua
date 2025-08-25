@@ -501,11 +501,11 @@ local function _ShowHistoryPopup(full)
         posStr = (seg and seg.posStr) or string.format("[%d/%d]", view2, #s.segments)
     end
 
-    -- Popup "légère" dédiée historique
+    -- Popup
     local p = UI.CreatePopup and UI.CreatePopup({
-        title  = string.format("%s\n%s %s - %s",
-                  Tr("group_tracker_title") or "Suivi du groupe",
-                  Tr("history_title") or "Historique", posStr or "", (GLOG and GLOG.ExtractNameOnly and GLOG.ExtractNameOnly(full)) or full or ""),
+        title  = string.format("%s\n%s",
+                  Tr("group_tracker_title"),
+                  (GLOG and GLOG.ExtractNameOnly and GLOG.ExtractNameOnly(full)) or full or ""),
         width  = 520,
         height = 360,
         strata = "DIALOG",
@@ -515,7 +515,7 @@ local function _ShowHistoryPopup(full)
 
     -- Zone : on libère le footer et on étire la zone de contenu
     do
-        local L, R, T, B = 8, 8, 32, 8
+        local L, R, T, B = 8, 8, 8, 8
         local POP_SIDE, POP_TOP, POP_BOT = (UI.POPUP_SIDE_PAD or 6), (UI.POPUP_TOP_EXTRA_GAP or 18), (UI.POPUP_BOTTOM_LIFT or 4)
         if p.content then
             p.content:ClearAllPoints()
@@ -525,7 +525,7 @@ local function _ShowHistoryPopup(full)
         if p.footer and p.footer.Hide then p.footer:Hide() end
     end
 
-    -- Liste
+    -- Liste : rowHeight honoré + scrollbar optionnelle masquée
     local cols = UI.NormalizeColumns({
         { key="time",  title=Tr("col_time"),     w=120,  justify="CENTER" },
         { key="cat",   title=Tr("col_category"), w=120,  justify="CENTER" },
@@ -533,7 +533,7 @@ local function _ShowHistoryPopup(full)
     })
 
     local lv = UI.ListView(p.content, cols, {
-        topOffset = 0, safeRight = true, rowHeight = 20,
+        topOffset = 40,
         buildRow = function(r)
             local w = {}
             w.time  = UI.Label(r, { justify = "CENTER" })
@@ -550,15 +550,18 @@ local function _ShowHistoryPopup(full)
         end,
     })
 
-    -- ➕ Transparence : UNIQUEMENT pour le dégradé des lignes de la LV (popup léger)
+    -- Applique le masquage de la scrollbar + supprime l'espace à droite
+    if UI and UI.ListView_SetScrollbarVisible then
+        UI.ListView_SetScrollbarVisible(lv, false)
+    end
+
+    -- ➕ Transparence (déjà en place)
     state.popup = p
     if p then p._lv = lv end
     do
         local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1
-        -- ⚠️ NE PAS toucher à l'opacité du cadre de la popup "normale"
-        -- (pas de UI.SetFrameVisualOpacity(p, a) ici)
-        if UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(lv, a) end -- header/fond conteneur
-        if UI and UI.ListView_SetRowGradientOpacity then UI.ListView_SetRowGradientOpacity(lv, a) end -- dégradé des lignes
+        if UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(lv, a) end
+        if UI and UI.ListView_SetRowGradientOpacity then UI.ListView_SetRowGradientOpacity(lv, a) end
     end
 
     -- Données
@@ -603,11 +606,10 @@ local function _ensureWindow()
         title   = "group_tracker_title",
         width   = 275,
         height  = 308,
-        headerHeight = 22,
+        headerHeight = 25,
         strata  = "FULLSCREEN_DIALOG",
         level   = 220,
         saveKey = "GroupTrackerWindow",
-        -- 🔹 Position par défaut : aligné à GAUCHE de l’écran
         defaultPoint    = "LEFT",
         defaultRelPoint = "LEFT",
         defaultX        = 24,
@@ -615,7 +617,99 @@ local function _ensureWindow()
     })
     state.win = f
 
-    -- boutons de navigation, titre, etc. (code existant inchangé au-dessus)
+    -- Conteneur stable pour les boutons de navigation + reset
+    if f.hctrl and f.   hctrl.Hide then f.hctrl:Hide() end
+    f.hctrl = CreateFrame("Frame", nil, f.header)
+    -- Laisse 28 px pour le bouton de fermeture (22 + marge 6)
+    f.hctrl:ClearAllPoints()
+    f.hctrl:SetPoint("RIGHT", f.header, "RIGHT", -28, 0)
+    f.hctrl:SetSize(92, 22) -- largeur suffisante pour 3x20 + espacements
+    f.hctrl:SetFrameLevel(f.header:GetFrameLevel() + 3)
+
+    -- '>' (plus récent / vers Live)
+    if not f.nextBtn then
+        f.nextBtn = CreateFrame("Button", nil, f.hctrl)
+        f.nextBtn:SetSize(20, 20)
+        local txN = f.nextBtn:CreateTexture(nil, "OVERLAY"); txN:SetAllPoints()
+        txN:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+        f.nextBtn:SetScript("OnClick", function()
+            local s = _Store()
+            _setViewIndex((s.viewIndex or 1) - 1) -- vers plus récent / Live
+        end)
+    else
+        f.nextBtn:SetParent(f.hctrl)
+        f.nextBtn:SetSize(20, 20)
+    end
+    f.nextBtn:ClearAllPoints()
+    f.nextBtn:SetPoint("RIGHT", f.hctrl, "RIGHT", 0, 0)
+    f.nextBtn:SetFrameLevel(f.hctrl:GetFrameLevel() + 1)
+
+    -- '<' (plus ancien)
+    if not f.prevBtn then
+        f.prevBtn = CreateFrame("Button", nil, f.hctrl)
+        f.prevBtn:SetSize(20, 20)
+        local txP = f.prevBtn:CreateTexture(nil, "OVERLAY"); txP:SetAllPoints()
+        txP:SetTexture("Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up")
+        f.prevBtn:SetScript("OnClick", function()
+            local s = _Store()
+            _setViewIndex((s.viewIndex or 1) + 1) -- vers plus ancien
+        end)
+    else
+        f.prevBtn:SetParent(f.hctrl)
+        f.prevBtn:SetSize(20, 20)
+    end
+    f.prevBtn:ClearAllPoints()
+    f.prevBtn:SetPoint("RIGHT", f.nextBtn, "LEFT", -4, 0)
+    f.prevBtn:SetFrameLevel(f.hctrl:GetFrameLevel() + 1)
+
+    -- Corbeille (vider l'historique)
+    if f.clearBtn and f.clearBtn.Hide then f.clearBtn:Hide() end
+    if not f.clearBtn then
+        f.clearBtn = CreateFrame("Button", nil, f.hctrl)
+        f.clearBtn:SetSize(20, 20)
+        local texPath = "Interface\\PaperDollInfoFrame\\UI-GearManager-LeaveItem-Transparent"
+        f.clearBtn:SetNormalTexture(texPath)
+        f.clearBtn:SetPushedTexture(texPath)
+        f.clearBtn:SetDisabledTexture(texPath)
+        f.clearBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+        local nrm = f.clearBtn:GetNormalTexture();   if nrm then nrm:SetVertexColor(1, 0.25, 0.25, 1) end
+        local psh = f.clearBtn:GetPushedTexture();   if psh then psh:SetVertexColor(1, 0.25, 0.25, 1) end
+        local dis = f.clearBtn:GetDisabledTexture(); if dis then dis:SetVertexColor(1, 0.25, 0.25, 0.45); dis:SetDesaturated(true) end
+        local hl  = f.clearBtn:GetHighlightTexture(); if hl then hl:SetAlpha(0.22) end
+        f.clearBtn:SetScript("OnClick", function()
+            if UI and UI.PopupConfirm then
+                UI.PopupConfirm(Tr("confirm_clear_history"), function()
+                    if GLOG and GLOG.GroupTracker_ClearHistory then
+                        GLOG.GroupTracker_ClearHistory()
+                    end
+                end, nil, { strata = "FULLSCREEN_DIALOG" })
+            else
+                if GLOG and GLOG.GroupTracker_ClearHistory then
+                    GLOG.GroupTracker_ClearHistory()
+                end
+            end
+        end)
+        -- Tooltip
+        f.clearBtn:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(Tr("btn_reset_data"))
+            GameTooltip:Show()
+        end)
+        f.clearBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    else
+        f.clearBtn:SetParent(f.hctrl)
+        f.clearBtn:SetSize(20, 20)
+    end
+    f.clearBtn:ClearAllPoints()
+    f.clearBtn:SetPoint("RIGHT", f.prevBtn, "LEFT", -6, 0)
+    f.clearBtn:SetFrameLevel(f.hctrl:GetFrameLevel() + 2)
+
+    -- Recalage automatique si la fenêtre est redimensionnée
+    f:HookScript("OnSizeChanged", function()
+        if not f.hctrl then return end
+        f.hctrl:ClearAllPoints()
+        f.hctrl:SetPoint("RIGHT", f.header, "RIGHT", -28, 0)
+    end)
 
     -- Colonnes
     local cols = UI.NormalizeColumns({
@@ -628,7 +722,7 @@ local function _ensureWindow()
     local lv = UI.ListView(f.content, cols, {
         topOffset = 0,
         safeRight = false,  -- pas besoin d'espace pour une barre
-        rowHeight = 12,
+        rowHeight = 22,
         buildRow = function(r)
             r:EnableMouse(true)
             r:SetScript("OnMouseUp", function(self, button)
@@ -748,8 +842,8 @@ local function _ensureWindow()
 
         -- Titre de la fenêtre principale (on NE TOUCHE PAS au titre de la popup ici)
         if f.title and f.title.SetText then
-            f.title:SetText(string.format("%s - %s %s",
-                Tr("group_tracker_title"), label or "", posStr or ""))
+            f.title:SetText(string.format("%s %s\n%s",
+                Tr("group_tracker_title"), posStr or "", label or ""))
         elseif f.header and f.header.title and f.header.title.SetText then
             f.header.title:SetText(string.format("%s - %s %s",
                 Tr("group_tracker_title"), label or "", posStr or ""))
@@ -1050,7 +1144,6 @@ ev:SetScript("OnEvent", function(_, event, ...)
         _RebuildCategoryLookup()
 
     elseif event == "BAG_UPDATE_DELAYED" then
-        -- Certains sorts d'utilisation d'objets ne sont connus qu'une fois l'item chargé en cache
         _RebuildCategoryLookup()
     
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -1104,10 +1197,8 @@ ev:SetScript("OnEvent", function(_, event, ...)
 
         local maxIdx = #s.segments
         if s.viewIndex == 0 then
-            -- tu regardais le Live → reste sur le combat tout juste créé
             s.viewIndex = math.min(1, maxIdx)
         else
-            -- tu regardais un historique → ne pas changer
             s.viewIndex = math.min(s.viewIndex or 1, maxIdx)
         end
         if state.win and state.win._Refresh then state.win:_Refresh() end
