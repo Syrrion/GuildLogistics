@@ -65,6 +65,12 @@ ns.Data.CONSUMABLE_CATEGORY = ns.Data.CONSUMABLE_CATEGORY or {
     [212253] = "util", 
 
     [5512] = "stone", -- Pierre de soins
+    [6262] = "stone", -- Pierre de soins
+    
+}
+
+ns.Data.CONSUMABLE_EXCLUDE_SPELLS = ns.Data.CONSUMABLE_EXCLUDE_SPELLS or {
+    [82326] = true, -- Holy Light (Paladin) : ne doit JAMAIS être compté comme potion/prépot
 }
 
 -- Healthstones explicites (si connus)

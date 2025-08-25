@@ -31,13 +31,15 @@ _Store = function()
     GuildLogisticsUI_Char.groupTracker = GuildLogisticsUI_Char.groupTracker or {}
     local s = GuildLogisticsUI_Char.groupTracker
 
-    s.cooldown = s.cooldown or { heal = 300, util = 300, stone = 300 }
-    s.expiry    = s.expiry    or {}
-    s.segments  = s.segments  or {}
-    s.viewIndex = s.viewIndex or 1
-    s.enabled   = (s.enabled == true)            -- 🔹 Par défaut: false ⇒ la popup ne s’ouvre pas
-    s.opacity   = tonumber(s.opacity or 0.95) or 0.95
-    s.recording = (s.recording == true)
+    s.cooldown   = s.cooldown   or { heal = 300, util = 300, stone = 300 }
+    s.expiry     = s.expiry     or {}
+    s.segments   = s.segments   or {}
+    s.viewIndex  = s.viewIndex  or 1
+    s.enabled    = (s.enabled == true)
+    s.opacity    = tonumber(s.opacity    or 1.00) or 1.00   -- fonds/bordures
+    s.textOpacity= tonumber(s.textOpacity or 1.00) or 1.00  -- texte
+    s.btnOpacity = tonumber(s.btnOpacity  or 1.00) or 1.00  -- 🔹 boutons
+    s.recording  = (s.recording == true)
 
     return s
 end
@@ -54,11 +56,12 @@ local function _Store()
     local s = GuildLogisticsUI_Char.groupTracker
     s.cooldown = s.cooldown or { heal = 300, util = 300, stone = 300 }
     s.expiry   = s.expiry   or {} -- [full] = { heal = epoch, util = epoch, stone = epoch }
-    s.segments  = s.segments  or {}
+    s.segments = s.segments or {}
     s.viewIndex = s.viewIndex or 1 -- 0 = live (uniquement en combat), 1 = segment le plus récent
     s.enabled   = (s.enabled == true)
     s.opacity   = tonumber(s.opacity or 0.95) or 0.95 -- transparence fenêtre (0.1..1.0)
-    s.recording = (s.recording == true) -- 🔹 Enregistrement en arrière-plan (UI fermée)
+    s.textOpacity = tonumber(s.textOpacity or 1.0) or 1.0 -- 🔹 transparence du TEXTE (0.1..1.0)
+    s.recording = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
     return s
 end
 
@@ -274,7 +277,18 @@ end
 local function _detectCategory(spellID, spellName)
     spellID = tonumber(spellID or 0) or 0
 
-    -- 0) Mapping explicite pré-compilé
+    -- (-1) Exclusions explicites (IDs, puis noms)
+    if Data and Data.CONSUMABLE_EXCLUDE_SPELLS and Data.CONSUMABLE_EXCLUDE_SPELLS[spellID] then
+        return nil
+    end
+    if Data and Data.CONSUMABLE_EXCLUDE_NAMES and spellName then
+        local sn = tostring(spellName or ""):lower()
+        if Data.CONSUMABLE_EXCLUDE_NAMES[sn] then
+            return nil
+        end
+    end
+
+    -- 0) Mapping explicite pré-compilé (IDs directs)
     if _CategoryBySpellID[spellID] then
         return _CategoryBySpellID[spellID]
     end
@@ -287,18 +301,14 @@ local function _detectCategory(spellID, spellName)
                 local useName, useSpellID = GetItemSpell and GetItemSpell(itemID)
                 -- 1) Match direct sur l'ID du sort d'utilisation
                 if useSpellID and useSpellID == spellID then
-                    _CategoryBySpellID[spellID] = cat -- cache pour les prochains
+                    _CategoryBySpellID[spellID] = cat -- cache pour les suivants
                     return cat
                 end
-                -- 2) Match par nom du sort d'utilisation (au cas où l'ID varie par rang/localisation)
+                -- 2) Match par nom du sort d'utilisation
                 if useName then
                     local si = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(useName)
                     if si and si.spellID == spellID then
                         _CategoryBySpellID[spellID] = cat
-                        return cat
-                    end
-                    -- dernier filet : compare les noms en minuscule
-                    if (tostring(spellName or ""):lower() == tostring(useName or ""):lower()) then
                         return cat
                     end
                 end
@@ -306,28 +316,28 @@ local function _detectCategory(spellID, spellName)
         end
     end
 
-    -- Support direct si la table Data est renseignée en SpellID (sécurité)
+    -- 0-bis) Si jamais Data contenait par erreur un SpellID direct (sécurité)
     if Data and Data.CONSUMABLE_CATEGORY and Data.CONSUMABLE_CATEGORY[spellID] then
         return Data.CONSUMABLE_CATEGORY[spellID]
     end
 
-    -- 1) Healthstone prioritaire si fourni ailleurs
+    -- 1) Healthstone priorité si connue
     if Data and Data.HEALTHSTONE_SPELLS and Data.HEALTHSTONE_SPELLS[spellID] then
         return "stone"
     end
 
-    -- 2) Fallback par nom exact depuis Data (si on n'a pas d'ID encore mappé)
+    -- 2) Fallback par nom exact depuis Data (si on n'a pas d'ID mappé)
     local sn = tostring(spellName or ""):lower()
     if _CategoryBySpellName[sn] then
         return _CategoryBySpellName[sn]
     end
 
-    -- 3) Heuristique locales/icônes … (la suite de la fonction reste inchangée)
-
+    -- 3) Heuristique via icône
+    local icon = (C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID) and C_Spell.GetSpellInfo(spellID).iconID) or nil
     if type(icon) == "string" then
         local ic = icon:lower()
         if ic:find("healthstone") or ic:find("inv_stone") then return "stone" end
-        if ic:find("inv_potion") or ic:find("potion") then return "util" end
+        if ic:find("inv_potion")  or ic:find("potion")    then return "util"  end
     end
 
     return nil
@@ -550,20 +560,14 @@ local function _ShowHistoryPopup(full)
 
     -- Données
     if lv and lv.SetData then lv:SetData(rows) end
-
-    -- 🆕 Transparence visuelle : fonds/bordures uniquement (texte inchangé)
-    do
-    local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 0.95
-    if UI and UI.SetFrameVisualOpacity then
-        UI.SetFrameVisualOpacity(p, a)
-    end
-        -- Optionnel : légère transparence du fond englobant de la ListView si présent
-        if lv and lv._containerBG and lv._containerBG.SetAlpha then
-            lv._containerBG:SetAlpha(math.max(0, a - 0.05))
-        end
+    -- Mémorise le popup pour MAJ live des opacités
+    state.lastPopup = p
+    if p.SetScript then
+        p:SetScript("OnHide", function()
+            if state.lastPopup == p then state.lastPopup = nil end
+        end)
     end
 end
-
 
 -- ===== Vue & navigation =====
 local function _setViewIndex(idx)
@@ -692,56 +696,86 @@ local function _ensureWindow()
 
     local function _updateHeaderTitle()
         local s = _Store()
-        local view = tonumber(s.viewIndex or 1) or 1
+        local f = state.win
+        if not f then return end
 
-        -- 🔹 Si l'historique est vide et qu'on n'est pas en combat → titre simple
-        if (not session.inCombat) and (#s.segments == 0) then
-            if f.title and f.title.SetText then
-                f.title:SetText(Tr("group_tracker_title"))
-            end
-            -- états boutons
-            f.nextBtn:SetEnabled(false); f.prevBtn:SetEnabled(false)
-            f.nextBtn:SetAlpha(0.35);    f.prevBtn:SetAlpha(0.35)
-            f.clearBtn:SetEnabled(false); f.clearBtn:SetAlpha(0.35)
-            return
-        end
+        -- Garde-fous pour éviter les comparaisons nil
+        local segCount = (s.segments and #s.segments) or 0
+        local view     = tonumber(s.viewIndex)
+        if view == nil then view = (segCount > 0) and 1 or 0 end
+        if view < 0 then view = 0 end
+        if view > segCount then view = segCount end
 
+        -- ====== Ton bloc : calcul du libellé et de la position ======
         local label, posStr
-        if session.inCombat and view == 0 then
+        if view == 0 then
+            -- session "live" (en combat) si disponible
+            local session = state.liveSession or s.liveSession or {}
+            local inCombat = (session.inCombat == true)
+            if not inCombat then
+                -- si pas en combat, on retombe sur un segment valide si possible
+                if segCount > 0 then
+                    view = math.min(tonumber(s.viewIndex or 1) or 1, segCount)
+                else
+                    view = 1
+                end
+            end
             label  = session.label or Tr("history_combat")
             posStr = "[Live]"
-        else
-            if (not session.inCombat) and view == 0 then view = 1 end
-            label  = (s.segments[view] and s.segments[view].label) or Tr("history_combat")
-            posStr = string.format("[%d/%d]", view, #s.segments)
+        end
+        if view ~= 0 then
+            if (not s.segments or not s.segments[view]) and segCount > 0 then
+                -- garde-fou si view est hors bornes
+                view = math.min(math.max(view, 1), segCount)
+            end
+            label  = (s.segments and s.segments[view] and s.segments[view].label) or Tr("history_combat")
+            posStr = string.format("[%d/%d]", view, segCount)
         end
 
+        -- Titre de la fenêtre principale (on NE TOUCHE PAS au titre de la popup ici)
         if f.title and f.title.SetText then
             f.title:SetText(string.format("%s - %s %s",
-                Tr("group_tracker_title"), label, posStr))
+                Tr("group_tracker_title"), label or "", posStr or ""))
+        elseif f.header and f.header.title and f.header.title.SetText then
+            f.header.title:SetText(string.format("%s - %s %s",
+                Tr("group_tracker_title"), label or "", posStr or ""))
         end
 
-        local minIdx = (session.inCombat and 0) or 1
-        f.nextBtn:SetEnabled((s.viewIndex or 1) > minIdx)
-        f.prevBtn:SetEnabled((s.viewIndex or 1) < #s.segments)
-        f.nextBtn:SetAlpha(((s.viewIndex or 1) > minIdx) and 1 or 0.35)
-        f.prevBtn:SetAlpha(((s.viewIndex or 1) < #s.segments) and 1 or 0.35)
-        f.clearBtn:SetAlpha((#s.segments > 0) and 1 or 0.35)
-        f.clearBtn:SetEnabled(#s.segments > 0)
+        -- États/alpha des boutons (multiplie par l'opacité des boutons)
+        local canNext  = (view > 1)
+        local canPrev  = (view < segCount)
+        local canClear = (segCount > 0)
+
+        if f.nextBtn  then f.nextBtn:SetEnabled(canNext)  end
+        if f.prevBtn  then f.prevBtn:SetEnabled(canPrev)  end
+        if f.clearBtn then f.clearBtn:SetEnabled(canClear) end
+
+        local sA = (GLOG and GLOG.GroupTracker_GetButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity()) or 1
+        if UI and UI.SetButtonAlphaScaled then
+            if f.nextBtn  then UI.SetButtonAlphaScaled(f.nextBtn,  canNext  and 1 or 0.35, sA) end
+            if f.prevBtn  then UI.SetButtonAlphaScaled(f.prevBtn,  canPrev  and 1 or 0.35, sA) end
+            if f.clearBtn then UI.SetButtonAlphaScaled(f.clearBtn, canClear and 1 or 0.35, sA) end
+            if f.close    then UI.SetButtonAlphaScaled(f.close,    1.00,          sA) end
+        else
+            if f.nextBtn  then f.nextBtn:SetAlpha(canNext  and 1 or 0.35) end
+            if f.prevBtn  then f.prevBtn:SetAlpha(canPrev  and 1 or 0.35) end
+            if f.clearBtn then f.clearBtn:SetAlpha(canClear and 1 or 0.35) end
+        end
     end
+
 
     -- Colonnes réduites : 100 / 50 / 50 / 50 ✅
     local cols = UI.NormalizeColumns({
-        { key="name",   title=Tr("col_name"),          w=160, min=160, flex=1, justify="LEFT"  },
-        { key="heal",   title=Tr("col_heal_potion"),   w=60,  justify="CENTER" },
-        { key="util",   title=Tr("col_other_potions"), w=60,  justify="CENTER" },
-        { key="stone",  title=Tr("col_healthstone"),   w=60,  justify="CENTER" },
+        { key="name",   title=Tr("col_name"),          w=95, min=95, flex=1, justify="LEFT"  },
+        { key="heal",   title=Tr("col_heal_potion"),   w=49,  justify="CENTER" },
+        { key="util",   title=Tr("col_other_potions"), w=49,  justify="CENTER" },
+        { key="stone",  title=Tr("col_healthstone"),   w=49,  justify="CENTER" },
     })
 
     local lv = UI.ListView(f.content, cols, {
         topOffset = 0,
         safeRight = false,  -- pas besoin d'espace pour une barre
-        rowHeight = 20,
+        rowHeight = 12,
         buildRow = function(r)
             r:EnableMouse(true)
             r:SetScript("OnMouseUp", function(self, button)
@@ -759,7 +793,17 @@ local function _ensureWindow()
         updateRow = function(i, r, w, it)
             if not it then return end
             r._full = it.name
-            if UI.SetNameTag and w.name then UI.SetNameTag(w.name, it.name or "") end
+
+            -- ✅ Affichage sans serveur, tout en conservant le style (classe/couleur/icone)
+            if UI and UI.SetNameTagShort and w.name then
+                UI.SetNameTagShort(w.name, it.name or "")
+            elseif UI and UI.SetNameTag and w.name then
+                -- Fallback si jamais la fonction n’est pas encore chargée
+                local short = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(it.name)) or (it.name or "")
+                w.name.text:SetText(short)
+                UI.SetNameTag(w.name, it.name or "")
+            end
+
             local function cell(rem, n)
                 rem = tonumber(rem or 0) or 0
                 local base
@@ -779,6 +823,7 @@ local function _ensureWindow()
             w.util:SetText(  cell(it.utilR  or 0, it.utilN  or 0) )
             w.stone:SetText( cell(it.stoneR or 0, it.stoneN or 0) )
         end,
+
     })
 
     -- Libérer totalement l'espace réservé à la scrollbar (popup light)
@@ -867,12 +912,18 @@ function GLOG.GroupTracker_ShowWindow(show)
         state.enabled = true
         _ensureWindow()
         if state.win then
-            -- 🔹 Applique l’opacité persistée
-            if state.win.SetAlpha and GLOG.GroupTracker_GetOpacity then
-                state.win:SetAlpha(GLOG.GroupTracker_GetOpacity())
+            -- 🔸 Opacité des cadres (fonds/bordures), 0..1
+            local a = (GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 0.95
+            if UI and UI.SetFrameVisualOpacity then
+                UI.SetFrameVisualOpacity(state.win, a)
             end
 
-            -- 🔹 Ancrage par défaut : bord gauche de l’écran (si aucun point défini)
+            -- 🔸 Opacité du texte & des boutons (indépendante)
+            local ta = (GLOG.GroupTracker_GetTextOpacity and GLOG.GroupTracker_GetTextOpacity()) or 1.0
+            if UI and UI.ApplyTextAlpha then UI.ApplyTextAlpha(state.win, ta) end
+            if UI and UI.ApplyButtonsAlpha then UI.ApplyButtonsAlpha(state.win, ta) end
+
+            -- Ancrage par défaut si nécessaire (bord gauche)
             if not state.win._glog_default_anchored then
                 local hasPoints = (state.win.GetNumPoints and state.win:GetNumPoints() or 0) > 0
                 if not hasPoints then
@@ -883,6 +934,11 @@ function GLOG.GroupTracker_ShowWindow(show)
             end
 
             state.win:Show()
+
+            -- 🔹 Applique l'opacité des boutons à l'ouverture de la fenêtre
+            if UI and UI.ApplyButtonsOpacity and GLOG and GLOG.GroupTracker_GetButtonsOpacity then
+                UI.ApplyButtonsOpacity(state.win, GLOG.GroupTracker_GetButtonsOpacity())
+            end
             if state.win._Refresh then state.win:_Refresh() end
         end
     else
@@ -892,23 +948,73 @@ function GLOG.GroupTracker_ShowWindow(show)
     end
 end
 
-
 function GLOG.GroupTracker_GetOpacity()
     local s = _Store()
-    local a = tonumber(s.opacity or 0.95) or 0.95
-    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
+    local a = tonumber(s.opacity or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
     return a
 end
 
 function GLOG.GroupTracker_SetOpacity(a)
     local s = _Store()
     a = tonumber(a or 0.95) or 0.95
-    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
     s.opacity = a
-    if state.win and state.win.SetAlpha then
-            state.win:SetAlpha(a)
+
+    -- Fenêtre principale
+    if state.win and UI and UI.SetFrameVisualOpacity then
+        UI.SetFrameVisualOpacity(state.win, a)
+    end
+
+    -- Popup d'historique + ListView interne
+    if state.popup then
+        if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(state.popup, a) end
+        if state.popup._lv and UI and UI.ListView_SetVisualOpacity then
+            UI.ListView_SetVisualOpacity(state.popup._lv, a)
+        end
     end
 end
+
+function GLOG.GroupTracker_GetTextOpacity()
+    local s = _Store()
+    local a = tonumber(s.textOpacity or 1.0) or 1.0
+    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
+    return a
+end
+
+function GLOG.GroupTracker_SetTextOpacity(a)
+    local s = _Store()
+    a = tonumber(a or 1.0) or 1.0
+    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
+    s.textOpacity = a
+    if state.win and UI and UI.ApplyTextAlpha then
+        UI.ApplyTextAlpha(state.win, a)
+    end
+end
+
+function GLOG.GroupTracker_GetButtonsOpacity()
+    local s = _Store()
+    local a = tonumber(s.btnOpacity or 1.0) or 1.0
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    return a
+end
+
+function GLOG.GroupTracker_SetButtonsOpacity(a)
+    local s = _Store()
+    a = tonumber(a or 1.0) or 1.0
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    s.btnOpacity = a
+
+    -- Applique immédiatement à la fenêtre principale (si ouverte)
+    if state.win and UI and UI.ApplyButtonsOpacity then
+        UI.ApplyButtonsOpacity(state.win, a)
+    end
+    -- Applique à la popup d’historique (si ouverte)
+    if state.popup and UI and UI.ApplyButtonsOpacity then
+        UI.ApplyButtonsOpacity(state.popup, a)
+    end
+end
+
 
 function GLOG.GroupTracker_GetRecordingEnabled()
     local s = _Store()
@@ -931,6 +1037,24 @@ function GLOG.GroupTracker_SetRecordingEnabled(enabled)
             _RecomputeEnabled()
         end
     end
+end
+
+function GLOG.GroupTracker_IsPopupTitleHidden()
+    local s = _Store()
+    return s.popupTitleTextHidden == true
+end
+
+function GLOG.GroupTracker_SetPopupTitleHidden(hidden)
+    local s = _Store()
+    s.popupTitleTextHidden = (hidden == true)
+    if state.popup and UI and UI.SetFrameTitleVisibility then
+        UI.SetFrameTitleVisibility(state.popup, not s.popupTitleTextHidden)
+    end
+end
+
+function GLOG.GroupTracker_TogglePopupTitleHidden()
+    local s = _Store()
+    GLOG.GroupTracker_SetPopupTitleHidden(not (s.popupTitleTextHidden == true))
 end
 
 -- =========================

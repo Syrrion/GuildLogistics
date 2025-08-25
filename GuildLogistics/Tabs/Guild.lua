@@ -35,13 +35,8 @@ local function _BuildColumns()
         { key="mplus",  title=Tr("col_mplus_score"),    w=100,  justify="CENTER" },
         { key="mkey",   title=Tr("col_mplus_key"),      w=300,  justify="LEFT"   },
         { key="last",   title=Tr("col_attendance"),     w=100,  justify="CENTER" },
+        { key="ver",    title=Tr("col_version_short"), w=70, justify="CENTER" }
     }
-
-    -- ➕ Ajoute la colonne "Version" uniquement si le mode debug est actif
-    local dbg = (GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) or false
-    if dbg then
-        table.insert(base, { key="ver", title=Tr("col_version_short"), w=70, justify="CENTER" })
-    end
 
     return UI.NormalizeColumns(base)
 end
@@ -67,8 +62,6 @@ local function _RecreateListView()
         sepLabelColor = UI.MIDGREY,
     })
 
-    -- Mémorise la présence de la colonne "ver" pour détecter les bascules de debug
-    lv._hasVerCol = ((GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) or false) and true or false
 end
 
 
@@ -261,7 +254,7 @@ function UpdateRow(i, r, f, it)
     -- ➕ Version d'addon (uniquement si la colonne existe dans la LV)
     if f.ver then
         local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(data.name)) or ""
-        f.ver:SetText((v ~= "" and v) or "—")
+        f.ver:SetText((v ~= "" and "v"..v) or "—")
     end
 
     -- Niveau
@@ -410,12 +403,6 @@ function Refresh()
         if lv then lv:SetData({}) end
         if lv and lv.Layout then lv:Layout() end
         return
-    end
-
-    -- 🔄 Si le mode debug a changé → (re)crée la LV avec/ss colonne "Ver."
-    local dbgNow = (GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) or false
-    if lv and lv._hasVerCol ~= dbgNow then
-        _RecreateListView()
     end
 
     -- Rafraîchit le cache guilde si nécessaire

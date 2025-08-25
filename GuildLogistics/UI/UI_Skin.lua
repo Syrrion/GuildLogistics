@@ -564,35 +564,89 @@ function UI.ApplyTiledBackdrop(frame, bgFile, tileSize, alpha, insets)
 end
 
 -- Applique une "opacité visuelle" à une frame skinnée (fonds/bordures uniquement)
--- ⚠ Ne touche PAS au texte : aucune propagation via :SetAlpha() sur la frame mère.
 function UI.SetFrameVisualOpacity(frame, a)
     a = tonumber(a or 1) or 1
-    if a < 0   then a = 0 end
-    if a > 1   then a = 1 end
-    if not (frame and frame._cdzNeutral) then return end
-    local s = frame._cdzNeutral
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if not (frame and frame.GetObjectType) then return end
 
-    local function SA(x) if x and x.SetAlpha then x:SetAlpha(a) end end
+    -- ===============================
+    -- 1) Cadres "skinnés" (_cdzNeutral)
+    -- ===============================
+    if frame._cdzNeutral then
+        local s = frame._cdzNeutral
+        local function SA(x) if x and x.SetAlpha then x:SetAlpha(a) end end
 
-    -- Fond
-    SA(s.bg)
+        -- Fond principal (⚠️ manquait auparavant)
+        if s.bg then SA(s.bg) end
 
-    -- Bordures
-    if s.edges then
-        SA(s.edges.top)
-        SA(s.edges.bottom)
-        if s.edges.left  then SA(s.edges.left)  end
-        if s.edges.right then SA(s.edges.right) end
+        -- Fond global overlay & header atlas (si fourni par le thème)
+        if s.overlay then SA(s.overlay) end
+        if s.header  then SA(s.header)  end
+
+        -- Arêtes
+        if s.edges then
+            if s.edges.top    then SA(s.edges.top)    end
+            if s.edges.bottom then SA(s.edges.bottom) end
+            if s.edges.left   then SA(s.edges.left)   end  -- conteneur ; alpha se propage
+            if s.edges.right  then SA(s.edges.right)  end
+        end
+
+        -- Coins
+        if s.corners then
+            for _, t in pairs(s.corners) do SA(t) end
+        end
+
+        -- Barre de titre (thème : left/mid/right)
+        if s.title then
+            SA(s.title.left); SA(s.title.mid); SA(s.title.right)
+        end
+        -- Compat rétro : si jamais certains thèmes assignent ces champs legacy
+        if s.titleLeft  then SA(s.titleLeft)  end
+        if s.titleMid   then SA(s.titleMid)   end
+        if s.titleRight then SA(s.titleRight) end
+
+        -- Ruban optionnel
+        if s.ribbon then SA(s.ribbon) end
+        return
     end
 
-    -- Coins
-    if s.corners then
-        for _, t in pairs(s.corners) do SA(t) end
+    -- ===============================
+    -- 2) Fallback cadres "simples"
+    -- ===============================
+    local applied = false
+
+    -- PlainWindow : fond et header connus
+    if frame.bg and frame.bg.SetAlpha then
+        frame.bg:SetAlpha(a); applied = true
+    end
+    if frame.header and frame.header.bg and frame.header.bg.SetAlpha then
+        frame.header.bg:SetAlpha(a); applied = true
     end
 
-    -- Éléments facultatifs si présents (selon thème)
-    if s.titleLeft  then SA(s.titleLeft)  end
-    if s.titleMid   then SA(s.titleMid)   end
-    if s.titleRight then SA(s.titleRight) end
-    if s.ribbon     then SA(s.ribbon)     end
+    -- Conteneur BG utilisé par les listes & composés
+    if frame._containerBG and frame._containerBG.SetAlpha then
+        frame._containerBG:SetAlpha(a); applied = true
+    end
+
+    -- BackdropTemplate
+    if frame.SetBackdropColor and frame.GetBackdropColor then
+        local r, g, b = frame:GetBackdropColor()
+        frame:SetBackdropColor(r or 1, g or 1, b or 1, a)
+        applied = true
+    end
+
+    -- Dernier recours : textures "bg/background" directes
+    if not applied then
+        local regions = { frame:GetRegions() }
+        for _, r in ipairs(regions) do
+            if r and r.GetObjectType and r:GetObjectType() == "Texture" and r.SetAlpha then
+                local name = (r.GetName and r:GetName()) or ""
+                name = tostring(name):lower()
+                if name:find("bg") or name:find("background") then
+                    r:SetAlpha(a)
+                    applied = true
+                end
+            end
+        end
+    end
 end

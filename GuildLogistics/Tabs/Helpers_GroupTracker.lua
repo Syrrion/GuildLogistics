@@ -130,13 +130,12 @@ local function Build(container)
     y = _RowY(y, rowH)
 
     -- 📌 Ligne 3 : slider de transparence (localisé)
-    local percent = math.floor(((GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 0.95) * 100 + 0.5)
     slOpacity = UI.Slider(panel, {
         label  = "group_tracker_opacity_label", -- locales
-        min    = 30,
+        min    = 0,
         max    = 100,
-        step   = 5,
-        value  = percent,
+        step   = 1,
+        value  = math.floor(((GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1) * 100),
         width  = 360,
         tooltip= "group_tracker_opacity_tip",   -- locales
         format = function(v) return tostring(v) .. "%" end,
@@ -144,16 +143,88 @@ local function Build(container)
     })
     slOpacity:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
     slOpacity:SetOnValueChanged(function(_, v)
+        local a = math.max(0.0, math.min(1.0, (tonumber(v) or 100)/100))
         if GLOG and GLOG.GroupTracker_SetOpacity then
-            local a = math.max(0.30, math.min(1.0, (tonumber(v) or 100)/100))
             GLOG.GroupTracker_SetOpacity(a)
         end
     end)
     y = _RowY(y, 26)
 
-    
+-- 📌 (NOUVEAU) Ligne 3b : Transparence du texte (indépendante du fond)
+    if slTextOpacity and slTextOpacity.Hide then slTextOpacity:Hide() end -- au cas où on reconstruit
+    slTextOpacity = UI.Slider(panel, {
+        label   = Tr("group_tracker_text_opacity_label") or "Transparence du texte",
+        min     = 1,
+        max     = 100,
+        step   = 1,
+        value  = math.floor(((GLOG and GLOG.GroupTracker_GetTextOpacity and GLOG.GroupTracker_GetTextOpacity()) or 1) * 100),
+        width  = 360,
+        tooltip = Tr("group_tracker_text_opacity_tip"),
+                format = function(v) return tostring(v) .. "%" end,
+        name   = (ADDON or "GL").."_OpacitySlider2"
+    })
+    slTextOpacity:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    slTextOpacity:SetOnValueChanged(function(_, v)
+        local a = math.max(0.0, math.min(1.0, (tonumber(v) or 100)/100))
+        if GLOG and GLOG.GroupTracker_SetTextOpacity then
+            GLOG.GroupTracker_SetTextOpacity(a)
+        end
+    end)
+    y = _RowY(y, 26)
 
-    -- 📌 Ligne 4 : Astuce /glog track
+        -- 📌 (NOUVEAU) Ligne 3c : Transparence des boutons (Fermer, <, >, Vider)
+    if slBtnOpacity and slBtnOpacity.Hide then slBtnOpacity:Hide() end
+    slBtnOpacity = UI.Slider(panel, {
+        label   = Tr("group_tracker_btn_opacity_label") or "Transparence des boutons",
+        min     = 0,      -- autorise 0% (boutons invisibles mais cliquables)
+        max     = 100,
+        step    = 1,
+        tooltip = Tr("group_tracker_btn_opacity_tip") or "Contrôle l'opacité des boutons sans affecter les fonds ni le texte.",
+        width   = 360,
+        format  = function(v) return tostring(v) .. "%" end,
+        name    = (ADDON or "GL").."_BtnOpacitySlider",
+    })
+    slBtnOpacity:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    slBtnOpacity:SetOnValueChanged(function(_, v)
+        local a = math.max(0.0, math.min(1.0, (tonumber(v) or 100)/100))
+        if GLOG and GLOG.GroupTracker_SetButtonsOpacity then
+            GLOG.GroupTracker_SetButtonsOpacity(a)
+        end
+    end)
+    -- init depuis le store
+    if slBtnOpacity and slBtnOpacity.SetValue and GLOG and GLOG.GroupTracker_GetButtonsOpacity then
+        local p = math.floor(((GLOG.GroupTracker_GetButtonsOpacity() or 1.0) * 100))
+        if p < 0 then p = 0 elseif p > 100 then p = 100 end
+        slBtnOpacity:SetValue(p)
+    end
+    y = _RowY(y, 26)
+
+    -- 📌 (NOUVEAU) Bouton : Masquer / Afficher le texte du titre (popup)
+    local function _ApplyToggleText(btn)
+        local hidden = (GLOG and GLOG.GroupTracker_IsPopupTitleHidden and GLOG.GroupTracker_IsPopupTitleHidden()) or false
+        if btn and btn.SetText then
+            btn:SetText(hidden and (Tr("group_tracker_popup_title_btn_show") or "Afficher le texte du titre (popup)")
+                               or (Tr("group_tracker_popup_title_btn_hide") or "Masquer le texte du titre (popup)"))
+        end
+    end
+
+    local btnTitle = UI.Button(panel, {
+        text = Tr("group_tracker_popup_title_btn_hide") or "Masquer le texte du titre (popup)",
+        tooltip = Tr("group_tracker_popup_title_btn_tip") or "Bascule l'affichage du texte du titre de la popup d'historique.",
+        width = 360,
+        height = 22,
+    })
+    btnTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    btnTitle:SetScript("OnClick", function(self)
+        if GLOG and GLOG.GroupTracker_TogglePopupTitleHidden then
+            GLOG.GroupTracker_TogglePopupTitleHidden()
+            _ApplyToggleText(self)
+        end
+    end)
+    _ApplyToggleText(btnTitle)
+    y = _RowY(y, 24)
+
+    -- 📌 Ligne 5 : Astuce /glog track
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
     hint:SetJustifyH("LEFT")

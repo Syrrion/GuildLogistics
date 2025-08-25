@@ -807,6 +807,124 @@ function UI.SetNameTag(tag, name)
     end
 end
 
+-- ✅ Nouveau : même rendu (couleur/icone) mais sans le "-Royaume" dans le texte
+function UI.SetNameTagShort(tag, name)
+    if not tag then return end
+    local display = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name or "")
+    local short   = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(display)) or display
+
+    local class, r, g, b, coords = nil, 1, 1, 1, nil
+    if GLOG and GLOG.GetNameStyle then class, r, g, b, coords = GLOG.GetNameStyle(display) end
+
+    if tag.text then
+        tag.text:SetText(short or "")
+        tag.text:SetTextColor(r or 1, g or 1, b or 1)
+    end
+
+    if tag.icon and coords then
+        tag.icon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes")
+        tag.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        tag.icon:Show()
+    elseif tag.icon then
+        tag.icon:SetTexture(nil)
+        tag.icon:Hide()
+    end
+end
+
+-- ✅ Nouveau : alpha dédié pour les boutons (icônes, textes & états)
+function UI.SetButtonAlpha(btn, a)
+    if not btn then return end
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    local function SA(t) if t and t.SetAlpha then t:SetAlpha(a) end end
+    if btn.GetNormalTexture   then SA(btn:GetNormalTexture())   end
+    if btn.GetPushedTexture   then SA(btn:GetPushedTexture())   end
+    if btn.GetDisabledTexture then SA(btn:GetDisabledTexture()) end
+    if btn.GetHighlightTexture then
+        local hl = btn:GetHighlightTexture()
+        if hl and hl.SetAlpha then hl:SetAlpha(math.min(1, a + 0.15)) end -- léger bonus de lisibilité
+    end
+
+    if btn.Icon and btn.Icon.SetAlpha then btn.Icon:SetAlpha(a) end
+    if btn.icon and btn.icon.SetAlpha then btn.icon:SetAlpha(a) end
+    if btn.Text and btn.Text.SetAlpha then btn.Text:SetAlpha(a) end
+    if btn.text and btn.text.SetAlpha then btn.text:SetAlpha(a) end
+end
+
+-- ✅ Nouveau : applique l'alpha “interactif” standard aux contrôles connus d’un conteneur
+function UI.ApplyButtonsAlpha(container, a)
+    if not container then return end
+    if container.close    then UI.SetButtonAlpha(container.close,    a) end
+    if container.prevBtn  then UI.SetButtonAlpha(container.prevBtn,  a) end
+    if container.nextBtn  then UI.SetButtonAlpha(container.nextBtn,  a) end
+    if container.clearBtn then UI.SetButtonAlpha(container.clearBtn, a) end
+
+    -- Parcourt aussi les boutons directement dans le header (popup skinnée, etc.)
+    local hdr = container.header
+    if hdr and hdr.GetChildren then
+        local children = { hdr:GetChildren() }
+        for _, c in ipairs(children) do
+            if c and c.GetObjectType and c:GetObjectType() == "Button" then
+                UI.SetButtonAlpha(c, a)
+            end
+        end
+    end
+end
+
+-- 🆕 Variante: affiche le nom sans le serveur tout en conservant la couleur/classe
+function UI.SetNameTagShort(tag, name)
+    if not tag then return end
+    local raw = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name or "")
+    local display = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(raw)) or raw
+
+    local class, r, g, b, coords = nil, 1, 1, 1, nil
+    if GLOG and GLOG.GetNameStyle then class, r, g, b, coords = GLOG.GetNameStyle(raw) end
+
+    if tag.text then
+        tag.text:SetText(display or "")
+        tag.text:SetTextColor(r or 1, g or 1, b or 1)
+    end
+
+    if tag.icon and coords then
+        tag.icon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes")
+        tag.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        tag.icon:Show()
+    elseif tag.icon then
+        tag.icon:SetTexture(nil)
+        tag.icon:Hide()
+    end
+end
+
+-- 🆕 Applique une opacité uniquement sur les textes (FontString) d'un frame et ses enfants
+function UI.SetTextAlpha(frame, a)
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if not frame then return end
+
+    local function apply(fs)
+        if fs and fs.GetObjectType and fs:GetObjectType() == "FontString" and fs.SetAlpha then
+            fs:SetAlpha(a)
+        end
+    end
+
+    local regions = { frame:GetRegions() }
+    for _, r in ipairs(regions) do apply(r) end
+
+    local function walkChildren(parent)
+        local num = parent.GetNumChildren and parent:GetNumChildren() or 0
+        for i = 1, num do
+            local child = select(i, parent:GetChildren())
+            if child then
+                local regs = { child:GetRegions() }
+                for _, rr in ipairs(regs) do apply(rr) end
+                walkChildren(child)
+            end
+        end
+    end
+    walkChildren(frame)
+end
+
 function UI.ClassIconMarkup(classTag, size)
     if not classTag or not CLASS_ICON_TCOORDS or not CLASS_ICON_TCOORDS[classTag] then return "" end
     local c = CLASS_ICON_TCOORDS[classTag]
@@ -1219,5 +1337,123 @@ function UI.RegisterEscapeClose(frame)
                 self:Hide()
             end
         end)
+    end
+end
+
+function UI.ApplyTextAlpha(frame, a)
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if not (frame and frame.GetObjectType) then return end
+
+    local function applyTo(obj)
+        if not obj then return end
+        local ot = (obj.GetObjectType and obj:GetObjectType()) or ""
+
+        -- FontString
+        if ot == "FontString" and obj.SetAlpha then
+            obj:SetAlpha(a)
+        end
+
+        -- Boutons/frames avec fontstring intégrée
+        if obj.GetFontString then
+            local fs = obj:GetFontString()
+            if fs and fs.SetAlpha then fs:SetAlpha(a) end
+        end
+
+        -- Widgets NameTag : appliquer aussi à l'icône de classe
+        if obj.icon and obj.icon.SetAlpha then
+            obj.icon:SetAlpha(a)
+        end
+        if obj.Icon and obj.Icon.SetAlpha then
+            obj.Icon:SetAlpha(a)
+        end
+        if obj.text and obj.text.SetAlpha then
+            obj.text:SetAlpha(a)
+        end
+    end
+
+    -- Régions directes
+    local regions = { frame:GetRegions() }
+    for _, r in ipairs(regions) do applyTo(r) end
+
+    -- Enfants (récursif)
+    local children = { frame:GetChildren() }
+    for _, c in ipairs(children) do
+        applyTo(c)
+        UI.ApplyTextAlpha(c, a)
+    end
+end
+
+-- Applique alpha = base * scale (base = 1 ou 0.35 selon activé/désactivé)
+function UI.SetButtonAlphaScaled(btn, base, scale)
+    if not (btn and btn.SetAlpha) then return end
+    local b = tonumber(base or 1)  or 1
+    local s = tonumber(scale or 1) or 1
+    if s < 0 then s = 0 elseif s > 1 then s = 1 end
+    btn:SetAlpha(b * s)
+end
+
+-- Applique l'opacité aux boutons connus d'un conteneur + tous les boutons du header
+function UI.ApplyButtonsOpacity(container, scale)
+    if not container then return end
+    local function apply(btn)
+        if not btn then return end
+        local base = (btn.IsEnabled and (btn:IsEnabled() and 1 or 0.35)) or 1
+        UI.SetButtonAlphaScaled(btn, base, scale)
+    end
+
+    -- Boutons connus
+    apply(container.close)
+    apply(container.nextBtn)
+    apply(container.prevBtn)
+    apply(container.clearBtn)
+
+    -- Tous les boutons éventuels dans le header
+    local hdr = container.header
+    if hdr and hdr.GetChildren then
+        local children = { hdr:GetChildren() }
+        for _, c in ipairs(children) do
+            if c and c.GetObjectType and c:GetObjectType() == "Button" then
+                apply(c)
+            end
+        end
+    end
+end
+
+function UI.SetFrameTitleVisibility(frame, visible)
+    if not frame then return end
+    local function setFS(fs)
+        if not fs or not fs.GetObjectType or fs:GetObjectType() ~= "FontString" then return end
+        if visible then fs:Show() else fs:Hide() end
+    end
+
+    -- Header classique
+    if frame.header then
+        if frame.header.title then setFS(frame.header.title) end
+        if frame.header.text  then setFS(frame.header.text)  end
+        if frame.header.Title then setFS(frame.header.Title) end
+        if frame.header.TitleText then setFS(frame.header.TitleText) end
+        -- scan de secours dans le header
+        local regs = { frame.header:GetRegions() }
+        for _, r in ipairs(regs) do
+            local name = (r.GetName and r:GetName()) or ""
+            if type(name) == "string" and name:lower():find("title") then
+                setFS(r)
+            end
+        end
+    end
+
+    -- Titres éventuels directement sur la frame
+    if frame.title     then setFS(frame.title)     end
+    if frame.Title     then setFS(frame.Title)     end
+    if frame.TitleText then setFS(frame.TitleText) end
+
+    -- scan global (fallback)
+    local regs = { frame:GetRegions() }
+    for _, r in ipairs(regs) do
+        local name = (r.GetName and r:GetName()) or ""
+        if type(name) == "string" and name:lower():find("title") then
+            setFS(r)
+        end
     end
 end

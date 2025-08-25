@@ -408,3 +408,55 @@ function UI.ListView(parent, cols, opts)
 
     return lv
 end
+
+function UI.ListView_SetVisualOpacity(lv, a)
+    -- a ∈ [0..1] : applique l'alpha aux éléments "visuels" (fond/header/sep)
+    if not lv then return end
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    local function SA(x) if x and x.SetAlpha then x:SetAlpha(a) end end
+    local function SAif(t) if t and t.SetAlpha then t:SetAlpha(a) end end
+
+    -- Fond conteneur éventuel
+    if lv._containerBG then SA(lv._containerBG) end
+
+    -- Header
+    if lv.header then
+        if lv.header._bg then SA(lv.header._bg) end
+        if lv.header.bg   then SA(lv.header.bg)   end
+        -- lignes/traits du header possibles
+        if lv.header._sepTop    then SAif(lv.header._sepTop)    end
+        if lv.header._sepBottom then SAif(lv.header._sepBottom) end
+        -- évite le texte : rien à faire ici (géré par UI.ApplyTextAlpha)
+    end
+
+    -- Lignes/rows
+    local function applyRow(r)
+        if not r then return end
+        if r._bg       then SA(r._bg) end
+        if r._sepTop   then SAif(r._sepTop) end
+        if r._sepBot   then SAif(r._sepBot) end
+        if r._stripe   then SAif(r._stripe) end
+        -- ne pas toucher aux FontString / icônes du texte : gérés séparément
+    end
+
+    -- Rows souvent sous scrollChild
+    if lv.scrollChild and lv.scrollChild.GetChildren then
+        local children = { lv.scrollChild:GetChildren() }
+        for _, row in ipairs(children) do
+            applyRow(row)
+        end
+    end
+
+    -- Parfois les rows sont attachées directement à lv (fallback)
+    if lv.GetChildren then
+        local children = { lv:GetChildren() }
+        for _, row in ipairs(children) do
+            -- heuristique : frame de row avec champ _bg ou _sepTop
+            if type(row) == "table" and (row._bg or row._sepTop or row._sepBot) then
+                applyRow(row)
+            end
+        end
+    end
+end

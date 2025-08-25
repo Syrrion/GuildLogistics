@@ -15,8 +15,11 @@ local Tr = ns.Tr or function(s) return s end
 function UI.Slider(parent, opts)
     opts = opts or {}
     local wrap = CreateFrame("Frame", nil, parent)
+
     local width   = tonumber(opts.width or 240)
-    local height  = 26
+    -- ⬇️ Hauteur augmentée car le slider passe sous le libellé
+    local height  = tonumber(opts.height) or 42
+
     local minV    = tonumber(opts.min or 0) or 0
     local maxV    = tonumber(opts.max or 100) or 100
     local step    = tonumber(opts.step or 1) or 1
@@ -26,26 +29,32 @@ function UI.Slider(parent, opts)
 
     wrap:SetSize(width, height)
 
-    -- Libellé à gauche
+    -- Libellé (ligne du haut, à gauche)
     local fs = wrap:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    fs:SetPoint("LEFT", wrap, "LEFT", 0, 0)
+    fs:SetPoint("TOPLEFT", wrap, "TOPLEFT", 0, 0)
+    fs:SetJustifyH("LEFT")
     fs:SetText((Tr and Tr(label)) or label)
     wrap.label = fs
 
-    -- Valeur formatée à droite
+    -- Valeur formatée (ligne du haut, à droite)
     local vfs = wrap:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    vfs:SetPoint("RIGHT", wrap, "RIGHT", 0, 0)
+    vfs:SetPoint("TOPRIGHT", wrap, "TOPRIGHT", 0, 0)
+    vfs:SetJustifyH("RIGHT")
     wrap.valueFS = vfs
+
+    -- Le libellé prend la place disponible à gauche de la valeur
+    fs:SetPoint("RIGHT", vfs, "LEFT", -8, 0)
 
     -- 🔹 Génère un nom unique si absent, nécessaire pour OptionsSliderTemplate
     UI.__slider_uid = (UI.__slider_uid or 0) + 1
     local sliderName = opts.name or (tostring(ADDON or "GL") .. "_Slider" .. UI.__slider_uid)
 
-    -- Slider (au centre)
+    -- Slider (en dessous du libellé/valeur)
     local s = CreateFrame("Slider", sliderName, wrap, "OptionsSliderTemplate")
-    s:SetPoint("LEFT", fs, "RIGHT", 10, 0)
-    s:SetPoint("RIGHT", vfs, "LEFT", -10, 0)
     s:SetHeight(16)
+    local gapY = 6
+    s:SetPoint("TOPLEFT", fs, "BOTTOMLEFT", 0, -gapY)
+    s:SetPoint("TOPRIGHT", vfs, "BOTTOMRIGHT", 0, -gapY)
 
     s:SetMinMaxValues(minV, maxV)
     s:SetValueStep(step)
@@ -100,3 +109,4 @@ function UI.Slider(parent, opts)
 
     return wrap
 end
+

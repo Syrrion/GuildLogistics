@@ -40,8 +40,6 @@ local cols = UI.NormalizeColumns({
     { key="alias",  title=Tr("col_alias"),          w=90, justify="LEFT" },
     { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
     { key="name",   title=Tr("col_name"),           min=200, flex=1 },
-    { key="ilvl",   title=Tr("col_ilvl"),           w=120, justify="CENTER" },
-    { key="last",   title=Tr("col_attendance"),     w=120 },
     { key="act",    title="",                       w=120 },
     { key="solde",  title=Tr("col_balance"),        w=70 },
 })
@@ -216,12 +214,6 @@ local function BuildRow(r, context)
     f.lvl   = UI.Label(r, { justify = "CENTER" })
     f.alias = UI.Label(r, { justify = "LEFT"  })
     f.name  = UI.CreateNameTag(r)
-    f.ilvl  = UI.Label(r, { justify = "CENTER" })
-    f.mplus = UI.Label(r, { justify = "CENTER" })
-    f.mkey  = UI.Label(r, { justify = "LEFT"  })
-    f.last  = UI.Label(r, { justify = "CENTER" })
-    -- ➕ cellule "Version"
-    f.ver   = UI.Label(r, { justify = "CENTER" })
     -- Solde (fontstring simple pour compat thèmes)
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 
@@ -235,7 +227,7 @@ local function BuildRow(r, context)
     r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"),  { size="sm", variant="ghost", minWidth=60 })
 
     -- Alignement des actions à droite
-    UI.AttachRowRight(f.act, { r.btnDeposit }, 8, -4, { leftPad = 8, align = "center" })
+    UI.AttachRowRight(f.act, {  r.btnDeposit, r.btnWithdraw }, 8, -4, { leftPad = 8, align = "center" })
 
     return f
 end
@@ -293,25 +285,6 @@ local function UpdateRow(i, r, f, data)
         end
     end
 
-    -- ➕ Liseré "même groupe/sous-groupe"
-    do
-        local same = (GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name)) or false
-        local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {}
-        local c  = st.accent or { r = 1, g = 0.82, b = 0.00, a = 0.90 }
-        if UI.SetRowAccent then UI.SetRowAccent(r, same, c.r, c.g, c.b, c.a) end
-    end
-
-    -- Présence
-    if f.last then
-        if gi.online then
-            f.last:SetText("|cff40ff40"..Tr("status_online").."|r")
-        elseif gi.days or gi.hours then
-            f.last:SetText(ns.Format.LastSeen(gi.days, gi.hours))
-        else
-            f.last:SetText(gray(Tr("status_empty")))
-        end
-    end
-
     -- Niveau
     if f.lvl then
         if gi.level and gi.level > 0 then
@@ -322,68 +295,6 @@ local function UpdateRow(i, r, f, data)
             end
         else
             f.lvl:SetText("")
-        end
-    end
-
-    -- Score M+
-    if f.mplus then
-        local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
-        if gi.online then
-            f.mplus:SetText(score and score > 0 and tostring(score) or gray(Tr("status_empty")))
-        else
-            f.mplus:SetText(score and score > 0 and gray(score) or gray(Tr("status_empty")))
-        end
-    end
-
-    -- Clé M+
-    if f.mkey then
-        local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
-        if gi.online then
-            f.mkey:SetText(mkeyTxt or "")
-        else
-            f.mkey:SetText(mkeyTxt ~= "" and gray(mkeyTxt) or gray(Tr("status_empty")))
-        end
-    end
-
-    -- iLvl
-    if f.ilvl then
-        local ilvl    = (GLOG.GetIlvl     and GLOG.GetIlvl(data.name))     or nil
-        local ilvlMax = (GLOG.GetIlvlMax  and GLOG.GetIlvlMax(data.name))  or nil
-
-        local function fmtOnline()
-            if ilvl and ilvl > 0 then
-                if ilvlMax and ilvlMax > 0 then
-                    return tostring(ilvl).." ("..tostring(ilvlMax)..")"
-                else
-                    return tostring(ilvl)
-                end
-            else
-                return gray(Tr("status_empty"))
-            end
-        end
-
-        local function fmtOffline()
-            if ilvl and ilvl > 0 then
-                if ilvlMax and ilvlMax > 0 then
-                    return gray(tostring(ilvl).." ("..tostring(ilvlMax)..")")
-                else
-                    return gray(tostring(ilvl))
-                end
-            else
-                return gray(Tr("status_empty"))
-            end
-        end
-
-        f.ilvl:SetText( gi.online and fmtOnline() or fmtOffline() )
-    end
-
-    -- ➕ Version Addon (si la colonne existe)
-    if f.ver then
-        local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(data.name)) or ""
-        if v == "" then
-            f.ver:SetText(gray(Tr("status_empty")))
-        else
-            f.ver:SetText(gi.online and v or gray(v))
         end
     end
     
