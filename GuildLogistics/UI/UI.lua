@@ -383,9 +383,17 @@ function UI.RegisterTab(label, buildFunc, refreshFunc, layoutFunc, opts)
 end
 
 local function ShowPanel(idx)
+    -- Affiche uniquement le panneau sélectionné
     for i,p in ipairs(Panels) do p:SetShown(i == idx) end
     UI._current = idx
 
+    -- Persistance : mémorise le dernier onglet actif (par libellé)
+    local def = Registered and Registered[idx]
+    if def and def.label and GLOG and GLOG.SetLastActiveTabLabel then
+        GLOG.SetLastActiveTabLabel(def.label)
+    end
+
+    -- Met à jour l'état visuel des boutons d'onglet
     for i, def in ipairs(Registered) do
         local b = def._btn
         if b then
@@ -402,6 +410,7 @@ local function ShowPanel(idx)
         end
     end
 end
+
 UI.ShowPanel = ShowPanel
 
 -- Création d’un bouton d’onglet basé sur le précédent visible
@@ -1046,8 +1055,32 @@ function ns.ToggleUI()
             end
         end
 
-        ShowPanel(1)
-        if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+        -- Sélection de l'onglet à afficher :
+        -- 1) restaurer le dernier onglet actif si possible
+        -- 2) sinon, choisir le premier onglet visible
+        local restored = false
+        local savedLabel = GLOG and GLOG.GetLastActiveTabLabel and GLOG.GetLastActiveTabLabel() or nil
+        if type(savedLabel) == "string" and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[savedLabel] then
+            if UI.ShowTabByLabel then UI.ShowTabByLabel(savedLabel); restored = true end
+        end
+
+        if not restored then
+            -- Premier onglet affichable
+            for i, def in ipairs(Registered or {}) do
+                if def._btn and def._btn.IsShown and def._btn:IsShown() then
+                    ShowPanel(i)
+                    if def.refresh then def.refresh() end
+                    restored = true
+                    break
+                end
+            end
+        end
+
+        -- Fallback ultime
+        if not restored then
+            ShowPanel(1)
+            if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+        end
     end
 end
 
@@ -1371,6 +1404,8 @@ if UI.Main and UI.Main.SetScript then
         if not UI._catBar then UI.CreateCategorySidebar() end
     end)
 end
+
+
 
 function UI.CreateSidebarSyncFooter()
     local bar = UI and UI._catBar

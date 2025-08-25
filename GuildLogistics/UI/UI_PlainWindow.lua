@@ -4,7 +4,13 @@ local UI = ns.UI
 local Tr = ns.Tr or function(s) return s end
 
 -- Fenêtre épurée : header noir 50%, fond global 25%, redimensionnable coin BR.
--- opts = { title, width, height, strata, level, saveKey, headerHeight }
+-- opts = {
+--   title, width, height, strata, level, saveKey, headerHeight,
+--   -- Position par défaut si aucune position sauvegardée n’existe :
+--   defaultPoint="CENTER", defaultRelPoint="CENTER", defaultX=0, defaultY=0,
+--   -- Padding interne du contenu :
+--   contentPad = 8,
+-- }
 function UI.CreatePlainWindow(opts)
     opts = opts or {}
     local titleText = Tr(opts.title or "")
@@ -14,6 +20,7 @@ function UI.CreatePlainWindow(opts)
     local level   = tonumber(opts.level or 220)
     local headerH = tonumber(opts.headerHeight or 24)
     local saveKey = tostring(opts.saveKey or ("Plain_"..(titleText or "Window")))
+    local pad     = tonumber(opts.contentPad or (UI and UI.GUTTER) or 8)
 
     -- Persistance (position/taille)
     local function _GetStore()
@@ -23,7 +30,7 @@ function UI.CreatePlainWindow(opts)
         return GuildLogisticsUI_Char.plainWins[saveKey]
     end
 
-    -- Pas de BackdropTemplate → visuel minimal
+    -- Frame principale
     local f = CreateFrame("Frame", "GLOG_Plain_"..saveKey, UIParent)
     f:SetSize(w, h)
     f:SetFrameStrata(strata)
@@ -38,9 +45,9 @@ function UI.CreatePlainWindow(opts)
     -- Fond global 25%
     f.bg = f:CreateTexture(nil, "BACKGROUND")
     f.bg:SetAllPoints(f)
-    f.bg:SetColorTexture(0, 0, 0, 0.25)
+    f.bg:SetColorTexture(0, 0, 0, 0.5)
 
-    -- Header (draggable) + fond NOIR 50% ✅
+    -- Header (draggable) + fond NOIR 50%
     f.header = CreateFrame("Frame", nil, f)
     f.header:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     f.header:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
@@ -55,25 +62,22 @@ function UI.CreatePlainWindow(opts)
     f.header.bg:SetAllPoints(f.header)
     f.header.bg:SetColorTexture(0, 0, 0, 0.50) -- noir 50%
 
-    f.title = f.header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    -- Titre à gauche
+    f.title = f.header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.title:SetPoint("LEFT", f.header, "LEFT", 8, 0)
-    f.title:SetJustifyH("LEFT")
-    f.title:SetAlpha(0.95)
     f.title:SetText(titleText)
 
-    -- Bouton X
+    -- Bouton fermer (croix) à droite
     f.close = CreateFrame("Button", nil, f.header, "UIPanelCloseButton")
-    f.close:SetPoint("TOPRIGHT", f.header, "TOPRIGHT", 2, -2)
-    f.close:SetFrameLevel(f.header:GetFrameLevel() + 2)
+    f.close:SetPoint("RIGHT", f.header, "RIGHT", -2, 0)
+    f.close:SetSize(22, 22)
 
-    -- Contenu
+    -- 🔹 Conteneur de contenu standard (pour y attacher ListView, etc.)
     f.content = CreateFrame("Frame", nil, f)
-    f.content:SetPoint("TOPLEFT",     f, "TOPLEFT",    6, -(headerH + 4))
-    f.content:SetPoint("TOPRIGHT",    f, "TOPRIGHT",  -6, -(headerH + 4))
-    f.content:SetPoint("BOTTOMLEFT",  f, "BOTTOMLEFT",  6, 6)
-    f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -6, 6)
+    f.content:SetPoint("TOPLEFT",     f, "TOPLEFT",     pad, -(headerH + pad))
+    f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -pad, -pad)
 
-    -- Grip redimensionnement (BR)
+    -- Redimensionnement coin bas-droit
     f.resize = CreateFrame("Button", nil, f)
     f.resize:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
     f.resize:SetSize(16, 16)
@@ -88,18 +92,22 @@ function UI.CreatePlainWindow(opts)
     local function Save()
         local st = _GetStore()
         local p, _, rp, x, y = f:GetPoint(1)
-        st.point, st.relPoint, st.x, st.y = p, rp, math.floor(x or 0 + 0.5), math.floor(y or 0 + 0.5)
+        st.point, st.relPoint, st.x, st.y = p, rp, math.floor((x or 0) + 0.5), math.floor((y or 0) + 0.5)
         st.w, st.h = math.floor((f:GetWidth() or w) + 0.5), math.floor((f:GetHeight() or h) + 0.5)
     end
     local function Restore()
         local st = _GetStore()
-        local p, rp = st.point or "CENTER", st.relPoint or "CENTER"
+        local p  = st.point    or (opts.defaultPoint    or "CENTER")
+        local rp = st.relPoint or (opts.defaultRelPoint or "CENTER")
+        local x  = st.x; if x == nil then x = tonumber(opts.defaultX or 0) end
+        local y  = st.y; if y == nil then y = tonumber(opts.defaultY or 0) end
         f:ClearAllPoints()
-        f:SetPoint(p, UIParent, rp, tonumber(st.x or 0), tonumber(st.y or 0))
+        f:SetPoint(p, UIParent, rp, tonumber(x or 0), tonumber(y or 0))
         f:SetSize(tonumber(st.w or w), tonumber(st.h or h))
     end
     f:SetScript("OnHide", Save)
     f:HookScript("OnSizeChanged", Save)
     Restore()
+
     return f
 end

@@ -5,7 +5,10 @@ local PAD = UI.OUTER_PAD or 16
 local U = ns.Util
 
 -- ✏️ ajout gmFS
-local panel, lv, lvRecv, lvSend, recvArea, sendArea, purgeDBBtn, purgeAllBtn, forceSyncBtn, footer, debugTicker, verFS, gmFS
+local panel, lvRecv, lvSend, lvPending, recvArea, sendArea, pendingArea,
+      purgeDBBtn, purgeAllBtn, purgeEpuBtn, purgeResBtn, forceSyncBtn,
+      footer, debugTicker, verFS
+
 
 -- Rafraîchit l'étiquette de version DB dans le footer
 local function UpdateDBVersionLabel()
@@ -77,7 +80,11 @@ local function BuildRow(r)
 end
 
 local function UpdateRow(i, r, f, it)
-    f.time:SetText(date("%H:%M:%S", it.ts or time()))
+    -- Affiche l'heure réelle : conversion du temps "jeu" (it.ts) en epoch local
+    local epoch = (GLOG and GLOG.PreciseToEpoch and GLOG.PreciseToEpoch(it.ts)) or (tonumber(it.ts or 0) or 0)
+    if epoch <= 0 then epoch = (time and time()) or 0 end
+    f.time:SetText(date("%H:%M:%S", epoch))
+
     f.dir:SetText(it.dir == "send" and "|cff9ecbff"..Tr("lbl_status_sent").."|r" or "|cff7dff9a"..Tr("lbl_status_recieved").."|r")
 
     local total = tonumber(it.total or 1) or 1
@@ -153,7 +160,6 @@ local function UpdateRow(i, r, f, it)
 
         local function PrettyVal(v)
             if type(v) ~= "table" then return tostring(v) end
-            -- v est un array (issu de decodeKV "[a,b,c]") -> joignons les 10 premiers
             local out = {}
             local n = #v
             for i = 1, math.min(n, 10) do out[#out+1] = tostring(v[i]) end
@@ -183,6 +189,7 @@ local function UpdateRow(i, r, f, it)
         )
     end)
 end
+
 
 -- Regroupe les fragments et décode rv/lm
 local function groupLogs(raw)
@@ -331,12 +338,20 @@ local function Build(container)
     panel = container
     if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
-    purgeDBBtn = UI.Button(panel, Tr("btn_purge_debug"), { size="sm", minWidth=120 })
-    purgeDBBtn:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -PAD, -12)
-    purgeDBBtn:SetOnClick(function() GLOG.ClearDebugLogs(); Refresh() end)
+    -- === Footer (pattern Synthese) ===
+    footer = UI.CreateFooter(panel, 36)
 
-    purgeAllBtn = UI.Button(panel,  Tr("btn_purge_full"), { size="sm", minWidth=120})
-    purgeAllBtn:SetPoint("RIGHT", purgeDBBtn, "LEFT", -8, 0)
+    -- Label version DB (bas-gauche)
+    verFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    verFS:SetPoint("LEFT", footer, "LEFT", UI.OUTER_PAD or 12, 0)
+    if UpdateDBVersionLabel then UpdateDBVersionLabel() end
+    -- ⚠️ Pas de version d’addon dans le footer (gmFS supprimé)
+
+    -- === Boutons du footer (créés DIRECTEMENT dans le footer) ===
+    purgeDBBtn  = UI.Button(footer, Tr("btn_purge_debug"), { size="sm", minWidth=120 })
+        :SetOnClick(function() GLOG.ClearDebugLogs(); Refresh() end)
+
+    purgeAllBtn = UI.Button(footer, Tr("btn_purge_full"),  { size="sm", minWidth=120 })
     purgeAllBtn:SetConfirm(Tr("lbl_purge_confirm_all"), function()
         if GLOG.WipeAllSaved then
             GLOG.WipeAllSaved()
@@ -347,10 +362,8 @@ local function Build(container)
         ReloadUI()
     end)
 
-    -- ➕ GM : Purge Lots & objets épuisés
-    local purgeEpuBtn = UI.Button(panel, Tr("btn_purge_free_items_lots"), { size="sm", minWidth=240})
-    purgeEpuBtn:SetPoint("RIGHT", purgeAllBtn, "LEFT", -8, 0)
-    purgeEpuBtn:SetShown(GLOG.IsMaster and GLOG.IsMaster())
+    -- Boutons GM (même logique que Synthese : présents mais masqués si non-GM)
+    purgeEpuBtn = UI.Button(footer, Tr("btn_purge_free_items_lots"), { size="sm", minWidth=240 })
     purgeEpuBtn:SetConfirm(Tr("lbl_purge_confirm_lots"), function()
         if GLOG.PurgeLotsAndItemsExhausted then
             local l, it = GLOG.PurgeLotsAndItemsExhausted()
@@ -360,10 +373,7 @@ local function Build(container)
         end
     end)
 
-    -- ➕ GM : Purger Ressources (tout effacer)
-    local purgeResBtn = UI.Button(panel, Tr("btn_purge_all_items_lots"), { size="sm", minWidth=180 })
-    purgeResBtn:SetPoint("RIGHT", purgeEpuBtn, "LEFT", -8, 0)
-    purgeResBtn:SetShown(GLOG.IsMaster and GLOG.IsMaster())
+    purgeResBtn = UI.Button(footer, Tr("btn_purge_all_items_lots"), { size="sm", minWidth=180 })
     purgeResBtn:SetConfirm(Tr("lbl_purge_confirm_all_lots"), function()
         if GLOG.PurgeAllResources then
             local l, it = GLOG.PurgeAllResources()
@@ -373,25 +383,9 @@ local function Build(container)
         end
     end)
 
-    -- ➕ Footer actions
-    footer = UI.CreateFooter(panel, 36)
-
-    -- ➕ Affichage version DB (bas gauche)
-    verFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    verFS:SetPoint("LEFT", footer, "LEFT", 12, 0)
-    if UpdateDBVersionLabel then UpdateDBVersionLabel() end
-
-    -- ➕ Affichage GM (à droite de la version)
-    gmFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    gmFS:SetPoint("LEFT", verFS, "RIGHT", 16, 0)
-    if UpdateAddonVersionLabel then UpdateAddonVersionLabel() end
-
-    -- ➕ Bouton GM : Forcer ma version (envoi direct d’un SYNC_FULL)
-    forceSyncBtn = UI.Button(footer, Tr("btn_force_version_gm"), { size="sm", minWidth=200,
-        tooltip = Tr("lbl_diffusing_snapshot") })
+    forceSyncBtn = UI.Button(footer, Tr("btn_force_version_gm"), { size="sm", minWidth=200, tooltip = Tr("lbl_diffusing_snapshot") })
     forceSyncBtn:SetConfirm(Tr("lbl_diffusing_snapshot_confirm"), function()
         if GLOG and GLOG._SnapshotExport and GLOG.Comm_Broadcast then
-            -- Option: on garde le comportement 'force' en incrémentant la révision locale si disponible
             local newrv = (GLOG.IncRev and GLOG.IncRev()) or nil
             local snap = GLOG._SnapshotExport()
             if newrv then snap.rv = newrv end
@@ -399,74 +393,68 @@ local function Build(container)
         end
     end)
 
-    -- ➕ Reparent dans le footer
-    purgeDBBtn:SetParent(footer)
-    purgeAllBtn:SetParent(footer)
+    -- Alignement à droite IMMÉDIAT (comme dans Synthese)
+    if UI.AttachButtonsFooterRight then
+        local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+        if isMaster then
+            UI.AttachButtonsFooterRight(footer, { forceSyncBtn, purgeEpuBtn, purgeResBtn, purgeDBBtn, purgeAllBtn })
+        else
+            UI.AttachButtonsFooterRight(footer, { purgeDBBtn, purgeAllBtn })
+        end
+    end
 
-    -- === Trois zones empilées : RECU (40%) / ENVOI (40%) / FILE (20%) ===
+    -- === Trois zones empilées : REÇU (40%) / ENVOI (40%) / FILE (reste) ===
     recvArea    = CreateFrame("Frame", nil, panel)
     sendArea    = CreateFrame("Frame", nil, panel)
     pendingArea = CreateFrame("Frame", nil, panel)
 
-    -- Titre + trait pour chaque zone
     UI.SectionHeader(recvArea,    Tr("lbl_incoming_packets"))
-    lvRecv    = UI.ListView(recvArea,    cols,         { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvRecv    = UI.ListView(recvArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
 
-    UI.SectionHeader(sendArea,    Tr("lbl_outcoming_packets"))
-    lvSend    = UI.ListView(sendArea,    cols,         { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
+    UI.SectionHeader(sendArea,    Tr("lbl_outgoing_packets"))
+    lvSend    = UI.ListView(sendArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
 
-    UI.SectionHeader(pendingArea, Tr("lbl_pending_packets"))
-    lvPending = UI.ListView(pendingArea, pendingCols,  { buildRow = BuildPendingRow, updateRow = UpdatePendingRow, topOffset = UI.SECTION_HEADER_H or 26, bottomAnchor = footer })
-
-    -- Colonnes simplifiées pour la file d'attente (heure / type / info)
-    local colsQueue = UI.NormalizeColumns({
+    UI.SectionHeader(pendingArea, Tr("lbl_pending_queue"))
+    lvPending = UI.ListView(pendingArea, {
         { key="time", title=Tr("col_time"), w=110 },
-        { key="type", title=Tr("col_type"),  w=100 },
+        { key="type", title=Tr("col_type"), w=100 },
         { key="info", title=Tr("col_request"), min=240, flex=1 },
+    }, {
+        buildRow = function(r)
+            local f = {}
+            f.time = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            f.type = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            f.info = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            return f
+        end,
+        updateRow = UpdatePendingRow,
+        topOffset = UI.SECTION_HEADER_H or 26
     })
-    local function BuildRowQueue(r)
-        local f = {}
-        f.time = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        f.type = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        f.info = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        return f
-    end
-    local function UpdateRowQueue(i, r, f, it)
-        local d = it.data or it
-        local dt = date and date("%H:%M:%S", tonumber(d.ts or 0)) or tostring(d.ts or "")
-        f.time:SetText(dt)
-        f.type:SetText(d.type or "")
-        f.info:SetText(d.info or (Tr("lbl_id_prefix") .. tostring(d.id or "")))
-    end
 
-    -- Positionnement responsive (40/40/20 de la hauteur utile)
+    -- Placement type Synthese : zones au-dessus du footer
     local function PositionAreas()
         local pH      = panel:GetHeight() or 600
-        local footerH = footer:GetHeight() or 36
-        local topOff  = 38
-        local gap     = 8
+        local footerH = footer:GetHeight() or (UI.FOOTER_H or 36)
+        local topOff  = 10
+        local gap     = 10
         local usable  = math.max(0, pH - footerH - topOff)
-        local hRecv   = math.floor((usable) * 0.40)
-        local hSend   = math.floor((usable) * 0.40)
-        local hPend   = math.max(0, usable - hRecv - hSend - (gap*2))
+        local hRecv   = math.floor(usable * 0.40)
+        local hSend   = math.floor(usable * 0.40)
 
-        -- RECU
         recvArea:ClearAllPoints()
         recvArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -topOff)
         recvArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -topOff)
         recvArea:SetHeight(hRecv)
 
-        -- ENVOI
         sendArea:ClearAllPoints()
         sendArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + hRecv + gap))
         sendArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + hRecv + gap))
         sendArea:SetHeight(hSend)
 
-        -- FILE d'attente
         pendingArea:ClearAllPoints()
         pendingArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + hRecv + gap + hSend + gap))
         pendingArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + hRecv + gap + hSend + gap))
-        pendingArea:SetPoint("BOTTOMLEFT", footer, "TOPLEFT",  0, 0)
+        pendingArea:SetPoint("BOTTOMLEFT",  footer, "TOPLEFT",  0, 0)
         pendingArea:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 0)
 
         if lvRecv and lvRecv.Layout then lvRecv:Layout() end
@@ -474,24 +462,34 @@ local function Build(container)
         if lvPending and lvPending.Layout then lvPending:Layout() end
     end
 
-
-    -- Calcul initial + relayout sur resize du panneau
     PositionAreas()
     if panel and panel.HookScript then
         panel:HookScript("OnSizeChanged", PositionAreas)
     end
 end
 
+
 -- ➕ Layout avec footer et visibilité GM
 local function Layout()
     local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+
+    -- Visibilités GM comme dans Synthese
     if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end
-    if UI.AttachButtonsFooterRight then
-        local buttons = { purgeDBBtn, purgeAllBtn }
-        if isMaster and forceSyncBtn then table.insert(buttons, 1, forceSyncBtn) end
-        UI.AttachButtonsFooterRight(footer, buttons, 8, nil)
+    if purgeEpuBtn  then purgeEpuBtn:SetShown(isMaster)  end
+    if purgeResBtn  then purgeResBtn:SetShown(isMaster)  end
+
+    -- Ré-attache les boutons à droite du footer (compact)
+    if UI.AttachButtonsFooterRight and footer then
+        if isMaster then
+            UI.AttachButtonsFooterRight(footer, { forceSyncBtn, purgeEpuBtn, purgeResBtn, purgeDBBtn, purgeAllBtn }, 8, nil)
+        else
+            UI.AttachButtonsFooterRight(footer, { purgeDBBtn, purgeAllBtn }, 8, nil)
+        end
     end
-    if lv and lv.Layout then lv:Layout() end
+
+    if lvRecv and lvRecv.Layout then lvRecv:Layout() end
+    if lvSend and lvSend.Layout then lvSend:Layout() end
+    if lvPending and lvPending.Layout then lvPending:Layout() end
 end
 
 -- ➕ Rafraîchissement temps réel lorsque des logs arrivent / changent d'état

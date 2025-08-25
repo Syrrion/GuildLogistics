@@ -54,10 +54,26 @@ f:SetScript("OnEvent", function(self, event, name)
             end)
         end
 
-        -- Slash /glog
+        -- Slash /glog (ouvre l'UI principale) + sous-commande "track" pour ouvrir le suivi
+        -- et activer l'enregistrement en arrière-plan
         SLASH_GLOG1 = "/glog"
-        SlashCmdList.GLOG = function()
-            if ns.ToggleUI then ns.ToggleUI() end
+        SlashCmdList.GLOG = function(msg)
+            local txt = tostring(msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+            if txt == "track" or txt == "tracker" or txt == "suivi" then
+                if ns and ns.GLOG then
+                    -- 🔹 Active l'enregistrement même si la fenêtre est fermée
+                    if ns.GLOG.GroupTracker_SetRecordingEnabled then
+                        ns.GLOG.GroupTracker_SetRecordingEnabled(true)
+                    end
+                    -- 🔹 Ouvre la popup minimaliste
+                    if ns.GLOG.GroupTracker_ShowWindow then
+                        ns.GLOG.GroupTracker_ShowWindow(true)
+                    end
+                end
+                return
+            end
+            -- Comportement par défaut : ouvrir/afficher l’UI principale
+            if ns and ns.ToggleUI then ns.ToggleUI() end
         end
 
         if ns.UI and ns.UI.Finalize then ns.UI.Finalize() end

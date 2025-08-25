@@ -2,100 +2,167 @@ local ADDON, ns = ...
 local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
 local PAD = (UI and UI.OUTER_PAD) or 16
+local ROW_GAP = 12
 
-local panel, chk
-local lblHeal, inHeal
-local lblUtil, inUtil
-local lblStone, inStone
-local resetBtn
+local panel
+local btnOpen, btnClear, slOpacity, cbRecording
+
+local function _RowY(prevY, h)
+    return prevY + (h or 0) + ROW_GAP
+end
+
+-- Active/désactive proprement un bouton (compatible gabarits différents)
+local function _SetButtonEnabled(b, enabled)
+    if not b then return end
+    if b.SetEnabled then b:SetEnabled(enabled) end
+    if enabled then
+        if b.Enable then b:Enable() end
+    else
+        if b.Disable then b:Disable() end
+    end
+    if b.SetAlpha then b:SetAlpha(enabled and 1 or 0.5) end
+end
+
+local function _UpdateButtonsEnabled()
+    local checked = false
+    if cbRecording then
+        if cbRecording.GetChecked then
+            checked = cbRecording:GetChecked() and true or false
+        elseif cbRecording.GetValue then
+            checked = cbRecording:GetValue() and true or false
+        end
+    else
+        checked = (GLOG and GLOG.GroupTracker_GetRecordingEnabled and GLOG.GroupTracker_GetRecordingEnabled()) or false
+    end
+    _SetButtonEnabled(btnOpen,  checked)
+    _SetButtonEnabled(btnClear, checked)
+end
 
 local function Build(container)
     panel = container
-
     if UI.ApplySafeContentBounds then
         UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
     end
 
     local y = 0
+    -- Section header (cohérent avec les autres onglets)
     y = y + (UI.SectionHeader(panel, Tr("tab_group_tracker"), { topPad = y }) or 26) + 8
 
-    -- Toggle fenêtre
-    chk = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    chk:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
-    chk.text = chk:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    chk.text:SetPoint("LEFT", chk, "RIGHT", 6, 0)
-    chk.text:SetText(Tr("group_tracker_toggle"))
-    chk:SetScript("OnClick", function(self)
-        local on = self:GetChecked() and true or false
-        if GLOG and GLOG.GroupTrackerSetEnabled then GLOG.GroupTrackerSetEnabled(on) end
-    end)
-    y = y + (chk:GetHeight() or 24) + 12
+    -- 📌 Ligne 1 : case à cocher « Activer le suivi »
+    local initial = false
+    if GLOG and GLOG.GroupTracker_GetRecordingEnabled then
+        initial = GLOG.GroupTracker_GetRecordingEnabled()
+    end
 
-    -- Cooldowns par catégorie
-    lblHeal = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblHeal:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
-    lblHeal:SetText(Tr("group_tracker_cooldown_heal"))
-    inHeal = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    inHeal:SetSize(64, 28); inHeal:SetAutoFocus(false); inHeal:SetNumeric(true)
-    inHeal:SetPoint("LEFT", lblHeal, "RIGHT", 8, 0)
-    inHeal:SetScript("OnTextChanged", function(self)
-        if GLOG and GLOG.GroupTrackerSetCooldown then
-            local v = tonumber(self:GetText() or "") or 0
-            GLOG.GroupTrackerSetCooldown("heal", v)
+    if UI.Checkbox then
+        cbRecording = UI.Checkbox(panel, "group_tracker_record_label", {
+            checked = initial,
+            tooltip = "group_tracker_record_tip",
+            minWidth = 360,
+        })
+        cbRecording:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        if cbRecording.SetOnValueChanged then
+            cbRecording:SetOnValueChanged(function(_, checked)
+                if GLOG and GLOG.GroupTracker_SetRecordingEnabled then
+                    GLOG.GroupTracker_SetRecordingEnabled(checked)
+                end
+                _UpdateButtonsEnabled()
+            end)
+        else
+            cbRecording:SetScript("OnClick", function(self)
+                local checked = self:GetChecked()
+                if GLOG and GLOG.GroupTracker_SetRecordingEnabled then
+                    GLOG.GroupTracker_SetRecordingEnabled(checked)
+                end
+                _UpdateButtonsEnabled()
+            end)
+        end
+    else
+        -- Fallback natif
+        cbRecording = CreateFrame("CheckButton", (ADDON or "GL").."_RecordCheck", panel, "UICheckButtonTemplate")
+        cbRecording:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        cbRecording:SetChecked(initial)
+        _G[cbRecording:GetName().."Text"]:SetText(Tr and Tr("group_tracker_record_label") or "group_tracker_record_label")
+        cbRecording:SetScript("OnClick", function(self)
+            if GLOG and GLOG.GroupTracker_SetRecordingEnabled then
+                GLOG.GroupTracker_SetRecordingEnabled(self:GetChecked())
+            end
+            _UpdateButtonsEnabled()
+        end)
+        if UI.SetTooltip then UI.SetTooltip(cbRecording, Tr("group_tracker_record_tip")) end
+    end
+    y = _RowY(y, 20)
+
+    -- 📌 Ligne 2 : deux boutons sur la même rangée (seront (dés)activés par _UpdateButtonsEnabled)
+    btnOpen = UI.Button(panel, "group_tracker_toggle", { size="md", minWidth=200 })
+    btnOpen:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    btnOpen:SetOnClick(function()
+        -- Garde-fou si jamais l’état visuel n’était pas à jour
+        if cbRecording and cbRecording.GetChecked and not cbRecording:GetChecked() then return end
+        if GLOG and GLOG.GroupTracker_ShowWindow then
+            GLOG.GroupTracker_ShowWindow(true)
         end
     end)
 
-    lblUtil = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblUtil:SetPoint("LEFT", inHeal, "RIGHT", 24, 0)
-    lblUtil:SetText(Tr("group_tracker_cooldown_util"))
-    inUtil = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    inUtil:SetSize(64, 28); inUtil:SetAutoFocus(false); inUtil:SetNumeric(true)
-    inUtil:SetPoint("LEFT", lblUtil, "RIGHT", 8, 0)
-    inUtil:SetScript("OnTextChanged", function(self)
-        if GLOG and GLOG.GroupTrackerSetCooldown then
-            local v = tonumber(self:GetText() or "") or 0
-            GLOG.GroupTrackerSetCooldown("util", v)
+    btnClear = UI.Button(panel, "btn_reset_data", { size="sm", variant="danger", minWidth=220 })
+    btnClear:SetPoint("LEFT", btnOpen, "RIGHT", 12, 0)
+    btnClear:SetOnClick(function()
+        if cbRecording and cbRecording.GetChecked and not cbRecording:GetChecked() then return end
+        if StaticPopup_Show then
+            StaticPopup_Show("GLOG_CONFIRM_CLEAR_SEGMENTS")
+        elseif GLOG and GLOG.GroupTracker_ClearHistory then
+            GLOG.GroupTracker_ClearHistory()
         end
     end)
 
-    lblStone = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    lblStone:SetPoint("LEFT", inUtil, "RIGHT", 24, 0)
-    lblStone:SetText(Tr("group_tracker_cooldown_stone"))
-    inStone = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
-    inStone:SetSize(64, 28); inStone:SetAutoFocus(false); inStone:SetNumeric(true)
-    inStone:SetPoint("LEFT", lblStone, "RIGHT", 8, 0)
-    inStone:SetScript("OnTextChanged", function(self)
-        if GLOG and GLOG.GroupTrackerSetCooldown then
-            local v = tonumber(self:GetText() or "") or 0
-            GLOG.GroupTrackerSetCooldown("stone", v)
+    local rowH = math.max(btnOpen:GetHeight() or 28, btnClear:GetHeight() or 24)
+    y = _RowY(y, rowH)
+
+    -- 📌 Ligne 3 : slider de transparence (localisé)
+    local percent = math.floor(((GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 0.95) * 100 + 0.5)
+    slOpacity = UI.Slider(panel, {
+        label  = "group_tracker_opacity_label", -- locales
+        min    = 30,
+        max    = 100,
+        step   = 5,
+        value  = percent,
+        width  = 360,
+        tooltip= "group_tracker_opacity_tip",   -- locales
+        format = function(v) return tostring(v) .. "%" end,
+        name   = (ADDON or "GL").."_OpacitySlider"
+    })
+    slOpacity:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    slOpacity:SetOnValueChanged(function(_, v)
+        if GLOG and GLOG.GroupTracker_SetOpacity then
+            local a = math.max(0.30, math.min(1.0, (tonumber(v) or 100)/100))
+            GLOG.GroupTracker_SetOpacity(a)
         end
     end)
+    y = _RowY(y, 26)
 
-    -- Reset session
-    resetBtn = UI.Button(panel, Tr("btn_reset_counters"), { size="sm", minWidth=140 })
-    resetBtn:ClearAllPoints()
-    resetBtn:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y + 40))
-    resetBtn:SetScript("OnClick", function()
-        if GLOG and GLOG.GroupTracker_Reset then GLOG.GroupTracker_Reset() end
-    end)
+    
 
-    -- Aide
+    -- 📌 Ligne 4 : Astuce /glog track
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y + 76))
+    hint:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
     hint:SetJustifyH("LEFT")
-    hint:SetText(Tr("group_tracker_hint"))
+    hint:SetText((Tr("group_tracker_hint") or ""))
+
+    -- État initial des boutons
+    _UpdateButtonsEnabled()
 end
 
-
 local function Refresh()
-    if not panel then return end
-    if chk and chk.SetChecked then chk:SetChecked((GLOG and GLOG.GroupTrackerIsEnabled and GLOG.GroupTrackerIsEnabled()) or false) end
-
-    if GLOG and GLOG.GroupTrackerGetCooldown then
-        if inHeal  and inHeal.SetText  then inHeal:SetText( tostring(GLOG.GroupTrackerGetCooldown("heal")  or 0) ) end
-        if inUtil  and inUtil.SetText  then inUtil:SetText( tostring(GLOG.GroupTrackerGetCooldown("util")  or 0) ) end
-        if inStone and inStone.SetText then inStone:SetText(tostring(GLOG.GroupTrackerGetCooldown("stone") or 0) ) end
+    if slOpacity and slOpacity.SetValue and GLOG and GLOG.GroupTracker_GetOpacity then
+        local p = math.floor((GLOG.GroupTracker_GetOpacity() or 0.95)*100 + 0.5)
+        slOpacity:SetValue(p)
     end
+    if cbRecording then
+        local v = (GLOG and GLOG.GroupTracker_GetRecordingEnabled and GLOG.GroupTracker_GetRecordingEnabled()) or false
+        if cbRecording.SetChecked then cbRecording:SetChecked(v) end
+        if cbRecording.SetValue then cbRecording:SetValue(v) end
+    end
+    _UpdateButtonsEnabled()
 end
 
 local function Layout() end

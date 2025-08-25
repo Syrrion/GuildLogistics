@@ -17,16 +17,43 @@ local state = {
     tick = nil,        -- ticker de refresh
 }
 
+-- 🔹 Forward-declare la variable locale (évite la capture globale nil)
+local _Store
+
+-- 🔹 Définition par assignation (ne pas redéclarer avec `local function _Store`)
+_Store = function()
+    GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
+    GuildLogisticsUI_Char.groupTracker = GuildLogisticsUI_Char.groupTracker or {}
+    local s = GuildLogisticsUI_Char.groupTracker
+
+    s.cooldown = s.cooldown or { heal = 300, util = 300, stone = 300 }
+    s.expiry    = s.expiry    or {}
+    s.segments  = s.segments  or {}
+    s.viewIndex = s.viewIndex or 1
+    s.enabled   = (s.enabled == true)            -- 🔹 Par défaut: false ⇒ la popup ne s’ouvre pas
+    s.opacity   = tonumber(s.opacity or 0.95) or 0.95
+    s.recording = (s.recording == true)
+
+    return s
+end
+
+local function _RecomputeEnabled()
+    local s = _Store()
+    local winShown = state.win and state.win:IsShown()
+    state.enabled = (winShown or s.recording) and true or false
+end
+
 local function _Store()
     GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
     GuildLogisticsUI_Char.groupTracker = GuildLogisticsUI_Char.groupTracker or {}
     local s = GuildLogisticsUI_Char.groupTracker
     s.cooldown = s.cooldown or { heal = 300, util = 300, stone = 300 }
     s.expiry   = s.expiry   or {} -- [full] = { heal = epoch, util = epoch, stone = epoch }
-    -- segments : { label, start, stop, isBoss, roster = { "Name-Realm", ... }, data = { [full] = { events = { {t,cat,spellID,spellName}, ... } } } }
-    s.segments = s.segments or {}
+    s.segments  = s.segments  or {}
     s.viewIndex = s.viewIndex or 1 -- 0 = live (uniquement en combat), 1 = segment le plus récent
-    s.enabled = (s.enabled == true)
+    s.enabled   = (s.enabled == true)
+    s.opacity   = tonumber(s.opacity or 0.95) or 0.95 -- transparence fenêtre (0.1..1.0)
+    s.recording = (s.recording == true) -- 🔹 Enregistrement en arrière-plan (UI fermée)
     return s
 end
 
@@ -540,11 +567,17 @@ local function _ensureWindow()
 
     local f = UI.CreatePlainWindow({
         title   = "group_tracker_title",
-        width   = 560,
-        height  = 360,
+        width   = 420,
+        height  = 308,
+        headerHeight = 22,
         strata  = "FULLSCREEN_DIALOG",
         level   = 220,
         saveKey = "GroupTrackerWindow",
+        -- 🔹 Position par défaut : aligné à GAUCHE de l’écran
+        defaultPoint    = "LEFT",
+        defaultRelPoint = "LEFT",
+        defaultX        = 24,
+        defaultY        = 0,
     })
     state.win = f
 
@@ -796,14 +829,75 @@ function GLOG.GroupTracker_ClearHistory()
 end
 
 function GLOG.GroupTracker_ShowWindow(show)
+    local s = _Store()
     if show then
-        local s = _Store()
         state.enabled = true
         _ensureWindow()
-        if state.win then state.win:Show(); state.win:_Refresh() end
+        if state.win then
+            -- 🔹 Applique l’opacité persistée
+            if state.win.SetAlpha and GLOG.GroupTracker_GetOpacity then
+                state.win:SetAlpha(GLOG.GroupTracker_GetOpacity())
+            end
+
+            -- 🔹 Ancrage par défaut : bord gauche de l’écran (si aucun point défini)
+            if not state.win._glog_default_anchored then
+                local hasPoints = (state.win.GetNumPoints and state.win:GetNumPoints() or 0) > 0
+                if not hasPoints then
+                    state.win:ClearAllPoints()
+                    state.win:SetPoint("LEFT", UIParent, "LEFT", 24, 0)
+                end
+                state.win._glog_default_anchored = true
+            end
+
+            state.win:Show()
+            if state.win._Refresh then state.win:_Refresh() end
+        end
     else
-        state.enabled = false
+        -- Ferme uniquement la fenêtre. L’enregistrement éventuel reste actif si l’option est cochée.
         if state.win and state.win.Hide then state.win:Hide() end
+        -- Recalcule l’état global d’activation (fenêtre visible OU enregistrement actif)
+        local winShown = state.win and state.win:IsShown()
+        state.enabled = (winShown or s.recording) and true or false
+    end
+end
+
+function GLOG.GroupTracker_GetOpacity()
+    local s = _Store()
+    local a = tonumber(s.opacity or 0.95) or 0.95
+    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
+    return a
+end
+
+function GLOG.GroupTracker_SetOpacity(a)
+    local s = _Store()
+    a = tonumber(a or 0.95) or 0.95
+    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
+    s.opacity = a
+    if state.win and state.win.SetAlpha then
+        state.win:SetAlpha(a)
+    end
+end
+
+function GLOG.GroupTracker_GetRecordingEnabled()
+    local s = _Store()
+    return s.recording == true
+end
+
+function GLOG.GroupTracker_SetRecordingEnabled(enabled)
+    local s = _Store()
+    s.recording = (enabled == true)
+
+    if s.recording then
+        -- Le suivi est activé : on ne force pas l'ouverture de la fenêtre ici.
+        -- (/glog track s'en charge si besoin)
+        _RecomputeEnabled()
+    else
+        -- Le suivi est désactivé : masquer la fenêtre si elle est ouverte
+        if state.win and state.win:IsShown() then
+            GLOG.GroupTracker_ShowWindow(false) -- fera aussi _RecomputeEnabled()
+        else
+            _RecomputeEnabled()
+        end
     end
 end
 

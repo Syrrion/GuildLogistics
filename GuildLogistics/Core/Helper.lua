@@ -14,6 +14,24 @@ local function truthy(v) v = tostring(v or ""); return (v == "1" or v:lower() ==
 local function now() return (time and time()) or 0 end
 local function normalizeStr(s) s = tostring(s or ""):gsub("%s+",""):gsub("'",""); return s:lower() end
 
+function GLOG.PreciseToEpoch(ts)
+    -- Convertit un timestamp "jeu" (GetTime*/GetTimePreciseSec) en epoch local
+    -- Sécurité : si on reçoit déjà un epoch (>= ~2001-09-09), on renvoie tel quel
+    ts = tonumber(ts or 0) or 0
+    if ts >= 1000000000 then
+        return math.floor(ts)
+    end
+
+    -- Base actuelle : epoch (local) moins temps relatif du client
+    local epochNow = (time and time()) or 0
+    local relNow   = (type(GetTimePreciseSec) == "function" and GetTimePreciseSec())
+                  or (type(GetTime)           == "function" and GetTime())
+                  or 0
+    local offset   = epochNow - relNow
+
+    return math.floor(offset + ts + 0.5)
+end
+
 -- =========================
 -- === Gestion des noms  ===
 -- =========================

@@ -2,7 +2,7 @@
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 1.3.1
+## Version: 2.0.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char
@@ -35,6 +35,7 @@ UI/UI_Colors.lua
 UI/UI_Badge.lua
 UI/UI_Float.lua
 UI/UI_PlainWindow.lua
+UI/UI_Slider.lua
 
 Tabs/Guilde.lua
 

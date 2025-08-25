@@ -1512,6 +1512,21 @@ function GLOG.SaveWindow(point, relTo, relPoint, x, y)
     GuildLogisticsUI.y        = y
 end
 
+-- ➕ Persistance : dernier onglet actif (par personnage)
+function GLOG.GetLastActiveTabLabel()
+    EnsureDB()
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    return GuildLogisticsUI.lastTabLabel
+end
+
+function GLOG.SetLastActiveTabLabel(label)
+    if not label or label == "" then return end
+    EnsureDB()
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    GuildLogisticsUI.lastTabLabel = tostring(label)
+end
+
+
 -- =========================
 -- ==== Demandes (GM) ======
 -- =========================
