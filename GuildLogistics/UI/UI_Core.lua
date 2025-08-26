@@ -119,6 +119,7 @@ function UI.LayoutRow(row, cols, fields)
             if f.SetJustifyH and c.justify then f:SetJustifyH(c.justify) end
             -- Empêche le débordement visuel/interaction hors cellule
             if f.SetClipsChildren then pcall(f.SetClipsChildren, f, true) end
+            if UI.ApplyCellTruncation then UI.ApplyCellTruncation(f, w - 8) end
         end
 
         x = x + w
@@ -409,6 +410,132 @@ function UI.Label(parent, opts)
     return fs
 end
 
+-- === Texte tronqué à la largeur (…)
+-- Utilitaires UTF-8 (évite de couper en plein milieu d'un caractère accentué)
+local function _utf8_iter(s)
+    return string.gmatch(tostring(s or ""), "[%z\1-\127\194-\244][\128-\191]*")
+end
+
+local function _utf8_sub(s, codepoints)
+    if not s or codepoints <= 0 then return "" end
+    local out, n = {}, 0
+    for ch in _utf8_iter(s) do
+        n = n + 1
+        out[n] = ch
+        if n >= codepoints then break end
+    end
+    return table.concat(out, "")
+end
+
+-- Mesure de texte en copiant la police d'un FontString donné
+function UI._MeasureStringWidthLike(fs, text)
+    UI._MEASURE_FS = UI._MEASURE_FS or UIParent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local m = UI._MEASURE_FS
+    m:Hide()
+    local file, size, flags = fs:GetFont()
+    if file and size then m:SetFont(file, size, flags) end
+    local fo = fs:GetFontObject()
+    if fo then m:SetFontObject(fo) end
+    m:SetText(tostring(text or ""))
+    return m:GetStringWidth() or 0
+end
+
+-- Tronque proprement en conservant un éventuel |c...|r
+function UI.TruncateTextToWidth(fs, fullText, maxWidth)
+    local text = tostring(fullText or "")
+    if maxWidth == nil or maxWidth <= 0 then return "" end
+    -- Si chaînes spéciales (textures), ne pas tenter de tronquer automatiquement
+    if string.find(text, "|T") then return text end
+
+    -- Conserver enveloppe de couleur si présente
+    local color = string.match(text, "^|c(%x%x%x%x%x%x%x%x)")
+    local inner = text
+    local hasClose = false
+    if color then
+        if string.sub(text, -2) == "|r" then
+            inner = string.sub(text, 11, -3) -- après |cXXXXXXXX et avant |r
+            hasClose = true
+        else
+            color = nil
+        end
+    end
+
+    -- Déjà assez court ?
+    local w = UI._MeasureStringWidthLike(fs, inner)
+    if w <= maxWidth then
+        return text
+    end
+
+    local ell = "…"
+    local lo, hi = 0, 0
+    for _ in _utf8_iter(inner) do hi = hi + 1 end
+    if hi <= 1 then
+        return (color and ("|c"..color..ell..(hasClose and "|r" or "")) or ell)
+    end
+
+    -- Recherche dichotomique du nombre max de glyphes avec "…"
+    local best = 0
+    while lo <= hi do
+        local mid = math.floor((lo + hi) / 2)
+        local cand = _utf8_sub(inner, mid) .. ell
+        local cw = UI._MeasureStringWidthLike(fs, cand)
+        if cw <= maxWidth then
+            best = mid
+            lo = mid + 1
+        else
+            hi = mid - 1
+        end
+    end
+
+    local trimmed = _utf8_sub(inner, math.max(best, 0)) .. ell
+    if color then
+        return "|c" .. color .. trimmed .. (hasClose and "|r" or "")
+    else
+        return trimmed
+    end
+end
+
+-- Applique la troncature à une "cellule" (FontString direct, ou frame avec .text)
+function UI.ApplyCellTruncation(cell, availWidth)
+    if cell and cell._noTruncation then return end
+    if not cell or not availWidth or availWidth <= 0 then return end
+
+    -- Trouve la cible texte
+    local target = nil
+    if type(cell.GetObjectType) == "function" and cell:GetObjectType() == "FontString" then
+        target = cell
+    elseif type(cell.GetObjectType) == "function" then
+        if cell.text and type(cell.text.GetObjectType) == "function" and cell.text:GetObjectType() == "FontString" then
+            target = cell.text
+        elseif cell.GetFontString and type(cell.GetFontString) == "function" then
+            local fs = cell:GetFontString()
+            if fs and fs.GetObjectType and fs:GetObjectType() == "FontString" then target = fs end
+        end
+    end
+    if not target then return end
+
+    -- Désactive le word wrap et limite à 1 ligne
+    if target.SetWordWrap then pcall(target.SetWordWrap, target, false) end
+    if target.SetMaxLines then pcall(target.SetMaxLines, target, 1) end
+
+    -- Hook SetText pour mémoriser le texte "complet"
+    if not target._origSetText then
+        target._origSetText = target.SetText
+        target.SetText = function(self, s)
+            self._fullText = tostring(s or "")
+            return self:_origSetText(self._fullText)
+        end
+    end
+
+    local full = target._fullText or (target.GetText and target:GetText()) or ""
+    local show = UI.TruncateTextToWidth(target, full, availWidth)
+    if target._origSetText then
+        target:_origSetText(show)
+    else
+        target:SetText(show)
+    end
+end
+
 -- Footer générique attaché au bas d’un panel
 function UI.CreateFooter(parent, height)
     local f = CreateFrame("Frame", nil, parent)
@@ -499,21 +626,46 @@ end
 function UI.SetItemCell(cell, item)
     if not cell or not item then return end
 
-    -- Lien WoW complet (pour tooltip)
-    local link = (item.itemID and select(2, GetItemInfo(item.itemID)))
-                 or item.itemLink
+    -- 1) Résolution robuste de l'itemID (prend item.itemID, puis itemLink numérique, puis "item:12345")
+    local itemID = tonumber(item.itemID)
+    if not itemID then
+        if type(item.itemLink) == "number" then
+            itemID = tonumber(item.itemLink)
+        elseif type(item.itemLink) == "string" then
+            local idstr = string.match(item.itemLink, "^item:(%d+)")
+            if idstr then itemID = tonumber(idstr) end
+        end
+    end
 
-    -- Nom affiché = sans crochets
-    local name = (link and link:gsub("%[",""):gsub("%]",""))
-                 or item.itemName
-                 or ("Objet #"..tostring(item.itemID or "?"))
+    -- 2) Résolution du lien (préférer GetItemInfo; sinon garder un lien texte complet s'il existe)
+    local link = nil
+    if itemID and GetItemInfo then
+        link = select(2, GetItemInfo(itemID))
+    end
+    if not link and type(item.itemLink) == "string" and string.find(item.itemLink, "|Hitem:") then
+        link = item.itemLink
+    end
 
-    local icon = (item.itemID and GetItemIcon(item.itemID)) or "Interface/Icons/INV_Misc_QuestionMark"
+    -- 3) Nom affiché
+    local name = item.itemName
+    if not name and type(link) == "string" then
+        name = string.match(link, "%[(.-)%]") -- extrait le nom entre crochets
+    end
+    if not name and itemID and GetItemInfo then
+        name = select(1, GetItemInfo(itemID))
+    end
+    if not name then
+        name = "Objet #" .. tostring(itemID or "?")
+    end
 
+    -- 4) Icône
+    local icon = (itemID and GetItemIcon and GetItemIcon(itemID)) or "Interface/Icons/INV_Misc_QuestionMark"
+
+    -- 5) Remplissage de la cellule + données tooltip
     cell.icon:SetTexture(icon)
     cell.text:SetText(name or "")
-    cell.btn._itemID = item.itemID
-    cell.btn._link   = link
+    cell.btn._itemID = itemID           -- SetItemByID sera utilisé si présent
+    cell.btn._link   = (type(link)=="string") and link or nil -- fallback Hyperlink si pas d'ID
 end
 
 -- == Badge cell (generic): colored badge with gloss + optional medal texture ==

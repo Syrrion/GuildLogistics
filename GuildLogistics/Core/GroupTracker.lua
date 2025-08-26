@@ -62,6 +62,7 @@ local function _Store()
     s.opacity   = tonumber(s.opacity or 0.95) or 0.95 -- transparence fenêtre (0.1..1.0)
     s.textOpacity = tonumber(s.textOpacity or 1.0) or 1.0 -- 🔹 transparence du TEXTE (0.1..1.0)
     s.recording = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
+    s.winOpen = (s.winOpen == true)
     return s
 end
 
@@ -301,7 +302,7 @@ local function _detectCategory(spellID, spellName)
                 local useName, useSpellID = GetItemSpell and GetItemSpell(itemID)
                 -- 1) Match direct sur l'ID du sort d'utilisation
                 if useSpellID and useSpellID == spellID then
-                    _CategoryBySpellID[spellID] = cat -- cache pour les suivants
+                    _CategoryBySpellID[spellID] = cat
                     return cat
                 end
                 -- 2) Match par nom du sort d'utilisation
@@ -309,6 +310,11 @@ local function _detectCategory(spellID, spellName)
                     local si = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(useName)
                     if si and si.spellID == spellID then
                         _CategoryBySpellID[spellID] = cat
+                        return cat
+                    end
+                    -- 2-bis) Si l'ID diverge mais que le NOM est identique, on accepte et on mémorise
+                    if spellName and tostring(useName):lower() == tostring(spellName):lower() then
+                        _CategoryBySpellName[tostring(useName):lower()] = cat
                         return cat
                     end
                 end
@@ -533,7 +539,7 @@ local function _ShowHistoryPopup(full)
     })
 
     local lv = UI.ListView(p.content, cols, {
-        topOffset = 40,
+        topOffset = 65,
         buildRow = function(r)
             local w = {}
             w.time  = UI.Label(r, { justify = "CENTER" })
@@ -604,7 +610,7 @@ local function _ensureWindow()
 
     local f = UI.CreatePlainWindow({
         title   = "group_tracker_title",
-        width   = 275,
+        width   = 260,
         height  = 308,
         headerHeight = 25,
         strata  = "FULLSCREEN_DIALOG",
@@ -614,6 +620,7 @@ local function _ensureWindow()
         defaultRelPoint = "LEFT",
         defaultX        = 24,
         defaultY        = 0,
+        contentPadBottomExtra = -30,
     })
     state.win = f
 
@@ -713,10 +720,10 @@ local function _ensureWindow()
 
     -- Colonnes
     local cols = UI.NormalizeColumns({
-        { key="name",   title=Tr("col_name"),          w=95, min=95, flex=1, justify="LEFT"  },
-        { key="heal",   title=Tr("col_heal_potion"),   w=49,  justify="CENTER" },
-        { key="util",   title=Tr("col_other_potions"), w=49,  justify="CENTER" },
-        { key="stone",  title=Tr("col_healthstone"),   w=49,  justify="CENTER" },
+        { key="name",   title=Tr("col_name"),          min=95, flex=1, justify="LEFT"  },
+        { key="heal",   title=Tr("col_heal_potion"),   w=51,  justify="CENTER" },
+        { key="util",   title=Tr("col_other_potions"), w=51,  justify="CENTER" },
+        { key="stone",  title=Tr("col_healthstone"),   w=51,  justify="CENTER" },
     })
 
     local lv = UI.ListView(f.content, cols, {
@@ -913,11 +920,19 @@ function GLOG.GroupTrackerSetEnabled(on)
 end
 
 function GLOG.GroupTrackerSetCooldown(cat, sec)
+    local s = _Store()
+    s.cooldown = s.cooldown or { heal = 300, util = 300, stone = 300 }
+    if cat and s.cooldown[cat] ~= nil then
+        s.cooldown[cat] = math.max(0, tonumber(sec) or s.cooldown[cat] or 300)
+    end
 end
 
 function GLOG.GroupTrackerGetCooldown(cat)
-    return 300
+    local s = _Store()
+    local cd = (s.cooldown and s.cooldown[cat or ""]) or 300
+    return tonumber(cd) or 300
 end
+
 
 function GLOG.GroupTracker_Reset()
     _clearLive()
@@ -940,6 +955,23 @@ function GLOG.GroupTracker_ShowWindow(show)
         if not state.win then return end
 
         local f = state.win
+        
+        -- 🧷 Mémorise l’ouverture et hooke OnShow/OnHide (une seule fois)
+        s.winOpen = true
+        if not f._openStateHooked then
+            f:HookScript("OnShow", function()
+                local st = _Store()
+                st.winOpen = true
+                _RecomputeEnabled()
+            end)
+            f:HookScript("OnHide", function()
+                local st = _Store()
+                st.winOpen = false
+                _RecomputeEnabled()
+            end)
+            f._openStateHooked = true
+        end
+
         -- Applique les réglages actuels
         local aWin  = (GLOG.GroupTracker_GetOpacity       and GLOG.GroupTracker_GetOpacity())       or 0.95
         local aText = (GLOG.GroupTracker_GetTextOpacity   and GLOG.GroupTracker_GetTextOpacity())   or 1.00
@@ -1001,6 +1033,8 @@ function GLOG.GroupTracker_ShowWindow(show)
         if f._Refresh then f:_Refresh() end
     else
         state.enabled = false
+        local s = _Store()
+        s.winOpen = false
         if state.win then state.win:Hide() end
     end
 end
@@ -1153,6 +1187,7 @@ ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 ev:RegisterEvent("PLAYER_REGEN_DISABLED")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("ENCOUNTER_START")
+ev:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 
 ev:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
@@ -1181,7 +1216,12 @@ ev:SetScript("OnEvent", function(_, event, ...)
             end
         end
 
-        if state.enabled then GLOG.GroupTracker_ShowWindow(true) end
+        -- Démarrage : si la fenêtre était ouverte la dernière fois, on la rouvre
+        if s.winOpen == true then
+            GLOG.GroupTracker_ShowWindow(true)
+        else
+            _RecomputeEnabled() 
+        end
 
     elseif event == "ADDON_LOADED" then
         local name = ...
@@ -1251,6 +1291,66 @@ ev:SetScript("OnEvent", function(_, event, ...)
             s.viewIndex = math.min(s.viewIndex or 1, maxIdx)
         end
         if state.win and state.win._Refresh then state.win:_Refresh() end
+
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if not state.enabled then return end
+        local unit, castGUID, spellID = ...
+        if not unit or not spellID then return end
+        -- On ne garde que player/raidX/partyX
+        if unit ~= "player" and (not unit:find("^raid") and not unit:find("^party")) then return end
+
+        local sName = (GetSpellInfo and select(1, GetSpellInfo(spellID))) or nil
+
+        -- On calcule tout de suite l'identité de l'unité
+        local name, realm = UnitName(unit)
+        if not name or name == "" then return end
+        local full = (realm and realm ~= "" and (name.."-"..realm)) or name
+        local now  = (time and time()) or 0
+        local guid = UnitGUID and UnitGUID(unit)
+
+        -- Catégorie via nos mappings (ItemID -> SpellID) et fallback par nom
+        local cat   = _detectCategory(spellID, sName)
+        if cat then
+            if _shouldAcceptEvent(guid, full, spellID, now) then
+                _onConsumableUsed(full, cat, spellID, sName)
+            end
+            return
+        end
+
+        -- 🔎 Secours : inspecter brièvement les auras pour attraper les consos à buff « décalé » (ex: Délice cavernicole)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.15, function()
+                local function FindAuraMatch(u)
+                    if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
+                        local i=1
+                        while true do
+                            local a = C_UnitAuras.GetBuffDataByIndex(u, i)
+                            if not a then break end
+                            local n = a.name and a.name:lower() or ""
+                            local sid = tonumber(a.spellId) or 0
+                            local c = _CategoryBySpellID[sid] or _CategoryBySpellName[n]
+                            if c then return c, sid, a.name end
+                            i=i+1
+                        end
+                    elseif UnitAura then
+                        local i=1
+                        while true do
+                            local n, _, _, _, _, _, _, _, _, sid = UnitAura(u, i, "HELPFUL")
+                            if not n then break end
+                            local lower = n:lower()
+                            local c = _CategoryBySpellID[sid or 0] or _CategoryBySpellName[lower]
+                            if c then return c, (sid or 0), n end
+                            i=i+1
+                        end
+                    end
+                end
+
+                local c2, sid2, n2 = FindAuraMatch(unit)
+                if c2 and _shouldAcceptEvent(guid, full, sid2 ~= 0 and sid2 or spellID, (time and time()) or now) then
+                    _onConsumableUsed(full, c2, sid2 ~= 0 and sid2 or spellID, n2 or sName)
+                end
+            end)
+        end
 
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         if not state.enabled then return end

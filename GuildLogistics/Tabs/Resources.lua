@@ -228,7 +228,15 @@ local function UpdateRowLots(i, r, f, it)
     f.name:SetText(lot.name or (Tr("lbl_lot")..tostring(lot.id)))
     f.type:SetText(N>1 and (N..Tr("lbl_uses")) or "1"..Tr("lbl_use"))
     f.status:SetText( (st=="EPU" and Tr("badge_exhausted")) or (GLOG.Lot_Remaining and (GLOG.Lot_Remaining(lot).." "..Tr("suffix_remaining"))) or ((N-used).." "..Tr("suffix_remaining")))
-    f.content:SetText(tostring(#(lot.itemIds or {})))
+    -- Pour un lot "or uniquement" (itemIds vide et totalCopper > 0) => afficher "0".
+    local itemsCount  = #(lot.itemIds or {})
+    local totalCopper = tonumber(lot.totalCopper or lot.copper or 0) or 0
+    if itemsCount == 0 and totalCopper > 0 then
+        f.content:SetText("0")
+    else
+        f.content:SetText(tostring(itemsCount))
+    end
+
     f.total:SetText(moneyCopper(totalCopper))
 
     f.content:SetOnClick(function()
@@ -380,7 +388,62 @@ local function Build(container)
         table.sort(idxs)
 
         if #idxs == 0 then
-            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r "..Tr("lbl_no_res_selected")..".", 1,0.4,0.4)
+            -- Aucun objet sélectionné : proposer la création d'un lot "or uniquement"
+            local dlg = UI.CreatePopup({ title=Tr("btn_create_bundle"), width=480, height=240 })
+
+            -- Nom du lot
+            local nameLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            nameLabel:SetText(Tr("lbl_bundle_name"))
+            local nameInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate")
+            nameInput:SetSize(280, 28); nameInput:SetAutoFocus(true)
+
+            -- Nombre d'utilisations (multi-session)
+            local nLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            nLabel:SetText(Tr("lbl_num_uses"))
+            local nInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate")
+            nInput:SetSize(80, 28); nInput:SetNumeric(true); nInput:SetNumber(1)
+
+            -- Montant (en or)
+            local gLabel = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            gLabel:SetText(Tr("lbl_amount_gold"))
+            local gInput = CreateFrame("EditBox", nil, dlg.content, "InputBoxTemplate")
+            gInput:SetSize(120, 28); gInput:SetNumeric(true); gInput:SetNumber(0)
+
+            -- Layout simple
+            nameLabel:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 6, -14)
+            nameInput:SetPoint("LEFT", nameLabel, "RIGHT", 8, 0)
+
+            nLabel:SetPoint("TOPLEFT", nameLabel, "BOTTOMLEFT", 0, -14)
+            nInput:SetPoint("LEFT", nLabel, "RIGHT", 8, 0)
+
+            gLabel:SetPoint("TOPLEFT", nLabel, "BOTTOMLEFT", 0, -14)
+            gInput:SetPoint("LEFT", gLabel, "RIGHT", 8, 0)
+
+            dlg:SetButtons({
+                { text=Tr("btn_create"), default=true, onClick=function()
+                    local nm = nameInput:GetText() or ""
+                    if nm == "" then nm = Tr("lbl_bundle") end
+
+                    local N = tonumber(nInput:GetNumber() or 1) or 1
+                    if N < 1 then N = 1 end
+                    local isMulti = (N > 1)
+
+                    local gold = tonumber(gInput:GetNumber() or 0) or 0
+                    if gold <= 0 then
+                        UI.PopupConfirm(Tr("err_amount_invalid"))
+                        return
+                    end
+                    local copper = gold * 10000
+
+                    if GLOG.Lot_CreateFromAmount then
+                        GLOG.Lot_CreateFromAmount(nm, copper, isMulti, N)
+                        selected = {}
+                        if ns.RefreshAll then ns.RefreshAll() end
+                    end
+                end },
+                { text=Tr("btn_cancel"), variant="ghost" },
+            })
+
             return
         end
 

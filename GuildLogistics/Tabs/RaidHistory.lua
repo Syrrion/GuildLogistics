@@ -116,14 +116,16 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 return
             end
 
-            -- Calcule les charges utilisées et max
-            local used, maxSessions = 0, 0
-            for _, lot in ipairs(lots) do
-                local l = GLOG.Lot_GetById and GLOG.Lot_GetById(lot.id)
-                if l then
-                    used       = used + (tonumber(l.used or 0) or 0)
-                    maxSessions= maxSessions + (tonumber(l.sessions or 1) or 1)
-                end
+            -- Résumé pour CETTE sortie : #lots & Σ charges utilisées (somme des n)
+            local nbLots, usedCharges = #lots, 0
+            for _, lotRef in ipairs(lots) do
+                local l  = GLOG.Lot_GetById and GLOG.Lot_GetById(lotRef.id)
+                local N  = tonumber(lotRef.N or (l and l.sessions) or 1) or 1
+                if N < 1 then N = 1 end
+                local n  = tonumber(lotRef.n or 0) or 0
+                if n < 0 then n = 0 end
+                if n > N then n = N end
+                usedCharges = usedCharges + n
             end
 
             local dlg = UI.CreatePopup({ 
@@ -135,7 +137,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
             -- Ajoute la ligne de précision sous le titre
             if dlg.title then
                 local fs = dlg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                fs:SetText(string.format(Tr("lbl_used_charges").." : %d / %d", used, maxSessions))
+                fs:SetText(string.format("%s : %d   •   %s : %d", Tr("lbl_used_bundles"), nbLots, Tr("lbl_used_charges"), usedCharges))
                 fs:SetPoint("TOP", dlg.title, "BOTTOM", 0, -4)
             end
 
@@ -175,7 +177,15 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                     f2.qty:SetText(qtyText or "")
                     f2.amt:SetText(amtText or UI.MoneyFromCopper(math.floor(tonumber(row.amtP or (exp and exp.copper) or 0))))
 
-                    UI.SetItemCell(f2.item, exp)
+                    if exp then
+                        UI.SetItemCell(f2.item, exp)
+                    else
+                        -- Ligne synthétique (lot "or uniquement" ou lot sans dépenses listées)
+                        f2.item.icon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+                        f2.item.text:SetText(Tr("lbl_bundle_gold_only"))
+                        f2.item.btn._itemID = nil
+                        f2.item.btn._link   = nil
+                    end
                 end,
             })
 
@@ -192,16 +202,17 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 end
 
                 if lot then
+                    local addedAny = false
                     -- Cherche toutes les dépenses liées à ce lot
                     for _, e in ipairs(dbExp) do
                         if e.lotId == lot.id then
-                            -- ✅ PRORATA : (n charges utilisées pour CE raid) / (N charges max du lot)
+                            -- ✅ PRORATA : (charges utilisées POUR CE raid) / (charges max du lot)
                             local N = tonumber(lotRef.N or lot.sessions or 1) or 1
                             if N <= 0 then N = 1 end
-                            local nUsed = tonumber(lotRef.n or 1) or 1
+                            local nUsed = tonumber(lotRef.n or 0) or 0
                             if nUsed < 0 then nUsed = 0 end
                             if nUsed > N then nUsed = N end
-                            local frac       = nUsed / N
+                            local frac = (N > 0) and (nUsed / N) or 0
 
                             local baseQty    = tonumber(e.qty or 0) or 0
                             local baseCopper = tonumber(e.copper or 0) or 0
@@ -217,7 +228,31 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                             local amtText = UI.MoneyFromCopper(amtP)
 
                             table.insert(rows, { lot = lot, item = e, qtyP = qtyP, amtP = amtP, qtyText = qtyText, amtText = amtText })
+                            addedAny = true
                         end
+                    end
+
+                    -- ⚠️ Aucun "expense" lié : on ajoute une ligne synthétique (ex. lot en or sans objet)
+                    if not addedAny then
+                        local N = tonumber(lotRef.N or lot.sessions or 1) or 1
+                        if N <= 0 then N = 1 end
+                        local nUsed = tonumber(lotRef.n or 0) or 0
+                        if nUsed < 0 then nUsed = 0 end
+                        if nUsed > N then nUsed = N end
+                        local frac = (N > 0) and (nUsed / N) or 0
+
+                        local totalCopper = tonumber(lot.totalCopper or 0) or 0
+                        local amtP = math.floor(totalCopper * frac + 0.5)
+
+                        table.insert(rows, {
+                            lot     = lot,
+                            item    = nil,         -- ➜ ligne synthétique
+                            qtyP    = nil,
+                            amtP    = amtP,
+                            qtyText = "",          -- vide (pas de quantité)
+                            amtText = UI.MoneyFromCopper(amtP),
+                            _synthetic = true,
+                        })
                     end
                 end
             end

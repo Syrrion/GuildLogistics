@@ -278,13 +278,25 @@ end
 
 function GLOG.GetNameClass(name)
     local c = GLOG._guildCache
-    if not c then return nil end
-    local by = c.byName or {}
-    local k  = GLOG.NormName(name)
-    local e  = k and by[k]
-    local mainKey = e and e.main
-    -- 1) classe du main (clé déjà normalisée) ; 2) sinon classe du perso scanné
-    local cls = (mainKey and c.mainsClass and c.mainsClass[mainKey]) or (e and e.class)
+    local cls = nil
+
+    if c then
+        local by = c.byName or {}
+        local k  = GLOG.NormName(name)
+        local e  = k and by[k]
+        local mainKey = e and e.main
+        -- 1) classe du main ; 2) sinon classe du personnage scanné
+        cls = (mainKey and c.mainsClass and c.mainsClass[mainKey]) or (e and e.class)
+    end
+
+    -- 🔁 Fallback : tenter via les unités du groupe/raid si pas en guilde
+    if (not cls or cls == "") and ns and ns.Util and ns.Util.LookupClassForName then
+        local fromUnits = ns.Util.LookupClassForName(name)
+        if fromUnits and fromUnits ~= "" then
+            return fromUnits
+        end
+    end
+
     return cls
 end
 

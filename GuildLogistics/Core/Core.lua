@@ -1302,6 +1302,38 @@ function GLOG.Lot_Remaining(lot)   -- utilisations restantes
     return math.max(0, N - used)
 end
 
+-- Valeur restante (en cuivre) d'un lot en tenant compte des utilisations consommées
+function GLOG.Lot_RemainingCopper(lot)
+    _ensureLots()
+    if not lot then return 0 end
+    local total = tonumber(lot.totalCopper or lot.copper or 0) or 0
+    local N     = tonumber(lot.sessions or 1) or 1
+    local used  = tonumber(lot.used or 0) or 0
+    if N <= 0 then return 0 end
+    local remUses = math.max(0, math.min(N, N - used))
+    return math.floor((total * remUses) / N) -- arrondi inf. pour ne jamais surestimer
+end
+
+-- Somme totale des ressources disponibles (ressources libres + valeur restante des lots non épuisés), en cuivre
+function GLOG.Resources_TotalAvailableCopper()
+    EnsureDB(); _ensureLots()
+    local free = 0
+    local e = GuildLogisticsDB.expenses or { list = {} }
+    for _, it in ipairs(e.list or {}) do
+        local lid = tonumber(it.lotId or 0) or 0
+        if lid == 0 then
+            free = free + (tonumber(it.copper) or 0)
+        end
+    end
+
+    local remainLots = 0
+    for _, l in ipairs(GuildLogisticsDB.lots.list or {}) do
+        remainLots = remainLots + (GLOG.Lot_RemainingCopper(l) or 0)
+    end
+    return free + remainLots
+end
+
+
 -- Création : fige le contenu depuis une liste d'index ABSOLUS de GuildLogisticsDB.expenses.list
 -- isMulti = true/false ; sessions = N si multi (>=1)
 function GLOG.Lot_Create(name, isMulti, sessions, absIdxs)
@@ -1328,6 +1360,39 @@ function GLOG.Lot_Create(name, isMulti, sessions, absIdxs)
     -- ➕ Diffusion GM
     if GLOG.BroadcastLotCreate and GLOG.IsMaster and GLOG.IsMaster() then GLOG.BroadcastLotCreate(l) end
     return l
+end
+
+-- Création d'un lot "or uniquement" (sans rattacher d'objets)
+-- name: string, amountCopper: number (cuivre), isMulti: bool, sessions: N
+function GLOG.Lot_CreateFromAmount(name, amountCopper, isMulti, sessions)
+    _ensureLots()
+    local L = GuildLogisticsDB.lots
+    local id = L.nextId or 1
+
+    local N = tonumber(sessions) or 1
+    if N < 1 then N = 1 end
+    if not isMulti then N = 1 end
+
+    local l = {
+        id = id,
+        name = name or "Lot",
+        sessions = N,
+        used = 0,
+        totalCopper = tonumber(amountCopper) or 0,
+        itemIds = {},     -- aucun objet rattaché
+    }
+
+    table.insert(L.list, l)
+    L.nextId = id + 1
+
+    if ns.Emit then ns.Emit("lots:changed") end
+    if ns.RefreshActive then ns.RefreshActive() end
+
+    -- ➕ Diffusion GM
+    if GLOG.BroadcastLotCreate and GLOG.IsMaster and GLOG.IsMaster() then
+        GLOG.BroadcastLotCreate(l)
+    end
+    return true
 end
 
 -- Suppression possible uniquement si jamais utilisé (rend les ressources libres)

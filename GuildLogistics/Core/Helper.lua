@@ -80,6 +80,47 @@ end
 U.CleanFullName  = CleanFullName
 U.NormalizeFull  = NormalizeFull
 
+-- 🔎 Récupération générique de la classe d'un joueur via les unités du groupe/raid
+-- Retourne un classTag (ex: "WARRIOR") ou nil
+function U.LookupClassForName(name)
+    local targetKey = (ns and ns.GLOG and ns.GLOG.NormName and ns.GLOG.NormName(name))
+                      or tostring(name or ""):lower()
+    if not targetKey or targetKey == "" then return nil end
+
+    local function classOf(unit)
+        if not UnitExists or not UnitExists(unit) then return nil end
+        local n, r = UnitName(unit)
+        if not n or n == "" then return nil end
+        local full = (r and r ~= "" and (n.."-"..r)) or n
+        local key  = (ns and ns.GLOG and ns.GLOG.NormName and ns.GLOG.NormName(full))
+                    or tostring(full or ""):lower()
+        if key ~= targetKey then return nil end
+
+        local _, classTag = UnitClass(unit)
+        if classTag and classTag ~= "" then return classTag end
+
+        local guid = UnitGUID and UnitGUID(unit)
+        if guid and GetPlayerInfoByGUID then
+            local _, _, _, _, _, classByGUID = GetPlayerInfoByGUID(guid)
+            if classByGUID and classByGUID ~= "" then return classByGUID end
+        end
+        return nil
+    end
+
+    -- Priorité : player, puis raid, sinon party
+    local c = classOf("player"); if c then return c end
+    if IsInRaid and IsInRaid() then
+        for i = 1, (GetNumGroupMembers() or 0) do
+            c = classOf("raid"..i); if c then return c end
+        end
+    else
+        for i = 1, 4 do
+            c = classOf("party"..i); if c then return c end
+        end
+    end
+    return nil
+end
+
 local function SamePlayer(a,b)
     a, b = tostring(a or ""), tostring(b or ""); if a=="" or b=="" then return false end
     -- Égalité sur le nom complet uniquement

@@ -629,6 +629,8 @@ local function _send(typeName, channel, target, kv)
     Seq = Seq + 1
     kv.t = typeName
     kv.s = Seq
+    -- ⚠️ Attention : 'kv.t' est réservé au TYPE de message par l'enveloppe réseau.
+    -- Ne pas réutiliser 't' pour des champs applicatifs dans les payloads (utiliser 'tc', 'amt', etc.).
 
     local payload = packPayloadStr(kv)
     local parts = {}
@@ -1496,6 +1498,7 @@ function GLOG._HandleFull(sender, msgType, kv)
                 refunded = safenum(kv.r,0) ~= 0,
                 participants = {},
             }
+            rec.hid = safenum(kv.h or kv.hid, 0)
             for i = 1, #(kv.P or {}) do rec.participants[i] = kv.P[i] end
 
             -- ➕ parse L (lots) envoyé dans l'add (compat: L peut être liste de CSV)
@@ -1546,7 +1549,7 @@ function GLOG._HandleFull(sender, msgType, kv)
         local t = GuildLogisticsDB.history or {}
         for i = #t, 1, -1 do
             local rec = t[i]
-            local match = (hid > 0 and safenum(rec.hid,0) == hid) or (hid == 0 and safenum(rec.ts,0) == ts)
+            local match = (hid > 0 and safenum(rec.hid,0) == hid) or (ts > 0 and safenum(rec.ts,0) == ts)
             if match then
                 table.remove(t, i)
                 break
@@ -1564,17 +1567,33 @@ function GLOG._HandleFull(sender, msgType, kv)
         GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
 
         local id = safenum(kv.id, 0); if id <= 0 then return end
-        for _, l0 in ipairs(GuildLogisticsDB.lots.list) do if safenum(l0.id,0) == id then return end end
+
+        -- Remplacer le lot existant (au lieu d’ignorer le LOT_CREATE)
+        local existingIndex, existing = nil, nil
+        for i, l0 in ipairs(GuildLogisticsDB.lots.list) do
+            if safenum(l0.id,0) == id then existingIndex, existing = i, l0; break end
+        end
+
+        -- Copie défensive des IDs (ne jamais aliaser kv.I)
+        local items = {}
+        if type(kv.I) == "table" then
+            for i2 = 1, #kv.I do
+                items[#items+1] = safenum(kv.I[i2], 0)
+            end
+        end
 
         local l = {
             id = id,
             name = kv.n or ("Lot " .. tostring(id)),
             sessions = safenum(kv.N, 1),
-            used = safenum(kv.u, 0),
-            totalCopper = safenum(kv.t, 0),
-            itemIds = {},
+            used = safenum(math.max(tonumber(kv.u or 0) or 0, tonumber(existing and existing.used or 0) or 0), 0),
+            totalCopper = safenum(tonumber(kv.tc) or tonumber(kv.t), 0),
+            itemIds = items,
         }
-        for _, v in ipairs(kv.I or {}) do l.itemIds[#l.itemIds+1] = safenum(v, 0) end
+
+        if existingIndex then
+            table.remove(GuildLogisticsDB.lots.list, existingIndex)
+        end
 
         -- ➕ Sécurités de cohérence côté client
         -- 1) Recalcule le total si absent/invalide
@@ -2415,11 +2434,12 @@ function GLOG.BroadcastLotCreate(l)
         n  = l.name or ("Lot " .. tostring(l.id or "")),
         N  = safenum(l.sessions, 1),
         u  = safenum(l.used, 0),
-        t  = safenum(l.totalCopper, 0),
+        tc = safenum(l.totalCopper, 0), 
         I  = {},
         rv = rv,
         lm = GuildLogisticsDB.meta.lastModified,
     }
+
     for _, eid in ipairs(l.itemIds or {}) do payload.I[#payload.I+1] = safenum(eid, 0) end
     GLOG.Comm_Broadcast("LOT_CREATE", payload)
 end
@@ -2712,7 +2732,7 @@ function GLOG.GM_CreateLot(name, sessions, totalCopper, itemIds)
         n  = name,
         N  = safenum(sessions, 1),
         u  = 0,
-        t  = safenum(total, 0),
+        tc = safenum(total, 0), -- ⚠️ 'tc' au lieu de 't'
         I  = itemIds or {},
         rv = rv,
         lm = GuildLogisticsDB.meta.lastModified,

@@ -16,11 +16,15 @@ function UI.CreatePlainWindow(opts)
     local titleText = Tr(opts.title or "")
     local w       = tonumber(opts.width or 560)
     local h       = tonumber(opts.height or 360)
+    local minW    = tonumber(opts.width  or 320)
+    local minH    = tonumber(opts.height or 200)
     local strata  = opts.strata or "FULLSCREEN_DIALOG"
     local level   = tonumber(opts.level or 220)
     local headerH = tonumber(opts.headerHeight or 24)
     local saveKey = tostring(opts.saveKey or ("Plain_"..(titleText or "Window")))
     local pad     = tonumber(opts.contentPad or (UI and UI.GUTTER) or 8)
+    local padBottomExtra = tonumber(opts.contentPadBottomExtra or 0) or 0
+    local resizeVerticalOnly = (opts.resizeVerticalOnly == true)
 
     -- Persistance (position/taille)
     local function _GetStore()
@@ -40,7 +44,16 @@ function UI.CreatePlainWindow(opts)
     f:SetMovable(true)
     f:EnableMouse(true)
     f:SetResizable(true)
-    if f.SetResizeBounds then f:SetResizeBounds(300, 200) end
+    if f.SetResizeBounds then
+        if resizeVerticalOnly then
+            -- Largeur verrouillée à la largeur **actuelle**, hauteur mini = déclarée
+            local cw = math.floor((f:GetWidth() or minW) + 0.5)
+            f:SetResizeBounds(cw, minH, cw, 4000)
+        else
+            -- Mini = dimensions **déclarées**
+            f:SetResizeBounds(minW, minH)
+        end
+    end
 
     -- Fond global 25%
     f.bg = f:CreateTexture(nil, "BACKGROUND")
@@ -72,10 +85,10 @@ function UI.CreatePlainWindow(opts)
     f.close:SetPoint("RIGHT", f.header, "RIGHT", -2, 0)
     f.close:SetSize(22, 22)
 
-    -- 🔹 Conteneur de contenu standard (pour y attacher ListView, etc.)
+-- 🔹 Conteneur de contenu standard (pour y attacher ListView, etc.)
     f.content = CreateFrame("Frame", nil, f)
     f.content:SetPoint("TOPLEFT",     f, "TOPLEFT",     pad, -(headerH + pad))
-    f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -pad, -pad)
+    f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -pad, -(pad + padBottomExtra))
 
     -- Redimensionnement coin bas-droit
     f.resize = CreateFrame("Button", nil, f)
@@ -85,8 +98,19 @@ function UI.CreatePlainWindow(opts)
     tex:SetAllPoints()
     tex:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
     tex:SetAlpha(0.7)
-    f.resize:SetScript("OnMouseDown", function() f:StartSizing("BOTTOMRIGHT") end)
+    -- En mode verticalOnly on ne tire que le bord BAS, pas le coin BR
+    f.resize:SetScript("OnMouseDown", function() f:StartSizing(resizeVerticalOnly and "BOTTOM" or "BOTTOMRIGHT") end)
     f.resize:SetScript("OnMouseUp",   function() f:StopMovingOrSizing() end)
+    -- Calque/rafraîchit les bornes (utilise les mini déclarés)
+    local function _ApplyResizeBounds()
+        if not f.SetResizeBounds then return end
+        if resizeVerticalOnly then
+            local cw = math.floor((f:GetWidth() or minW) + 0.5)
+            f:SetResizeBounds(cw, minH, cw, 4000)
+        else
+            f:SetResizeBounds(minW, minH)
+        end
+    end
 
     -- Persistance pos/size
     local function Save()
@@ -104,6 +128,11 @@ function UI.CreatePlainWindow(opts)
         f:ClearAllPoints()
         f:SetPoint(p, UIParent, rp, tonumber(x or 0), tonumber(y or 0))
         f:SetSize(tonumber(st.w or w), tonumber(st.h or h))
+        _ApplyResizeBounds()
+        -- Garantit qu’on ne descend pas sous les mini **déclarés**
+        local cw, ch = f:GetSize()
+        if cw < minW then f:SetWidth(minW) end
+        if ch < minH then f:SetHeight(minH) end
     end
     f:SetScript("OnHide", Save)
     f:HookScript("OnSizeChanged", Save)

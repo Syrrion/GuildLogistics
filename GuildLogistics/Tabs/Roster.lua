@@ -3,7 +3,8 @@ local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, noGuildMsg
+local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, resourceFS, sepFS, bothFS, noGuildMsg
+
 -- État d’affichage ...
 local reserveCollapsed = true
 local reserveToggleBtn
@@ -48,6 +49,12 @@ local cols = UI.NormalizeColumns({
 local function money(v)
     v = tonumber(v) or 0
     return (UI and UI.MoneyText) and UI.MoneyText(v) or (tostring(v).." po")
+end
+
+-- Affichage cuivre → g/s/c
+local function moneyCopper(v)
+    v = tonumber(v) or 0
+    return (UI and UI.MoneyFromCopper) and UI.MoneyFromCopper(v) or (tostring(math.floor(v/10000)).." po")
 end
 
 local function CanActOn(name)
@@ -471,6 +478,23 @@ local function Refresh()
         local txt = (UI and UI.MoneyText) and UI.MoneyText(total) or (tostring(total).." po")
         totalFS:SetText("|cffffd200"..Tr("lbl_total_balance").." :|r " .. txt)
     end
+    -- Total ressources (en cuivre -> arrondi à l'or comme les soldes)
+    local rcopper = 0
+    if GLOG and GLOG.Resources_TotalAvailableCopper then
+        rcopper = GLOG.Resources_TotalAvailableCopper() or 0
+    end
+
+    if resourceFS then
+        local rtxt = (UI and UI.MoneyText) and UI.MoneyText(rcopper / 10000) or (tostring(math.floor(rcopper / 10000 + 0.5)).." po")
+        resourceFS:SetText("|cffffd200"..Tr("lbl_total_resources").." :|r " .. rtxt)
+    end
+
+    -- Total cumulé = soldes (en or) + ressources (converties en or), même arrondi que MoneyText
+    if bothFS then
+        local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
+        local ctxt = (UI and UI.MoneyText) and UI.MoneyText(combinedGold) or (tostring(math.floor(combinedGold + 0.5)).." po")
+        bothFS:SetText("|cffffd200"..Tr("lbl_total_both").." :|r " .. ctxt)
+    end
 end
 
 -- Footer
@@ -603,6 +627,26 @@ local function Build(container)
     footer = UI.CreateFooter(panel, 36)
     totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
+
+    -- Compteur "Total ressources" (si vous l'avez déjà créé, ce bloc est idempotent)
+    if not resourceFS then
+        resourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        resourceFS:SetPoint("LEFT", totalFS, "RIGHT", 24, 0)
+    end
+
+    -- Séparateur visuel (léger, gris)
+    if not sepFS then
+        sepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+        sepFS:SetPoint("LEFT", resourceFS, "RIGHT", 16, 0)
+        sepFS:SetText("|")
+    end
+
+    -- Compteur "Total cumulé" (soldes + ressources)
+    if not bothFS then
+        bothFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        bothFS:SetPoint("LEFT", sepFS, "RIGHT", 16, 0)
+    end
+
 
     local isGM = GLOG.IsMaster and GLOG.IsMaster()
     BuildFooterButtons(footer, isGM)
