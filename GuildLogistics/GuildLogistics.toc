@@ -2,7 +2,7 @@
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 2.0.5
+## Version: 2.1.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char
@@ -15,6 +15,7 @@ Locales/locales-frFR.lua
 
 Data/BiS_Trinkets.lua
 Data/Potions.lua
+Data/Upgrades.lua
 
 Core/Core.lua
 Core/Helper.lua
@@ -47,6 +48,12 @@ Tabs/Resources.lua
 Tabs/Requests.lua
 
 Tabs/BiS.lua
+Tabs/Helpers_Upgrades.lua
+Tabs/Helpers_Delves.lua
+Tabs/Helpers_Dungeons.lua
+Tabs/Helpers_Raids.lua
+Tabs/Helpers_Crests.lua
+
 Tabs/Helpers_GroupTracker.lua
 
 Tabs/Settings.lua

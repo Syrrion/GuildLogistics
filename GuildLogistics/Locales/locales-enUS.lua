@@ -10,28 +10,28 @@ local L = ns.L
 
 
 -- ============================================== --
--- ===                 ONGLETS                 === --
+-- ===                 TABS                   === --
 -- ============================================== --
 L["tab_roster"]           = "Roster"
-L["tab_start_raid"]       = "Start Raid"
-L["tab_history"]          = "History of outings"
+L["tab_start_raid"]       = "Start a raid"
+L["tab_history"]          = "Raid history"
 L["tab_resources"]        = "Resources"
-L["tab_requests"]         = "Awaiting transactions"
-L["tab_debug"]            = "Data Broadcast"
-L["tab_settings"]         = "Settings"
-L["tab_guild_members"]    = "Guild Members"
+L["tab_requests"]         = "Pending transactions"
+L["tab_debug"]            = "Data broadcast"
+L["tab_settings"]         = "Options"
+L["tab_guild_members"]    = "Guild members"
 
 
 -- ============================================== --
--- ===     TITRES / APPLICATION / SYNCHRO      === --
+-- ===     TITLES / APPLICATION / SYNC         === --
 -- ============================================== --
-L["msg_no_guild"]         = "You don’t belong to any guild on this character"
+L["msg_no_guild"]         = "You don't belong to any guild on this character"
 L["app_title"]            = "Guild Logistics"
 L["main_title_guild"]     = "Guild"
-L["sync_data"]            = "Data synchronization"
+L["sync_data"]            = "Synchronizing..."
 L["btn_reload"]           = "Reload"
 
--- ➕ Obsolescence version
+-- ➕ Outdated version
 L["popup_outdated_title"] = "Outdated version"
 L["msg_outdated_line1"]   = "Your version of "..L["app_title"].." (%s) is outdated."
 L["msg_outdated_line2"]   = "A newer version is available: %s."
@@ -40,7 +40,7 @@ L["msg_outdated_from"]    = "Reported by: %s"
 
 
 -- ============================================== --
--- ===          COLONNES / LIBELLÉS            === --
+-- ===          COLUMNS / LABELS              === --
 -- ============================================== --
 L["col_time"]             = "Time"
 L["col_dir"]              = "Direction"
@@ -68,60 +68,60 @@ L["col_source"]           = "Source"
 L["col_bundle"]           = "Bundle"
 L["col_content"]          = "Content"
 L["col_uses"]             = "Uses"
-L["col_total_value"]      = "Total Value"
+L["col_total_value"]      = "Total value"
 L["col_level_short"]      = "Lvl"
-L["col_ilvl"]             = "iLvl (Max)\rof main"
+L["col_ilvl"]             = "iLvl (Max)\rfrom main"
 L["col_attendance"]       = "Attendance"
 L["col_participants"]     = "Participants"
 L["col_value"]            = "Value"
 L["col_price"]            = "Price"
 L["col_total"]            = "Total"
-L["col_last_seen"]        = "Last Seen"
+L["col_last_seen"]        = "Last seen"
 L["col_rerolls"]          = "Rerolls"
-L["col_mplus_score"]      = "Main’s M+ Score"
-L["col_mplus_key"]        = "Main’s Mythic+ Key"
+L["col_mplus_score"]      = "M+ Score\rfrom main"
+L["col_mplus_key"]        = "Main Mythic+ Key"
 L["col_state"]            = "State"
 L["col_request"]          = "Request"
-L["col_version"]          = "Addon Version"
+L["col_version"]          = "Addon version"
 L["lbl_of_main"]          = "of main"
 
 
 -- ============================================== --
--- ===           BOUTONS / ACTIONS             === --
+-- ===           BUTTONS / ACTIONS            === --
 -- ============================================== --
 L["btn_view"]             = "View"
-L["btn_purge_all"]        = "Full Purge"
-L["btn_purge_bundles_exhausted"] = "Purge Bundles & depleted items"
-L["btn_purge_resources"]  = "Purge Resources"
+L["btn_purge_all"]        = "Full purge"
+L["btn_purge_bundles_exhausted"] = "Purge bundles & exhausted items"
+L["btn_purge_resources"]  = "Purge resources"
 L["btn_force_version_gm"] = "Force my version (GM)"
 L["btn_approve"]          = "Approve"
 L["btn_refuse"]           = "Refuse"
-L["btn_make_free"]        = "Make Free"
-L["btn_remove_free"]      = "Cancel Free"
+L["btn_make_free"]        = "Make free"
+L["btn_remove_free"]      = "Remove free"
 L["btn_back"]             = "< Back"
 L["btn_add_to_roster"]    = "Add to Roster"
 L["btn_remove_from_roster"] = "Remove from Roster"
-L["btn_add_player"]       = "Add Player"
-L["btn_clear_all_free"]   = "Clear All (Free)"
+L["btn_add_player"]       = "Add player"
+L["btn_clear_all_free"]   = "Clear all (free)"
 L["btn_close"]            = "Close"
 L["btn_delete_short"]     = "X"
-L["btn_enable_debug"]     = "Enable Debug"
-L["btn_create_bundle"]    = "Create Bundle"
+L["btn_enable_debug"]     = "Enable debug"
+L["btn_create_bundle"]    = "Create bundle"
 L["btn_deposit_gold"]     = "Deposit"
 L["btn_withdraw_gold"]    = "Withdraw"
-L["btn_stop_recording"]   = "Stop Recording"
-L["btn_start_recording_expenses"] = "Start Recording Expenses"
-L["add_guild_member"]     = "Roster Management"
-L["guild_members"]        = "Guild Members"
-L["btn_purge_full"]       = "Full Purge"
-L["btn_purge_free_items_lots"] = "Purge Bundles & depleted items"
-L["btn_purge_all_items_lots"]  = "Purge all Bundles & Items"
-L["btn_notify_players"]   = "Notify Players"
+L["btn_stop_recording"]   = "Stop recording"
+L["btn_start_recording_expenses"] = "Start recording expenses"
+L["add_guild_member"]     = "Roster management"
+L["guild_members"]        = "Guild members"
+L["btn_purge_full"]       = "Full purge"
+L["btn_purge_free_items_lots"] = "Purge bundles & exhausted items"
+L["btn_purge_all_items_lots"]  = "Purge all bundles & items"
+L["btn_notify_players"]   = "Notify players"
 L["btn_confirm"]          = "Confirm"
 L["btn_cancel"]           = "Cancel"
 L["btn_create"]           = "Create"
 L["btn_split"]            = "Split"
-L["btn_show_hidden_reserve"] = "Show Hidden Players"
+L["btn_show_hidden_reserve"] = "Show hidden players"
 L["btn_purge_debug"]      = "Purge Debug" -- (deduplication: keep 2nd occurrence)
 
 
@@ -130,43 +130,43 @@ L["btn_purge_debug"]      = "Purge Debug" -- (deduplication: keep 2nd occurrence
 -- ============================================== --
 L["col_alias"]            = "Alias"
 L["btn_set_alias"]        = "Alias…"
-L["popup_set_alias_title"]= "Set Alias"
+L["popup_set_alias_title"]= "Set alias"
 L["lbl_alias"]            = "Alias:"
 
 
 -- ============================================== --
--- ===      LISTES / BADGES / LIBELLÉS        === --
+-- ===      LISTS / BADGES / LABELS           === --
 -- ============================================== --
 L["lbl_bundles"]          = "Bundles"
 L["lbl_in_roster"]        = "In roster"
 L["lbl_in_reserve"]       = "In reserve"
-L["lbl_guild_members"]    = "Guild Members"
-L["lbl_usable_bundles"]   = "Usable Bundles"
-L["lbl_used_bundles"]     = "Used Bundles"
-L["lbl_item_reserve"]     = "Item Reserve"
-L["lbl_usable_bundles_raids"] = "Usable Bundles for Raids"
-L["lbl_participating_players"] = "Participating Players"
-L["lbl_reserved_players"] = "Reserved Players"
+L["lbl_guild_members"]    = "Guild members"
+L["lbl_usable_bundles"]   = "Usable bundles"
+L["lbl_used_bundles"]     = "Used bundles"
+L["lbl_item_reserve"]     = "Item reserve"
+L["lbl_usable_bundles_raids"] = "Usable raid bundles"
+L["lbl_participating_players"] = "Participating players"
+L["lbl_reserved_players"] = "Reserved players"
 L["lbl_bundle"]           = "Bundle"
-L["lbl_no_data"]          = "No Data..."
-L["opt_ui_theme"]         = "UI Theme"
-L["opt_open_on_login"]    = "Open automatically on login"
-L["lbl_active_roster"]    = "Active Roster"
+L["lbl_no_data"]          = "No data..."
+L["opt_ui_theme"]         = "UI theme"
+L["opt_open_on_login"]    = "Open automatically at login"
+L["lbl_active_roster"]    = "Active roster"
 L["lbl_message"]          = "Message"
-L["lbl_message_received"] = "Message Received"
-L["lbl_message_sent"]     = "Message Sent"
+L["lbl_message_received"] = "Message received"
+L["lbl_message_sent"]     = "Message sent"
 L["lbl_shop"]             = "Shop"
 L["lbl_ah"]               = "AH"
-L["lbl_incoming_packets"] = "Incoming Packets"
-L["lbl_outcoming_packets"]= "Outgoing Packets"
-L["lbl_pending_packets"]  = "Pending Packets"
-L["lbl_diffusing_snapshot"] = "Immediately broadcast a full snapshot"
-L["lbl_diffusing_snapshot_confirm"] = "Broadcast and FORCE GM’s version?"
+L["lbl_incoming_packets"] = "Incoming packets list"
+L["lbl_outcoming_packets"]= "Outgoing packets list"
+L["lbl_pending_packets"]  = "Pending packets list"
+L["lbl_diffusing_snapshot"] = "Immediately diffuse a full snapshot"
+L["lbl_diffusing_snapshot_confirm"] = "Diffuse and FORCE GM version?"
 L["lbl_status_sent"]      = "SENT"
 L["lbl_status_waiting"]   = "Waiting"
-L["lbl_status_inprogress"]= "In Progress"
+L["lbl_status_inprogress"]= "In progress"
 L["lbl_status_transmitted"]= "Transmitted"
-L["lbl_status_discovering"]= "Discovering…"
+L["lbl_status_discovering"]= "Discovering..."
 L["lbl_status_elected"]   = "Elected: "
 L["lbl_status_assembling"]= "Assembling"
 L["lbl_empty_payload"]    = "(empty payload)"
@@ -178,22 +178,23 @@ L["lbl_lot"]              = "Bundle "
 L["lbl_left_short"]       = "rem."
 L["lbl_refunded"]         = "Refunded"
 L["lbl_closed"]           = "Closed"
-L["lbl_used_charges"]     = "Charges Used"
+L["lbl_used_charges"]     = "Charges used"
 L["lbl_bundle_gold_only"] = "Gold"
-L["lbl_recent_online"]    = "Online < 1 month (most recent character)"
+L["lbl_recent_online"]    = "Online < 1 month (most recent char)"
 L["lbl_old_online"]       = "Last login ≥ 1 month"
 L["lbl_no_player_found"]  = "No player found"
 L["lbl_out_of_guild"]     = "Players outside guild"
 L["confirm_delete"]       = "Delete this player?"
-L["lbl_scan_roster_progress"] = "Scanning roster in progress..."
+L["lbl_scan_roster_progress"] = "Scanning roster..."
 L["lbl_from_roster_question"] = "From roster?"
-L["lbl_total_balance"]    = "Total Balances"
-L["lbl_total_resources"]    = "Total Resources"
-L["lbl_total_both"]       = "Available Balances"
-L["lbl_status_recieved"]  = "Received"
-L["lbl_guild_members"]    = "Guild Members"
-L["lbl_sep_online"]  = "Online"
-L["lbl_sep_offline"] = "Offline"
+L["lbl_total_balance"]    = "Total balances"
+L["lbl_total_resources"]  = "Total resources"
+L["lbl_total_both"]       = "Remaining balance"
+L["lbl_status_recieved"]  = "Received" 
+L["lbl_guild_members"]    = "Guild members"
+L["lbl_sep_online"]       = "Online"
+L["lbl_sep_offline"]      = "Offline"
+
 
 -- ============================================== --
 -- ===           POPUPS / PROMPTS             === --
@@ -241,22 +242,22 @@ L["tooltip_remove_history4"] = "• If CLOSED: no refund will be made."
 
 
 -- ============================================== --
--- ===   TOOLTIPS / MESSAGES / PRÉFIXES       === --
+-- ===   TOOLTIPS / MESSAGES / PREFIXES       === --
 -- ============================================== --
 L["badge_approved_list"]  = "Approved via list"
 L["badge_refused_list"]   = "Refused via list"
-L["warn_debit_n_players_each"] = "You will debit %d player(s) of %s each."
+L["warn_debit_n_players_each"] = "You will debit %d player(s) %s each."
 L["prefix_add_gold_to"]   = "Add gold to "
 L["prefix_remove_gold_from"] = "Remove gold from "
 L["prefix_delete"]        = "Delete "
 L["tooltip_send_back_active_roster"] = "Send this player back to Active Roster"
 L["tooltip_view_raids_history"]      = "View raid history"
-L["badge_exhausted"]      = "Depleted"
+L["badge_exhausted"]      = "Exhausted"
 L["suffix_remaining"]     = "remaining"
-
+L["range_to"]             = "to"
 
 -- ============================================== --
--- ===            STATUTS COLORÉS             === --
+-- ===            COLORED STATUS              === --
 -- ============================================== --
 L["status_online"]        = "Online"
 L["status_empty"]         = "-"
@@ -272,19 +273,19 @@ L["opt_alliance"]         = "Alliance"
 L["opt_horde"]            = "Horde"
 L["opt_neutral"]          = "Neutral"
 L["opt_auto"]             = "Automatic"
-L["opt_script_errors"]   = "Show Lua errors"
-L["yes"]                 = "Yes"
-L["no"]                  = "No"
+L["opt_script_errors"]    = "Show Lua errors"
+L["yes"]                  = "Yes"
+L["no"]                   = "No"
 
 -- ============================================== --
--- ===     NOTIFS / MINIMAP / INDICATEURS     === --
+-- ===     NOTIFS / MINIMAP / INDICATORS      === --
 -- ============================================== --
 L["tooltip_minimap_left"]        = "Left click: Open/close window"
 L["tooltip_minimap_drag"]        = "Drag: move icon around minimap"
 L["btn_ok"]                      = "OK"
 L["popup_tx_request_message"]    = "|cffffd200Requester:|r %s\n|cffffd200Operation:|r %s %s\n\nApprove?"
-L["popup_deducted_amount_fmt"]   = "|cffffd200Deducted Amount:|r %s"
-L["popup_remaining_balance_fmt"] = "|cffffd200Remaining Balance:|r %s"
+L["popup_deducted_amount_fmt"]   = "|cffffd200Amount deducted:|r %s"
+L["popup_remaining_balance_fmt"] = "|cffffd200Remaining balance:|r %s"
 L["lbl_status_present_colored"]  = "|cff40ff40Present|r"
 L["lbl_status_deleted_colored"]  = "|cffff7070Deleted|r"
 L["lbl_db_version_prefix"]       = "DB v"
@@ -292,17 +293,17 @@ L["lbl_id_prefix"]               = "ID "
 
 
 -- ============================================== --
--- ===         INVITATIONS CALENDRIER         === --
+-- ===         CALENDAR INVITATIONS           === --
 -- ============================================== --
-L["pending_invites_title"]       = "Pending Invitations"
-L["pending_invites_message_fmt"] = "You have %d unanswered calendar invitation(s).\nPlease respond.\nThis window will reappear at each login as long as invitations remain pending."
-L["btn_open_calendar"]           = "Open Calendar"
+L["pending_invites_title"]       = "Pending invitations"
+L["pending_invites_message_fmt"] = "You have %d unanswered calendar invitation(s).\nPlease respond.\nThis window will reappear at login while pending invitations remain."
+L["btn_open_calendar"]           = "Open calendar"
 L["col_when"]                    = "When"
 L["col_event"]                   = "Event"
 
 
 -- ============================================== --
--- ===         JOURS DE LA SEMAINE (min)      === --
+-- ===         WEEKDAYS (min)                 === --
 -- ============================================== --
 L["weekday_mon"] = "Monday"
 L["weekday_tue"] = "Tuesday"
@@ -314,83 +315,207 @@ L["weekday_sun"] = "Sunday"
 
 
 -- ============================================== --
--- ===      OPTIONS : NOTIFICATIONS UI        === --
+-- ===      OPTIONS : UI NOTIFICATIONS        === --
 -- ============================================== --
-L["options_notifications_title"] = "Popup Display"
+L["options_notifications_title"] = "Popup display"
 L["opt_popup_calendar_invite"]   = "Calendar invite notification"
 L["opt_popup_raid_participation"]= "Raid participation notification"
 
 
 -- ============================================== --
--- ===           Onglet BiS (Trinkets)        === --
+-- ===           BiS TAB (Trinkets)           === --
 -- ============================================== --
-L["tab_bis"]         = "Trinkets BiS"
+L["tab_bis"]         = "BiS Trinkets"
 L["col_tier"]        = "Tier"
 L["col_owned"]       = "Owned"
 L["lbl_class"]       = "Class"
 L["lbl_spec"]        = "Specialization"
 L["lbl_bis_filters"] = "Filters"
-L["msg_no_data"]     = "No Data"
+L["msg_no_data"]     = "No data"
 L["footer_source_wowhead"] = "Source: wowhead.com"
-L["bis_intro"] = "This tab lists BiS trinkets by class and specialization.\nRanks S to F indicate priority (S being best). Use the dropdowns to change class and specialization."
-L["col_useful_for"]    = "Useful for"
-L["btn_useful_for"]    = "Useful for..."
-L["popup_useful_for"]      = "Other classes having this object in their Tier-List"
+L["bis_intro"] = "This tab lists BiS trinkets by class and specialization.\nRanks S to F indicate priority (S being best). Use dropdowns to change class and specialization."
+L["col_useful_for"]        = "Useful for"
+L["btn_useful_for"]        = "Useful for..."
+L["popup_useful_for"]      = "Other classes that list this item in their Tier-List"
 L["col_rank"]              = "Rank"
 L["col_class"]             = "Class"
 L["col_spec"]              = "Specialization"
 L["msg_no_usage_for_item"] = "No class/spec references this item in the BiS tables."
 
-
 -- ============================================== --
--- ===    CATEGORIES (navigation latérale)       ===
+-- ===    CATEGORIES (side navigation)        === --
 -- ============================================== --
 L["cat_guild"]    = "Guild"
 L["cat_raids"]    = "Raids"
 L["cat_tools"]    = "Tools"
+L["cat_tracker"]  = "Tracker"
 L["cat_info"]     = "Helpers"
 L["cat_settings"] = "Options"
 L["cat_debug"]    = "Debug"
 
+-- ====== Upgrade tracks (Helpers) ======
+L["tab_upgrade_tracks"]       = "Upgrade tracks (ilvl)"
+L["upgrade_header_itemlevel"] = "ITEM LEVELS"
+L["upgrade_header_crests"]    = "REQUIRED CRESTS"
+L["upgrade_track_adventurer"] = "ADVENTURER"
+L["upgrade_track_veteran"]    = "VETERAN"
+L["upgrade_track_champion"]   = "CHAMPION"
+L["upgrade_track_hero"]       = "HERO"
+L["upgrade_track_myth"]       = "MYTH"
+
+-- ====== Crests ======
+L["crest_valor"]   = "Valor"
+L["crest_worn"]    = "Worn"
+L["crest_carved"]  = "Carved"
+L["crest_runic"]   = "Runic"
+L["crest_golden"]  = "Golden"
+
+-- ====== Upgrade steps ======
+L["upgrade_step_adventurer"] = "Adventurer %d/8"
+L["upgrade_step_veteran"]    = "Veteran %d/8"
+L["upgrade_step_champion"]   = "Champion %d/8"
+L["upgrade_step_hero"]       = "Hero %d/6"
+L["upgrade_step_myth"]       = "Myth %d/6"
+
+
+-- ====== Dungeons (Helpers) ======
+L["tab_dungeons_loot"]             = "Dungeons (ilvl & vault)"
+L["dungeons_header_activity"]      = "— — —"
+L["dungeons_header_dungeon_loot"]  = "DUNGEON LOOT"
+L["dungeons_header_vault"]         = "VAULT"
+L["dungeons_header_crests"]        = "CRESTS"
+L["dng_row_normal"]                = "Normal dungeons"
+L["dng_row_timewalking"]           = "Timewalking"
+L["dng_row_heroic"]                = "Heroic dungeons"
+L["dng_row_m0"]                    = "Mythic 0"
+L["dng_row_key_fmt"]               = "Key level %d"
+L["dungeon_no_tag"]                = "no item mention"
+L["max_short"]                     = "max"
+
+-- Intro text
+L["dng_note_intro"]   = "Season 3 of The War Within adjusts the item level of all dungeons:"
+L["dng_note_week1"]   = "Week 1: Mythic 0 dungeons drop ilvl 681 (Champion 1/8)."
+L["dng_note_week2"]   = "Week 2: Tazavesh in Mythic 0 drops ilvl 694 (Hero 1/6)."
+L["dng_note_vault"]   = "The Great Vault offers up to 3 choices depending on the highest dungeon level completed (Heroic, Mythic, Mythic+ key, or Timewalking)."
+
+-- Keystone scaling paragraph
+L["dng_note_keystone_scaling"] =
+"Item levels for Mythic+ dungeons scale up to level 10 keys, " ..
+"with 2 gear pieces per dungeon (at level 10) and 1 additional piece every 5 levels. " ..
+"In addition, the weekly Great Vault offers up to 3 loot options depending on completing 1, 4, and 8 " ..
+"maximum-level dungeons in Heroic, Mythic, Mythic+ key, or Timewalking."
+
+
+-- ====== Delves (Helpers) ======
+L["tab_delves"]            = "Delves (rewards)"
+L["delves_header_level"]   = "LEVEL"
+L["delves_header_chest"]   = "ABUNDANT CHEST"
+L["delves_header_map"]     = "TREASURE MAP"
+L["delves_header_vault"]   = "VAULT"
+L["delves_level_prefix"]   = "Level %s"
+L["delves_cell_fmt"]       = "%d: %s (%d max)"
+
+-- Intro text above
+L["delves_intro_title"]    = "Rewards & functioning"
+L["delves_intro_b1"]       = "Chests have a chance to contain a random gear piece with ilvl 655 (linked to battalion)."
+L["delves_intro_b2"]       = "Delves quartermaster offers starter gear with ilvl 668 (Veteran) in exchange for Fragments."
+L["delves_intro_b3"]       = "You can find 1 treasure map per week per character at 20% of the season journey progression."
+
+
+-- ====== Raids (Helpers) ======
+L["tab_raid_ilvls"]          = "Raids (iLvl per difficulty)"
+L["raid_header_difficulty"]  = "DIFFICULTY"
+L["difficulty_lfr"]          = "LFR"
+L["difficulty_normal"]       = "NORMAL"
+L["difficulty_heroic"]       = "HEROIC"
+L["difficulty_mythic"]       = "MYTHIC"
+
+-- Table rows
+L["raid_row_group1"]         = "Plexus, Rou'ethar, Naazindhri"
+L["raid_row_group2"]         = "Araz, Hunters and Fractillus"
+L["raid_row_group3"]         = "Nexus-King and Dimensius"
+
+-- Footer
+L["raid_footer_ilvl_max"]    = "MAX ITEM LEVEL"
+L["tab_raid_loot"]           = "Manaforge Omega"
+L["raid_intro_b1"]           = "The final raid Manaforge Omega contains several gear pieces from ilvl 671 to 723:"
+L["raid_intro_b2"]           = "- Timewalking raids offer ilvl 681 (Champion 1) when active."
+L["raid_intro_b3"]           = "- The raid contains up to 3 ilvl tiers with 1 upgrade track increase every 3 bosses."
+L["raid_intro_b4"]           = "- Unlike Liberation of Terremine, the upgrade track starts at 2/8 (instead of 1) on early bosses."
+
+
+-- ====== Crests (tab & headers) ======
+L["tab_crests"]              = "Crests (sources)"
+L["crests_header_crest"]     = "CRESTS"
+L["crests_header_chasms"]    = "DELVES"
+L["crests_header_dungeons"]  = "DUNGEONS"
+L["crests_header_raids"]     = "RAIDS"
+L["crests_header_outdoor"]   = "OUTDOOR"
+
+-- Labels & formats
+L["crest_range"]             = "%s (%d to %d)"
+L["label_level"]             = "Level %d"
+L["label_crests_n"]          = "%d crests"
+L["label_per_boss"]          = "%d crests per boss"
+L["label_per_cache"]         = "%d crests per cache"
+L["label_except_last_boss"]  = "(except last boss)"
+L["label_na"]                = "N/A"
+
+-- Source names
+L["gouffre_classic"]         = "Classic delve"
+L["gouffre_abundant"]        = "Abundant delve"
+L["archaeologist_loot"]      = "Archaeologist loot"
+L["heroic"]                  = "Heroic"
+L["normal"]                  = "Normal"
+L["lfr"]                     = "Raid Finder"
+L["mythic"]                  = "Mythic"
+L["mythic0"]                 = "Mythic 0"
+L["mplus_key"]               = "Mythic+ key"
+L["weekly_event"]            = "Weekly event"
+L["treasures_quests"]        = "Treasures/Quests"
+
+
 -- ====== Group tracker (Helpers) ======
-L["tab_group_tracker"]         = "Consumables Group Tracker"
-L["group_tracker_title"]       = "Consumables Group Tracker"
-L["group_tracker_toggle"]      = "Show tracking window"
-L["group_tracker_hint"]       = "Tip: To open the tracking window directly, type this command in the chat |cffaaaaaa/glog track|r"
-L["btn_reset_counters"]        = "Reset counters"
+L["tab_group_tracker"]        = "Tracker"
+L["group_tracker_title"]      = "Tracker"
+L["group_tracker_toggle"]     = "Show tracking window"
+L["group_tracker_hint"]       = "Tip: To open the tracking window directly, type this command in chat |cffaaaaaa/glog track|r"
+L["btn_reset_counters"]       = "Reset counters"
 
 L["group_tracker_cooldown_heal"]  = "Heal potion CD (s)"
 L["group_tracker_cooldown_util"]  = "Other potions CD (s)"
 L["group_tracker_cooldown_stone"] = "Healthstone CD (s)"
 
 L["col_heal_potion"]   = "Heal"
-L["col_other_potions"] = "Pot"
+L["col_other_potions"] = "Prepot"
 L["col_healthstone"]   = "Stone"
 L["status_ready"]      = "Ready"
-L["history_title"]   = "History: %s"
-L["col_time"]        = "Time"
-L["col_category"]    = "Category"
-L["col_spell"]       = "Item"
-L["history_ooc"]     = "Out of combat"
-L["history_combat"]  = "Combat"
+L["history_title"]     = "History: %s"
+L["col_time"]          = "Time"
+L["col_category"]      = "Category"
+L["col_spell"]         = "Item"
+L["history_ooc"]       = "Out of combat"
+L["history_combat"]    = "Combat"
+L["confirm_clear_history"] = "Clear encounter history?"
+L["btn_reset_data"]    = "Clear encounter history"
 
 L["match_healthstone"] = "healthstone"
 L["match_potion"]      = "potion"
 L["match_heal"]        = "heal"
 L["match_mana"]        = "mana"
-L["confirm_clear_history"] = "Clear encounters history?"
-L["btn_reset_data"] =  "Clear encounters history"
 
-L["group_tracker_opacity_label"] = "Opacity"
-L["group_tracker_opacity_tip"]   = "Sets the opacity of the tracking window."
+L["group_tracker_opacity_label"] = "Transparency"
+L["group_tracker_opacity_tip"]   = "Set the tracking window transparency."
 L["group_tracker_record_label"]  = "Enable tracking"
 L["group_tracker_record_tip"]    = "Enable tracking"
-L["group_tracker_text_opacity_label"] = "Text opacity"
-L["group_tracker_text_opacity_tip"]   = "Controls text opacity without affecting backgrounds or borders."
-L["group_tracker_btn_opacity_label"] = "Buttons opacity"
-L["group_tracker_btn_opacity_tip"]   = "Controls the opacity of header buttons (Close, Previous, Next, Clear) without affecting text or background."
+L["group_tracker_text_opacity_label"] = "Text transparency"
+L["group_tracker_text_opacity_tip"]   = "Adjust text opacity without affecting backgrounds or borders."
+L["group_tracker_btn_opacity_label"] = "Button transparency"
+L["group_tracker_btn_opacity_tip"]   = "Adjust button opacity (Close, Prev, Next, Clear) without affecting text or background."
 L["group_tracker_history"]                = "History"
 L["group_tracker_history_empty"]          = "Empty history"
-L["group_tracker_popup_title_btn_hide"]   = "Hide popup title text"
-L["group_tracker_popup_title_btn_show"]   = "Show popup title text"
-L["group_tracker_popup_title_btn_tip"]    = "Toggle the popup history title text visibility."
+L["group_tracker_popup_title_btn_hide"]   = "Hide title text (popup)"
+L["group_tracker_popup_title_btn_show"]   = "Show title text (popup)"
+L["group_tracker_popup_title_btn_tip"]    = "Toggle display of the popup history title text."
+L["group_tracker_row_height_label"]       = "Row height."
+L["group_tracker_row_height_tip"]         = "Adjust row height"

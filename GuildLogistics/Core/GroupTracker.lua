@@ -611,7 +611,7 @@ local function _ensureWindow()
     local f = UI.CreatePlainWindow({
         title   = "group_tracker_title",
         width   = 260,
-        height  = 308,
+        height  = 160,
         headerHeight = 25,
         strata  = "FULLSCREEN_DIALOG",
         level   = 220,
@@ -731,6 +731,7 @@ local function _ensureWindow()
         showSB = false,
         safeRight = false,  -- pas besoin d'espace pour une barre
         rowHeight = 22,
+        showSB = false,
         buildRow = function(r)
             r:EnableMouse(true)
             r:SetScript("OnMouseUp", function(self, button)
@@ -994,40 +995,6 @@ function GLOG.GroupTracker_ShowWindow(show)
         if f.close then
             f.close:SetScript("OnClick", function() f:Hide() end)
         end
-
-        -- ✅ Demande : survol = opacités 100%, puis restauration en sortie de survol
-        local function _restoreVisual()
-            local _aWin  = (GLOG.GroupTracker_GetOpacity       and GLOG.GroupTracker_GetOpacity())       or 0.95
-            local _aText = (GLOG.GroupTracker_GetTextOpacity   and GLOG.GroupTracker_GetTextOpacity())   or 1.00
-            if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, _aWin) end
-            if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, _aText)            end
-            if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, _aWin) end
-            if f._Refresh then f:_Refresh() end -- réapplique les états/alphas des boutons (prev/next/clear)
-        end
-        local function _fullVisual()
-            if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, 1) end
-            if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, 1)            end
-            if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, 1) end
-            -- Boutons : on force à plein ; la restauration repassera par _Refresh()
-            if UI and UI.SetButtonAlphaScaled then
-                if f.nextBtn  then UI.SetButtonAlphaScaled(f.nextBtn,  1, 1) end
-                if f.prevBtn  then UI.SetButtonAlphaScaled(f.prevBtn,  1, 1) end
-                if f.clearBtn then UI.SetButtonAlphaScaled(f.clearBtn, 1, 1) end
-                if f.close    then UI.SetButtonAlphaScaled(f.close,    1, 1) end
-            end
-        end
-
-        -- Hooks de survol sur le frame principal + zones utiles
-        local function _hookHover(frame)
-            if not frame or not frame.HookScript then return end
-            frame:EnableMouse(true)
-            frame:HookScript("OnEnter", _fullVisual)
-            frame:HookScript("OnLeave", _restoreVisual)
-        end
-        _hookHover(f)
-        _hookHover(f.header)
-        _hookHover(f.content)
-        if f.hctrl then _hookHover(f.hctrl) end
 
         f:Show()
         if f._Refresh then f:_Refresh() end

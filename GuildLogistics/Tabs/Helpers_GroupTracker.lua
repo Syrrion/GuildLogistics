@@ -259,5 +259,5 @@ end
 local function Layout() end
 
 UI.RegisterTab(Tr("tab_group_tracker"), Build, Refresh, Layout, {
-    category = Tr("cat_info"), -- Helpers
+    category = Tr("cat_tracker"), -- Helpers
 })

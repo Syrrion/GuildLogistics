@@ -455,8 +455,9 @@ local function Build(container)
 
     footer = UI.CreateFooter(panel, 22)
     footer:ClearAllPoints()
-    footer:SetPoint("BOTTOMLEFT",  panel, "BOTTOMLEFT",  INSET, INSET)
-    footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -INSET, INSET)
+    footer:SetPoint("BOTTOMLEFT",  panel, "BOTTOMLEFT",  0, 0)
+    footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+
 
     local sourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     sourceFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)

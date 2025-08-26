@@ -195,6 +195,7 @@ L["lbl_guild_members"] = "Membres de la guilde"
 L["lbl_sep_online"]  = "Connectés"
 L["lbl_sep_offline"] = "Déconnectés"
 
+
 -- ============================================== --
 -- ===           POPUPS / PROMPTS             === --
 -- ============================================== --
@@ -253,7 +254,7 @@ L["tooltip_send_back_active_roster"] = "Renvoyer ce joueur dans le Roster actif"
 L["tooltip_view_raids_history"]      = "Voir l’historique des raids"
 L["badge_exhausted"]      = "Épuisé"
 L["suffix_remaining"]     = "restantes"
-
+L["range_to"] = "à"
 
 -- ============================================== --
 -- ===            STATUTS COLORÉS             === --
@@ -347,13 +348,136 @@ L["msg_no_usage_for_item"] = "Aucune classe/spécialisation ne référence cet o
 L["cat_guild"]    = "Guilde"
 L["cat_raids"]    = "Raids"
 L["cat_tools"]    = "Outils"
+L["cat_tracker"]  = "Tracker"
 L["cat_info"]     = "Helpers"
 L["cat_settings"] = "Options"
 L["cat_debug"]    = "Débug"
 
+-- ====== Paliers d’amélioration (Helpers) ======
+L["tab_upgrade_tracks"]       = "Paliers d’amélioration"
+L["upgrade_header_itemlevel"] = "NIVEAUX D’OBJET"
+L["upgrade_header_crests"]    = "ÉCUS REQUIS"
+L["upgrade_track_adventurer"] = "AVENTURIER"
+L["upgrade_track_veteran"]    = "VÉTÉRAN"
+L["upgrade_track_champion"]   = "CHAMPION"
+L["upgrade_track_hero"]       = "HÉROS"
+L["upgrade_track_myth"]       = "MYTHE"
+
+-- ====== Écus ======
+L["crest_valor"]   = "Vaillance"
+L["crest_worn"]    = "Abîmé"
+L["crest_carved"]  = "Gravé"
+L["crest_runic"]   = "Runique"
+L["crest_golden"]  = "Doré"
+
+-- ====== Étapes d’amélioration ======
+L["upgrade_step_adventurer"] = "Aventurier %d/8"
+L["upgrade_step_veteran"]    = "Vétéran %d/8"
+L["upgrade_step_champion"]   = "Champion %d/8"
+L["upgrade_step_hero"]       = "Héros %d/6"
+L["upgrade_step_myth"]       = "Mythe %d/6"
+
+
+-- ====== Donjons (Helpers) ======
+L["tab_dungeons_loot"]             = "Paliers Donjons"
+L["dungeons_header_activity"]      = "— — —"
+L["dungeons_header_dungeon_loot"]  = "BUTIN DE DONJON"
+L["dungeons_header_vault"]         = "CHAMBRE-FORTE"
+L["dungeons_header_crests"]        = "ÉCUS"
+L["dng_row_normal"]                = "Donjons normaux"
+L["dng_row_timewalking"]           = "Marcheurs du temps"
+L["dng_row_heroic"]                = "Donjons héroïques"
+L["dng_row_m0"]                    = "Mythique 0"
+L["dng_row_key_fmt"]               = "Clé de niveau %d"
+L["dungeon_no_tag"]                = "aucune mention d'objet"
+L["max_short"]                     = "max"
+
+-- Texte d’intro (FR)
+L["dng_note_intro"]   = "La saison 3 de The War Within adapte le niveau d'objet de tous les donjons :"
+L["dng_note_week1"]   = "Semaine 1 : les donjons Mythique 0 donnent du butin 681 (Champion 1/8)."
+L["dng_note_week2"]   = "Semaine 2 : Tazavesh en Mythique 0 donne du butin 694 (Héros 1/6)."
+L["dng_note_vault"]   = "La grande chambre-forte propose jusqu’à 3 choix selon le niveau le plus élevé de donjons terminés (Héroïque, Mythique, clé Mythique ou Marcheurs du temps)."
+
+-- Paragraphe explicatif (FR)
+L["dng_note_keystone_scaling"] =
+"Le niveau d'objet pour les donjons de clé mythique est échelonné jusqu'au niveau 10 maximum en fonction du niveau de la clé, " ..
+"avec 2 pièces d'équipement par donjon (au niveau 10) et 1 pièce supplémentaire par tranche de 5 niveaux. " ..
+"De plus, la grande chambre-forte hebdomadaire propose jusqu'à 3 options de butin au terme de la semaine en fonction de 1, 4 et 8 " ..
+"donjons de niveau maximum terminés en mode héroïque, mythique, clé mythique ou Marcheurs du temps."
+
+
+-- ====== Gouffres (Helpers) ======
+L["tab_delves"]            = "Paliers Gouffres"
+L["delves_header_level"]   = "NIVEAU"
+L["delves_header_chest"]   = "COFFRE ABONDANT"
+L["delves_header_map"]     = "CARTE AUX TRÉSORS"
+L["delves_header_vault"]   = "CHAMBRE FORTE"
+L["delves_level_prefix"]   = "Niveau %s"
+L["delves_cell_fmt"]       = "%d : %s (%d max)"
+
+-- Texte au-dessus
+L["delves_intro_title"]    = "Récompenses & fonctionnement"
+L["delves_intro_b1"]       = "Les coffres ont une chance de proposer une pièce d’équipement aléatoire avec 655 niveaux d’objet (lié au bataillon)."
+L["delves_intro_b2"]       = "L’intendant des Gouffres propose de l’équipement de départ avec 668 niveaux d’objet (Vétéran) contre les Sous-pièces."
+L["delves_intro_b3"]       = "Il est possible de trouver 1 seule carte aux trésors par semaine par personnage à 20% de la progression du périple de saison."
+
+
+-- ====== Raids (Helpers) ======
+L["tab_raid_ilvls"]          = "Paliers Raids"
+L["raid_header_difficulty"]  = "DIFFICULTÉ"
+L["difficulty_lfr"]          = "LFR"
+L["difficulty_normal"]       = "NORMAL"
+L["difficulty_heroic"]       = "HÉROÏQUE"
+L["difficulty_mythic"]       = "MYTHIQUE"
+
+-- lignes du tableau
+L["raid_row_group1"]         = "Plexus, Rou'ethar, Naazindhri"
+L["raid_row_group2"]         = "Araz, Chasseurs et Fractillus"
+L["raid_row_group3"]         = "Roi-nexus et Dimensius"
+
+-- pied récapitulatif
+L["raid_footer_ilvl_max"]    = "NIVEAU D'OBJET MAX"
+L["tab_raid_loot"]           = "Manaforge Oméga"
+L["raid_intro_b1"]           = "Le raid final de la Manaforge Omega contient plusieurs pièces d’équipement de 671 à 723 niveaux d’objet :"
+L["raid_intro_b2"]           = "- Les raids des marcheurs du temps proposent 681 niveaux d’objet (Champion 1) lorsque l’événement est actif."
+L["raid_intro_b3"]           = "- Le raid contient jusqu’à 3 paliers de niveau d’objet avec une augmentation de 1 voie d’amélioration tous les 3 boss."
+L["raid_intro_b4"]           = "- Contrairement à la Libération de Terremine, la voie d’amélioration commence à 2/8 (au lieu de 1) sur les boss du début."
+
+
+-- ====== Crests (onglet & entêtes) ======
+L["tab_crests"]              = "Écus (Sources)"
+L["crests_header_crest"]     = "ÉCUS"
+L["crests_header_chasms"]    = "GOUFFRES"
+L["crests_header_dungeons"]  = "DONJONS"
+L["crests_header_raids"]     = "RAIDS"
+L["crests_header_outdoor"]   = "EXTÉRIEUR"
+
+-- ====== Libellés & formats ======
+L["crest_range"]             = "%s (%d à %d)"
+L["label_level"]             = "Niveau %d"
+L["label_crests_n"]          = "%d écus"
+L["label_per_boss"]          = "%d écus par boss"
+L["label_per_cache"]         = "%d écus par cache"
+L["label_except_last_boss"]  = "(hors boss final)"
+L["label_na"]                = "N/A"
+
+-- ====== Noms de sources ======
+L["gouffre_classic"]         = "Gouffre classique"
+L["gouffre_abundant"]        = "Gouffre abondant"
+L["archaeologist_loot"]      = "Butin de l'archéologue"
+L["heroic"]                  = "Héroïque"
+L["normal"]                  = "Normal"
+L["lfr"]                     = "Outils raids"
+L["mythic"]                  = "Mythique"
+L["mythic0"]                 = "Mythique 0"
+L["mplus_key"]               = "Clé mythique"
+L["weekly_event"]            = "Événement hebdomadaire"
+L["treasures_quests"]        = "Trésors/Quêtes"
+
+
 -- ====== Suivi de groupe (Helpers) ======
-L["tab_group_tracker"]        = "Suivi des consommables"
-L["group_tracker_title"]      = "Suivi des consommables"
+L["tab_group_tracker"]        = "Tracker"
+L["group_tracker_title"]      = "Tracker"
 L["group_tracker_toggle"]     = "Afficher la fenêtre de suivi"
 L["group_tracker_hint"]       = "Astuce : Pour ouvrir directement la fenêtre de suivi, saisissez cette commande dans le chat |cffaaaaaa/glog track|r"
 L["btn_reset_counters"]       = "Réinitialiser les compteurs"
