@@ -5,7 +5,7 @@ local PAD = (UI and UI.OUTER_PAD) or 16
 local ROW_GAP = 12
 
 local panel
-local btnOpen, btnClear, slOpacity, cbRecording
+local btnOpen, btnClear, slOpacity, cbRecording, cbColHeal, cbColUtil, cbColStone
 
 local function _RowY(prevY, h)
     return prevY + (h or 0) + ROW_GAP
@@ -124,10 +124,89 @@ local function Build(container)
             end
         end
     end)
-
-
+    
     local rowH = math.max(btnOpen:GetHeight() or 28, btnClear:GetHeight() or 24)
     y = _RowY(y, rowH)
+
+    -- === Nouvelle section : Paramétrage (style identique aux autres SectionHeader) ===
+    y = y + (UI.SectionHeader(panel, "Visibilité", { topPad = y }) or 26) + 8
+
+    -- === Cases à cocher pour (dés)afficher les 3 dernières colonnes de la fenêtre flottante ===
+    local initHeal  = (GLOG and GLOG.GroupTracker_GetColumnVisible and GLOG.GroupTracker_GetColumnVisible("heal"))  ~= false
+    local initUtil  = (GLOG and GLOG.GroupTracker_GetColumnVisible and GLOG.GroupTracker_GetColumnVisible("util"))  ~= false
+    local initStone = (GLOG and GLOG.GroupTracker_GetColumnVisible and GLOG.GroupTracker_GetColumnVisible("stone")) ~= false
+
+    if UI and UI.Checkbox then
+        cbColHeal = UI.Checkbox(panel, "col_heal_potion",   { checked = initHeal,  minWidth = 240 })
+        cbColHeal:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        if cbColHeal.SetOnValueChanged then
+            cbColHeal:SetOnValueChanged(function(_, checked)
+                if GLOG and GLOG.GroupTracker_SetColumnVisible then
+                    GLOG.GroupTracker_SetColumnVisible("heal", checked)
+                end
+            end)
+        end
+        y = _RowY(y, 20)
+
+        cbColUtil = UI.Checkbox(panel, "col_other_potions", { checked = initUtil,  minWidth = 240 })
+        cbColUtil:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        if cbColUtil.SetOnValueChanged then
+            cbColUtil:SetOnValueChanged(function(_, checked)
+                if GLOG and GLOG.GroupTracker_SetColumnVisible then
+                    GLOG.GroupTracker_SetColumnVisible("util", checked)
+                end
+            end)
+        end
+        y = _RowY(y, 20)
+
+        cbColStone = UI.Checkbox(panel, "col_healthstone",  { checked = initStone, minWidth = 240 })
+        cbColStone:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        if cbColStone.SetOnValueChanged then
+            cbColStone:SetOnValueChanged(function(_, checked)
+                if GLOG and GLOG.GroupTracker_SetColumnVisible then
+                    GLOG.GroupTracker_SetColumnVisible("stone", checked)
+                end
+            end)
+        end
+        y = _RowY(y, 20)
+    else
+        -- Fallback natif (si UI.Checkbox indisponible)
+        cbColHeal = CreateFrame("CheckButton", (ADDON or "GL").."_ChkColHeal", panel, "UICheckButtonTemplate")
+        cbColHeal:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        cbColHeal:SetChecked(initHeal)
+        _G[cbColHeal:GetName().."Text"]:SetText(Tr and Tr("col_heal_potion") or "col_heal_potion")
+        cbColHeal:SetScript("OnClick", function(self)
+            if GLOG and GLOG.GroupTracker_SetColumnVisible then
+                GLOG.GroupTracker_SetColumnVisible("heal", self:GetChecked())
+            end
+        end)
+        y = _RowY(y, 20)
+
+        cbColUtil = CreateFrame("CheckButton", (ADDON or "GL").."_ChkColUtil", panel, "UICheckButtonTemplate")
+        cbColUtil:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        cbColUtil:SetChecked(initUtil)
+        _G[cbColUtil:GetName().."Text"]:SetText(Tr and Tr("col_other_potions") or "col_other_potions")
+        cbColUtil:SetScript("OnClick", function(self)
+            if GLOG and GLOG.GroupTracker_SetColumnVisible then
+                GLOG.GroupTracker_SetColumnVisible("util", self:GetChecked())
+            end
+        end)
+        y = _RowY(y, 20)
+
+        cbColStone = CreateFrame("CheckButton", (ADDON or "GL").."_ChkColStone", panel, "UICheckButtonTemplate")
+        cbColStone:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+        cbColStone:SetChecked(initStone)
+        _G[cbColStone:GetName().."Text"]:SetText(Tr and Tr("col_healthstone") or "col_healthstone")
+        cbColStone:SetScript("OnClick", function(self)
+            if GLOG and GLOG.GroupTracker_SetColumnVisible then
+                GLOG.GroupTracker_SetColumnVisible("stone", self:GetChecked())
+            end
+        end)
+        y = _RowY(y, 20)
+    end
+
+    -- === Nouvelle section : Paramétrage (style identique aux autres SectionHeader) ===
+    y = y + (UI.SectionHeader(panel, "Paramétrage", { topPad = y }) or 26) + 8
 
     -- 📌 Ligne 3 : slider de transparence (localisé)
     slOpacity = UI.Slider(panel, {
@@ -246,10 +325,17 @@ function Refresh()
         slOpacity:SetValue(p)
     end
 
-    if cbRecording then
-        local v = (GLOG and GLOG.GroupTracker_GetRecordingEnabled and GLOG.GroupTracker_GetRecordingEnabled()) or false
-        if cbRecording.SetChecked then cbRecording:SetChecked(v) end
-        if cbRecording.SetValue   then cbRecording:SetValue(v)   end
+    -- Rafraîchit l’état des cases de colonnes
+    if GLOG and GLOG.GroupTracker_GetColumnVisible then
+        local vHeal  = GLOG.GroupTracker_GetColumnVisible("heal")
+        local vUtil  = GLOG.GroupTracker_GetColumnVisible("util")
+        local vStone = GLOG.GroupTracker_GetColumnVisible("stone")
+        if cbColHeal and cbColHeal.SetChecked then cbColHeal:SetChecked(vHeal ~= false) end
+        if cbColUtil and cbColUtil.SetChecked then cbColUtil:SetChecked(vUtil ~= false) end
+        if cbColStone and cbColStone.SetChecked then cbColStone:SetChecked(vStone ~= false) end
+        if cbColHeal and cbColHeal.SetValue   then cbColHeal:SetValue(vHeal ~= false)   end
+        if cbColUtil and cbColUtil.SetValue   then cbColUtil:SetValue(vUtil ~= false)   end
+        if cbColStone and cbColStone.SetValue then cbColStone:SetValue(vStone ~= false) end
     end
 
     _UpdateButtonsEnabled()

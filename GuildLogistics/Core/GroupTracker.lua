@@ -63,6 +63,8 @@ local function _Store()
     s.textOpacity = tonumber(s.textOpacity or 1.0) or 1.0 -- 🔹 transparence du TEXTE (0.1..1.0)
     s.recording = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
     s.winOpen = (s.winOpen == true)
+    -- Visibilité des 3 dernières colonnes (fenêtre flottante du Tracker)
+    s.colVis = s.colVis or { heal = true, util = true, stone = true }
     return s
 end
 
@@ -565,8 +567,6 @@ local function _ShowHistoryPopup(full)
     state.popup = p
     if p then p._lv = lv end
     do
-        local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1
-        if UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(lv, a) end
         if UI and UI.ListView_SetRowGradientOpacity then UI.ListView_SetRowGradientOpacity(lv, a) end
     end
 
@@ -603,6 +603,98 @@ function GLOG.GroupTracker_ClearHistory()
     if state.win and state.win._Refresh then state.win:_Refresh() end
 end
 
+
+-- Applique la visibilité des colonnes (heal/util/stone) à un frame contenant la ListView
+local function _ApplyColumnsVisibilityToFrame(f)
+    if not (f and f._lv) then return end
+    local lv = f._lv
+    local s  = _Store()
+    local vis = s.colVis or { heal=true, util=true, stone=true }
+
+    -- Base des colonnes : on repart du modèle d’origine si disponible
+    local base = f._baseCols or lv.cols or {}
+    local cols = {}
+
+    for i, c in ipairs(base) do
+        local cc = {}
+        for k, v in pairs(c) do cc[k] = v end
+
+        if cc.key == "heal" or cc.key == "util" or cc.key == "stone" then
+            local show = vis[cc.key] ~= false
+            if not show then
+                cc.w, cc.min, cc.flex = 0, 0, 0  -- masque complètement la colonne
+            else
+                -- largeur fixe standard (respecte l’intention originale)
+                cc.w, cc.min, cc.flex = 51, 51, 0
+            end
+        end
+        cols[#cols+1] = cc
+    end
+
+    lv.cols = cols
+    if lv.header and UI and UI.LayoutHeader then
+        UI.LayoutHeader(lv.header, lv.cols, lv.hLabels)
+    end
+    if lv.Refresh then lv:Refresh() elseif lv.Layout then lv:Layout() end
+end
+
+
+-- Calcule la largeur minimale requise par la ListView + bordures
+local function _ComputeMinWindowWidth(f)
+    if not (f and f._lv) then
+        return math.max(200, (f and f:GetWidth() or 200))
+    end
+    local lv = f._lv
+    local cols = lv.cols or {}
+
+    local sum, visible = 0, 0
+    for _, c in ipairs(cols) do
+        -- On prend la meilleure estimation "minimale" : max(w, min)
+        local w   = tonumber(c and c.w)   or 0
+        local wmn = tonumber(c and c.min) or 0
+        local ww  = math.max(w, wmn, 0)
+
+        if ww > 0 then
+            sum = sum + ww
+            visible = visible + 1
+        end
+    end
+
+    local colSpacing = 0
+    local spacing    = (visible > 0) and (colSpacing * (visible - 1)) or 0
+    local scrollW    = (lv.scroll and 16) or 16 -- largeur scroll barre verticale
+    local padX       = (lv.padX or 12) * 2      -- padding interne ListView
+    local frameEdge  = 28                       -- marges/bordures de la fenêtre
+
+    local minW = sum + spacing + scrollW + padX + frameEdge
+    -- On borne pour éviter une fenêtre trop petite
+    return math.max(50, math.floor(minW + 0.5))
+end
+
+-- Applique la largeur minimale ET ajuste la largeur active (snap)
+local function _ApplyMinWidthAndResize(f, snapToMin)
+    if not f then return end
+    local minW = _ComputeMinWindowWidth(f)
+    local minH = 160
+
+    if f.SetResizeBounds then
+        f:SetResizeBounds(minW, minH)
+    elseif f.SetMinResize then
+        f:SetMinResize(minW, minH)
+    end
+
+    -- Adaptation automatique de la largeur active :
+    -- - Si on ajoute une colonne => élargit à minW
+    -- - Si on retire une colonne => réduit à minW
+    if snapToMin ~= false then
+        f:SetWidth(minW)
+    else
+        -- Variante "non agressive" (on n'utilise pas ici) : seulement si trop petit
+        local cur = f:GetWidth() or minW
+        if cur < minW then f:SetWidth(minW) end
+    end
+end
+
 -- Fenêtre principale (épurée via UI.CreatePlainWindow)
 local function _ensureWindow()
     if state.win and state.win:IsShown() then return state.win end
@@ -610,7 +702,6 @@ local function _ensureWindow()
 
     local f = UI.CreatePlainWindow({
         title   = "group_tracker_title",
-        width   = 260,
         height  = 160,
         headerHeight = 25,
         strata  = "FULLSCREEN_DIALOG",
@@ -720,7 +811,7 @@ local function _ensureWindow()
 
     -- Colonnes
     local cols = UI.NormalizeColumns({
-        { key="name",   title=Tr("col_name"),          min=95, flex=1, justify="LEFT"  },
+        { key="name",   title=Tr("col_name"),          min=50, flex=1, justify="LEFT"  },
         { key="heal",   title=Tr("col_heal_potion"),   w=51,  justify="CENTER" },
         { key="util",   title=Tr("col_other_potions"), w=51,  justify="CENTER" },
         { key="stone",  title=Tr("col_healthstone"),   w=51,  justify="CENTER" },
@@ -728,7 +819,6 @@ local function _ensureWindow()
 
     local lv = UI.ListView(f.content, cols, {
         topOffset = 0,
-        showSB = false,
         safeRight = false,  -- pas besoin d'espace pour une barre
         rowHeight = 22,
         showSB = false,
@@ -787,6 +877,13 @@ local function _ensureWindow()
         local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1
         if UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(lv, a) end
     end
+
+    -- Mémorise le modèle de colonnes pour les recalculs (show/hide)
+    f._baseCols = cols
+    -- Applique la visibilité des colonnes selon les préférences
+    _ApplyColumnsVisibilityToFrame(f)
+    -- Ajuste la largeur minimale ET la largeur active selon les colonnes visibles
+    _ApplyMinWidthAndResize(f, true)
 
     -- Libérer totalement l'espace réservé à la scrollbar (popup light)
     do
@@ -983,6 +1080,10 @@ function GLOG.GroupTracker_ShowWindow(show)
         if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, aText)            end
         if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, aWin) end
         if f._lv and UI and UI.ListView_SetRowHeight     then UI.ListView_SetRowHeight(f._lv, rowH)     end
+        -- Respecte le masquage/affichage des colonnes choisi par l’utilisateur
+        _ApplyColumnsVisibilityToFrame(f)
+        -- Adapte la largeur minimale + largeur active en fonction des colonnes visibles
+        _ApplyMinWidthAndResize(f, true)
 
         -- Assure une ancre gauche du titre (déjà fait côté PlainWindow, on sécurise)
         if f.title and f.header then
@@ -1076,6 +1177,28 @@ function GLOG.GroupTracker_SetButtonsOpacity(a)
     if state.popup and UI and UI.ApplyButtonsOpacity then
         UI.ApplyButtonsOpacity(state.popup, a)
     end
+end
+
+-- === Visibilité des colonnes (fenêtre flottante) ===
+function GLOG.GroupTracker_GetColumnVisible(key)
+    local s = _Store()
+    local v = (s.colVis or {})[tostring(key or "")]
+    if v == nil then return true end
+    return v == true
+end
+
+function GLOG.GroupTracker_SetColumnVisible(key, visible)
+    key = tostring(key or "")
+    if key ~= "heal" and key ~= "util" and key ~= "stone" then return end
+    local s = _Store()
+    s.colVis = s.colVis or { heal=true, util=true, stone=true }
+    s.colVis[key] = (visible == true)
+
+    -- Applique immédiatement si la fenêtre est ouverte
+    if state.win then _ApplyColumnsVisibilityToFrame(state.win) end
+    -- Ajuste la largeur minimale et la largeur active (réduction/agrandissement auto)
+    if state.win then _ApplyMinWidthAndResize(state.win, true) end
+
 end
 
 -- Hauteur de ligne de la listview (fenêtre minimaliste)
