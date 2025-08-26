@@ -727,3 +727,22 @@ function ns.Util.SpellInfoCompat(idOrName)
 
     return name, icon
 end
+
+-- ===============================
+-- ===  Erreurs Lua (scriptErrors)
+-- ===============================
+function GLOG.IsScriptErrorsEnabled()
+    if type(GetCVar) == "function" then
+        local v = tostring(GetCVar("scriptErrors") or "0")
+        return (v == "1") or (v:lower() == "true")
+    end
+    return false
+end
+
+function GLOG.SetScriptErrorsEnabled(enabled)
+    local v = enabled and "1" or "0"
+    if type(SetCVar) == "function" then
+        pcall(SetCVar, "scriptErrors", v)
+    end
+    return GLOG.IsScriptErrorsEnabled()
+end

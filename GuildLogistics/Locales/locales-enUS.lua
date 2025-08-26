@@ -272,7 +272,9 @@ L["opt_alliance"]         = "Alliance"
 L["opt_horde"]            = "Horde"
 L["opt_neutral"]          = "Neutral"
 L["opt_auto"]             = "Automatic"
-
+L["opt_script_errors"]   = "Show Lua errors"
+L["yes"]                 = "Yes"
+L["no"]                  = "No"
 
 -- ============================================== --
 -- ===     NOTIFS / MINIMAP / INDICATEURS     === --

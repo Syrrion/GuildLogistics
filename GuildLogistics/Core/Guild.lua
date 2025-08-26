@@ -281,10 +281,10 @@ function GLOG.GetNameClass(name)
     local cls = nil
 
     if c then
-        local by = c.byName or {}
-        local k  = GLOG.NormName(name)
-        local e  = k and by[k]
-        local mainKey = e and e.main
+    local by = c.byName or {}
+    local k  = GLOG.NormName(name)
+    local e  = k and by[k]
+    local mainKey = e and e.main
         -- 1) classe du main ; 2) sinon classe du personnage scanné
         cls = (mainKey and c.mainsClass and c.mainsClass[mainKey]) or (e and e.class)
     end

@@ -4,7 +4,7 @@ local GLOG, UI = ns.GLOG, ns.UI
 
 -- État local des contrôles (permet un refresh simple)
 local optPanel
-local themeRadios, autoRadios, debugRadios = {}, {}, {}
+local themeRadios, autoRadios, debugRadios, scriptErrRadios = {}, {}, {}, {}
 
 local function _SetRadioGroupChecked(group, key)
     for k, b in pairs(group) do
@@ -44,6 +44,13 @@ function Build(container)
             elseif group == debugRadios then
                 GuildLogisticsUI.debugEnabled = (key == "YES")
                 if UI.SetDebugEnabled then UI.SetDebugEnabled(GuildLogisticsUI.debugEnabled) end
+            elseif group == scriptErrRadios then
+                local on = (key == "YES")
+                if GLOG.SetScriptErrorsEnabled then
+                    GLOG.SetScriptErrorsEnabled(on)
+                else
+                    if SetCVar then pcall(SetCVar, "scriptErrors", on and "1" or "0") end
+                end
             end
         end)
 
@@ -100,11 +107,18 @@ function Build(container)
     makeRadioV(debugRadios, "YES", Tr("opt_yes"))
     makeRadioV(debugRadios, "NO",  Tr("opt_no"))
 
+    -- === Section 5 : Afficher les erreurs Lua ===
+    local headerH5 = UI.SectionHeader(optionsPane, Tr("opt_script_errors"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    y = y + headerH5 + 8
+    makeRadioV(scriptErrRadios, "YES", Tr("opt_yes"))
+    makeRadioV(scriptErrRadios, "NO",  Tr("opt_no"))
+
     -- État initial depuis la sauvegarde
     local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
     _SetRadioGroupChecked(themeRadios, (saved.theme) or "AUTO")
     _SetRadioGroupChecked(autoRadios,  (saved.autoOpen) and "YES" or "NO")
     _SetRadioGroupChecked(debugRadios, (saved.debugEnabled) and "YES" or "NO")
+    _SetRadioGroupChecked(scriptErrRadios, GLOG.IsScriptErrorsEnabled() and "YES" or "NO")
 end
 
 function RefreshOptions()
@@ -112,6 +126,7 @@ function RefreshOptions()
     _SetRadioGroupChecked(themeRadios, (saved.theme) or "AUTO")
     _SetRadioGroupChecked(autoRadios,  (saved.autoOpen) and "YES" or "NO")
     _SetRadioGroupChecked(debugRadios, (saved.debugEnabled) and "YES" or "NO")
+    _SetRadioGroupChecked(scriptErrRadios, GLOG.IsScriptErrorsEnabled() and "YES" or "NO")
 end
 
 
