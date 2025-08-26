@@ -214,8 +214,38 @@ function UpdateRow(i, r, f, it)
 
     local data = it -- pour lisibilité
 
-    -- Nom (icône/couleur main gérés par CreateNameTag / SetNameTag)
-    UI.SetNameTag(f.name, data.name or "")
+    -- Nom (sans royaume) + ajout éventuel du reroll connecté (icône + nom)
+    UI.SetNameTagShort(f.name, data.name or "")
+
+    -- Récupère le reroll online attaché au main (si différent du main)
+    local gi = FindGuildInfo(data.name or "")
+    local altBase, altFull, altClass = gi and gi.onlineAltBase, gi and gi.onlineAltFull, gi and gi.altClass
+
+    if altBase and altBase ~= "" then
+        -- Icône de classe ronde (texture native)
+        local function classIconMarkup(classTag, size)
+            size = size or 14
+            if not classTag or classTag == "" then return "" end
+            local c = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classTag]
+            if not c then return "" end
+            local w, h = size, size
+            return ("|TInterface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES:%d:%d:0:0:256:256:%d:%d:%d:%d|t")
+                :format(w, h, c[1]*256, c[2]*256, c[3]*256, c[4]*256)
+        end
+
+        -- Nom du reroll (sans royaume), coloré classe
+        local altShort   = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(altFull or altBase)) or altBase
+        local altColored = (UI and UI.WrapTextClassColor and UI.WrapTextClassColor(altShort, nil, altClass)) or altShort
+        local icon       = classIconMarkup(altClass, 14)
+
+        -- On garde la casse du main ; parenthèses grises uniquement
+        local baseText = (f.name and f.name.text and f.name.text:GetText()) or ""
+        local altPart  = (" |cffaaaaaa( |r%s%s|cffaaaaaa )|r"):format((icon ~= "" and (icon.." ") or ""), altColored)
+
+        if f.name and f.name.text then
+            f.name.text:SetText(baseText .. altPart)
+        end
+    end
 
     -- ➕ Marquage "même groupe/sous-groupe"
     do
