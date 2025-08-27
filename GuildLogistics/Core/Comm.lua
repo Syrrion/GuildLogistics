@@ -134,57 +134,74 @@ end
 local function decodeKV(s)
     local t = {}
     s = tostring(s or "")
-    local i = 1
-    while i <= #s do
-        local j = s:find("|", i, true) or (#s + 1)
-        local part = s:sub(i, j - 1)
-        local eq = part:find("=", 1, true)
-        if eq then
-            local k = part:sub(1, eq - 1)
-            local v = part:sub(eq + 1)
+    local len = #s
+    local i   = 1
+    local buf = {}
 
-            if v:match("^%[.*%]$") then
-                -- Parse d'array avec échappements (\, \], \\, ||, \n)
-                local body = v:sub(2, -2)
-                local list, buf, esc = {}, {}, false
-                for p = 1, #body do
-                    local ch = body:sub(p, p)
-                    if esc then
-                        buf[#buf+1] = ch
-                        esc = false
+    local function flush(part)
+        if part == "" then return end
+        local eq = part:find("=", 1, true)
+        if not eq then return end
+        local k = part:sub(1, eq - 1)
+        local v = part:sub(eq + 1)
+
+        if v:match("^%[.*%]$") then
+            -- Array: on réutilise le parseur existant (échappements \n, \\, \,, \], ||)
+            local body = v:sub(2, -2)
+            local list, abuf, esc = {}, {}, false
+            for p = 1, #body do
+                local ch = body:sub(p, p)
+                if esc then
+                    abuf[#abuf+1] = ch; esc = false
+                else
+                    if ch == "\\" then
+                        esc = true
+                    elseif ch == "," then
+                        list[#list+1] = table.concat(abuf); abuf = {}
                     else
-                        if ch == "\\" then
-                            esc = true
-                        elseif ch == "," then
-                            list[#list+1] = table.concat(buf); buf = {}
-                        else
-                            buf[#buf+1] = ch
-                        end
+                        abuf[#abuf+1] = ch
                     end
                 end
-                list[#list+1] = table.concat(buf)
-
-                -- déséchappement final par élément
-                for idx = 1, #list do
-                    local x = list[idx]
-                    x = x:gsub("\\n", "\n")
-                         :gsub("||", "|")
-                         :gsub("\\,", ",")
-                         :gsub("\\%]", "]")
-                         :gsub("\\\\", "\\")
-                    list[idx] = x
-                end
-                t[k] = list
-            else
-                -- valeur scalaire : déséchappement simple
-                v = v:gsub("\\n", "\n"):gsub("||", "|")
-                t[k] = v
             end
+            list[#list+1] = table.concat(abuf)
+
+            for idx = 1, #list do
+                local x = list[idx]
+                x = x:gsub("\\n", "\n")
+                     :gsub("||", "|")
+                     :gsub("\\,", ",")
+                     :gsub("\\%]", "]")
+                     :gsub("\\\\", "\\")
+                list[idx] = x
+            end
+            t[k] = list
+        else
+            -- String simple (|| = pipe littéral)
+            v = v:gsub("\\n", "\n"):gsub("||", "|")
+            t[k] = v
         end
-        i = j + 1
     end
+
+    -- Scanner top-level: '||' = pipe échappé, '|' seul = séparateur
+    while i <= len do
+        local ch = s:sub(i, i)
+        if ch == "|" then
+            if s:sub(i + 1, i + 1) == "|" then
+                buf[#buf+1] = "|"  -- pipe littéral
+                i = i + 2
+            else
+                flush(table.concat(buf)); buf = {}
+                i = i + 1
+            end
+        else
+            buf[#buf+1] = ch
+            i = i + 1
+        end
+    end
+    flush(table.concat(buf))
     return t
 end
+
 
 local function packPayloadStr(kv_or_str)
     -- ✅ Si on reçoit déjà une chaîne encodée, ne pas ré-encoder (on compresse éventuellement)
@@ -409,6 +426,12 @@ local function _decideAndGrant(hid)
         init  = sess.initiator,
         m     = sess.reason or "rv_gap",
     })
+    -- On garde 5s pour l'affichage éventuel, puis on libère l'élection de la mémoire
+    C_Timer.After(5, function()
+        if HelloElect then HelloElect[hid] = nil end
+        if ns and ns.Emit then ns.Emit("debug:changed") end
+    end)
+
 end
 
 local function _scheduleOfferReply(hid, initiator, rv_init)
@@ -474,6 +497,37 @@ local DebugLog  = DebugLog or {} -- { {dir,type,size,chan,channel,dist,target,fr
 local SendLogIndexBySeq = SendLogIndexBySeq or {}  -- index "pending" ENVOI par seq
 local RecvLogIndexBySeq = RecvLogIndexBySeq or {}  -- index RECU par seq
 
+function GLOG.Debug_GetMemStats()
+    local function len(t) local n=0; for _ in pairs(t or {}) do n=n+1 end; return n end
+    local mem = (collectgarbage and collectgarbage("count")) or 0
+    return {
+        mem = mem,           -- en KiB
+        outq = #OutQ,
+        inbox = len(Inbox),
+        recvIdx = len(RecvLogIndexBySeq),
+        sendIdx = len(SendLogIndexBySeq),
+        debugLog = #DebugLog,
+    }
+end
+
+function GLOG.Debug_PrintMemStats()
+    local s = GLOG.Debug_GetMemStats()
+    print(("GuildLogistics mem: %.1f KiB | OutQ=%d Inbox=%d RecvIdx=%d SendIdx=%d DebugLog=%d")
+        :format(s.mem, s.outq, s.inbox, s.recvIdx, s.sendIdx, s.debugLog))
+end
+
+-- Évier : neutralise toute écriture dans les index quand le debug est OFF
+local function _sinkIndexTable()
+    return setmetatable({}, {
+        __newindex = function() end,
+        __index    = function() return nil end
+    })
+end
+if GLOG and GLOG.IsDebugEnabled and not GLOG.IsDebugEnabled() then
+    SendLogIndexBySeq = _sinkIndexTable()
+    RecvLogIndexBySeq = _sinkIndexTable()
+end
+
 -- Timestamp précis pour garantir l'ordre visuel dans l'onglet Debug
 local function _nowPrecise()
     if type(GetTimePreciseSec) == "function" then return GetTimePreciseSec() end
@@ -524,6 +578,25 @@ local function pushLog(dir, t, size, channel, peerOrSender, seq, part, total, ra
     }
 
     DebugLog[#DebugLog+1] = r
+
+    -- Limite douce du journal (ring ~400). On coupe par paquet pour amortir.
+    local MAX = 400
+    if #DebugLog > (MAX + 40) then
+        local drop = #DebugLog - MAX
+        -- compactage manuel (plus rapide que remove(1) en boucle)
+        local new = {}
+        for i = drop+1, #DebugLog do new[#new+1] = DebugLog[i] end
+        DebugLog = new
+        -- Répare les index après compactage
+        for s, idx in pairs(RecvLogIndexBySeq or {}) do
+            local ni = idx - drop; RecvLogIndexBySeq[s] = (ni > 0) and ni or nil
+        end
+        for s, idx in pairs(SendLogIndexBySeq or {}) do
+            local ni = idx - drop; SendLogIndexBySeq[s] = (ni > 0) and ni or nil
+        end
+        if ns.Emit then ns.Emit("debug:changed") end
+    end
+
     if #DebugLog > 400 then table.remove(DebugLog, 1) end
     if ns.Emit then ns.Emit("debug:changed") end
 end
@@ -570,6 +643,35 @@ function GLOG.ClearDebugLogs()
     if ns.Emit then ns.Emit("debug:changed") end
 end
 
+function GLOG.Debug_GetMemStats()
+    local function len(t) local n=0; for _ in pairs(t or {}) do n=n+1 end; return n end
+    local mem = (collectgarbage and collectgarbage("count")) or 0
+    return { mem=mem, outq=#OutQ, inbox=len(Inbox), recvIdx=len(RecvLogIndexBySeq),
+             sendIdx=len(SendLogIndexBySeq), debugLog=#DebugLog, he=len(HelloElect or {}) }
+end
+
+function GLOG.Debug_PrintMemStats()
+    local s = GLOG.Debug_GetMemStats()
+    print(("GuildLogistics mem: %.1f KiB | OutQ=%d Inbox=%d RecvIdx=%d SendIdx=%d DebugLog=%d Hello=%d")
+        :format(s.mem, s.outq, s.inbox, s.recvIdx, s.sendIdx, s.debugLog, s.he))
+end
+
+-- Nettoyage agressif des caches temporaires (utile en raid si la RAM grimpe)
+function GLOG.Debug_BulkCleanup(opts)
+    opts = opts or {}
+    -- ⚠️ ceci peut interrompre une reconstitution en cours
+    Inbox = {}
+    if not opts.keepDiscovery then Discovery = {} end
+    HelloElect = {}
+    OfferCooldown = {}
+    _HelloStatusSentTo = {}
+    _NonCritSuppress = {}
+    wipe(DebugLog); wipe(RecvLogIndexBySeq); wipe(SendLogIndexBySeq)
+    if collectgarbage then collectgarbage("collect") end
+    if ns and ns.Emit then ns.Emit("debug:changed") end
+    print("GLOG: caches volatils purgés")
+end
+
 -- ✏️ Trace locale vers l’onglet Debug avec entête conforme (raw = "v=1|t=...|s=...|p=...|n=...|payload")
 function GLOG.DebugLocal(event, fields)
     if GLOG and GLOG.IsDebugEnabled and not GLOG.IsDebugEnabled() then return end
@@ -606,12 +708,24 @@ end
 local function _ensureTicker()
     if OutTicker then return end
     local last = 0
+    local idle = 0   -- compte les ticks "sans travail"
+
     OutTicker = C_Timer.NewTicker(0.1, function()
         local t = now()
         if (t - last) < (1.0 / OUT_MAX_PER_SEC) then return end
         last = t
+
         local item = table.remove(OutQ, 1)
-        if not item then return end
+        if not item then
+            idle = idle + 1
+            -- Éteint le ticker après ~3s sans travail (30 ticks)
+            if idle >= 30 then
+                if OutTicker and OutTicker.Cancel then OutTicker:Cancel() end
+                OutTicker = nil
+            end
+            return
+        end
+        idle = 0
 
         C_ChatInfo.SendAddonMessage(item.prefix, item.payload, item.channel, item.target)
 
@@ -1887,7 +2001,7 @@ function GLOG._HandleFull(sender, msgType, kv)
                 local rv_me  = safenum(getRev(), 0)
                 C_Timer.After(0.2, function()
                     GLOG.Comm_Broadcast("HELLO", {
-                        hid = hid2, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1",
+                        hid = hid2, rv = rv_me, player = me, caps = {"OFFER","GRANT","TOKEN1"},
                         ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
                     })
                 end)
@@ -2013,11 +2127,17 @@ local function onAddonMsg(prefix, message, channel, sender)
         r.state   = (part >= total) and "received" or "receiving"
         r.status  = r.state
         r.stateText = (r.state == "received") and "Reçu" or "En cours"
+        -- Alimente la progression avec le compteur réel du réassemblage
+        r.got     = (box and box.got) or r.got
+
         if ns.Emit then ns.Emit("debug:changed") end
     else
         -- première trace pour cette séquence
         pushLog("recv", t or "?", #message, channel, sender, seq, part, total, message, (part >= total) and "received" or "receiving")
-        RecvLogIndexBySeq[seq] = #DebugLog
+        -- ⚠️ Ne crée pas d'index si le debug est OFF (sinon la table croit quand même)
+        if not (GLOG and GLOG.IsDebugEnabled and not GLOG.IsDebugEnabled()) then
+            RecvLogIndexBySeq[seq] = #DebugLog
+        end
     end
 
     -- ✅ Ajout : pour chaque fragment reçu après le premier, on journalise AUSSI ce fragment
@@ -2055,6 +2175,9 @@ local function onAddonMsg(prefix, message, channel, sender)
         -- Reconstitution
         local full = table.concat(box.parts, "")
         Inbox[key] = nil
+
+        -- Libère l'entrée d'index liée à cette séquence (même si le debug est OFF ça ne coûte rien)
+        if RecvLogIndexBySeq then RecvLogIndexBySeq[seq] = nil end
 
         -- ➕ Termine proprement l’indicateur en toute circonstance pour SYNC_FULL
         local function _finishSync(ok)
@@ -2836,7 +2959,7 @@ function GLOG.Sync_RequestHello()
     GLOG._lastHelloHid = hid
 
     GLOG.Comm_Broadcast("HELLO", {
-        hid = hid, rv = rv_me, player = me, caps = "OFFER|GRANT|TOKEN1",
+        hid = hid, rv = rv_me, player = me, caps = {"OFFER","GRANT","TOKEN1"},
         ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
     })
 
@@ -2869,7 +2992,66 @@ function GLOG.Comm_Init()
             local cutoff = now() - 30
             for k, box in pairs(Inbox) do if (box.ts or 0) < cutoff then Inbox[k] = nil end end
         end)
+
+            -- Maintenance mémoire
+
+            -- 1) Élections HELLO terminées (garde 60s max pour l'UI, puis on libère)
+            local heCutoff = now() - 60
+            for hid, info in pairs(HelloElect or {}) do
+                local ends = (info and info.endsAt) or 0
+                if ends < heCutoff then HelloElect[hid] = nil end
+            end
+
+            -- 2) Index de debug orphelins (au cas où le ring a tourné)
+            for s, idx in pairs(RecvLogIndexBySeq or {}) do
+                local r = DebugLog and DebugLog[idx]
+                if not r or r.seq ~= s then RecvLogIndexBySeq[s] = nil end
+            end
+            for s, idx in pairs(SendLogIndexBySeq or {}) do
+                local r = DebugLog and DebugLog[idx]
+                if not r or r.seq ~= s then SendLogIndexBySeq[s] = nil end
+            end
+
+            -- 3) Anti-spam expiré & cooldowns anciens
+            for k, untilTs in pairs(_NonCritSuppress or {}) do
+                if (untilTs or 0) <= now() then _NonCritSuppress[k] = nil end
+            end
+            do
+                local coolCutoff = now() - 300 -- 5 min
+                for who, ts in pairs(OfferCooldown or {}) do
+                    if (ts or 0) < coolCutoff then OfferCooldown[who] = nil end
+                end
+                local helloCutoff = now() - (HELLO_STATUS_CD_SEC or 3)
+                for who, ts in pairs(_HelloStatusSentTo or {}) do
+                    if (ts or 0) < helloCutoff then _HelloStatusSentTo[who] = nil end
+                end
+            end
+
+            -- 4) Allègement des vieux logs : on retire le payload 'raw' > 15s
+            do
+                local stripBefore = now() - 15
+                for _, r in ipairs(DebugLog or {}) do
+                    if (r.ts or 0) < stripBefore and r.raw ~= nil then r.raw = nil end
+                end
+            end
+
     end
+
+    -- Purge les index de réception orphelins (ligne supprimée du ring-buffer ou mismatch)
+    for s, idx in pairs(RecvLogIndexBySeq) do
+        local r = DebugLog[idx]
+        if not r or r.seq ~= s then
+            RecvLogIndexBySeq[s] = nil
+        end
+    end
+
+    -- Purge les entrées anti-spam arrivées à échéance
+    for k, untilTs in pairs(_NonCritSuppress) do
+        if (untilTs or 0) <= now() then
+            _NonCritSuppress[k] = nil
+        end
+    end
+
 
     -- ✅ Démarrage automatique : envoie un HELLO pour ouvrir la découverte
     if not GLOG._helloAutoStarted then

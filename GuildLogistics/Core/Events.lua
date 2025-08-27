@@ -59,19 +59,23 @@ f:SetScript("OnEvent", function(self, event, name)
         SLASH_GLOG1 = "/glog"
         SlashCmdList.GLOG = function(msg)
             local txt = tostring(msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-            if txt == "track" or txt == "tracker" or txt == "suivi" then
-                if ns and ns.GLOG then
-                    -- 🔹 Active l'enregistrement même si la fenêtre est fermée
-                    if ns.GLOG.GroupTracker_SetRecordingEnabled then
-                        ns.GLOG.GroupTracker_SetRecordingEnabled(true)
-                    end
-                    -- 🔹 Ouvre la popup minimaliste
-                    if ns.GLOG.GroupTracker_ShowWindow then
-                        ns.GLOG.GroupTracker_ShowWindow(true)
-                    end
+            if txt == "mem" or txt == "memory" or txt == "ram" then
+                local f = ns and ns.GLOG and ns.GLOG.Debug_PrintMemStats
+                if f then f() else print("GLOG: outil mémoire indisponible") end
+                return
+            elseif txt == "gc" or txt == "collect" then
+                local before = collectgarbage("count")
+                collectgarbage("collect")
+                local after  = collectgarbage("count")
+                print(("GLOG GC: %.1f KiB -> %.1f KiB (%.1f libérés)"):format(before, after, before-after))
+                return
+            elseif txt == "bc" or txt == "bulk" then
+                if ns and ns.GLOG and ns.GLOG.Debug_BulkCleanup then
+                    ns.GLOG.Debug_BulkCleanup()
                 end
                 return
             end
+
             -- Comportement par défaut : ouvrir/afficher l’UI principale
             if ns and ns.ToggleUI then ns.ToggleUI() end
         end

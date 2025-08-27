@@ -686,10 +686,16 @@ function UI.SnapRegion(region)
             local p, rel, rp, x, y = region:GetPoint(i)
             if p then
                 local nx, ny = UI.RoundToPixel(x or 0), UI.RoundToPixel(y or 0)
-                if PixelUtil and PixelUtil.SetPoint then
-                    PixelUtil.SetPoint(region, p, rel, rp, nx, ny)
-                else
-                    region:SetPoint(p, rel, rp, nx, ny)
+                -- 🔒 évite les SetPoint redondants (qui déclenchent des relayouts en cascade)
+                local changed = (not x) or (not y)
+                    or math.abs((x or 0) - nx) > 1e-3
+                    or math.abs((y or 0) - ny) > 1e-3
+                if changed then
+                    if PixelUtil and PixelUtil.SetPoint then
+                        PixelUtil.SetPoint(region, p, rel, rp, nx, ny)
+                    else
+                        region:SetPoint(p, rel, rp, nx, ny)
+                    end
                 end
             end
         end

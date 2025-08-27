@@ -111,7 +111,7 @@ GLOG._EnsureDB = EnsureDB
 -- ➕ API : état du débug
 function GLOG.IsDebugEnabled()
     EnsureDB()
-    return GuildLogisticsUI.debugEnabled ~= false
+    return GuildLogisticsUI.debugEnabled == true
 end
 
 -- =========================
