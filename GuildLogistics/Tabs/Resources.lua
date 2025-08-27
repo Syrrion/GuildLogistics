@@ -365,10 +365,9 @@ end
 -- ========= BUILD =========
 -- =========================
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side=10, bottom=6 }) end
-
-    footer   = UI.CreateFooter(panel, 36)
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
+    
     topPane  = CreateFrame("Frame", nil, panel)
     bottomPane = CreateFrame("Frame", nil, panel)
 

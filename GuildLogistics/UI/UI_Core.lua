@@ -8,12 +8,12 @@ local GLOG = ns.GLOG
 UI.FRAME_THEME = "AUTO"
 
 -- Constantes (prend celles de UI.lua si déjà définies)
-UI.OUTER_PAD       = UI.OUTER_PAD       or 16
 UI.ROW_H           = UI.ROW_H           or 10
 UI.SECTION_HEADER_H = UI.SECTION_HEADER_H or 26
 UI.FONT_YELLOW = UI.FONT_YELLOW or {1, 0.82, 0}
 UI.WHITE       = UI.WHITE       or {1,1,1}
 UI.ACCENT      = UI.ACCENT      or {0.22,0.55,0.95}
+
 -- Couleur par défaut du libellé des lignes "séparateur" (Joueurs conserve cette couleur)
 UI.SEPARATOR_LABEL_COLOR = UI.SEPARATOR_LABEL_COLOR or { 1, 0.95, 0.3 } -- jaune doux
 
@@ -388,27 +388,36 @@ function UI.PaddedBox(parent, opts)
     return box, content
 end
 
-
--- Cadre utile pour le contenu : respecte les insets de la skin + safe pads
-function UI.ApplySafeContentBounds(frame, opts)
+-- Cadre utile pour le contenu
+function UI.CreateMainContainer(frame, opts)
+    cadre = frame
     opts = opts or {}
-    local side  = 20
-    local topEx = 20
-    local botEx = 20
-
     local parent = frame:GetParent()
     local skin   = parent and parent._cdzNeutral
-    local L,R,T,B = UI.OUTER_PAD, UI.OUTER_PAD, UI.OUTER_PAD, UI.OUTER_PAD
+    local L,R,T,B = 0,0,0,0
 
     if skin and skin.GetInsets then
         L,R,T,B = skin:GetInsets()
     end
 
-    local extraLeft = tonumber(UI.CATEGORY_BAR_W or 0) or 0
+    local footerH = 36
+    if(opts.footer and opts.footer == true) then
+        footer = UI.CreateFooter(frame, footerH)
+    else
+        footerH = 0
+        footer = nil
+    end
 
-    frame:ClearAllPoints()
-    frame:SetPoint("TOPLEFT",     parent, "TOPLEFT",     L + side + extraLeft, -(T + topEx))
-    frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -(R + side),          B + botEx)
+    cadre:ClearAllPoints()
+    cadre:SetPoint("TOPLEFT",     parent, "TOPLEFT",     L + UI.OUTER_PAD + UI.LEFT_PAD_BAR, -(T + UI.OUTER_PAD + UI.TOP_PAD))
+    cadre:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -(R + UI.OUTER_PAD + UI.RIGHT_PAD), B + UI.OUTER_PAD + UI.BOTTOM_PAD + footerH )
+
+    container = CreateFrame("Frame", nil, cadre)
+    container:ClearAllPoints()
+    container:SetPoint("TOPLEFT",     cadre, "TOPLEFT",     UI.INNER_PAD, -(UI.INNER_PAD))
+    container:SetPoint("BOTTOMRIGHT", cadre, "BOTTOMRIGHT", -(UI.INNER_PAD),  UI.INNER_PAD)
+
+    return container, footer, footerH
 end
 
 -- Normalisation légère des colonnes (justif/tailles par type)
@@ -580,10 +589,9 @@ end
 -- Footer générique attaché au bas d’un panel
 function UI.CreateFooter(parent, height)
     local f = CreateFrame("Frame", nil, parent)
-
     f:SetHeight(height or UI.FOOTER_H or 36)
-    f:SetPoint("BOTTOMLEFT",  parent, "BOTTOMLEFT",  0, 0)
-    f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0) -- pleine largeur
+    f:SetPoint("BOTTOMLEFT",  parent, "BOTTOMLEFT",  -UI.OUTER_PAD - 2, -(UI.OUTER_PAD + UI.INNER_PAD + height))
+    f:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", (UI.INNER_PAD), 0) -- pleine largeur
 
     -- ✅ Toujours au-dessus du contenu (z-order)
     if f.SetFrameStrata then
@@ -596,7 +604,7 @@ function UI.CreateFooter(parent, height)
 
     -- Fond sombre (zone d'action)
     local bg = f:CreateTexture(nil, "BACKGROUND")
-    local c  = UI.FOOTER_BG or {0, 0, 0, 0.22}
+    local c  = UI.FOOTER_BG or {0, 0, 0, 0.35}
     bg:SetColorTexture(c[1], c[2], c[3], c[4])
     bg:SetAllPoints(f)
 

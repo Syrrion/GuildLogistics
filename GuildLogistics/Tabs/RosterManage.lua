@@ -368,11 +368,8 @@ local function Refresh()
 end
 
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
-
-    -- ✅ Utiliser en priorité le footer hôte (celui qui contient "Close")
-    footer = (panel and panel.footer) or (UI.GetFooter and UI.GetFooter(panel)) or UI.CreateFooter(panel, 36)
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
 
     -- Bouton "Ajouter un joueur" (dans le MÊME footer que "Close")
     btnAdd = UI.Button(footer, Tr("btn_add_player"), { size="sm", variant="primary", minWidth=120 })

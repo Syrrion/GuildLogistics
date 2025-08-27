@@ -524,9 +524,8 @@ end
 
 -- Build panel
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
-
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
     activeArea  = CreateFrame("Frame", nil, panel)
     reserveArea = CreateFrame("Frame", nil, panel)
 
@@ -626,7 +625,6 @@ local function Build(container)
         end
     end
 
-    footer = UI.CreateFooter(panel, 36)
     totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 

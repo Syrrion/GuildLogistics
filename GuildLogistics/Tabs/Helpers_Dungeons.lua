@@ -14,7 +14,7 @@ local _notesFS = {}
 
 -- Colonnes
 local cols = UI.NormalizeColumns({
-    { key="label",   title = ""   , w=210, flex=1, justify="LEFT" },
+    { key="label",   title = ""   , w=180, flex=1, justify="LEFT" },
     { key="loot",    title = (DATA and DATA.headers and DATA.headers.dungeonLoot), w=300, justify="CENTER" },
     { key="vault",   title = (DATA and DATA.headers and DATA.headers.vault)      , w=300, justify="CENTER" },
     { key="crests",  title = (DATA and DATA.headers and DATA.headers.crests)     , w=300, justify="CENTER" },
@@ -196,8 +196,8 @@ end
 
 -- == BUILD ==
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
     local y = 0
     y = y + (UI.SectionHeader(panel, Tr("tab_dungeons_loot"), { topPad = 0 }) or 26) + 8

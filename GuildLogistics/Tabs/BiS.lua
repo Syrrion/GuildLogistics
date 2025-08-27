@@ -392,22 +392,17 @@ end
 -- == Construit l'interface de l'onglet BiS (intro, filtres, liste, footer) == --
 local function Build(container)
 
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
-    
-    local INSET   = 12
-    local PAD     = UI.OUTER_PAD or 10
-    local PAD_LEFT, PAD_RIGHT = 10, 10
-    local PAD_TOP, PAD_BOTTOM = 6, 0
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
 
     local introArea = CreateFrame("Frame", nil, panel)
-    introArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  INSET, -INSET)
-    introArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -INSET, -INSET)
+    introArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -0)
+    introArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -0, -0)
     introArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     local introFS = introArea:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    introFS:SetPoint("TOPLEFT",  introArea, "TOPLEFT",  PAD_LEFT, -PAD_TOP)
-    introFS:SetPoint("TOPRIGHT", introArea, "TOPRIGHT", -PAD_RIGHT, -PAD_TOP)
+    introFS:SetPoint("TOPLEFT",  introArea, "TOPLEFT",  0, -0)
+    introFS:SetPoint("TOPRIGHT", introArea, "TOPRIGHT", -0, -0)
     introFS:SetJustifyH("LEFT"); introFS:SetJustifyV("TOP")
     if introFS.SetWordWrap then introFS:SetWordWrap(true) end
     if introFS.SetNonSpaceWrap then introFS:SetNonSpaceWrap(true) end
@@ -420,7 +415,7 @@ local function Build(container)
         introFS:SetTextColor(1, 1, 1)
         if introFS.SetShadowOffset then introFS:SetShadowOffset(1, -1) end
     end
-    introArea:SetHeight(math.max(24, (introFS:GetStringHeight() or 16) + PAD_TOP + PAD_BOTTOM))
+    introArea:SetHeight(math.max(24, (introFS:GetStringHeight() or 16)))
 
     local headerArea = CreateFrame("Frame", nil, panel)
     headerArea:SetPoint("TOPLEFT",  introArea, "BOTTOMLEFT",  0, -10)
@@ -453,22 +448,16 @@ local function Build(container)
     specDD:SetBuilder(_SpecMenuBuilder)
     _AttachDropdownZFix(specDD, panel)
 
-    footer = UI.CreateFooter(panel, 22)
-    footer:ClearAllPoints()
-    footer:SetPoint("BOTTOMLEFT",  panel, "BOTTOMLEFT",  0, 0)
-    footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
-
-
     local sourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     sourceFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
     sourceFS:SetJustifyH("LEFT"); sourceFS:SetJustifyV("MIDDLE")
     sourceFS:SetText(Tr("footer_source_wowhead"))
 
     listArea = CreateFrame("Frame", nil, panel)
-    listArea:SetPoint("TOPLEFT",     filtersArea, "BOTTOMLEFT",  0, -8)
-    listArea:SetPoint("TOPRIGHT",    filtersArea, "BOTTOMRIGHT", 0, -8)
-    listArea:SetPoint("BOTTOMLEFT",  footer,      "TOPLEFT",     0,  8)
-    listArea:SetPoint("BOTTOMRIGHT", footer,      "TOPRIGHT",    0,  8)
+    listArea:SetPoint("TOPLEFT",     filtersArea, "BOTTOMLEFT",  0, 0)
+    listArea:SetPoint("TOPRIGHT",    filtersArea, "BOTTOMRIGHT", 0, 0)
+    listArea:SetPoint("BOTTOMLEFT",  footer,      "TOPLEFT",     0, footerH - UI.INNER_PAD )
+    listArea:SetPoint("BOTTOMRIGHT", footer,      "TOPRIGHT",    0, 0 )
     listArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     lv = UI.ListView(listArea, cols, {

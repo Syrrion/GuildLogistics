@@ -14,7 +14,7 @@ local _notesFS = {}
 
 -- Colonnes (structure standard ListView)
 local cols = UI.NormalizeColumns({
-    { key="level", title = (DATA and DATA.headers and DATA.headers.level),  w=210, justify="LEFT"   },
+    { key="level", title = (DATA and DATA.headers and DATA.headers.level),  w=180, justify="LEFT"   },
     { key="chest", title = (DATA and DATA.headers and DATA.headers.chest),  w=300, justify="CENTER" },
     { key="map",   title = (DATA and DATA.headers and DATA.headers.map),    w=300, justify="CENTER" },
     { key="vault", title = (DATA and DATA.headers and DATA.headers.vault),  w=300, justify="CENTER" },
@@ -167,8 +167,8 @@ end
 
 -- == BUILD ==
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
     local y = 0
     y = y + (UI.SectionHeader(panel, Tr("delves_intro_title"), { topPad = 0 }) or 26) + 8

@@ -7,7 +7,13 @@ local UI = ns.UI
 
 UI.DEFAULT_W, UI.DEFAULT_H = 1360, 680
 
-UI.OUTER_PAD = 16
+UI.OUTER_PAD = 4
+UI.INNER_PAD = 10
+UI.LEFT_PAD   = 29
+UI.RIGHT_PAD  = 29
+UI.TOP_PAD    = 29
+UI.BOTTOM_PAD = 29
+
 UI.ROW_H = 30
 UI.FONT_YELLOW = {1, 0.82, 0}
 UI.MIDGREY = {0.5,0.5,0.5}
@@ -26,7 +32,6 @@ UI.FOOTER_BORDER       = UI.FOOTER_BORDER       or {1, 1, 1, 0.12}
 UI.TAB_EXTRA_GAP       = UI.TAB_EXTRA_GAP       or 14
 UI.CONTENT_SIDE_PAD    = UI.CONTENT_SIDE_PAD    or -23
 UI.CONTENT_BOTTOM_LIFT = UI.CONTENT_BOTTOM_LIFT or -20
-UI.TAB_LEFT_PAD        = UI.TAB_LEFT_PAD        or 18
 UI.CATEGORY_GAP_TOP    = UI.CATEGORY_GAP_TOP    or 10
 -- --- Scrollbar (skin global et réutilisable) ---
 UI.SCROLLBAR_INSET         = 4   -- marge interne droite pour la réserve de place
@@ -439,7 +444,7 @@ local function _CreateTopTabButton(prevBtn, text)
         if Main._cdzNeutral and Main._cdzNeutral.GetInsets then
             L = (Main._cdzNeutral:GetInsets())
         end
-        b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.TAB_LEFT_PAD or 12), -52)
+        b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.LEFT_PAD_BAR or 12), -52)
     else
         b:SetPoint("LEFT", prevBtn, "RIGHT", 8, 0)
     end
@@ -774,7 +779,7 @@ function UI.RelayoutTabs()
                     if Main and Main._cdzNeutral and Main._cdzNeutral.GetInsets then
                         L = (Main._cdzNeutral:GetInsets())
                     end
-                    b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.TAB_LEFT_PAD or 12), -52)
+                    b:SetPoint("TOPLEFT", Main, "TOPLEFT", L + (UI.LEFT_PAD_BAR or 12), -52)
                 else
                     b:SetPoint("LEFT", lastBtn, "RIGHT", 8, 0)
                 end
@@ -1350,8 +1355,7 @@ function UI.CreateCategorySidebar()
     list:SetClipsChildren(false)
 
     -- Réserve l’espace global
-    UI.CATEGORY_BAR_W = bar:GetWidth() + 3
-    UI.TAB_LEFT_PAD   = (UI.CATEGORY_BAR_W or 0) + 12
+    UI.LEFT_PAD_BAR   = bar:GetWidth() + UI.LEFT_PAD
 
     -- Construit la liste de catégories réellement utilisées
     local hasCat = {}

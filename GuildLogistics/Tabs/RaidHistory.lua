@@ -283,12 +283,8 @@ if ns and ns.On then
 end
 
 local function Build(container)
-    panel = container
-    -- Padding global, identique aux autres onglets
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
-
-    -- Footer + bouton retour (inchangés fonctionnellement)
-    footer = UI.CreateFooter(panel, 1)
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
     -- 📦 Conteneur interne paddé (comme Synthese/Guilde)
     histPane = CreateFrame("Frame", nil, panel)

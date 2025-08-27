@@ -185,10 +185,8 @@ local function Refresh()
 end
 
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
-
-    footer = UI.CreateFooter(panel, 36)
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
 
     totalLabel = footer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     totalLabel:SetText(Tr("lbl_total_amount_gold"))

@@ -71,16 +71,7 @@ function UI.ListView(parent, cols, opts)
             if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
         end
     end
-
-    -- Ancrage bas optionnel (ex : footer) pour limiter la hauteur de scroll
-    lv._bottomAnchor = opts.bottomAnchor
-    if lv._bottomAnchor and lv._bottomAnchor.HookScript then
-        -- si le footer change de taille, on relayout la liste
-        lv._bottomAnchor:HookScript("OnSizeChanged", function()
-            if lv and lv.Layout then lv:Layout() end
-        end)
-    end
-
+    
     -- Overlay d'état vide (grisé + texte centré)
     function lv:_EnsureEmptyOverlay()
         if self._empty then return end

@@ -13,8 +13,8 @@ local function _SetRadioGroupChecked(group, key)
 end
 
 function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
     optionsPane = CreateFrame("Frame", nil, panel)
     

@@ -39,8 +39,8 @@ local function _UpdateButtonsEnabled()
 end
 
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
     local y = 0
     -- Section header (cohérent avec les autres onglets)

@@ -13,7 +13,7 @@ local _notesFS = {}
 
 -- Colonnes (même moteur ListView/NormalizeColumns)
 local cols = UI.NormalizeColumns({
-    { key="label",  title = (DATA and DATA.headers and DATA.headers.difficulty) , min=210, flex=2, justify="LEFT"   },
+    { key="label",  title = (DATA and DATA.headers and DATA.headers.difficulty) , min=180, flex=2, justify="LEFT"   },
     { key="lfr",    title = (DATA and DATA.headers and DATA.headers.lfr)        ,    w=225, justify="CENTER" },
     { key="normal", title = (DATA and DATA.headers and DATA.headers.normal)     ,    w=225, justify="CENTER" },
     { key="heroic", title = (DATA and DATA.headers and DATA.headers.heroic)     ,    w=225, justify="CENTER" },
@@ -108,8 +108,8 @@ end
 
 -- == BUILD ==
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
     local y = 0
     y = y + (UI.SectionHeader(panel, Tr("tab_raid_loot"), { topPad = 0 }) or 26) + 8

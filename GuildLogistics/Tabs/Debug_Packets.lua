@@ -335,11 +335,8 @@ function Refresh()
 end
 
 local function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
-
-    -- === Footer (pattern Synthese) ===
-    footer = UI.CreateFooter(panel, 36)
+    -- Création du conteneur
+    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
 
     -- Label version DB (bas-gauche)
     verFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")

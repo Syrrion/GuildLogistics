@@ -64,7 +64,6 @@ local function _RecreateListView()
 
 end
 
-
 -- Recherche d’infos agrégées guilde (main + rerolls)
 local function FindGuildInfo(playerName)
     local guildRows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
@@ -399,14 +398,9 @@ end
 
 -- Build panel
 function Build(container)
-    panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
-    -- Conteneur de l’onglet
-    membersPane = CreateFrame("Frame", nil, panel)
-    membersPane:ClearAllPoints()
-    membersPane:SetPoint("TOPLEFT",     panel, "TOPLEFT",     UI.OUTER_PAD, -UI.OUTER_PAD)
-    membersPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD,  UI.OUTER_PAD)
+    -- Création du conteneur
+    membersPane, footer = UI.CreateMainContainer(container, {footer = false})
 
     -- En-tête de section
     UI.SectionHeader(membersPane, Tr("lbl_guild_members"), { topPad = 2 })
