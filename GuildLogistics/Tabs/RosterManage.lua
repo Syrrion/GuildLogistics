@@ -369,7 +369,7 @@ end
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     -- ✅ Utiliser en priorité le footer hôte (celui qui contient "Close")
     footer = (panel and panel.footer) or (UI.GetFooter and UI.GetFooter(panel)) or UI.CreateFooter(panel, 36)

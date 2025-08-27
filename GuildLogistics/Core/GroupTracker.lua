@@ -541,7 +541,7 @@ local function _ShowHistoryPopup(full)
     })
 
     local lv = UI.ListView(p.content, cols, {
-        topOffset = 65,
+        topOffset = 0,
         buildRow = function(r)
             local w = {}
             w.time  = UI.Label(r, { justify = "CENTER" })
@@ -819,9 +819,7 @@ local function _ensureWindow()
 
     local lv = UI.ListView(f.content, cols, {
         topOffset = 0,
-        safeRight = false,  -- pas besoin d'espace pour une barre
         rowHeight = 22,
-        showSB = false,
         buildRow = function(r)
             r:EnableMouse(true)
             r:SetScript("OnMouseUp", function(self, button)
@@ -1071,10 +1069,10 @@ function GLOG.GroupTracker_ShowWindow(show)
         end
 
         -- Applique les réglages actuels
-        local aWin  = (GLOG.GroupTracker_GetOpacity       and GLOG.GroupTracker_GetOpacity())       or 0.95
-        local aText = (GLOG.GroupTracker_GetTextOpacity   and GLOG.GroupTracker_GetTextOpacity())   or 1.00
+        local aWin  = (GLOG.GroupTracker_GetOpacity        and GLOG.GroupTracker_GetOpacity())       or 0.95
+        local aText = (GLOG.GroupTracker_GetTextOpacity    and GLOG.GroupTracker_GetTextOpacity())   or 1.00
         local aBtnS = (GLOG.GroupTracker_GetButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity()) or 1.00
-        local rowH  = (GLOG.GroupTracker_GetRowHeight     and GLOG.GroupTracker_GetRowHeight())     or 22
+        local rowH  = (GLOG.GroupTracker_GetRowHeight      and GLOG.GroupTracker_GetRowHeight())     or 22
 
         if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, aWin) end
         if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, aText)            end
@@ -1106,7 +1104,6 @@ function GLOG.GroupTracker_ShowWindow(show)
         if state.win then state.win:Hide() end
     end
 end
-
 
 function GLOG.GroupTracker_GetOpacity()
     local s = _Store()

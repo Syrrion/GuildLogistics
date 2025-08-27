@@ -9,9 +9,6 @@ UI.FRAME_THEME = "AUTO"
 
 -- Constantes (prend celles de UI.lua si déjà définies)
 UI.OUTER_PAD       = UI.OUTER_PAD       or 16
-UI.SCROLLBAR_W     = UI.SCROLLBAR_W     or 20
-UI.SCROLLBAR_INSET = UI.SCROLLBAR_INSET or 10 
-UI.GUTTER          = UI.GUTTER          or 8
 UI.ROW_H           = UI.ROW_H           or 10
 UI.SECTION_HEADER_H = UI.SECTION_HEADER_H or 26
 UI.FONT_YELLOW = UI.FONT_YELLOW or {1, 0.82, 0}
@@ -23,6 +20,52 @@ UI.SEPARATOR_LABEL_COLOR = UI.SEPARATOR_LABEL_COLOR or { 1, 0.95, 0.3 } -- jaune
 -- Padding (px) ajouté au-dessus des lignes "séparateur" (déjà utilisé)
 UI.SEPARATOR_TOP_PAD = UI.SEPARATOR_TOP_PAD or 20
 
+-- Récupère la ScrollBar d'un ScrollFrame "UIPanelScrollFrameTemplate"
+function UI.GetScrollBar(scroll)
+    if not scroll then return nil end
+    local sb = scroll.ScrollBar or scroll.scrollbar
+    if (not sb) and scroll.GetName then
+        local n = scroll:GetName()
+        if n then sb = _G[n .. "ScrollBar"] end
+    end
+    return sb
+end
+
+-- Supprime définitivement les flèches haut/bas et étire la barre sur toute la hauteur
+function UI.StripScrollButtons(scrollOrBar)
+    local sb = scrollOrBar
+    if sb and sb.GetObjectType and sb:GetObjectType() == "ScrollFrame" then
+        sb = UI.GetScrollBar(sb)
+    end
+    if not sb or sb._gl_noArrows then return end
+
+    local parent = sb:GetParent() or sb
+    local function strip(btn)
+        if not btn then return end
+        btn:Hide()
+        if btn.EnableMouse then btn:EnableMouse(false) end
+        if btn.SetAlpha then btn:SetAlpha(0) end
+        if btn.SetSize then btn:SetSize(1, 1) end
+        if btn.ClearAllPoints then btn:ClearAllPoints() end
+        if not btn._gl_hideHook then
+            btn:HookScript("OnShow", function(b) b:Hide() end)
+            btn._gl_hideHook = true
+        end
+    end
+
+    strip(sb.ScrollUpButton)
+    strip(sb.ScrollDownButton)
+
+    if sb.ClearAllPoints and sb.SetPoint then
+        sb:ClearAllPoints()
+        sb:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+        sb:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
+    end
+
+    sb._gl_noArrows = true
+end
+
+
 function UI.GetSeparatorTopPadding()
     local v = tonumber(UI.SEPARATOR_TOP_PAD)
     if not v or v < 0 then v = 0 end
@@ -32,7 +75,6 @@ end
 -- === Colonnes: w/min/flex
 function UI.ResolveColumns(totalWidth, cols, opts)
     opts = opts or {}
-    local safeRight = (opts.safeRight ~= false)
     local SAFE = (UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)
     local fixed, flexUnits = 0, 0
     local out = {}
@@ -51,7 +93,6 @@ function UI.ResolveColumns(totalWidth, cols, opts)
     end
 
     local contentW = totalWidth or 800
-    if safeRight and #out > 0 then contentW = contentW - SAFE end
     local rem = math.max(0, contentW - fixed)
 
     if flexUnits > 0 and rem > 0 then
@@ -62,10 +103,6 @@ function UI.ResolveColumns(totalWidth, cols, opts)
         end
     end
 
-    if safeRight and #out > 0 then
-        local last = out[#out]
-        last.w = math.max(24, last.w - SAFE)
-    end
     return out
 end
 
@@ -296,6 +333,10 @@ function UI.CreateScroll(parent)
     list:SetPoint("TOPLEFT")
     list:SetPoint("TOPRIGHT")
     list:SetHeight(1)
+
+    if UI.SkinScrollBar then UI.SkinScrollBar(scroll) end
+    if UI.StripScrollButtons then UI.StripScrollButtons(scroll) end
+
     return scroll, list
 end
 
@@ -351,9 +392,9 @@ end
 -- Cadre utile pour le contenu : respecte les insets de la skin + safe pads
 function UI.ApplySafeContentBounds(frame, opts)
     opts = opts or {}
-    local side  = tonumber(opts.side)   or 10
-    local topEx = tonumber(opts.top)    or 10
-    local botEx = tonumber(opts.bottom) or 6
+    local side  = 20
+    local topEx = 20
+    local botEx = 20
 
     local parent = frame:GetParent()
     local skin   = parent and parent._cdzNeutral

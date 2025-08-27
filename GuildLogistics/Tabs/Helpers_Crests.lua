@@ -11,11 +11,11 @@ local _headerBGs
 
 -- Colonnes (structure ListView standard)
 local cols = UI.NormalizeColumns({
-    { key="crest",   title=(DATA and DATA.headers and DATA.headers.crest)   , min=200, flex=1,  justify="CENTER"   },
-    { key="chasms",  title=(DATA and DATA.headers and DATA.headers.chasms)  , w=220, justify="CENTER" },
-    { key="dungeons",title=(DATA and DATA.headers and DATA.headers.dungeons), w=220, justify="CENTER" },
-    { key="raids",   title=(DATA and DATA.headers and DATA.headers.raids)   , w=220, justify="CENTER" },
-    { key="outdoor", title=(DATA and DATA.headers and DATA.headers.outdoor) , w=220, justify="CENTER" },
+    { key="crest",   title=(DATA and DATA.headers and DATA.headers.crest)   , min=210, flex=1,  justify="CENTER"   },
+    { key="chasms",  title=(DATA and DATA.headers and DATA.headers.chasms)  , w=225, justify="CENTER" },
+    { key="dungeons",title=(DATA and DATA.headers and DATA.headers.dungeons), w=225, justify="CENTER" },
+    { key="raids",   title=(DATA and DATA.headers and DATA.headers.raids)   , w=225, justify="CENTER" },
+    { key="outdoor", title=(DATA and DATA.headers and DATA.headers.outdoor) , w=225, justify="CENTER" },
 })
 
 -- Helpers de rendu texte (localisation & couleur)
@@ -172,9 +172,7 @@ end
 -- == BUILD ==
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then
-        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
-    end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     -- Hauteur de ligne augmentée pour le multi-ligne
     lv = UI.ListView(panel, cols, {

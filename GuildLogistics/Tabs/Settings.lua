@@ -14,7 +14,7 @@ end
 
 function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     optionsPane = CreateFrame("Frame", nil, panel)
     

@@ -6,7 +6,9 @@ ns.UI = ns.UI or {}
 local UI = ns.UI
 
 UI.DEFAULT_W, UI.DEFAULT_H = 1360, 680
-UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER, UI.ROW_H = 16, 20, 8, 30
+
+UI.OUTER_PAD = 16
+UI.ROW_H = 30
 UI.FONT_YELLOW = {1, 0.82, 0}
 UI.MIDGREY = {0.5,0.5,0.5}
 UI.WHITE = {1,1,1}
@@ -26,6 +28,16 @@ UI.CONTENT_SIDE_PAD    = UI.CONTENT_SIDE_PAD    or -23
 UI.CONTENT_BOTTOM_LIFT = UI.CONTENT_BOTTOM_LIFT or -20
 UI.TAB_LEFT_PAD        = UI.TAB_LEFT_PAD        or 18
 UI.CATEGORY_GAP_TOP    = UI.CATEGORY_GAP_TOP    or 10
+-- --- Scrollbar (skin global et réutilisable) ---
+UI.SCROLLBAR_INSET         = 4   -- marge interne droite pour la réserve de place
+-- Hauteur minimale (px) du pouce quand la liste est très longue
+UI.SCROLLBAR_TRACK       = {0, 0, 0, 0.30}
+UI.SCROLLBAR_THUMB       = {0.5, 0.5, 0.5, 0.85}
+UI.SCROLLBAR_THUMB_HOVER = {0.5, 0.5, 0.5, 1}
+UI.SCROLLBAR_ALPHA       = 0.5
+UI.SCROLLBAR_THUMB_MIN_H   = 5
+UI.SCROLLBAR_W     = 5
+UI.GUTTER          = 5
 
 -- Utilitaires : formatage avec séparateur de milliers
 UI.NUM_THOUSANDS_SEP = UI.NUM_THOUSANDS_SEP or " "

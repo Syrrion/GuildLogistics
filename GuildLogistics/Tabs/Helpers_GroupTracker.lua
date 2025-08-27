@@ -40,9 +40,7 @@ end
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then
-        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
-    end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     local y = 0
     -- Section header (cohérent avec les autres onglets)
@@ -124,7 +122,7 @@ local function Build(container)
             end
         end
     end)
-    
+
     local rowH = math.max(btnOpen:GetHeight() or 28, btnClear:GetHeight() or 24)
     y = _RowY(y, rowH)
 

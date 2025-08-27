@@ -285,9 +285,7 @@ end
 local function Build(container)
     panel = container
     -- Padding global, identique aux autres onglets
-    if UI.ApplySafeContentBounds then
-        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
-    end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     -- Footer + bouton retour (inchangés fonctionnellement)
     footer = UI.CreateFooter(panel, 1)

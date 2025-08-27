@@ -393,7 +393,7 @@ end
 local function Build(container)
 
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
     
     local INSET   = 12
     local PAD     = UI.OUTER_PAD or 10
@@ -472,7 +472,6 @@ local function Build(container)
     listArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     lv = UI.ListView(listArea, cols, {
-        safeRight    = true,
         buildRow     = BiS_BuildRow,
         updateRow    = BiS_UpdateRow,
         bottomAnchor = footer,

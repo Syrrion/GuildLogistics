@@ -400,12 +400,9 @@ end
 -- Build panel
 function Build(container)
     panel = container
-    -- Padding global (respecte la sidebar catégorie via CATEGORY_BAR_W)
-    if UI.ApplySafeContentBounds then
-        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
-    end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
-    -- Conteneur de l’onglet avec padding interne (comme Synthese)
+    -- Conteneur de l’onglet
     membersPane = CreateFrame("Frame", nil, panel)
     membersPane:ClearAllPoints()
     membersPane:SetPoint("TOPLEFT",     panel, "TOPLEFT",     UI.OUTER_PAD, -UI.OUTER_PAD)

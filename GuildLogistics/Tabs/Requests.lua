@@ -108,7 +108,7 @@ end
 
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 }) end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
     lv = UI.ListView(panel, cols, { buildRow = BuildRow, updateRow = UpdateRow })
 end
 

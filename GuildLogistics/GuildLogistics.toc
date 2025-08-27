@@ -37,6 +37,7 @@ UI/UI_Badge.lua
 UI/UI_Float.lua
 UI/UI_PlainWindow.lua
 UI/UI_Slider.lua
+UI/UI_Scrollbar.lua
 
 Tabs/Guild.lua
 

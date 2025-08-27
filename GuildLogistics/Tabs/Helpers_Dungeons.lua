@@ -14,7 +14,7 @@ local _notesFS = {}
 
 -- Colonnes
 local cols = UI.NormalizeColumns({
-    { key="label",   title = ""   , w=180, flex=1, justify="LEFT" },
+    { key="label",   title = ""   , w=210, flex=1, justify="LEFT" },
     { key="loot",    title = (DATA and DATA.headers and DATA.headers.dungeonLoot), w=300, justify="CENTER" },
     { key="vault",   title = (DATA and DATA.headers and DATA.headers.vault)      , w=300, justify="CENTER" },
     { key="crests",  title = (DATA and DATA.headers and DATA.headers.crests)     , w=300, justify="CENTER" },
@@ -141,7 +141,7 @@ local function updateRow(i, r, f, item)
         golden = (ns.L and ns.L["crest_golden"]) or "Golden",
     }
 
-    local resolved = UI.ResolveColumns(r:GetWidth() or (UI.SumWidths(cols)), cols, { safeRight=false })
+    local resolved = UI.ResolveColumns(r:GetWidth() or (UI.SumWidths(cols)), cols)
     local x = 0
     for _, c in ipairs(resolved) do
         local w = c.w or c.min or 80
@@ -197,9 +197,7 @@ end
 -- == BUILD ==
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then
-        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
-    end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     local y = 0
     y = y + (UI.SectionHeader(panel, Tr("tab_dungeons_loot"), { topPad = 0 }) or 26) + 8
@@ -215,7 +213,6 @@ local function Build(container)
 
     lv = UI.ListView(panel, cols, {
         topOffset = y,
-        safeRight = true,
         buildRow  = buildRow,
         updateRow = updateRow,
     })

@@ -5,7 +5,7 @@ local UI = ns.UI
 
 -- ListView générique
 -- cols: { {key,title,w|min,flex,justify,pad}, ... }
--- opts: { topOffset=number, safeRight=true|false, bottomAnchor=Frame, buildRow(row)->fields, updateRow(i,row,fields,item) }
+-- opts: { topOffset=number, bottomAnchor=Frame, buildRow(row)->fields, updateRow(i,row,fields,item) }
 function UI.ListView(parent, cols, opts)
     opts = opts or {}
 
@@ -15,8 +15,53 @@ function UI.ListView(parent, cols, opts)
     lv.rows   = {}
     lv.opts   = opts
 
+    -- État/autorisation de la ScrollBar
+    lv._scrollbarAllowed = (opts.showSB ~= false)  -- par défaut autorisée
+    lv._showScrollbar    = false                   -- invisible tant qu'inutile
+
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
+
+    -- Relie le ScrollFrame à sa ListView pour les callbacks
+    lv.scroll._ownerListView = lv
+
+    -- Réaction immédiate quand la plage de scroll change (création/destruction de lignes, resize, etc.)
+    lv.scroll:HookScript("OnScrollRangeChanged", function(sf)
+        local owner = sf._ownerListView
+        if owner and UI and UI.ListView_SyncScrollbar then
+            UI.ListView_SyncScrollbar(owner, false) -- déféré pour laisser la range se stabiliser
+        end
+    end)
+
+    -- Quand le scrollframe apparaît, on resynchronise (au cas où tout a été construit off-screen)
+    lv.scroll:HookScript("OnShow", function(sf)
+        local owner = sf._ownerListView
+        if owner and UI and UI.ListView_SyncScrollbar then
+            UI.ListView_SyncScrollbar(owner, false) -- next frame
+        end
+    end)
+
+    -- Quand géométrie change, on resynchronise au frame suivant
+    if lv.scroll.HookScript then
+        lv.scroll:HookScript("OnSizeChanged", function(sf)
+            local owner = sf._ownerListView
+            if owner and UI and UI.ListView_SyncScrollbar then
+                UI.ListView_SyncScrollbar(owner, false)
+            end
+        end)
+    end
+    if lv.list and lv.list.HookScript then
+        lv.list:HookScript("OnSizeChanged", function()
+            if UI and UI.ListView_SyncScrollbar then
+                UI.ListView_SyncScrollbar(lv, false)
+            end
+        end)
+    end
+
+    -- État initial : pas de barre tant que non nécessaire
+    if UI.ListView_SetScrollbarVisible then
+        UI.ListView_SetScrollbarVisible(lv, false)
+    end
 
     -- Forçage d’affichage/masquage de l’entête (utilisé pour les listes repliables)
     lv._forceHeaderHidden = false
@@ -75,19 +120,31 @@ function UI.ListView(parent, cols, opts)
 
     -- Mise en page
     function lv:Layout()
-        local sbw  = (UI.SCROLLBAR_W or 20) + (UI.SCROLLBAR_INSET or 0)
         local top  = tonumber(self.opts.topOffset) or 0
         local pW   = self.parent:GetWidth() or 800
 
-        -- Réserve-t-on de l'espace à droite ?
-        -- On réserve seulement si la scrollbar est visible ET si safeRight n'est pas désactivé.
-        local showSB     = (self._showScrollbar ~= false) -- nil => true (comportement historique)
-        local wantSafe   = (self.opts.safeRight ~= false)
-        local reserve    = (showSB and wantSafe) and true or false
-        local cW         = pW - (reserve and sbw or 0)
+        -- La scrollbar est-elle visible ?
+        local showSB = (self._showScrollbar == true)
+
+        -- Largeur effective de la scrollbar (option par-liste > globale > largeur actuelle si dispo)
+        local sbW = (self.opts and self.opts.scrollbarWidth) or (UI.SCROLLBAR_W or 6)
+        if showSB and UI and UI.GetScrollBar then
+            local sb = UI.GetScrollBar(self.scroll)
+            if sb and sb.GetWidth then
+                local w = sb:GetWidth()
+                if w and w > 0 then sbW = w end
+            end
+        end
+
+        local inset = UI.SCROLLBAR_INSET or 0
+        local rOff  = showSB and (sbW + inset) or 0
+
+        -- Largeur des données (empêche toute superposition sous la barre)
+        local cW = math.max(0, pW - rOff)
+
 
         -- Résolution colonnes (on a déjà retiré l'éventuelle réservation de droite)
-        local resolved = UI.ResolveColumns(cW, self.cols, { safeRight = false })
+        local resolved = UI.ResolveColumns(cW, self.cols)
 
         -- Élargissement dynamique de la colonne 'act' selon le besoin réel observé
         local actIndex
@@ -134,7 +191,8 @@ function UI.ListView(parent, cols, opts)
         -- Header
         self.header:ClearAllPoints()
         self.header:SetPoint("TOPLEFT",  self.parent, "TOPLEFT",   0, -(top))
-        self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -(reserve and sbw or 0), -(top))
+        self.header:SetPoint("TOPRIGHT", self.parent, "TOPRIGHT", -rOff, -(top))
+
         UI.LayoutHeader(self.header, resolved, self.hLabels)
         if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
 
@@ -144,7 +202,7 @@ function UI.ListView(parent, cols, opts)
 
         local bottomTarget = self._bottomAnchor or self.parent
         local bottomPoint  = self._bottomAnchor and "TOPRIGHT" or "BOTTOMRIGHT"
-        local rightOffset  = reserve and sbw or 0
+        local rightOffset  = rOff
         self.scroll:SetPoint("BOTTOMRIGHT", bottomTarget, bottomPoint, -rightOffset, 0)
 
         self.list:SetWidth(cW)
@@ -162,6 +220,11 @@ function UI.ListView(parent, cols, opts)
         end
         self.list:SetHeight(y)
 
+        -- Force le recalcul immédiat de la plage de scroll (sinon elle arrive parfois au frame suivant)
+        if self.scroll and self.scroll.UpdateScrollChildRect then
+            self.scroll:UpdateScrollChildRect()
+        end
+
         -- Réassure l'ordre Z (au cas où)
         if self.scroll:GetFrameLevel() >= self.header:GetFrameLevel() then
             self.header:SetFrameLevel(self.scroll:GetFrameLevel() + 5)
@@ -176,8 +239,26 @@ function UI.ListView(parent, cols, opts)
             self._empty:SetFrameStrata(self.scroll:GetFrameStrata() or "MEDIUM")
             self._empty:SetFrameLevel(base + 3)
         end
-    end
 
+        -- Synchronisation de la barre après pose de la géométrie
+        if UI and UI.ListView_SyncScrollbar then
+            UI.ListView_SyncScrollbar(self, false) -- next frame pour laisser la range se stabiliser
+        end
+
+        -- --- Sync immédiat avec range + fallback géométrique (évite le "n'apparaît pas" aléatoire) ---
+        local yr    = (self.scroll.GetVerticalScrollRange and self.scroll:GetVerticalScrollRange()) or 0
+        local viewH = self.scroll:GetHeight() or 0
+        local need  = (yr > 0) or (y > (viewH + 1))
+        if self._scrollbarAllowed == false then need = false end
+        local current = (self._showScrollbar == true)
+        if current ~= need then
+            if UI and UI.ListView_SetScrollbarVisible then
+                UI.ListView_SetScrollbarVisible(self, need)
+            else
+                self._showScrollbar = need and true or false
+            end
+        end
+    end
 
     -- Données
     -- Wrapper propre qui ne recolorie PLUS le fond : il se contente de décorer les lignes
@@ -224,7 +305,7 @@ function UI.ListView(parent, cols, opts)
                         bg:ClearAllPoints()
                         -- englobe l’entête…
                         bg:SetPoint("TOPLEFT", self.header, "TOPLEFT", 0, 0)
-                        -- …jusqu’au bas de la zone scroll (respecte offsets/safeRight déjà appliqués)
+                        -- …jusqu’au bas de la zone scroll (respecte offsets déjà appliqués)
                         bg:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
 
                         -- garde la couleur en phase si le thème change dynamiquement
@@ -554,38 +635,57 @@ function UI.ListView_SetScrollbarVisible(lv, show)
     if not (lv and lv.scroll) then return end
     if show == nil then show = true end
 
+    -- Respecte l'autorisation globale
+    if lv._scrollbarAllowed == false then show = false end
+
+    local prev = (lv._showScrollbar == true)
     lv._showScrollbar = (show and true) or false
 
-    -- Trouver la ScrollBar du ScrollFrame "UIPanelScrollFrameTemplate"
-    local sb = lv.scroll.ScrollBar or lv.scroll.scrollbar
-    if (not sb) and lv.scroll.GetName then
-        local n = lv.scroll:GetName()
-        if n then sb = _G[n .. "ScrollBar"] end
-    end
+    -- ScrollBar du ScrollFrame
+    local sb = (UI.GetScrollBar and UI.GetScrollBar(lv.scroll)) or lv.scroll.ScrollBar or lv.scroll.scrollbar
+    if not sb then return end
 
-    if sb then
-        if lv._showScrollbar then
-            sb:Show()
-            if sb.EnableMouse then sb:EnableMouse(true) end
-            if sb.SetAlpha then sb:SetAlpha(1) end
-        else
-            sb:Hide()
-            if sb.EnableMouse then sb:EnableMouse(false) end
-            if sb.SetAlpha then sb:SetAlpha(0) end
+    -- Sécurité : supprimer flèches et appliquer skin fin si dispo
+    if UI.StripScrollButtons then UI.StripScrollButtons(sb) end
+    if UI.SkinScrollBar     then UI.SkinScrollBar(sb)     end
+
+    if lv._showScrollbar then
+        if sb.Show        then sb:Show() end
+        if sb.EnableMouse then sb:EnableMouse(true) end
+        if sb.SetAlpha    then sb:SetAlpha(UI.SCROLLBAR_ALPHA) end 
+        if sb.SetWidth and UI.SCROLLBAR_W then sb:SetWidth(UI.SCROLLBAR_W) end
+
+        -- ✅ Place la ScrollBar *en dehors* de la zone scroll (dans le gutter réservé par Layout)
+        -- Le gutter vaut: sbW (largeur réelle) + inset ; on ancre la barre dès le bord droit du ScrollFrame.
+        do
+            local gap = UI.SCROLLBAR_INSET or 0
+            if sb.ClearAllPoints then
+                sb:ClearAllPoints()
+                -- Le coin gauche de la barre colle au bord droit de la zone scroll + gap
+                sb:SetPoint("TOPLEFT",     lv.scroll, "TOPRIGHT",     gap, 0)
+                sb:SetPoint("BOTTOMLEFT",  lv.scroll, "BOTTOMRIGHT",  gap, 0)
+            end
         end
-    end
 
-    -- Si on masque la barre, on retire l'espace "safeRight" sur la droite
-    if lv.opts then
-        if lv._showScrollbar then
-            -- on respecte lv.opts.safeRight existant
-        else
-            lv.opts.safeRight = false
+        -- Recalage du pouce (proportionnel + min)
+        if UI.UpdateScrollThumb then
+            if lv.scroll and lv.scroll.UpdateScrollChildRect then
+                lv.scroll:UpdateScrollChildRect()
+            end
+            UI.UpdateScrollThumb(sb)
         end
+
+    else
+        if sb.Hide        then sb:Hide() end
+        if sb.EnableMouse then sb:EnableMouse(false) end
+        if sb.SetAlpha    then sb:SetAlpha(0) end
     end
 
-    if lv.Layout then lv:Layout() end
+    if prev ~= lv._showScrollbar and lv.Layout then
+        lv:Layout()
+    end
 end
+
 
 function UI.ListView_SetRowHeight(lv, h)
     if not lv then return end
@@ -603,5 +703,56 @@ function UI.ListView_SetRowHeight(lv, h)
         -- On suppose que l'appelant rappellera SetData après ce setter dans la plupart des cas.
         -- À défaut, on provoque au moins un Layout.
         if lv.Layout then lv:Layout() end
+    end
+end
+
+-- Synchronise l'état d'affichage de la ScrollBar avec la plage réelle du ScrollFrame.
+-- immediate=true => calcule maintenant ; sinon programme au frame suivant (évite les races de sizing).
+function UI.ListView_SyncScrollbar(lv, immediate)
+    if not (lv and lv.scroll) then return end
+
+    local function computeNeed()
+        local yr = (lv.scroll.GetVerticalScrollRange and lv.scroll:GetVerticalScrollRange()) or 0
+        local need = (yr > 0)
+        if not need then
+            -- Fallback si la plage n'est pas encore à jour : compare contenu vs viewport
+            local listH   = (lv.list and lv.list.GetHeight and lv.list:GetHeight()) or 0
+            local viewH   = (lv.scroll and lv.scroll.GetHeight and lv.scroll:GetHeight()) or 0
+            need = (listH > (viewH + 1))
+        end
+        if lv._scrollbarAllowed == false then need = false end
+        return need
+    end
+
+    local function doSync()
+        local need = computeNeed()
+        if (lv._showScrollbar == true) ~= need then
+            if UI and UI.ListView_SetScrollbarVisible then
+                UI.ListView_SetScrollbarVisible(lv, need)
+            else
+                lv._showScrollbar = need and true or false
+            end
+        end
+    end
+
+    if immediate then
+        doSync()
+    else
+        -- Deux passes déférées pour laisser UpdateScrollChildRect() et la range se stabiliser
+        lv._sbSyncTicket = (lv._sbSyncTicket or 0) + 1
+        local ticket = lv._sbSyncTicket
+
+        local function pass2()
+            if not (lv and lv.scroll) then return end
+            -- si un nouveau ticket est arrivé entre temps, on laisse la prochaine passe gérer
+            if lv._sbSyncTicket ~= ticket then return end
+            doSync()
+        end
+
+        C_Timer.After(0, function()
+            if not (lv and lv.scroll) then return end
+            doSync()
+            C_Timer.After(0, pass2)
+        end)
     end
 end

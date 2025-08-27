@@ -11,7 +11,7 @@ local _headerBGs -- textures de fond colorées par colonne (header)
 
 -- Colonnes (structure standard ListView)
 local cols = UI.NormalizeColumns({
-    { key="ilvl",      title = (DATA and DATA.headers and DATA.headers.itemLevel), min=140, flex=1 , justify="LEFT"  },
+    { key="ilvl",      title = (DATA and DATA.headers and DATA.headers.itemLevel), min=165, flex=1 , justify="LEFT"  },
     { key="crest",     title = (DATA and DATA.headers and DATA.headers.crests)    ,     min=140, flex=1},
     { key="aventurier",title = (DATA and DATA.headers and DATA.headers.aventurier),      w=160, justify="CENTER"  },
     { key="veteran",   title = (DATA and DATA.headers and DATA.headers.veteran)   ,         w=160, justify="CENTER"  },
@@ -109,9 +109,7 @@ end
 -- == BUILD (structure standard) ==
 local function Build(container)
     panel = container
-    if UI.ApplySafeContentBounds then
-        UI.ApplySafeContentBounds(panel, { side = 10, bottom = 6 })
-    end
+    if UI.ApplySafeContentBounds then UI.ApplySafeContentBounds(panel) end
 
     lv = UI.ListView(panel, cols, {
         buildRow = BuildRow,
