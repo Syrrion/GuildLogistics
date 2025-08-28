@@ -126,17 +126,114 @@ local function ShowEditPopup(parent, key, value, onSave)
     return dlg
 end
 
+-- Popup d'ajout de champ (clé + valeur) sur le nœud courant
+local function ShowAddFieldPopup()
+    local dlg = UI.CreatePopup({ title = Tr("popup_add_field") or "Ajouter un champ", width = 560, height = 400 })
+
+    local pathFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    pathFS:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 0, 0)
+    pathFS:SetText((Tr("lbl_edit_path") or "Chemin : ") .. _PathToText(currentPath))
+
+    -- Libellés
+    local labKey = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    labKey:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 0, -20)
+    labKey:SetText(Tr("lbl_key") or "Clé")
+
+    local labVal = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    labVal:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 0, -72)
+    labVal:SetText(Tr("lbl_value") or "Valeur (littéral Lua)")
+
+    -- Champ clé (une ligne)
+    local keyBox = CreateFrame("EditBox", nil, dlg.content, "BackdropTemplate")
+    keyBox:SetAutoFocus(true)
+    keyBox:SetMultiLine(false)
+    keyBox:SetFontObject("GameFontHighlight")
+    keyBox:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT", 0, -36)
+    keyBox:SetPoint("RIGHT", dlg.content, "RIGHT", 0, 0)
+    keyBox:SetHeight(24)
+    keyBox:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+    keyBox:SetBackdropColor(0,0,0,0.35)
+    keyBox:SetText("")
+
+    -- Champ valeur (multi-ligne, littéral Lua)
+    local valBox = CreateFrame("EditBox", nil, dlg.content, "BackdropTemplate")
+    valBox:SetMultiLine(true); valBox:SetAutoFocus(false)
+    valBox:SetFontObject("GameFontHighlight")
+    valBox:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT", 0, -90)
+    valBox:SetPoint("BOTTOMRIGHT", dlg.content, "BOTTOMRIGHT", 0, 40)
+    valBox:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+    valBox:SetBackdropColor(0,0,0,0.35)
+    valBox:SetText("")
+
+    local hint = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    hint:SetPoint("BOTTOMLEFT", dlg.content, "BOTTOMLEFT", 0, 0)
+    hint:SetText(Tr("lbl_lua_hint") or "Entrez un littéral Lua : 123, true, \"text\", { a = 1 }")
+
+    dlg:SetButtons({
+        { text = Tr("btn_confirm"), default = true, onClick = function()
+            -- Récupère le nœud courant
+            local node = select(3, _Resolve(currentPath))
+            if type(node) ~= "table" then
+                if UI.Toast then UI.Toast("|cffff6060"..(Tr("err_not_table") or "Le nœud courant n'est pas une table").."|r") end
+                return
+            end
+
+            local keyTxt = (keyBox:GetText() or ""):gsub("^%s+",""):gsub("%s+$","")
+            local valTxt = valBox:GetText() or ""
+
+            -- Parse la valeur via littéral Lua
+            local newVal, errV = (GLOG.DeserializeLua and GLOG.DeserializeLua(valTxt))
+            if errV then
+                if UI.Toast then UI.Toast("|cffff6060Erreur valeur :|r "..tostring(errV)) end
+                return
+            end
+
+            local isArray = GLOG.IsArrayTable and select(1, GLOG.IsArrayTable(node))
+
+            if isArray then
+                -- Tableau : clé optionnelle numérique → insertion à l'index, sinon append
+                local idx = tonumber(keyTxt)
+                if idx and idx >= 1 and idx <= (#node + 1) then
+                    table.insert(node, idx, newVal)
+                else
+                    node[#node+1] = newVal
+                end
+            else
+                -- Table de hachage : clé requise (on accepte littéral Lua string/number, sinon brut)
+                if keyTxt == "" then
+                    if UI.Toast then UI.Toast("|cffff6060"..(Tr("err_need_key") or "Clé requise pour une table de hachage").."|r") end
+                    return
+                end
+                local kParsed, errK = (GLOG.DeserializeLua and GLOG.DeserializeLua(keyTxt))
+                local kFinal = (not errK and (type(kParsed)=="string" or type(kParsed)=="number")) and kParsed or keyTxt
+                node[kFinal] = newVal
+            end
+
+            if UI.Toast then UI.Toast(Tr("lbl_saved") or "Enregistré") end
+            dlg:Hide()
+            if Refresh then Refresh() end
+        end },
+        { text = Tr("btn_cancel"), variant = "ghost" },
+    })
+    dlg:Show()
+    return dlg
+end
+
+
 UpdateRow = function(i, r, f, it)
     -- Libellés
     f.key:SetText(tostring(it.key))
     f.type:SetText(tostring(it.type))
     f.prev:SetText(_Preview(it.value))
 
-    -- État des actions
+    -- État des actions + restrictions GM
     local isTbl = (type(it.value) == "table")
-    r.btnOpen:SetShown(isTbl)       -- Naviguer dans une table
-    r.btnEdit:SetShown(not isTbl)   -- ❌ Interdit d'éditer une table
-    r.btnDel:SetShown(true)
+    local isGM  = (GLOG.IsGM and GLOG.IsGM()) or false
+
+    r.btnOpen:SetShown(isTbl)                  -- visible seulement si table
+    r.btnEdit:SetShown(isGM and not isTbl)              -- édition scalaire uniquement (inchangé)
+
+    r.btnDel:SetShown(isGM)
 
     -- Reflow (les shows/hides impactent le layout)
     if UI.AttachRowRight and f.act then
@@ -213,7 +310,7 @@ end
 -- =====   BUILD/UI   ======
 -- =========================
 Build = function(container)
-    panel, footer = UI.CreateMainContainer(container, { footer = false })
+    panel, footer = UI.CreateMainContainer(container, { footer = true })
 
     -- Barre navigation (haut)
     local nav = CreateFrame("Frame", nil, panel)
@@ -246,6 +343,18 @@ Build = function(container)
         updateRow = UpdateRow,
         topOffset = 34,
     })
+
+    -- Bouton footer
+    if footer then
+        local btnAdd = UI.Button(footer, Tr("btn_add_field") or "Ajouter un champ", { size="sm", minWidth=160, tooltip=Tr("tip_add_field") or "Ajouter une clé/valeur dans l'élément courant" })
+        btnAdd:SetOnClick(function()
+            ShowAddFieldPopup()
+        end)
+        if UI.AttachButtonsFooterRight then
+            UI.AttachButtonsFooterRight(footer, { btnAdd }, 8, 0)
+        end
+        btnAdd:SetShown((GLOG.IsGM and GLOG.IsGM()) or false)
+    end
 
     -- Assure un rafraîchissement quand on revient sur l’onglet
     if panel and panel.SetScript then

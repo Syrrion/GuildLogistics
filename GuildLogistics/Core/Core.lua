@@ -45,16 +45,49 @@ local function EnsureDB()
     GuildLogisticsDB = GuildLogisticsDB_Char
     GuildLogisticsUI = GuildLogisticsUI_Char
 
+    -- Debug pour forcer manuellement une version local (TESTS)
+    --GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
+    --GuildLogisticsDB_Char.meta.lastMigration = "2.3.0"
+
+    -- 🧹 Migration v2.3.0 : flush local au premier lancement si lastMigration < 2.3.0 (ou indéfini)
+    do
+        local TARGET = "2.3.0"
+        local cmp = (ns.Util and ns.Util.CompareVersions) or function(a, b)
+            local function parse(s)
+                local out = {}
+                for n in tostring(s or ""):gmatch("(%d+)") do out[#out+1] = tonumber(n) or 0 end
+                return out
+            end
+            local A, B = parse(a), parse(b)
+            local n = math.max(#A, #B)
+            for i = 1, n do
+                local x, y = A[i] or 0, B[i] or 0
+                if x < y then return -1 elseif x > y then return 1 end
+            end
+            return 0
+        end
+
+        local lm = GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.lastMigration
+        local needFlush = (not lm) or (cmp(lm, TARGET) < 0)
+        if needFlush then
+            -- ⚠️ Flush complet de la base par personnage
+            GuildLogisticsDB_Char = {}
+            GuildLogisticsDB_Char.meta = {lastMigration = TARGET}
+            -- Réaligne les alias runtime sur la nouvelle table
+            GuildLogisticsDB = GuildLogisticsDB_Char
+            GuildLogisticsUI = GuildLogisticsUI_Char
+        end
+    end
+
     -- ➕ 3) Initialisation habituelle (désormais sur la base « par personnage »)
     GuildLogisticsDB = GuildLogisticsDB or {
         players = {},
-        history = {},
+        history = { nextId = 1 },
         expenses = { recording = false, list = {}, nextId = 1 },
         lots     = { nextId = 1, list = {} },
         ids = { counter=0, byName={}, byId={} },
         meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
         requests = {},
-        historyNextId = 1,  -- ➕ compteur HID
     }
 
     GuildLogisticsUI = GuildLogisticsUI or {
@@ -67,8 +100,6 @@ local function EnsureDB()
     -- ✏️ Par défaut : debug/autoOpen
     if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = false end
     if GuildLogisticsUI.autoOpen   == nil then GuildLogisticsUI.autoOpen   = false  end
-
-    -- Harmonise/dédoublonne les clés joueurs -> toujours "Nom-Royaume"
 
     -- ➕ 4) Marqueur d’identification du profil (utile en debug et pour éviter les confusions)
     GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
@@ -976,7 +1007,8 @@ end
 function GLOG.AddHistorySession(total, perHead, participants, ctx)
 
     EnsureDB()
-    GuildLogisticsDB.historyNextId = GuildLogisticsDB.historyNextId or 1
+    GuildLogisticsDB.history = GuildLogisticsDB.history or {}
+    GuildLogisticsDB.history.nextId = tonumber(GuildLogisticsDB.history.nextId)
 
     local s = {
         ts = time(),
@@ -985,9 +1017,9 @@ function GLOG.AddHistorySession(total, perHead, participants, ctx)
         count = #(participants or {}),
         participants = { unpack(participants or {}) },
         refunded = false,
-        hid = GuildLogisticsDB.historyNextId, -- ➕ ID unique
+        hid = GuildLogisticsDB.history.nextId, -- ➕ ID unique
     }
-    GuildLogisticsDB.historyNextId = GuildLogisticsDB.historyNextId + 1
+    GuildLogisticsDB.history.nextId = GuildLogisticsDB.history.nextId + 1
 
     if type(ctx) == "table" and ctx.lots then
         s.lots = ctx.lots
@@ -1119,14 +1151,14 @@ function GLOG.WipeAllData()
     GuildLogisticsDB_Char = {}
     GuildLogisticsDB_Char = {
         players       = {},
-        history       = {},
+        history       = { nextId = 1 },
         expenses      = { recording = false, list = {}, nextId = 1 },
         lots          = { nextId = 1, list = {} },
         ids           = { counter=0, byName={}, byId={} },
         meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
         requests      = {},
-        historyNextId = 1,
     }
+
     -- Rebind des alias runtime
     GuildLogisticsDB = GuildLogisticsDB_Char
 end
@@ -1145,14 +1177,14 @@ function GLOG.WipeAllSaved()
     -- ⚠️ Purge les 2 SV par personnage
     GuildLogisticsDB_Char = {
         players       = {},
-        history       = {},
+        history       = { nextId = 1 },
         expenses      = { recording = false, list = {}, nextId = 1 },
         lots          = { nextId = 1, list = {} },
         ids           = { counter=0, byName={}, byId={} },
         meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
         requests      = {},
-        historyNextId = 1,
     }
+
     GuildLogisticsUI_Char = {
         point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
         minimap = { hide=false, angle=215 },
@@ -1699,7 +1731,6 @@ function GLOG.SetPlayerAddonVersion(name, ver, ts, by)
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
-    GuildLogisticsDB.meta.versions = GuildLogisticsDB.meta.versions or {}
 
     local now  = (time and time()) or 0
     local when = tonumber(ts) or now
@@ -1731,18 +1762,6 @@ function GLOG.SetPlayerAddonVersion(name, ver, ts, by)
             end
         end
     end
-    -- 3) Cache léger par MAIN pour l’onglet Joueurs (si pas d’entrée joueurs)
-    do
-        local e = GuildLogisticsDB.meta.versions[kMain] or {}
-        local prev = tonumber(e.ts or 0) or 0
-        if when >= prev then
-            e.ver  = ver
-            e.ts   = when
-            e.by   = tostring(by or "")
-            e.name = main
-            GuildLogisticsDB.meta.versions[kMain] = e
-        end
-    end
 end
 
 -- Récupère la version d’addon affichée par l’onglet Joueurs (clé MAIN prioritaire)
@@ -1761,12 +1780,6 @@ function GLOG.GetPlayerAddonVersion(name)
     do
         local p = GuildLogisticsDB.players[fullM]
         local v = p and p.addonVer
-        if v and v ~= "" then return tostring(v) end
-    end
-    -- 2) Cache meta.versions[kMain]
-    do
-        local e = GuildLogisticsDB.meta.versions and GuildLogisticsDB.meta.versions[kMain]
-        local v = e and e.ver
         if v and v ~= "" then return tostring(v) end
     end
     -- 3) Fallback: fiche du personnage émetteur si fournie
