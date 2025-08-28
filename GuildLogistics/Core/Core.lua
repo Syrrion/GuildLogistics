@@ -41,30 +41,6 @@ local function EnsureDB()
     GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
     GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
 
-    -- Migration DB (compte -> personnage) si pas encore faite sur ce perso
-    if not GuildLogisticsDB_Char._migr_perchar_1 then
-        if type(GuildLogisticsDB) == "table" and next(GuildLogisticsDB) ~= nil then
-            -- Copie superficielle suffisante ici (les sous-tables sont réutilisées telles quelles)
-            for k, v in pairs(GuildLogisticsDB) do
-                GuildLogisticsDB_Char[k] = v
-            end
-            GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
-            GuildLogisticsDB_Char.meta.migrFromAccount = true
-            GuildLogisticsDB_Char.meta.migrAt = (time and time()) or 0
-        end
-        GuildLogisticsDB_Char._migr_perchar_1 = true
-    end
-
-    -- Migration UI (compte -> personnage) si pas encore faite
-    if not GuildLogisticsUI_Char._migr_perchar_1 then
-        if type(GuildLogisticsUI) == "table" and next(GuildLogisticsUI) ~= nil then
-            for k, v in pairs(GuildLogisticsUI) do
-                GuildLogisticsUI_Char[k] = v
-            end
-        end
-        GuildLogisticsUI_Char._migr_perchar_1 = true
-    end
-
     -- ➕ 2) Alias runtime : le code existant continue d'utiliser GuildLogisticsDB/UI
     GuildLogisticsDB = GuildLogisticsDB_Char
     GuildLogisticsUI = GuildLogisticsUI_Char
@@ -79,10 +55,7 @@ local function EnsureDB()
         meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
         requests = {},
         historyNextId = 1,  -- ➕ compteur HID
-        debug = {},
-        aliases = {},       -- ➕ Alias par joueur (clé = main normalisé)
     }
-    GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
 
     GuildLogisticsUI = GuildLogisticsUI or {
         point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
@@ -94,6 +67,8 @@ local function EnsureDB()
     -- ✏️ Par défaut : debug/autoOpen
     if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = false end
     if GuildLogisticsUI.autoOpen   == nil then GuildLogisticsUI.autoOpen   = false  end
+
+    -- Harmonise/dédoublonne les clés joueurs -> toujours "Nom-Royaume"
 
     -- ➕ 4) Marqueur d’identification du profil (utile en debug et pour éviter les confusions)
     GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
@@ -119,14 +94,15 @@ end
 -- =========================
 local function GetOrCreatePlayer(name)
     EnsureDB()
-    if not name or name == "" then return { credit=0, debit=0, reserved=true } end
-    local p = GuildLogisticsDB.players[name]
+    if not name or name == "" then return { solde=0, reserved=true } end
+    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local p = GuildLogisticsDB.players[key]
     if not p then
         -- ⛑️ Création implicite = en "Réserve" par défaut
-        p = { credit = 0, debit = 0, reserved = true }
-        GuildLogisticsDB.players[name] = p
+        p = { solde = 0, reserved = true }
+        GuildLogisticsDB.players[key] = p
     else
-        if p.reserved == nil then p.reserved = true end -- compat données anciennes
+        if p.reserved == nil then p.reserved = true end
     end
     return p
 end
@@ -138,17 +114,14 @@ function GLOG.GetPlayersArray()
     EnsureDB()
     local out = {}
     for name, p in pairs(GuildLogisticsDB.players) do
-        local credit   = tonumber(p.credit) or 0
-        local debit    = tonumber(p.debit)  or 0
         local reserved = (p.reserved == true)
         table.insert(out, {
-            name   = name,
-            credit = credit,
-            debit  = debit,
-            solde  = credit - debit,
-            reserved = reserved,          -- ✅ on propage le statut pour les filtres en aval
+            name     = name,
+            solde    = tonumber(p.solde) or 0,
+            reserved = reserved,
         })
     end
+
     table.sort(out, function(a,b) return a.name:lower() < b.name:lower() end)
     return out
 end
@@ -180,17 +153,16 @@ function GLOG.GetPlayersArrayActive()
         if display then
             local b = agg[mk]
             if not b then
-                b = { name = display, credit = 0, debit = 0, reserved = false }
+                b = { name = display, solde = 0, reserved = false }
                 agg[mk] = b
             end
-            b.credit = (b.credit or 0) + (tonumber(p.credit) or 0)
-            b.debit  = (b.debit  or 0) + (tonumber(p.debit)  or 0)
+            b.solde = (b.solde or 0) + (tonumber(p.solde) or 0)
         end
     end
 
     -- 3) Normaliser la sortie
     for _, v in pairs(agg) do
-        v.solde = (tonumber(v.credit) or 0) - (tonumber(v.debit) or 0)
+        v.solde = tonumber(v.solde) or 0
         out[#out+1] = v
     end
 
@@ -223,7 +195,7 @@ function GLOG.GetPlayersArrayReserve(opts)
         if activeSet[mk] then return nil end
         local b = agg[mk]
         if not b then
-            b = { name = display or mk, credit = 0, debit = 0, reserved = true }
+            b = { name = display or mk, solde = 0, reserved = true }
             agg[mk] = b
         elseif display and (b.name == "" or b.name == mk) then
             b.name = display
@@ -240,8 +212,7 @@ function GLOG.GetPlayersArrayReserve(opts)
                 local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or main
                 local b = ensureBucket(mk, display)
                 if b then
-                    b.credit = (b.credit or 0) + (tonumber(p.credit) or 0)
-                    b.debit  = (b.debit  or 0) + (tonumber(p.debit)  or 0)
+                    b.solde = (b.solde or 0) + (tonumber(p.solde) or 0)
                 end
             end
         end
@@ -261,7 +232,7 @@ function GLOG.GetPlayersArrayReserve(opts)
 
     -- Sortie normalisée
     for _, v in pairs(agg) do
-        v.solde = (tonumber(v.credit) or 0) - (tonumber(v.debit) or 0)
+        v.solde = tonumber(v.solde) or 0
         out[#out+1] = v
     end
 
@@ -328,65 +299,55 @@ function GLOG.RemovePlayer(name)
     end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local p = GuildLogisticsDB.players or {}
-    if p[name] then p[name] = nil end
-    -- Optionnel: retirer l'UID mappé
-    if GuildLogisticsDB.ids and GuildLogisticsDB.ids.byName then
-        local uid = GuildLogisticsDB.ids.byName[name]
-        if uid then
-            GuildLogisticsDB.ids.byName[name] = nil
-            if GuildLogisticsDB.ids.byId then GuildLogisticsDB.ids.byId[uid] = nil end
-        end
-    end
+    local key = (GLOG.NormalizeDBKey and GLOG.NormalizeDBKey(name)) or tostring(name or "")
+
+    -- Supprime la clé normalisée et, par sûreté, la clé brute si différente
+    if key ~= "" and p[key] then p[key] = nil end
+    if name and name ~= "" and name ~= key and p[name] then p[name] = nil end
+
     if ns.RefreshAll then ns.RefreshAll() end
     return true
 end
 
-
 function GLOG.HasPlayer(name)
     EnsureDB()
-    if not name or name == "" then return false end
-    return GuildLogisticsDB.players[name] ~= nil
+    local key = (GLOG.NormalizeDBKey and GLOG.NormalizeDBKey(name)) or tostring(name or "")
+    if key == "" then return false end
+    return GuildLogisticsDB.players[key] ~= nil
 end
 
 -- ➕ Statut "en réserve" (alias bench pris en charge)
 function GLOG.IsReserve(name)
     EnsureDB()
     if not name or name == "" then return false end
-    local p = GuildLogisticsDB.players[name]
-    return (p and ((p.reserve == true) or (p.bench == true))) or false
+    local key = (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true })) or name
+    local p = GuildLogisticsDB.players[key]
+    return (p and ((p.reserve == true) or (p.bench == true) or (p.reserved == true))) or false
 end
 
 function GLOG.Credit(name, amount)
-    EnsureDB()
-    if not name or name == "" then return end
+    EnsureDB(); if not name or name == "" then return end
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     local existed = not not GuildLogisticsDB.players[name]
-
     local p = GetOrCreatePlayer(name)
     local a = math.floor(tonumber(amount) or 0)
-    p.credit = (p.credit or 0) + a
-
-    -- Premier mouvement d’or => apparition en BDD et flag "réserve" par défaut
+    p.solde = (p.solde or 0) + a
     if not existed then p.reserved = true end
 end
 
 function GLOG.Debit(name, amount)
-    EnsureDB()
-    if not name or name == "" then return end
+    EnsureDB(); if not name or name == "" then return end
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     local existed = not not GuildLogisticsDB.players[name]
-
     local p = GetOrCreatePlayer(name)
     local a = math.floor(tonumber(amount) or 0)
-    p.debit = (p.debit or 0) + a
-
-    -- Premier mouvement d’or => apparition en BDD et flag "réserve" par défaut
+    p.solde = (p.solde or 0) - a
     if not existed then p.reserved = true end
 end
 
 function GLOG.GetSolde(name)
     local p = GetOrCreatePlayer(name)
-    return (p.credit or 0) - (p.debit or 0)
+    return tonumber(p.solde) or 0
 end
 
 function GLOG.SamePlayer(a, b)
@@ -400,50 +361,32 @@ end
 function GLOG.NormalizePlayerKeys()
     if not GuildLogisticsDB then return end
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-    GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
 
     local function dedupRealm(full)
         full = tostring(full or "")
         local base, realm = full:match("^(.-)%-(.+)$")
         if not realm then
-            -- si pas de realm : on rajoute celui du perso courant si disponible
             local rn = select(2, UnitFullName("player"))
             return (rn and rn ~= "" and (full.."-"..rn)) or full
         end
-        -- garde uniquement le 1er segment de realm (évite A-B-C lors d’insertions successives)
         realm = realm:match("^([^%-]+)") or realm
         return string.format("%s-%s", base, realm)
     end
 
-    -- 1) Rebuild players avec clés normalisées + fusion des soldes
     local rebuilt = {}
-    for name, rec in pairs(GuildLogisticsDB.players) do
-        local norm = (NormalizeFull and NormalizeFull(name)) or name
-        norm = dedupRealm(norm)
-        local dst = rebuilt[norm]
-        if not dst then
-            rebuilt[norm] = { credit = tonumber(rec.credit) or 0, debit = tonumber(rec.debit) or 0 }
-        else
-            dst.credit = (dst.credit or 0) + (tonumber(rec.credit) or 0)
-            dst.debit  = (dst.debit  or 0) + (tonumber(rec.debit)  or 0)
-        end
+    for full, rec in pairs(GuildLogisticsDB.players or {}) do
+        local norm = (GLOG.NormalizeFull and GLOG.NormalizeFull(full)) or full
+        local key  = dedupRealm(norm)
+        rebuilt[key] = rec
     end
     GuildLogisticsDB.players = rebuilt
-
-    -- 2) Normalise aussi la table des UIDs -> noms
-    local newUIDs = {}
-    for uid, n in pairs(GuildLogisticsDB.uids) do
-        local norm = (NormalizeFull and NormalizeFull(n)) or n
-        newUIDs[tostring(uid)] = dedupRealm(norm)
-    end
-    GuildLogisticsDB.uids = newUIDs
 end
 
--- Ajuste directement le solde d’un joueur : delta > 0 => ajoute de l’or, delta < 0 => retire de l’or
 function GLOG.AdjustSolde(name, delta)
     local d = math.floor(tonumber(delta) or 0)
     if d == 0 then return GLOG.GetSolde(name) end
-    if d > 0 then GLOG.Credit(name, d) else GLOG.Debit(name, -d) end
+    local p = GetOrCreatePlayer(name)
+    p.solde = (p.solde or 0) + d
     return GLOG.GetSolde(name)
 end
 
@@ -479,54 +422,39 @@ end
 
 function GLOG.EnsureRosterLocal(name)
     if not name or name == "" then return end
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
+    if not full then return end
+
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     local created = false
-    if not GuildLogisticsDB.players[name] then
-        -- ⛑️ Toute matérialisation locale = Réserve par défaut
-        GuildLogisticsDB.players[name] = { credit = 0, debit = 0, reserved = true }
+    if not GuildLogisticsDB.players[full] then
+        GuildLogisticsDB.players[full] = { solde = 0, reserved = true }
         created = true
     else
-        if GuildLogisticsDB.players[name].reserved == nil then
-            GuildLogisticsDB.players[name].reserved = true
+        if GuildLogisticsDB.players[full].reserved == nil then
+            GuildLogisticsDB.players[full].reserved = true
         end
     end
-    if created and ns.Emit then ns.Emit("roster:upsert", name) end
+    if created and ns.Emit then ns.Emit("roster:upsert", full) end
 end
+
 
 function GLOG.RemovePlayerLocal(name, silent)
     if not name or name=="" then return false end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local p = GuildLogisticsDB.players or {}
-    local existed = not not p[name]
-    if p[name] then p[name] = nil end
 
-    -- ancien mapping (legacy)
-    if GuildLogisticsDB.ids and GuildLogisticsDB.ids.byName then
-        local _uid = GuildLogisticsDB.ids.byName[name]
-        if _uid then
-            GuildLogisticsDB.ids.byName[name] = nil
-            if GuildLogisticsDB.ids.byId then GuildLogisticsDB.ids.byId[_uid] = nil end
-        end
-    end
+    local key = (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true }))
+              or (name:find("%-") and name)
+    local existed = false
+    if key and p[key] then p[key] = nil; existed = true end
+    if name ~= key and p[name] then p[name] = nil; existed = true end
 
-    -- purge aussi la table des UID actifs
-    if GuildLogisticsDB.uids then
-        local uid = nil
-        if GLOG.FindUIDByName then
-            uid = GLOG.FindUIDByName(name)
-        elseif ns and ns.Util and ns.Util.FindUIDByName then
-            uid = ns.Util.FindUIDByName(name)
-        end
-        if not uid then
-            for k,v in pairs(GuildLogisticsDB.uids) do if v == name then uid = k break end end
-        end
-        if uid then GuildLogisticsDB.uids[uid] = nil end
-    end
-
-    if existed then ns.Emit("roster:removed", name) end
+    if existed then ns.Emit("roster:removed", key or name) end
     if not silent and ns.RefreshAll then ns.RefreshAll() end
-    return true
+    return existed
 end
 
 -- Suppression orchestrée : réservée au GM + broadcast
@@ -567,7 +495,8 @@ end
 -- IsReserved tolérant les anciens champs (reserved / reserve / bench / status texte)
 function GLOG.IsReserved(name)
     GuildLogisticsDB = GuildLogisticsDB or {}
-    local p = GuildLogisticsDB.players and GuildLogisticsDB.players[name]
+    local key = (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true })) or name
+    local p = GuildLogisticsDB.players and GuildLogisticsDB.players[key]
     if not p then return false end
 
     local v = p.reserved or p.reserve or p.bench
@@ -583,10 +512,20 @@ end
 GLOG.IsReserve = GLOG.IsReserved
 
 local function _SetReservedLocal(name, flag)
-    local p = GetOrCreatePlayer(name)
+    local key = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (name and name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
+    if not key then
+        if UIErrorsFrame then
+            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Royaume introuvable pour « "..tostring(name).." ». Utilisez « Nom-Royaume » ou ciblez le joueur/groupe.", 1, .4, .4)
+        end
+        return false
+    end
+
+    local p = GetOrCreatePlayer(key)
     local prev = not not p.reserved
     p.reserved = not not flag
-    if prev ~= p.reserved and ns.Emit then ns.Emit("roster:reserve", name, p.reserved) end
+    if prev ~= p.reserved and ns.Emit then ns.Emit("roster:reserve", key, p.reserved) end
+    return true
 end
 
 function GLOG.GM_SetReserved(name, flag)
@@ -597,6 +536,15 @@ function GLOG.GM_SetReserved(name, flag)
         return false
     end
     if not name or name=="" then return false end
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
+    if not full then
+        if UIErrorsFrame then
+            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Impossible de déterminer le royaume pour « "..tostring(name).." ». Utilisez « Nom-Royaume ».", 1, .4, .4)
+        end
+        return false
+    end
+    name = full
 
     _SetReservedLocal(name, flag)
 
@@ -644,20 +592,17 @@ local function _SetIlvlLocal(name, ilvl, ts, by, ilvlMax)
     if not name or name == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-    -- ⚠️ Ne pas créer d'entrée : si le joueur n'est pas dans le roster (actif/réserve), on sort.
     local p = GuildLogisticsDB.players[name]
     if not p then return end
 
     local nowts   = tonumber(ts) or time()
-    local prev_ts = tonumber(p.ilvlTs or 0) or 0
+    local prev_ts = tonumber(p.statusTimestamp or 0) or 0
     if nowts >= prev_ts then
-        p.ilvl     = math.floor(tonumber(ilvl) or 0)
+        p.ilvl   = math.floor(tonumber(ilvl) or 0)
         if ilvlMax ~= nil then
-            p.ilvlMax   = math.floor(tonumber(ilvlMax) or 0)
-            p.ilvlMaxTs = nowts
+            p.ilvlMax = math.floor(tonumber(ilvlMax) or 0)
         end
-        p.ilvlTs   = nowts
-        p.ilvlAuth = tostring(by or "")
+        p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("ilvl:changed", name) end
         if ns.RefreshAll then ns.RefreshAll() end
     end
@@ -766,16 +711,17 @@ function GLOG.GetMKeyText(name)
     local lvl = tonumber(p.mkeyLevel or 0) or 0
     if lvl <= 0 then return "" end
 
-    local label = (p.mkeyName and p.mkeyName ~= "") and p.mkeyName or ""
-    if (label == "" or label == "Clé") and tonumber(p.mkeyMapId or 0) > 0 then
-        local nm = GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(tonumber(p.mkeyMapId))
+    local label = ""
+    local mid = tonumber(p.mkeyMapId or 0) or 0
+    if mid > 0 and GLOG.ResolveMKeyMapName then
+        local nm = GLOG.ResolveMKeyMapName(mid)
         if nm and nm ~= "" then label = nm end
     end
     if label == "" then label = "Clé" end
 
     local levelText = string.format("|cffffa500+%d|r", lvl)
-    -- Niveau AVANT le nom du donjon
     return string.format("%s %s", levelText, label)
+
 end
 
 -- Application locale (sans créer d’entrée ; timestamp dominant)
@@ -787,13 +733,11 @@ _SetMKeyLocal = function(name, mapId, level, mapName, ts, by)
     if not p then return end
 
     local nowts   = tonumber(ts) or time()
-    local prev_ts = tonumber(p.mkeyTs or 0) or 0
+    local prev_ts = tonumber(p.statusTimestamp or 0) or 0
     if nowts >= prev_ts then
         p.mkeyMapId = tonumber(mapId) or 0
         p.mkeyLevel = math.max(0, tonumber(level) or 0)
-        p.mkeyName  = tostring(mapName or "")
-        p.mkeyTs    = nowts
-        p.mkeyAuth  = tostring(by or "")
+        p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("mkey:changed", name) end
         if ns.RefreshAll then ns.RefreshAll() end
     end
@@ -816,11 +760,10 @@ _SetMPlusScoreLocal = function(name, score, ts, by)
     if not p then return end
 
     local nowts   = tonumber(ts) or time()
-    local prev_ts = tonumber(p.mplusTs or 0) or 0
+    local prev_ts = tonumber(p.statusTimestamp or 0) or 0
     if nowts >= prev_ts then
         p.mplusScore = math.max(0, tonumber(score) or 0)
-        p.mplusTs    = nowts
-        p.mplusAuth  = tostring(by or "")
+        p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("mplus:changed", name) end
         if ns.RefreshAll then ns.RefreshAll() end
     end
@@ -1020,7 +963,7 @@ function GLOG.UpdateOwnKeystoneIfMain()
         local overall  = GLOG.ReadOwnMaxIlvl     and GLOG.ReadOwnMaxIlvl()     or nil
         GLOG.BroadcastStatusUpdate({
             ilvl = equipped, ilvlMax = overall,
-            mid = mid or 0, lvl = lvl or 0, map = tostring(mapName or ""),
+            mid = mid or 0, lvl = lvl or 0,
             ts = ts, by = me,
         })
     end
@@ -1173,7 +1116,7 @@ function GLOG.WipeAllData()
     local keepRev    = isMaster and oldRev or 0
     local keepMaster = (GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.master) or nil
 
-    -- ⚠️ Purge la SV par personnage (et pas seulement l’alias runtime)
+    GuildLogisticsDB_Char = {}
     GuildLogisticsDB_Char = {
         players       = {},
         history       = {},
@@ -1183,9 +1126,6 @@ function GLOG.WipeAllData()
         meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
         requests      = {},
         historyNextId = 1,
-        debug         = {},
-        aliases       = {},
-        _migr_perchar_1 = true, -- évite toute re-migration depuis l’ancienne DB compte
     }
     -- Rebind des alias runtime
     GuildLogisticsDB = GuildLogisticsDB_Char
@@ -1212,14 +1152,10 @@ function GLOG.WipeAllSaved()
         meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
         requests      = {},
         historyNextId = 1,
-        debug         = {},
-        aliases       = {},
-        _migr_perchar_1 = true,
     }
     GuildLogisticsUI_Char = {
         point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
         minimap = { hide=false, angle=215 },
-        _migr_perchar_1 = true,
         -- ✏️ Par défaut : options pratiques
         debugEnabled = true, autoOpen = true,
     }
@@ -1667,32 +1603,69 @@ end
 -- ======  ALIAS API  ======
 -- =========================
 
--- Renvoie la clé "main" normalisée (base du nom sans royaume + lowercase)
-local function _AliasMainKey(name)
+-- Ne JAMAIS deviner le royaume : on cherche un match UNIQUE dans les DB
+local function _FindUniqueFullByBase(baseName)
+    if not baseName or baseName == "" then return nil end
+    local norm = (GLOG.NormName and GLOG.NormName(baseName)) or tostring(baseName):lower()
+    local found
+    local function scan(db)
+        if not (db and db.players) then return end
+        for full,_ in pairs(db.players) do
+            local b = full:match("^([^%-]+)") or full
+            local nb = (GLOG.NormName and GLOG.NormName(b)) or b:lower()
+            if nb == norm then
+                if found and found ~= full then
+                    found = "__AMB__" -- plusieurs royaumes → ambigu
+                    return
+                end
+                found = full
+            end
+        end
+    end
+    scan(_G.GuildLogisticsDB_Char); if found == "__AMB__" then return nil end
+    scan(_G.GuildLogisticsDB);     if found == "__AMB__" then return nil end
+    return found
+end
+
+local function _AliasPlayerKey_NoGuess(name)
     if not name or name == "" then return nil end
-    local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
-    return (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
+    local s = tostring(name)
+    if s:find("%-") then
+        return s -- full fourni → on ne touche pas
+    end
+    -- pas de royaume → chercher un match unique
+    return _FindUniqueFullByBase(s)
 end
 
 function GLOG.GetAliasFor(name)
     EnsureDB()
-    local key = _AliasMainKey(name)
-    if not key then return nil end
-    return (GuildLogisticsDB.aliases or {})[key]
+    local key = _AliasPlayerKey_NoGuess(name); if not key then return nil end
+    local rec = (GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[key])
+            or (GuildLogisticsDB_Char and GuildLogisticsDB_Char.players and GuildLogisticsDB_Char.players[key])
+    return rec and rec.alias or nil
 end
 
 function GLOG.SetAliasLocal(name, alias)
     EnsureDB()
-    GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
-    local key = _AliasMainKey(name); if not key then return end
-    alias = tostring(alias or ""):gsub("^%s+", ""):gsub("%s+$","")
-    if alias == "" then
-        GuildLogisticsDB.aliases[key] = nil
-    else
-        GuildLogisticsDB.aliases[key] = alias
+    local key = _AliasPlayerKey_NoGuess(name)
+    if not key then
+        -- pas de clé fiable → ne rien créer (évite les entrées fantômes sur ton royaume)
+        if ns and ns.Debug then ns.Debug("alias:set", "ambiguous_or_not_found", tostring(name)) end
+        return
     end
-    if ns.Emit then ns.Emit("alias:changed", key, alias) end
-    if ns.RefreshAll then ns.RefreshAll() end
+
+    -- Écrit côté DB compte (si dispo), sinon côté perso
+    local db = _G.GuildLogisticsDB or _G.GuildLogisticsDB_Char
+    db.players = db.players or {}
+    local rec = db.players[key] or { solde=0, reserved=true }
+
+    local val = tostring(alias or ""):gsub("^%s+",""):gsub("%s+$","")
+    if val == "" then val = nil end
+    rec.alias = val
+    db.players[key] = rec
+
+    if ns and ns.Emit then ns.Emit("alias:changed", key, val) end
+    if ns and ns.RefreshAll then ns.RefreshAll() end
 end
 
 -- Action GM : définit l’alias d’un joueur et le diffuse via ROSTER_UPSERT
@@ -1744,7 +1717,6 @@ function GLOG.SetPlayerAddonVersion(name, ver, ts, by)
             if when >= prev then
                 p.addonVer     = ver
                 p.addonVerTs   = when
-                p.addonVerAuth = tostring(by or "")
             end
         end
     end
@@ -1756,7 +1728,6 @@ function GLOG.SetPlayerAddonVersion(name, ver, ts, by)
             if when >= prev then
                 p.addonVer     = ver
                 p.addonVerTs   = when
-                p.addonVerAuth = tostring(by or "")
             end
         end
     end

@@ -238,6 +238,81 @@ function GLOG.ResolveFullName(name)
     return n
 end
 
+-- Variante stricte : retourne "Nom-Royaume" ou nil si introuvable (aucun fallback local).
+function GLOG.ResolveFullNameStrict(name)
+    local n = tostring(name or "")
+    if n == "" then return nil end
+
+    -- Déjà complet → nettoyage simple
+    if n:find("%-") then
+        local cleaner = ns and ns.Util and ns.Util.CleanFullName
+        return (cleaner and cleaner(n)) or n
+    end
+
+    -- 1) Cache guilde (identique à ResolveFullName, mais nil si non trouvé)
+    do
+        local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+        for _, r in ipairs(rows) do
+            local full = r.name_raw or r.name_amb or r.name or ""
+            if full ~= "" then
+                local base = (full:match("^([^%-]+)%-") or full)
+                if base and (base:lower() == key) then
+                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                    return (cleaner and cleaner(full)) or full
+                end
+            end
+        end
+    end
+
+    -- 2) Déduire depuis la DB locale si UNE seule correspondance existe
+    do
+        if GuildLogisticsDB and GuildLogisticsDB.players then
+            local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+            local found
+            for full,_ in pairs(GuildLogisticsDB.players) do
+                local base = full:match("^([^%-]+)%-")
+                if base then
+                    local bk = (GLOG.NormName and GLOG.NormName(base)) or base:lower()
+                    if bk == key then
+                        if found and found ~= full then found = "__AMB__"; break end
+                        found = full
+                    end
+                end
+            end
+            if found and found ~= "__AMB__" then
+                local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                return (cleaner and cleaner(found)) or found
+            end
+        end
+    end
+
+    -- 3) Unités (raid/party/target/mouseover)
+    local function tryUnit(u)
+        if not UnitExists or not UnitExists(u) then return nil end
+        local nn, rr = UnitName(u)
+        if not nn or nn == "" then return nil end
+        local ok = ((GLOG.NormName and GLOG.NormName(nn)) or nn:lower())
+                   == ((GLOG.NormName and GLOG.NormName(n)) or n:lower())
+        if not ok then return nil end
+        return (rr and rr ~= "" and (nn.."-"..rr)) or nil
+    end
+    local full = tryUnit("player") or tryUnit("target") or tryUnit("mouseover") or tryUnit("focus")
+    if not full and IsInRaid and IsInRaid() then
+        for i=1,40 do full = tryUnit("raid"..i); if full then break end end
+    end
+    if not full then
+        for i=1,4 do full = tryUnit("party"..i); if full then break end end
+    end
+    if full then
+        local cleaner = ns and ns.Util and ns.Util.CleanFullName
+        return (cleaner and cleaner(full)) or full
+    end
+
+    -- 4) Strict: inconnu
+    return nil
+end
+
 -- ➕ Test d’appartenance guilde via le cache (léger, réutilisable)
 function GLOG.IsGuildCharacter(name)
     if not name or name == "" then return false end

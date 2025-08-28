@@ -181,7 +181,7 @@ local function UpdateRow(i, r, f, it)
         f.btnAlias:SetShown(true)
         f.btnAlias:SetOnClick(function()
             ns.UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
-                if ns.GLOG.GM_SetAlias then ns.GLOG.GM_SetAlias(name, val) end
+                if ns.GLOG.GM_SetAlias then ns.GLOG.GM_SetAlias(fullName, val) end
                 RefreshAllViews()
             end, { strata = "FULLSCREEN_DIALOG" })
         end)
@@ -234,33 +234,24 @@ local function UpdateRow(i, r, f, it)
     if f.act      and f.act._applyRowActionsLayout      then f.act._applyRowActionsLayout()      end
 end
 
--- Construit un nom complet "Nom-Realm" pour l'affichage/ajout roster
-local function EnsureFullMain(e)
-    local m = tostring((e and e.main) or "")
-    if m:find("-", 1, true) then return m end
-
-    -- Cherche le royaume à partir des lignes scannées de la guilde
-    local rows = (GLOG and GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
-    for _, r in ipairs(rows) do
-        local amb = r.name_amb or r.name_raw
-        if amb and GLOG.NormName and GLOG.NormName(amb) == e.key then
-            local raw = r.name_raw or amb
-            local realm = tostring(raw or ""):match("^[^-]+%-(.+)$")
-            if realm and realm ~= "" then
-                return m .. "-" .. realm
-            end
+    -- Construit un nom complet "Nom-Realm" pour l'affichage/ajout roster
+    function EnsureFullMain(e)
+        local m = tostring((e and e.main) or "")
+        if m == "" then return m end
+        if m:find("-", 1, true) then
+            return (ns and ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(m)) or m
         end
+
+        -- Résolution stricte (aucun fallback local)
+        if ns and ns.GLOG and ns.GLOG.ResolveFullNameStrict then
+            local full = ns.GLOG.ResolveFullNameStrict(m)
+            if full then return full end
+        end
+
+        -- Dernier recours UI (ne rien inventer) : on garde le nom court
+        return m
     end
 
-    -- Secours : royaume du joueur local
-    if UnitFullName then
-        local _, myRealm = UnitFullName("player")
-        if myRealm and myRealm ~= "" then
-            return m .. "-" .. myRealm
-        end
-    end
-    return m
-end
 
 -- Regroupe les entrées (actifs / anciens) puis produit la liste (avec séparateurs)
 local function buildItemsFromAgg(agg)

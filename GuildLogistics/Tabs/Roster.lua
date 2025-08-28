@@ -146,22 +146,12 @@ end
 
 -- Gestion robuste du solde : accepte soit l'objet "data" de ligne, soit un nom de joueur (string)
 local function GetSolde(data)
-    -- Si on reçoit directement le nom du joueur (string), lire le solde depuis la DB
     if type(data) == "string" then
         return (GLOG.GetSolde and GLOG.GetSolde(data)) or 0
     end
-
-    -- Si on reçoit l'objet de données (table) de la ligne
     if type(data) == "table" then
-        if data.solde ~= nil then
-            return tonumber(data.solde) or 0
-        end
-        local cr = tonumber(data.credit) or 0
-        local db = tonumber(data.debit) or 0
-        return cr - db
+        return tonumber(data.solde) or 0
     end
-
-    -- Par défaut
     return 0
 end
 

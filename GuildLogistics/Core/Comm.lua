@@ -13,53 +13,69 @@ GLOG.UnmapUID       = GLOG.UnmapUID       or (ns.Util and ns.Util.UnmapUID)
 GLOG.EnsureRosterLocal = GLOG.EnsureRosterLocal or (ns.Util and ns.Util.EnsureRosterLocal)
 
 if not GLOG.GetOrAssignUID then
-    -- Fallback minimal (au cas où Helper.lua n’est pas encore chargé — évite les nil)
+    -- Fallback minimal basé uniquement sur players[*].uid (aucune table uids)
     local function _ensureDB()
         GuildLogisticsDB = GuildLogisticsDB or {}
         GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
         GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-        GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
         GuildLogisticsDB.meta.uidSeq = GuildLogisticsDB.meta.uidSeq or 1
         return GuildLogisticsDB
     end
+
     function GLOG.GetOrAssignUID(name)
-        local db = _ensureDB()
+        local db   = _ensureDB()
         local full = tostring(name or "")
-        for uid, stored in pairs(db.uids) do if stored == full then return uid end end
-        local uid = string.format("P%06d", db.meta.uidSeq); db.meta.uidSeq = db.meta.uidSeq + 1
-        db.uids[uid] = full
-        -- ⛑️ Création implicite = Réserve
-        db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
-        return uid
+        db.players[full] = db.players[full] or { solde = 0, reserved = true }
+        if db.players[full].uid then return db.players[full].uid end
+        local nextId = tonumber(db.meta.uidSeq or 1) or 1
+        db.players[full].uid = nextId
+        db.meta.uidSeq = nextId + 1
+        return db.players[full].uid
     end
+
     function GLOG.GetNameByUID(uid)
         local db = _ensureDB()
-        return db.uids[tostring(uid or "")]
+        local n  = tonumber(uid)
+        if not n then return nil end
+        for full, rec in pairs(db.players or {}) do
+            if tonumber(rec and rec.uid) == n then return full end
+        end
+        return nil
     end
+
     function GLOG.MapUID(uid, name)
-        local db = _ensureDB()
-        db.uids[tostring(uid or "")] = tostring(name or "")
-        -- ⛑️ Création implicite = Réserve
-        local key = tostring(name or "")
-        db.players[key] = db.players[key] or { credit=0, debit=0, reserved = true }
-        return uid
+        local db   = _ensureDB()
+        local full =
+            (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true }))
+            or (type(name)=="string" and name:find("%-") and name)
+            or tostring(name or "")
+        local nuid = tonumber(uid)
+        if not nuid then return nil end
+        db.players[full] = db.players[full] or { solde=0, reserved=true }
+        db.players[full].uid = nuid
+        return nuid
     end
+
     function GLOG.UnmapUID(uid)
         local db = _ensureDB()
-        db.uids[tostring(uid or "")] = nil
+        local n  = tonumber(uid)
+        if not n then return end
+        for _, rec in pairs(db.players or {}) do
+            if tonumber(rec and rec.uid) == n then rec.uid = nil; return end
+        end
     end
+
     function GLOG.EnsureRosterLocal(name)
-        local db = _ensureDB()
+        local db   = _ensureDB()
         local full = tostring(name or "")
-        -- ⛑️ Création implicite = Réserve
-        db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
+        db.players[full] = db.players[full] or { solde=0, reserved=true }
         if db.players[full].reserved == nil then db.players[full].reserved = true end
         return db.players[full]
     end
 end
 
 -- ===== Constantes / État =====
-local PREFIX   = "GLOG1"
+local PREFIX   = "GLOG2"
 local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
@@ -79,7 +95,6 @@ local truthy         = (U and U.truthy)         or (_G and _G.truthy)         or
 local now            = (U and U.now)            or (_G and _G.now)            or function() return (time and time()) or 0 end
 local normalizeStr   = (U and U.normalizeStr)   or (_G and _G.normalizeStr)   or function(s) s=tostring(s or ""):gsub("%s+",""):gsub("'",""); return s:lower() end
 local playerFullName = (U and U.playerFullName) or (_G and _G.playerFullName) or function() local n,r=UnitFullName("player"); return r and (n.."-"..r) or n end
-local masterName     = (U and U.masterName)     or (_G and _G.masterName)     or function() return nil end
 local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=GuildLogisticsDB; return (db and db.meta and db.meta.rev) or 0 end
 
 local function _compressStr(s)
@@ -805,326 +820,381 @@ end
 
 -- ===== Application snapshot (import/export compact) =====
 function GLOG._SnapshotExport()
+    -- ==== DB minimale ====
     GuildLogisticsDB = GuildLogisticsDB or {}
-    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-    GuildLogisticsDB.uids = GuildLogisticsDB.uids or {}
+    GuildLogisticsDB.meta     = GuildLogisticsDB.meta     or {}
+    GuildLogisticsDB.players  = GuildLogisticsDB.players  or {}
     GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
-    GuildLogisticsDB.lots = GuildLogisticsDB.lots or { list = {}, nextId = 1 }
-    GuildLogisticsDB.aliases = GuildLogisticsDB.aliases or {}
+    GuildLogisticsDB.lots     = GuildLogisticsDB.lots     or { list = {}, nextId = 1 }
 
     local meta = GuildLogisticsDB.meta
-    local t = {
-        P = {}, I = {}, E = {}, L = {}, H = {}, HL = {},
-        A = {},  -- ➕ aliases (mainNormalisé:alias)
+
+    -- ==== helpers ====
+    local function escText(s)
+        s = tostring(s or "")
+        return (s:gsub("[:,%|%[%]]", function(ch) return string.format("%%%02X", string.byte(ch)) end))
+    end
+    local function normRealm(realm)
+        realm = tostring(realm or "")
+        if realm == "" then return realm end
+        local first, allsame
+        for seg in realm:gmatch("[^%-]+") do
+            if not first then first=seg; allsame=true
+            elseif seg ~= first then allsame=false end
+        end
+        if allsame and first then return first end
+        return realm
+    end
+    local function splitName(full)
+        local base, realm = tostring(full):match("^([^%-]+)%-(.+)$")
+        return base or tostring(full), realm or ""
+    end
+    local function uidNumFor(full)
+        local uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+        local n = tonumber(uid) or 0
+        return n
+    end
+    local function aliasFor(full, baseName)
+        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(full)) or baseName
+        return a or baseName
+    end
+
+    -- ===== joueurs et royaumes SANS fusion =====
+    -- On exporte chaque personnage tel quel (Nom-Complet), sans regroupement par baseName.
+
+    -- 1) Construire l'ensemble des royaumes utilisés
+    local realmSet = {}
+    for full, rec in pairs(GuildLogisticsDB.players) do
+        local base, realm = splitName(full)
+        local nrealm = normRealm(realm)
+        if nrealm ~= "" then realmSet[nrealm] = true end
+    end
+
+    -- 2) Construire R (réalms) trié alpha
+    local realms = {}
+    for r,_ in pairs(realmSet) do realms[#realms+1]=r end
+    table.sort(realms, function(a,b) return a:lower() < b:lower() end)
+    local ridByRealm = {}
+    local R = {}
+    for i,r in ipairs(realms) do
+        ridByRealm[r]=i
+        R[#R+1]=tostring(i)..":"..escText(r)
+    end
+
+    -- 3) Construire P sans fusion (une entrée par personnage complet)
+    local P = {}
+    for full, rec in pairs(GuildLogisticsDB.players) do
+        local base, realm = splitName(full)
+        local nrealm = normRealm(realm)
+        local rid = (nrealm ~= "" and ridByRealm[nrealm]) or 0
+        local aliasText = (aliasFor(full, base) or base)
+        if aliasText == base then aliasText = "@" end
+        local uidN = uidNumFor(full)
+        local balance = safenum(rec.solde, 0)
+        local res = rec.reserved and 1 or 0
+
+        P[#P+1] = table.concat({
+            tostring(uidN), tostring(rid), escText(base), escText(aliasText),
+            tostring(balance), tostring(res)
+        }, ":")
+    end
+    table.sort(P, function(a,b) return a:lower() < b:lower() end)
+
+
+    -- ===== Lots & labels =====
+    local T, L = {}, {}
+    for _,l in ipairs(GuildLogisticsDB.lots.list or {}) do
+        local lid = safenum(l.id,0)
+        T[#T+1] = tostring(lid) .. ":" .. escText(tostring(l.name or ("Lot "..lid)))
+        L[#L+1] = table.concat({
+            tostring(lid),
+            tostring(safenum(l.sessions,1)),
+            tostring(safenum(l.used,0)),
+            tostring(safenum(l.totalCopper,0))
+        }, ":")
+    end
+
+    -- ===== Dépenses & LE =====
+    local E, LE = {}, {}
+    for _, e in ipairs(GuildLogisticsDB.expenses.list or {}) do
+        local srcId = safenum(e.sourceId or 0, 0)
+        E[#E+1] = table.concat({
+            tostring(safenum(e.id,0)),
+            tostring(safenum(e.qty,0)),
+            tostring(safenum(e.copper,0)),
+            tostring(srcId),
+            tostring(safenum(e.itemID,0))
+        }, ":")
+        local lid = safenum(e.lotId, 0)
+        if lid > 0 then
+            LE[#LE+1] = tostring(lid) .. ":" .. tostring(safenum(e.id,0))
+        end
+    end
+
+    -- ===== Historique =====
+    local H = {}
+    for _, h in ipairs(GuildLogisticsDB.history or {}) do
+        local ts      = safenum(h.ts, 0)
+        local total   = safenum(h.total, 0)
+        local count   = safenum(h.count, (h.participants and #h.participants) or 0)
+        local refund  = (h.refunded and 1 or 0)
+
+        local pidsSet, pids = {}, {}
+        for _, name in ipairs(h.participants or {}) do
+            -- Utilise l'UID du personnage complet, sans passage par un « canon »
+            local uidNum = uidNumFor(tostring(name))
+            if uidNum and uidNum > 0 and not pidsSet[uidNum] then
+                pidsSet[uidNum] = true
+                pids[#pids+1] = tostring(uidNum)
+            end
+        end
+
+        local lots = {}
+        for _, li in ipairs(h.lots or {}) do
+            if type(li) == "table" then
+                local lid = safenum(li.id, 0)
+                if lid > 0 then lots[#lots+1] = tostring(lid) end
+            end
+        end
+
+        local head = table.concat({ tostring(ts), tostring(total), tostring(count), tostring(refund) }, ":")
+        local rec  = head .. "|" .. table.concat(pids, ",") .. "|" .. table.concat(lots, ",")
+        H[#H+1] = rec
+    end
+
+    -- ===== KV final =====
+    return {
+        sv = 3,
         rv = safenum(meta.rev, 0),
         lm = safenum(meta.lastModified, now()),
         fs = safenum(meta.fullStamp, now()),
+        R  = R,
+        P  = P,
+        T  = T,
+        L  = L,
+        E  = E,
+        LE = LE,
+        H  = H,
     }
-
-    for name, rec in pairs(GuildLogisticsDB.players) do
-        local res = (rec and rec.reserved) and 1 or 0
-        t.P[#t.P+1] = table.concat({ name, safenum(rec.credit, 0), safenum(rec.debit, 0), res }, ":")
-    end
-
-    local _players = GuildLogisticsDB.players or {}
-    for uid, name in pairs(GuildLogisticsDB.uids) do
-        if name and _players[name] ~= nil then
-            t.I[#t.I+1] = tostring(uid) .. ":" .. tostring(name)
-        end
-    end
-
-    -- ➕ Export des aliases (clé déjà normalisée côté Core)
-    for key, alias in pairs(GuildLogisticsDB.aliases) do
-        if alias and alias ~= "" then
-            t.A[#t.A+1] = tostring(key) .. ":" .. tostring(alias)
-        end
-    end
-
-    for _, e in ipairs(GuildLogisticsDB.expenses.list) do
-        -- Préfère l'ID de source stable si présent, sinon retombe sur l’ancien libellé texte
-        local srcField = tonumber(e.sourceId or 0) or 0
-        if srcField == 0 then srcField = tostring(e.source or "") end
-
-        t.E[#t.E+1] = table.concat({
-            safenum(e.id,0), safenum(e.qty,0), safenum(e.copper,0),
-            srcField, safenum(e.lotId,0), safenum(e.itemID,0)
-        }, ",")
-    end
-
-    for _, l in ipairs(GuildLogisticsDB.lots.list) do
-        local ids = {}
-        for _, id in ipairs(l.itemIds or {}) do ids[#ids+1] = tostring(id) end
-        t.L[#t.L+1] = table.concat({
-            safenum(l.id,0), tostring(l.name or ("Lot "..tostring(l.id))), safenum(l.sessions,1),
-            safenum(l.used,0), safenum(l.totalCopper,0), table.concat(ids, ";")
-        }, ",")
-    end
-    -- Historique compact (CSV: ts,total,perHead,count,ref,participants(;))
-    -- + ➕ tableau de correspondance HL : "ts|id,name,k,N,n,g;id,name,k,N,n,g"
-    for _, h in ipairs(GuildLogisticsDB.history or {}) do
-        local parts = table.concat(h.participants or {}, ";")
-        t.H[#t.H+1] = table.concat({
-            safenum(h.ts,0), safenum(h.total,0), safenum(h.perHead,0),
-            safenum(h.count,0), (h.refunded and 1 or 0), parts
-        }, ",")
-
-        local Lctx = {}
-        for _, li in ipairs(h.lots or {}) do
-            if type(li) == "table" then
-                local id   = tonumber(li.id or 0) or 0
-                local name = tostring(li.name or ("Lot " .. tostring(id)))
-                local k    = tonumber(li.k or 0) or 0
-                local N    = tonumber(li.N or 1) or 1
-                local n    = tonumber(li.n or 1) or 1
-                local g    = tonumber(li.gold or li.c or 0) or 0
-                Lctx[#Lctx+1] = table.concat({ id, name, k, N, n, g }, ",")
-            end
-        end
-        if #Lctx > 0 then
-            t.HL[#t.HL+1] = tostring(safenum(h.ts,0)) .. "|" .. table.concat(Lctx, ";")
-        end
-    end
-    return t
 end
-
 
 
 function GLOG._SnapshotApply(kv)
     GuildLogisticsDB = GuildLogisticsDB or {}
-    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-    GuildLogisticsDB.players = {}
-    GuildLogisticsDB.uids = {}
+    GuildLogisticsDB.meta     = GuildLogisticsDB.meta     or {}
+    GuildLogisticsDB.players  = {}
     GuildLogisticsDB.expenses = { list = {}, nextId = 1 }
-    GuildLogisticsDB.lots = { list = {}, nextId = 1 }
-    GuildLogisticsDB.aliases = {}  -- ➕ reset aliases (le FULL est autoritatif)
+    GuildLogisticsDB.lots     = { list = {}, nextId = 1 }
 
     local meta = GuildLogisticsDB.meta
-    meta.rev = safenum(kv.rv, 0)
-    meta.lastModified = safenum(kv.lm, now())
-    meta.fullStamp = safenum(kv.fs, now())
+    meta.rev         = safenum(kv.rv, 0)
+    meta.lastModified= safenum(kv.lm, now())
+    meta.fullStamp   = safenum(kv.fs, now())
+    -- helpers
+    local function unescText(s)
+        s = tostring(s or "")
+        return (s:gsub("%%(%x%x)", function(h)
+            local n = tonumber(h, 16); return n and string.char(n) or ("%")..h
+        end))
+    end
+    local function normRealm(realm)
+        realm = tostring(realm or "")
+        if realm == "" then return realm end
+        local first, allsame
+        for seg in realm:gmatch("[^%-]+") do
+            if not first then first=seg; allsame=true
+            elseif seg ~= first then allsame=false end
+        end
+        if allsame and first then return first end
+        return realm
+    end
 
-    -- ➕ Import des aliases (A = { "main:alias", ... })
-    for _, s in ipairs(kv.A or {}) do
-        local mainKey, alias = tostring(s):match("^(.-):(.*)$")
-        if mainKey and mainKey ~= "" then
-            if alias == "" then
-                GuildLogisticsDB.aliases[mainKey] = nil
-            else
-                GuildLogisticsDB.aliases[mainKey] = alias
-            end
+    local sv = tostring(kv.sv or "")
+    if sv ~= "3" and sv ~= "3.0" then return end
+
+    -- 1) R (réalms) avec normalisation anti-duplication
+    local realmById = {}
+    for _, s in ipairs(kv.R or {}) do
+        local rid, label = s:match("^(%-?%d+):(.*)$")
+        if rid then
+            local realm = unescText(label)
+            realmById[tonumber(rid) or 0] = normRealm(realm)
         end
     end
 
-    -- (dans function GLOG._SnapshotApply(kv))
+    -- 2) P (brut par PERSONNAGE COMPLET, pas de fusion)
+    -- uid:rid:name:alias:balance:res
     for _, s in ipairs(kv.P or {}) do
-    -- Nouveau format (4 champs) : name:credit:debit:reserved
-        local name, credit, debit, res = s:match("^(.-):(%-?%d+):(%-?%d+):(%-?%d+)$")
-        if name then
-            GuildLogisticsDB.players[name] = {
-                credit   = safenum(credit,0),
-                debit    = safenum(debit,0),
-                reserved = safenum(res,0) ~= 0
+        local uid, rid, name, alias, bal, res = s:match("^([%-%d]+):([%-%d]+):(.-):(.-):([%-%d]+):([%-%d]+)$")
+        if uid then
+            local uidNum = tonumber(uid) or 0
+            local ridNum = tonumber(rid) or 0
+            local base   = unescText(name)
+            local aliasS = unescText(alias)
+            if aliasS == "@" then aliasS = base end
+            local realm  = realmById[ridNum] or ""
+            local full   = base .. (realm ~= "" and "-"..realm or "")
+            local balance= safenum(bal,0)
+            local credit, debit = 0, 0
+            if balance >= 0 then credit = balance else debit = -balance end
+
+            GuildLogisticsDB.players[full] = {
+                uid      = safenum(uidNum,0),
+                solde    = safenum(balance,0),
+                reserved = (safenum(res,0) == 1),
+                alias    = aliasS,
             }
-        else
-            -- Compat anciens snapshots (3 champs) : name:credit:debit
-            local n2, c2, d2 = s:match("^(.-):(%-?%d+):(%-?%d+)$")
-            if n2 then
-                GuildLogisticsDB.players[n2] = {
-                    credit   = safenum(c2,0),
-                    debit    = safenum(d2,0),
-                    reserved = false
-                }
-            end
+
+
+            local kMain = (GLOG.NormName and GLOG.NormName(full)) or string.lower(full)
         end
     end
 
-    for _, s in ipairs(kv.I or {}) do
-        local uid, name = s:match("^(.-):(.-)$")
-        if uid and name then GuildLogisticsDB.uids[uid] = name end
-    end
-    do
-        local listE = kv.E or {}
 
-        -- Détecte si E est "agrégé" (1 élément = 1 ligne CSV) ou "aplati" (chaque champ séparé)
-        local aggregated = false
-        for _, s in ipairs(listE) do
-            if type(s) == "string" and s:find(",", 1, true) then aggregated = true; break end
-        end
-
-        local function addRecord(id, qty, copper, src, lotId, itemId)
-            id = safenum(id,0); if id <= 0 then return end
-            -- Normalise lotId: 0 => nil (sinon les “libres” disparaissent de l’UI)
-            local _lot = safenum(lotId,0); if _lot == 0 then _lot = nil end
-
-            -- src peut être un label (ancien format) OU un ID numérique (nouveau format)
-            local _sid = safenum(src, 0)
-            local entry = {
-                id      = id,
-                qty     = safenum(qty,0),
-                copper  = safenum(copper,0),
-                lotId   = _lot,
-                itemID  = safenum(itemId,0), -- ✅ normalisation clé attendue par l’UI
-            }
-            if _sid > 0 then
-                entry.sourceId = _sid    -- nouveau format
-            else
-                entry.source   = tostring(src or "") -- rétro-compat
-            end
-
-            GuildLogisticsDB.expenses.list[#GuildLogisticsDB.expenses.list+1] = entry
-            GuildLogisticsDB.expenses.nextId = math.max(GuildLogisticsDB.expenses.nextId or 1, id + 1)
-        end
-
-        if aggregated then
-            -- Format historique : chaque élément est "id,qty,copper,src,lotId,itemId"
-            for _, s in ipairs(listE) do
-                local id, qty, copper, src, lotId, itemId =
-                    s:match("^(%-?%d+),(%-?%d+),(%-?%d+),(.+),(%-?%d+),(%-?%d+)$")
-                if id then addRecord(id, qty, copper, src, lotId, itemId) end
-            end
-        else
-            -- Format aplati : reconstitue par paquets de 6 champs
-            local buf = {}
-            for _, tok in ipairs(listE) do
-                buf[#buf+1] = tok
-                if #buf == 6 then
-                    addRecord(buf[1], buf[2], buf[3], buf[4], buf[5], buf[6])
-                    buf = {}
-                end
-            end
+    -- 3) T (id→nom)
+    local LotNameById = {}
+    for _, s in ipairs(kv.T or {}) do
+        local lid, label = s:match("^(%-?%d+):(.*)$")
+        if lid then
+            LotNameById[safenum(lid,0)] = unescText(label)
         end
     end
-    do
-        GuildLogisticsDB.history = {}
-    end
 
+    -- 4) L (lots)
+    local LotsById = {}
     for _, s in ipairs(kv.L or {}) do
-        local id, name, sessions, used, totalCopper, idsCsv = s:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
-        id = safenum(id,0); if id > 0 then
-            local l = {
-                id = id, name = name,
-                sessions = safenum(sessions,1), used = safenum(used,0), totalCopper = safenum(totalCopper,0),
+        local lid, sessions, used, tot = s:match("^([%-%d]+):([%-%d]+):([%-%d]+):([%-%d]+)$")
+        if lid then
+            local id = safenum(lid,0)
+            local rec = {
+                id = id,
+                name = LotNameById[id] or ("Lot "..tostring(id)),
+                sessions = safenum(sessions,1),
+                used = safenum(used,0),
+                totalCopper = safenum(tot,0),
                 itemIds = {},
             }
-            if idsCsv and idsCsv ~= "" then
-                for v in tostring(idsCsv):gmatch("[^;]+") do l.itemIds[#l.itemIds+1] = safenum(v,0) end
-            end
-            GuildLogisticsDB.lots.list[#GuildLogisticsDB.lots.list+1] = l
+            table.insert(GuildLogisticsDB.lots.list, rec)
+            LotsById[id] = rec
             GuildLogisticsDB.lots.nextId = math.max(GuildLogisticsDB.lots.nextId or 1, id + 1)
         end
     end
 
-
-    -- ➕ Import Historique (compat CSV) + rattachement lots via HL et/ou s.L
-    GuildLogisticsDB.history = {}
-
-    -- 1) Prépare un dictionnaire ts -> lots à partir de HL
-    local HLmap = {}
-    local HLsrc = kv.HL
-
-    -- normalise : si HL est une string, mets-la dans une table
-    if type(HLsrc) == "string" then
-        HLsrc = { HLsrc }
-    elseif type(HLsrc) ~= "table" then
-        HLsrc = {}
-    end
-
-    for _, m in ipairs(HLsrc) do
-        if type(m) == "string" then
-            local tsStr, rest = m:match("^(%-?%d+)|(.+)$")
-            local ts = safenum(tsStr, 0)
-            if ts > 0 and rest and rest ~= "" then
-                local Lctx = {}
-                for chunk in tostring(rest):gmatch("[^;]+") do
-                    local id,name,kUse,Ns,n,g = chunk:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
-                    if id then
-                        Lctx[#Lctx+1] = {
-                            id = tonumber(id), name = name,
-                            k = tonumber(kUse), N = tonumber(Ns),
-                            n = tonumber(n),   gold = tonumber(g),
-                        }
-                    end
-                end
-                if #Lctx > 0 then HLmap[ts] = Lctx end
-            end
+    -- 5) E (dépenses)
+    local ExpensesById = {}
+    for _, s in ipairs(kv.E or {}) do
+        local id, qty, copper, srcId, itemId = s:match("^([%-%d]+):([%-%d]+):([%-%d]+):([%-%d]+):([%-%d]+)$")
+        if id then
+            local e = {
+                id     = safenum(id,0),
+                qty    = safenum(qty,0),
+                copper = safenum(copper,0),
+                itemID = safenum(itemId,0),
+            }
+            local sid = safenum(srcId,0)
+            if sid > 0 then e.sourceId = sid end
+            table.insert(GuildLogisticsDB.expenses.list, e)
+            GuildLogisticsDB.expenses.nextId = math.max(GuildLogisticsDB.expenses.nextId or 1, e.id + 1)
+            ExpensesById[e.id] = e
         end
     end
 
-    -- 2) Construit l'historique (CSV ou “table riche”) et attache les lots
-    for _, s in ipairs(kv.H or {}) do
-        local rec
-        if type(s) == "string" then
-            local hid, ts, total, per, count, refunded, rest
-            ts, total, per, count, refunded, rest =
-                s:match("^(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
-            if not ts then
-                hid, ts, total, per, count, refunded, rest =
-                    s:match("^(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+),?(.*)$")
+    -- 6) LE (liaison et itemIds)
+    for _, s in ipairs(kv.LE or {}) do
+        local lid, eid = s:match("^([%-%d]+):([%-%d]+)$")
+        if lid and eid then
+            local Lrec = LotsById[safenum(lid,0)]
+            local Erec = ExpensesById[safenum(eid,0)]
+            if Lrec and Erec then
+                Erec.lotId = Lrec.id
+                -- IMPORTANT : Resources.lua attend des EXPENSE IDs dans lot.itemIds
+                Lrec.itemIds = Lrec.itemIds or {}
+                table.insert(Lrec.itemIds, Erec.id)
             end
-
-            local names = {}
-            if rest and rest ~= "" then
-                for name in tostring(rest):gmatch("[^;]+") do names[#names+1] = name end
-            end
-
-            local _ts    = safenum(ts, 0)
-            local _total = safenum(total, 0)
-            local _per   = safenum(per, 0)
-            local _count = safenum(count, #names)
-            local _ref   = (safenum(refunded, 0) == 1)
-
-            if _ts > 0 and (_total ~= 0 or _per ~= 0 or _count > 0) then
-                rec = {
-                    hid = (hid ~= "" and hid or nil),
-                    ts  = _ts, total = _total, perHead = _per,
-                    count = _count, participants = names, refunded = _ref,
-                }
-            end
-        elseif type(s) == "table" then
-            local _ts    = safenum(s.ts or s.t, 0)
-            local _total = safenum(s.total or s.tot, 0)
-            local _per   = safenum(s.perHead or s.per or s.p, 0)
-            local _parts = s.names or s.participants or s.P or {}
-            local _count = safenum(s.count or s.cnt or s.c or #(_parts or {}), 0)
-            if _ts > 0 and (_total ~= 0 or _per ~= 0 or _count > 0) then
-                rec = {
-                    hid = s.hid, ts = _ts, total = _total, perHead = _per,
-                    count = _count, participants = _parts,
-                    refunded = (s.refunded or s.r == 1) and true or false,
-                }
-                -- Si la ligne “riche” porte déjà L, on la parse
-                local Lctx = {}
-                for j = 1, #(s.L or {}) do
-                    local v = s.L[j]
-                    if type(v) == "string" then
-                        local id,name,kUse,Ns,n,g = v:match("^(%-?%d+),(.-),(%-?%d+),(%-?%d+),(%-?%d+),(%-?%d+)$")
-                        if id then
-                            Lctx[#Lctx+1] = {
-                                id = tonumber(id), name = name,
-                                k = tonumber(kUse), N = tonumber(Ns),
-                                n = tonumber(n),   gold = tonumber(g),
-                            }
+            -- Backfill : si un lot n’a pas d’itemIds via LE, le reconstituer depuis les dépenses
+            do
+                -- Prépare un set par lot pour éviter les doublons
+                local seenPerLot = {}
+                for lid, Lrec in pairs(LotsById or {}) do
+                    seenPerLot[lid] = {}
+                    for _, eid in ipairs(Lrec.itemIds or {}) do
+                        seenPerLot[lid][eid] = true
+                    end
+                end
+                -- Balayer toutes les dépenses et rattacher par lotId
+                for _, Erec in pairs(ExpensesById or {}) do
+                    local lid = tonumber(Erec.lotId or 0) or 0
+                    local Lrec = LotsById and LotsById[lid]
+                    if Lrec then
+                        Lrec.itemIds = Lrec.itemIds or {}
+                        local seen = seenPerLot[lid]
+                        if not seen[Erec.id] then
+                            table.insert(Lrec.itemIds, Erec.id)
+                            seen[Erec.id] = true
                         end
-                    elseif type(v) == "table" then
-                        Lctx[#Lctx+1] = v
                     end
                 end
-                if #Lctx > 0 then rec.lots = Lctx end
             end
-        end
-
-        if rec then
-            -- Attache les lots depuis HL si pas déjà fournis sur la ligne
-            if not rec.lots and HLmap[rec.ts] and #HLmap[rec.ts] > 0 then
-                rec.lots = HLmap[rec.ts]
-            end
-            GuildLogisticsDB.history[#GuildLogisticsDB.history+1] = rec
         end
     end
 
-    if ns and ns.Emit then ns.Emit("history:changed") end
+    -- 7) H (historique) : ts:total:count:refund|pids|lotIds
+    GuildLogisticsDB.history = {}
+    -- Build reverse map UID->full déjà en place via DB.uids
+    for _, s in ipairs(kv.H or {}) do
+        local line = tostring(s):gsub("%|%|", "|")
+        local header, plist, llist = line:match("^(.-)%|(.-)%|(.*)$")
+        if not header then
+            header, plist = line:match("^(.-)%|(.*)$")
+            llist = ""
+        end
+        local ts, total, count, refund = (header or ""):match("^([%-%d]+):([%-%d]+):([%-%d]+):([%-%d]+)$")
+        local _ts     = safenum(ts,0)
+        local _total  = safenum(total,0)
+        local _count  = safenum(count,0)
+        local _ref    = safenum(refund,0) == 1
+
+        local participants = {}
+        local seenP = {}
+        for pid in tostring(plist or ""):gmatch("([^,]+)") do
+            local n = tonumber(pid)
+            if n and n > 0 then
+                local full = (GLOG.GetNameByUID and GLOG.GetNameByUID(n))
+                if full and not seenP[full] then
+                    seenP[full] = true
+                    participants[#participants+1] = full
+                end
+            end
+        end
+
+        local lots = {}
+        for tok in tostring(llist or ""):gmatch("([^,]+)") do
+            local lid = tonumber(tok)
+            if lid and lid > 0 then
+                local name = LotNameById[lid] or ("Lot "..tostring(lid))
+                table.insert(lots, { id = lid, name = name })
+            end
+        end
+
+        local per = (_count > 0) and math.floor(_total / _count) or 0
+        if _ts > 0 then
+            table.insert(GuildLogisticsDB.history, {
+                ts = _ts, total = _total, perHead = per,
+                count = _count, participants = participants, refunded = _ref,
+                lots = lots,
+            })
+        end
+    end
+
+    if ns and ns.Emit then
+        ns.Emit("players:changed")
+        ns.Emit("expenses:changed")
+        ns.Emit("lots:changed")
+        ns.Emit("history:changed")
+    end
 end
+
+
 
 -- ===== File complète → traitement ordonné =====
 local CompleteQ = {}
@@ -1246,13 +1316,20 @@ function GLOG._HandleFull(sender, msgType, kv)
             name = GLOG.GetNameByUID(uid)
         end
         if name and name ~= "" then
-            local p = GuildLogisticsDB.players[name] or { credit=0, debit=0, reserved=false }
-            p.reserved = (tonumber(kv.res) or 0) ~= 0
-            GuildLogisticsDB.players[name] = p
-            meta.rev = (rv >= 0) and rv or myrv
-            meta.lastModified = safenum(kv.lm, now())
-            if ns.Emit then ns.Emit("roster:reserve", name, p.reserved) end
-            refreshActive()
+            local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true }))
+                    or (name:find("%-") and name)
+                    or (uid and GLOG.GetNameByUID and GLOG.GetNameByUID(uid))
+            if full and full ~= "" then
+                local p = GuildLogisticsDB.players[full] or { solde=0, reserved=false }
+                p.reserved = (tonumber(kv.res) or 0) ~= 0
+                GuildLogisticsDB.players[full] = p
+                meta.rev = (rv >= 0) and rv or myrv
+                meta.lastModified = safenum(kv.lm, now())
+                if ns.Emit then ns.Emit("roster:reserve", full, p.reserved) end
+                refreshActive()
+            else
+                -- On ignore si on ne parvient pas à résoudre (mieux vaut ignorer que créer une mauvaise clé)
+            end
         end
         
     elseif msgType == "TX_REQ" then
@@ -1306,13 +1383,8 @@ function GLOG._HandleFull(sender, msgType, kv)
             local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
             local full = nf(kv.name or "")
             local existed = not not GuildLogisticsDB.players[full]
-            local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0, reserved = true }
-            local d = safenum(kv.delta, 0)
-            if d >= 0 then
-                rec.credit = safenum(rec.credit,0) + d
-            else
-                rec.debit  = safenum(rec.debit,0)  + (-d)
-            end
+            local rec = GuildLogisticsDB.players[full] or { solde = 0, reserved = true }
+            rec.solde = safenum(rec.solde, 0) + safenum(d, 0)
             -- 1er mouvement reçu par le réseau => flag réserve par défaut
             if not existed and rec.reserved == nil then rec.reserved = true end
             GuildLogisticsDB.players[full] = rec
@@ -1340,12 +1412,8 @@ function GLOG._HandleFull(sender, msgType, kv)
                 local full = nf(name)
                 local d = safenum(D[i], 0)
                 local existed = not not GuildLogisticsDB.players[full]
-                local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0, reserved = true }
-                if d >= 0 then
-                    rec.credit = safenum(rec.credit,0) + d
-                else
-                    rec.debit  = safenum(rec.debit,0)  + (-d)
-                end
+                local rec = GuildLogisticsDB.players[full] or { solde = 0 }
+                rec.solde = safenum(rec.solde, 0) + safenum(delta, 0)
                 -- 1er mouvement reçu par le réseau => flag réserve par défaut
                 if not existed and rec.reserved == nil then rec.reserved = true end
                 GuildLogisticsDB.players[full] = rec
@@ -1537,7 +1605,7 @@ function GLOG._HandleFull(sender, msgType, kv)
         if ns.Emit then ns.Emit("expenses:changed") end
 
     elseif msgType == "STATUS_UPDATE" then
-        -- Unifié : iLvl (+max) / Clé Mythique (mid,lvl,map) / ✨ Côte M+ (score)
+        -- Unifié : iLvl (+max) / Clé Mythique (mid,lvl) / ✨ Côte M+ (score)
         local pname = tostring(kv.name or "")
         local by    = tostring(kv.by   or sender or "")
         
@@ -1549,45 +1617,38 @@ function GLOG._HandleFull(sender, msgType, kv)
             local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
             if p then
                 local n_ts = safenum(kv.ts, now())
-                local changedIlvl, changedM, changedScore = false, false, false
+                local prev = safenum(p.statusTimestamp, 0)
+                local changed = false
 
                 -- ===== iLvl =====
                 local n_ilvl    = safenum(kv.ilvl, -1)
                 local n_ilvlMax = safenum(kv.ilvlMax, -1)
-                if n_ilvl >= 0 and n_ts >= safenum(p.ilvlTs, 0) then
-                    p.ilvl     = math.floor(n_ilvl)
-                    p.ilvlTs   = n_ts
-                    p.ilvlAuth = by
+                if n_ilvl >= 0 and n_ts >= prev then
+                    p.ilvl = math.floor(n_ilvl)
                     if n_ilvlMax >= 0 then
-                        p.ilvlMax   = math.floor(n_ilvlMax)
-                        p.ilvlMaxTs = n_ts
+                        p.ilvlMax = math.floor(n_ilvlMax)
                     end
-                    changedIlvl = true
+                    changed = true
                 end
 
-                -- ===== M+ =====
+                -- ===== Clé M+ (mid/lvl) =====
                 local n_mid = safenum(kv.mid, 0)
                 local n_lvl = safenum(kv.lvl, 0)
-                local n_map = tostring(kv.map or "")
-                if (n_map == "" or n_map == "Clé") and n_mid > 0 and GLOG.ResolveMKeyMapName then
-                    local nm = GLOG.ResolveMKeyMapName(n_mid); if nm and nm ~= "" then n_map = nm end
-                end
-                if n_lvl > 0 and n_ts >= safenum(p.mkeyTs, 0) then
+                if n_lvl > 0 and n_ts >= prev then
                     p.mkeyMapId = n_mid
                     p.mkeyLevel = n_lvl
-                    p.mkeyName  = n_map
-                    p.mkeyTs    = n_ts
-                    p.mkeyAuth  = by
-                    changedM = true
+                    changed = true
                 end
 
                 -- ✨ ===== Côte M+ =====
                 local n_score = safenum(kv.score, -1)
-                if n_score >= 0 and n_ts >= safenum(p.mplusTs, 0) then
+                if n_score >= 0 and n_ts >= prev then
                     p.mplusScore = n_score
-                    p.mplusTs    = n_ts
-                    p.mplusAuth  = by
-                    changedScore = true
+                    changed = true
+                end
+
+                if changed and n_ts > prev then
+                    p.statusTimestamp = n_ts
                 end
 
                 if changedIlvl and ns.Emit then ns.Emit("ilvl:changed", pname) end
@@ -1835,7 +1896,6 @@ function GLOG._HandleFull(sender, msgType, kv)
 
                 if lvl > 0 then
                     payload.mid = mid; payload.lvl = lvl
-                    if map ~= "" then payload.map = map end
                 end
 
                 -- ✅ Appliquer aussi localement à moi (sans créer d'entrée)
@@ -1848,18 +1908,19 @@ function GLOG._HandleFull(sender, msgType, kv)
                         if ilvl > 0 and ts >= safenum(p.ilvlTs, 0) then
                             p.ilvl   = ilvl
                             if ilvMx > 0 then p.ilvlMax = ilvMx; p.ilvlMaxTs = ts end
-                            p.ilvlTs = ts; p.ilvlAuth = me
+                            p.ilvlTs = ts
                             changed = true
                             if ns.Emit then ns.Emit("ilvl:changed", me) end
                         end
                         if lvl > 0 and ts >= safenum(p.mkeyTs, 0) then
-                            p.mkeyMapId = mid; p.mkeyLevel = lvl; p.mkeyName = map
-                            p.mkeyTs = ts; p.mkeyAuth = me
+                            p.mkeyMapId = mid; p.mkeyLevel = lvl
+                            -- mkeyName n'est plus stocké
+                            p.mkeyTs = ts
                             changed = true
                             if ns.Emit then ns.Emit("mkey:changed", me) end
                         end
                         if safenum(score, -1) >= 0 and ts >= safenum(p.mplusTs, 0) then
-                            p.mplusScore = score; p.mplusTs = ts; p.mplusAuth = me
+                            p.mplusScore = score; p.mplusTs = ts
                             changed = true
                             if ns.Emit then ns.Emit("mplus:changed", me) end
                         end
@@ -2022,7 +2083,7 @@ function GLOG._HandleFull(sender, msgType, kv)
                         end
                         GLOG.BroadcastStatusUpdate({
                             ilvl = il, ilvlMax = ilM,
-                            mid = safenum(mid,0), lvl = safenum(lvl,0), map = tostring(map or ""),
+                            mid = safenum(mid,0), lvl = safenum(lvl,0),
                             ts = time(), by = meNow,
                         })
                     end
@@ -2209,14 +2270,19 @@ end
 function GLOG.BroadcastRosterUpsert(name)
     if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
     if not name or name=="" then return end
-    local uid = GLOG.GetOrAssignUID(name)
+    -- 🔒 Toujours travailler sur un nom complet strict (jamais suffixer avec le royaume local ici)
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (type(name)=="string" and name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
+    if not full or full == "" then return end
+
+    local uid = GLOG.GetOrAssignUID(full)
     if not uid then return end
     local rv = safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) + 1
     GuildLogisticsDB.meta.rev = rv
     GuildLogisticsDB.meta.lastModified = now()
-    local alias = (GLOG.GetAliasFor and GLOG.GetAliasFor(name)) or nil
+    local alias = (GLOG.GetAliasFor and GLOG.GetAliasFor(full)) or nil
     GLOG.Comm_Broadcast("ROSTER_UPSERT", {
-        uid = uid, name = name, alias = alias,   -- ➕ alias (optionnel)
+        uid = uid, name = full, alias = alias,   -- ➕ alias (optionnel)
         rv = rv, lm = GuildLogisticsDB.meta.lastModified
     })
 end
@@ -2228,8 +2294,8 @@ function GLOG.BroadcastRosterRemove(idOrName)
     local uid, name = nil, nil
     local s = tostring(idOrName or "")
 
-    -- Si on reçoit un UID (ex: P000123), on garde tel quel ; sinon on considère que c’est un nom
-    if s:match("^P%d+$") then
+    -- Si on reçoit un UID numérique ...
+    if s:match("^%d+$") then
         uid  = s
         name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
     else
@@ -2250,20 +2316,32 @@ end
 
 function GLOG.GM_ApplyAndBroadcast(name, delta)
     if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
-    local uid = GLOG.GetOrAssignUID(name); if not uid then return end
+    -- 🔒 Résolution stricte du nom pour éviter les UID/entrées sur le mauvais royaume
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (type(name)=="string" and name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
+    if not full or full == "" then return end
+
+    local uid = GLOG.GetOrAssignUID(full); if not uid then return end
     local rv = safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) + 1
     GuildLogisticsDB.meta.rev = rv
     GuildLogisticsDB.meta.lastModified = now()
-    local nm = GLOG.GetNameByUID(uid) or name
+    local nm = GLOG.GetNameByUID(uid) or full
     GLOG.Comm_Broadcast("TX_APPLIED", { uid=uid, name=nm, delta=delta, rv=rv, lm=GuildLogisticsDB.meta.lastModified, by=playerFullName() })
 end
+
+
 function GLOG.GM_ApplyAndBroadcastEx(name, delta, extra)
     if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
-    local uid = GLOG.GetOrAssignUID(name); if not uid then return end
+    -- 🔒 Résolution stricte du nom
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (type(name)=="string" and name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
+    if not full or full == "" then return end
+
+    local uid = GLOG.GetOrAssignUID(full); if not uid then return end
     local rv = safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) + 1
     GuildLogisticsDB.meta.rev = rv
     GuildLogisticsDB.meta.lastModified = now()
-    local nm = GLOG.GetNameByUID(uid) or name
+    local nm = GLOG.GetNameByUID(uid) or full
     local p = { uid=uid, name=nm, delta=delta, rv=rv, lm=GuildLogisticsDB.meta.lastModified, by=playerFullName() }
     if type(extra)=="table" then for k,v in pairs(extra) do if p[k]==nil then p[k]=v end end end
     GLOG.Comm_Broadcast("TX_APPLIED", p)
@@ -2751,37 +2829,33 @@ function GLOG.BroadcastStatusUpdate(overrides)
         local p = GuildLogisticsDB.players[me]   -- ⚠️ ne crée pas d'entrée
         local changed = false
         if p then
-            -- iLvl (+ Max)
-            if ilvl ~= nil and ts >= safenum(p.ilvlTs, 0) then
-                p.ilvl   = math.floor(tonumber(ilvl) or 0)
-                if ilvlMax ~= nil then
-                    p.ilvlMax   = math.floor(tonumber(ilvlMax) or 0)
-                    p.ilvlMaxTs = ts
-                end
-                p.ilvlTs   = ts
-                p.ilvlAuth = by
-                changed = true
-                if ns.Emit then ns.Emit("ilvl:changed", me) end
+            local prev = safenum(p.statusTimestamp, 0)
+            local changed = false
+
+            -- iLvl
+            if ilvl ~= nil and ts >= prev then
+                p.ilvl = math.floor(tonumber(ilvl) or 0)
+                if ilvlMax ~= nil then p.ilvlMax = math.floor(tonumber(ilvlMax) or 0) end
+                changed = true; if ns.Emit then ns.Emit("ilvl:changed", me) end
             end
+
             -- Clé M+
-            if safenum(lvl, 0) > 0 and ts >= safenum(p.mkeyTs, 0) then
-                p.mkeyMapId = safenum(mid, 0)
+            if safenum(lvl,0) > 0 and ts >= prev then
+                if mid ~= nil then p.mkeyMapId = safenum(mid, 0) end
                 p.mkeyLevel = safenum(lvl, 0)
-                p.mkeyName  = tostring(map or "")
-                p.mkeyTs    = ts
-                p.mkeyAuth  = by
-                changed = true
-                if ns.Emit then ns.Emit("mkey:changed", me) end
+                changed = true; if ns.Emit then ns.Emit("mkey:changed", me) end
             end
+
             -- Côte M+
-            if safenum(score, -1) >= 0 and ts >= safenum(p.mplusTs, 0) then
+            if safenum(score, -1) >= 0 and ts >= prev then
                 p.mplusScore = safenum(score, 0)
-                p.mplusTs    = ts
-                p.mplusAuth  = by
-                changed = true
-                if ns.Emit then ns.Emit("mplus:changed", me) end
+                changed = true; if ns.Emit then ns.Emit("mplus:changed", me) end
             end
-            if changed and ns.RefreshAll then ns.RefreshAll() end
+
+            if changed and ts > prev then
+                p.statusTimestamp = ts
+                if ns.RefreshAll then ns.RefreshAll() end
+            end
         end
     end
 
@@ -2795,7 +2869,6 @@ function GLOG.BroadcastStatusUpdate(overrides)
     if safenum(lvl,0) > 0 then
         if mid ~= nil then payload.mid = safenum(mid, 0) end
         payload.lvl = safenum(lvl, 0)
-        if map ~= "" then payload.map = map end
     end
 
     GLOG.Comm_Broadcast("STATUS_UPDATE", payload)
@@ -2814,13 +2887,9 @@ end
 function GLOG.BroadcastMKeyUpdate(name, mapId, level, mapName, ts, by)
     local mid = safenum(mapId, 0)
     local lvl = safenum(level, 0)
-    local map = tostring(mapName or "")
-    if (map == "" or map == "Clé") and mid > 0 and GLOG.ResolveMKeyMapName then
-        local nm = GLOG.ResolveMKeyMapName(mid)
-        if nm and nm ~= "" then map = nm end
-    end
-    GLOG.BroadcastStatusUpdate({ mid = mid, lvl = lvl, map = map, ts = safenum(ts, now()), by = tostring(by or "") })
+    GLOG.BroadcastStatusUpdate({ mid = mid, lvl = lvl, ts = safenum(ts, now()), by = tostring(by or "") })
 end
+
 
 
 function GLOG.GM_CreateLot(name, sessions, totalCopper, itemIds)
@@ -2969,16 +3038,6 @@ end
 function GLOG.Comm_Init()
     C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 
-    -- Normalisation éventuelle du master stocké (realm)
-    if GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.master then
-        local m = GuildLogisticsDB.meta.master
-        local n, r = m:match("^(.-)%-(.+)$")
-        if not r then
-            local _, realm = UnitFullName("player")
-            GuildLogisticsDB.meta.master = m .. "-" .. (realm or "")
-        end
-    end
-
     if not GLOG._commFrame then
         local f = CreateFrame("Frame")
         f:RegisterEvent("CHAT_MSG_ADDON")
@@ -3068,14 +3127,7 @@ function GLOG.Comm_Init()
         if not IsInGuild or not IsInGuild() then return end
         if not GuildLogisticsDB then GuildLogisticsDB = {} end
         GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-
-        if not GuildLogisticsDB.meta.master or GuildLogisticsDB.meta.master == "" then
-            local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached()) or ""
-            GuildLogisticsDB.meta.master = gmName or ""
-            if ns.Emit then ns.Emit("meta:changed") end
-        end
     end)
-
 
 end
 

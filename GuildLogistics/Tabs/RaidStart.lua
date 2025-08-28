@@ -73,7 +73,7 @@ local function UpdateRow(i, r, f, d)
     end
 
     UI.SetNameTag(f.name, d.name or "")
-    local solde = (d.credit or 0) - (d.debit or 0)
+    local solde = tonumber(d.solde) or 0
     f.solde:SetText(UI.MoneyText(solde))
     local per = ComputePerHead()
     local isIncluded = includes[d.name] and true or false

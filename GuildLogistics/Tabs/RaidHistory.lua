@@ -116,16 +116,10 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 return
             end
 
-            -- Résumé pour CETTE sortie : #lots & Σ charges utilisées (somme des n)
+            -- Résumé pour CETTE sortie : #lots & Σ charges utilisées (1 charge par lot et par raid)
             local nbLots, usedCharges = #lots, 0
-            for _, lotRef in ipairs(lots) do
-                local l  = GLOG.Lot_GetById and GLOG.Lot_GetById(lotRef.id)
-                local N  = tonumber(lotRef.N or (l and l.sessions) or 1) or 1
-                if N < 1 then N = 1 end
-                local n  = tonumber(lotRef.n or 0) or 0
-                if n < 0 then n = 0 end
-                if n > N then n = N end
-                usedCharges = usedCharges + n
+            for _ , _ in ipairs(lots) do
+                usedCharges = usedCharges + 1
             end
 
             local dlg = UI.CreatePopup({ 
@@ -206,13 +200,10 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                     -- Cherche toutes les dépenses liées à ce lot
                     for _, e in ipairs(dbExp) do
                         if e.lotId == lot.id then
-                            -- ✅ PRORATA : (charges utilisées POUR CE raid) / (charges max du lot)
-                            local N = tonumber(lotRef.N or lot.sessions or 1) or 1
+                            -- ✅ PRORATA : 1 charge utilisée pour ce raid / charges max du lot
+                            local N = tonumber(lot.sessions or 1) or 1
                             if N <= 0 then N = 1 end
-                            local nUsed = tonumber(lotRef.n or 0) or 0
-                            if nUsed < 0 then nUsed = 0 end
-                            if nUsed > N then nUsed = N end
-                            local frac = (N > 0) and (nUsed / N) or 0
+                            local frac = 1 / N
 
                             local baseQty    = tonumber(e.qty or 0) or 0
                             local baseCopper = tonumber(e.copper or 0) or 0
@@ -232,14 +223,11 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                         end
                     end
 
-                    -- ⚠️ Aucun "expense" lié : on ajoute une ligne synthétique (ex. lot en or sans objet)
+                    -- ⚠️ Aucun "expense" lié : ligne synthétique (ex. lot en or)
                     if not addedAny then
-                        local N = tonumber(lotRef.N or lot.sessions or 1) or 1
+                        local N = tonumber(lot.sessions or 1) or 1
                         if N <= 0 then N = 1 end
-                        local nUsed = tonumber(lotRef.n or 0) or 0
-                        if nUsed < 0 then nUsed = 0 end
-                        if nUsed > N then nUsed = N end
-                        local frac = (N > 0) and (nUsed / N) or 0
+                        local frac = 1 / N
 
                         local totalCopper = tonumber(lot.totalCopper or 0) or 0
                         local amtP = math.floor(totalCopper * frac + 0.5)

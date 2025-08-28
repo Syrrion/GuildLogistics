@@ -228,13 +228,20 @@ local function UpdateRowLots(i, r, f, it)
     f.name:SetText(lot.name or (Tr("lbl_lot")..tostring(lot.id)))
     f.type:SetText(N>1 and (N..Tr("lbl_uses")) or "1"..Tr("lbl_use"))
     f.status:SetText( (st=="EPU" and Tr("badge_exhausted")) or (GLOG.Lot_Remaining and (GLOG.Lot_Remaining(lot).." "..Tr("suffix_remaining"))) or ((N-used).." "..Tr("suffix_remaining")))
-    -- Pour un lot "or uniquement" (itemIds vide et totalCopper > 0) => afficher "0".
-    local itemsCount  = #(lot.itemIds or {})
-    local totalCopper = tonumber(lot.totalCopper or lot.copper or 0) or 0
-    if itemsCount == 0 and totalCopper > 0 then
+    -- Somme des quantités d'objets sur les dépenses du lot
+    local sumQty = 0
+    if GLOG and GLOG.GetExpenseById then
+        for _, eid in ipairs(lot.itemIds or {}) do
+            local _, exp = GLOG.GetExpenseById(eid)
+            local q = tonumber(exp and exp.qty or 0) or 0
+            if q > 0 then sumQty = sumQty + 1 end
+        end
+    end
+    -- Lot “or uniquement” : 0 objets si pas de lignes mais du cuivre total
+    if sumQty == 0 and totalCopper > 0 then
         f.content:SetText("0")
     else
-        f.content:SetText(tostring(itemsCount))
+        f.content:SetText(tostring(sumQty))
     end
 
     f.total:SetText(moneyCopper(totalCopper))
@@ -272,12 +279,23 @@ local function UpdateRowLots(i, r, f, it)
 
         local rows = {}
         if GLOG.GetExpenseById then
+            -- Chemin normal : à partir des expenseIds du lot
             for _, eid in ipairs(lot.itemIds or {}) do
                 local _, it = GLOG.GetExpenseById(eid)
                 if it then table.insert(rows, it) end
             end
+            -- Fallback : si la liste est vide, balayer les dépenses et filtrer par lotId
+            if #rows == 0 and GLOG.GetExpenses then
+                local list = GLOG.GetExpenses()  -- renvoie list,total : ici Lua garde le 1er retour
+                for _, it in ipairs(list or {}) do
+                    if tonumber(it.lotId or 0) == tonumber(lot.id or 0) then
+                        table.insert(rows, it)
+                    end
+                end
+            end
         end
         lv:SetData(rows)
+
         dlg:SetButtons({ { text=Tr("btn_close"), default=true } })
         dlg:Show()
     end)

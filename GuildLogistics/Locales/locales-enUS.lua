@@ -519,3 +519,20 @@ L["group_tracker_popup_title_btn_show"]   = "Show title text (popup)"
 L["group_tracker_popup_title_btn_tip"]    = "Toggle display of the popup history title text."
 L["group_tracker_row_height_label"]       = "Row height."
 L["group_tracker_row_height_tip"]         = "Adjust row height"
+
+L["tab_debug_db"] = "Database"
+
+L["col_key"]     = "Key"
+L["col_preview"] = "Preview"
+
+L["btn_open"]    = "Open"
+L["btn_edit"]    = "Edit"
+L["btn_delete"]  = "Delete"
+L["btn_root"]    = "Root"
+L["btn_up"]      = "Up"
+
+L["popup_edit_value"] = "Edit value"
+L["lbl_edit_path"]    = "Path: "
+L["lbl_lua_hint"]     = "Enter a Lua literal: 123, true, \"text\", { a = 1 }"
+L["lbl_delete_confirm"] = "Delete this item?"
+L["lbl_saved"]          = "Saved"

@@ -80,6 +80,81 @@ end
 U.CleanFullName  = CleanFullName
 U.NormalizeFull  = NormalizeFull
 
+-- Résout un "nom" (avec ou sans royaume) en "Nom-Royaume" exact.
+-- opts.strict = true  -> ne JAMAIS compléter avec le royaume local si inconnu/ambigu.
+-- Retourne nil si strict et non résoluble.
+function GLOG.ResolveFullName(name, opts)
+    opts = opts or {}
+    local raw = tostring(name or "")
+    if raw == "" then return nil end
+
+    -- 1) Déjà complet → on nettoie (ex: "Name-Realm-Realm" -> "Name-Realm")
+    if raw:find("%-") then
+        if CleanFullName then return CleanFullName(raw) end
+        return raw
+    end
+
+    -- 2) Clé base (nom court normalisé)
+    local baseKey = (GLOG.NormName and GLOG.NormName(raw)) or raw:lower()
+
+    -- 3) Cherche en BDD locale : si un unique "Name-Realm" existe, on le garde
+    if GuildLogisticsDB and GuildLogisticsDB.players then
+        local candidate = nil
+        for full,_ in pairs(GuildLogisticsDB.players) do
+            local base = full:match("^([^%-]+)%-.+$")
+            if base and base:lower() == baseKey then
+                if candidate and candidate ~= full then
+                    candidate = "__AMB__"; break -- ambiguïté
+                end
+                candidate = full
+            end
+        end
+        if candidate and candidate ~= "__AMB__" then return candidate end
+    end
+
+    -- 4) Scan du groupe/raid pour trouver le royaume réel
+    local function tryUnit(u)
+        if not UnitExists or not UnitExists(u) then return nil end
+        local n, r = UnitName(u)
+        if not n or n == "" then return nil end
+        local k = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+        if k ~= baseKey then return nil end
+        local realm = (r and r ~= "" and r)
+                   or (GetNormalizedRealmName and GetNormalizedRealmName())
+                   or (GetRealmName and GetRealmName())
+                   or ""
+        realm = tostring(realm):gsub("%s+",""):gsub("'","")
+        if realm == "" then return nil end
+        return n .. "-" .. realm
+    end
+
+    local full = tryUnit("player") or tryUnit("target") or tryUnit("mouseover")
+    if not full then
+        for i=1,40 do full = tryUnit("raid"..i); if full then break end end
+    end
+    if not full then
+        for i=1,4 do full = tryUnit("party"..i); if full then break end end
+    end
+    if full then return full end
+
+    -- 5) Strict : on NE complète PAS avec le royaume local → on échoue
+    if opts.strict then return nil end
+
+    -- 6) fallback non-strict: royaume local (comportement legacy)
+    local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    realm = tostring(realm):gsub("%s+",""):gsub("'","")
+    if realm == "" then return raw end
+    return raw .. "-" .. realm
+end
+
+-- Clé DB normalisée : toujours "Nom-Royaume" (résolution guilde + fallback realm local)
+function ns.GLOG.NormalizeDBKey(name)
+    local full = (ns and ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name))
+                 or (ns and ns.GLOG and ns.GLOG.ResolveFullName and ns.GLOG.ResolveFullName(name))
+                 or tostring(name or "")
+    return full
+end
+
 -- 🔎 Récupération générique de la classe d'un joueur via les unités du groupe/raid
 -- Retourne un classTag (ex: "WARRIOR") ou nil
 function U.LookupClassForName(name)
@@ -153,16 +228,6 @@ end
 -- =========================
 -- ===  Accès DB / ver.  ===
 -- =========================
-local function masterName()
-    -- ⚠️ Source de vérité = roster (GM = rang index 0)
-    if GLOG and GLOG.GetGuildMasterCached then
-        local gm = GLOG.GetGuildMasterCached()
-        if gm and gm ~= "" then return gm end
-    end
-    -- Fallback minimal si roster indisponible
-    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-    return GuildLogisticsDB.meta.master
-end
 
 -- Chef de guilde = override toujours vrai
 -- Master désigné = strict si défini
@@ -252,66 +317,81 @@ end
 local function EnsureDB()
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
-    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-    GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
+GuildLogisticsDB.players = GuildLogisticsDB.players or {}
     GuildLogisticsDB.meta.uidSeq = GuildLogisticsDB.meta.uidSeq or 1
     return GuildLogisticsDB
 end
 local function _norm(s) return (normalizeStr and normalizeStr(s)) or tostring(s or ""):gsub("%s+",""):lower() end
 
+-- Retourne le nom complet par UID numérique en parcourant players
 if type(U.GetNameByUID) ~= "function" then
     function U.GetNameByUID(uid)
         local db = EnsureDB()
-        return db.uids[tostring(uid or "")]
-    end
-end
-
-if type(U.FindUIDByName) ~= "function" then
-    function U.FindUIDByName(name)
-        local db = EnsureDB()
-        local n0 = _norm((U.NormalizeFull and U.NormalizeFull(name)) or name)
-        for uid, stored in pairs(db.uids) do
-            if _norm(stored) == n0 then return uid end
+        local n = tonumber(uid)
+        if not n then return nil end
+        for full, rec in pairs(db.players or {}) do
+            if tonumber(rec and rec.uid) == n then
+                return full
+            end
         end
         return nil
     end
 end
 
-function U.MapUID(uid, name)
-    local db = EnsureDB()
-    local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
-    db.uids[tostring(uid or "")] = full
-    -- ⛑️ Création implicite = Réserve
-    db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
-    return uid
-end
-
-if type(U.UnmapUID) ~= "function" then
-    function U.UnmapUID(uid)
-        local db = EnsureDB()
-        db.uids[tostring(uid or "")] = nil
+-- Trouve l’UID numérique d’un joueur (stocké dans players[full].uid)
+if type(U.FindUIDByName) ~= "function" then
+    function U.FindUIDByName(name)
+        local db   = EnsureDB()
+        local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
+        local p = db.players[full]
+        return p and p.uid or nil
     end
 end
 
+-- Force un mapping UID<->player sur l’entrée players (pas de table uids)
+function U.MapUID(uid, name)
+    local db   = EnsureDB()
+    local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
+    local nuid = tonumber(uid)
+    if not nuid then return nil end
+    db.players[full] = db.players[full] or { solde = 0, reserved = true }
+    db.players[full].uid = nuid
+    return nuid
+end
+
+-- Supprime l’UID sur l’entrée player concernée
+if type(U.UnmapUID) ~= "function" then
+    function U.UnmapUID(uid)
+        local db = EnsureDB()
+        local n  = tonumber(uid)
+        if not n then return end
+        for full, rec in pairs(db.players or {}) do
+            if tonumber(rec and rec.uid) == n then
+                rec.uid = nil
+                return
+            end
+        end
+    end
+end
+
+-- Retourne l’UID numérique existant ou l’assigne si absent (séquence purement numérique)
 if type(U.GetOrAssignUID) ~= "function" then
     function U.GetOrAssignUID(name)
-        local db = EnsureDB()
+        local db   = EnsureDB()
         local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
-        local uid = U.FindUIDByName(full)
-        if uid then return uid end
+        db.players[full] = db.players[full] or { solde = 0, reserved = true }
+        if db.players[full].uid then return db.players[full].uid end
         local nextId = tonumber(db.meta.uidSeq or 1) or 1
-        uid = string.format("P%06d", nextId)
+        db.players[full].uid = nextId
         db.meta.uidSeq = nextId + 1
-        U.MapUID(uid, full)
-        return uid
+        return db.players[full].uid
     end
 end
 
 function U.EnsureRosterLocal(name)
-    local db = EnsureDB()
+    local db   = EnsureDB()
     local full = (U.NormalizeFull and U.NormalizeFull(name)) or tostring(name or "")
-    -- ⛑️ Création implicite = Réserve
-    db.players[full] = db.players[full] or { credit = 0, debit = 0, reserved = true }
+    db.players[full] = db.players[full] or { solde = 0, reserved = true }
     if db.players[full].reserved == nil then db.players[full].reserved = true end
     return db.players[full]
 end
@@ -326,12 +406,12 @@ if type(ns.GLOG.FindUIDByName) ~= "function" then ns.GLOG.FindUIDByName = U.Find
 if type(ns.GLOG.GetUID)        ~= "function" then ns.GLOG.GetUID        = U.FindUIDByName end
 
 
+
 -- ➕ Gestion centrale des UID / Roster (idempotent)
 local function EnsureDB()
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-    GuildLogisticsDB.uids    = GuildLogisticsDB.uids    or {}
     GuildLogisticsDB.meta.uidSeq = GuildLogisticsDB.meta.uidSeq or 1
     return GuildLogisticsDB
 end
@@ -340,42 +420,48 @@ local function _norm(s) return normalizeStr and normalizeStr(s) or tostring(s or
 if type(U.GetNameByUID) ~= "function" then
     function U.GetNameByUID(uid)
         local db = EnsureDB()
-        return db.uids[tostring(uid or "")]
+        local n = tonumber(uid)
+        if not n then return nil end
+        for full, rec in pairs(db.players or {}) do
+            if tonumber(rec and rec.uid) == n then return full end
+        end
+        return nil
     end
 end
 
 if type(U.FindUIDByName) ~= "function" then
     function U.FindUIDByName(name)
-        local db = EnsureDB()
-        local n = U.NormalizeFull and U.NormalizeFull(name) or tostring(name or "")
-        local n0 = _norm(n)
-        for uid, stored in pairs(db.uids) do
-            if _norm(stored) == n0 then return uid end
-        end
-        return nil
+        local db   = EnsureDB()
+        local full = U.NormalizeFull and U.NormalizeFull(name) or tostring(name or "")
+        local p = db.players[full]
+        return p and p.uid or nil
     end
 end
 
 if type(U.UnmapUID) ~= "function" then
     function U.UnmapUID(uid)
         local db = EnsureDB()
-        db.uids[tostring(uid or "")] = nil
+        local n  = tonumber(uid)
+        if not n then return end
+        for _, rec in pairs(db.players or {}) do
+            if tonumber(rec and rec.uid) == n then rec.uid = nil; return end
+        end
     end
 end
 
 if type(U.GetOrAssignUID) ~= "function" then
     function U.GetOrAssignUID(name)
         local db = EnsureDB()
-        local n = U.NormalizeFull and U.NormalizeFull(name) or tostring(name or "")
-        local uid = U.FindUIDByName(n)
-        if uid then return uid end
+        local n  = U.NormalizeFull and U.NormalizeFull(name) or tostring(name or "")
+        db.players[n] = db.players[n] or { solde = 0, reserved = true }
+        if db.players[n].uid then return db.players[n].uid end
         local nextId = tonumber(db.meta.uidSeq or 1) or 1
-        uid = string.format("P%06d", nextId)
+        db.players[n].uid = nextId
         db.meta.uidSeq = nextId + 1
-        U.MapUID(uid, n)
-        return uid
+        return db.players[n].uid
     end
 end
+
 
 -- ➕ Utilitaires : guilde & titre principal
 function GLOG.GetCurrentGuildName()
@@ -751,4 +837,72 @@ function GLOG.SetScriptErrorsEnabled(enabled)
         pcall(SetCVar, "scriptErrors", v)
     end
     return GLOG.IsScriptErrorsEnabled()
+end
+
+-- =========================
+-- ======  GENERIC DB  =====
+-- =========================
+
+-- Retourne vrai si 't' est un tableau séquentiel (1..n) + sa taille 'n'.
+function GLOG.IsArrayTable(t)
+    if type(t) ~= "table" then return false, 0 end
+    local n = #t
+    -- Vérifie qu'aucune clé non-numérique n'existe et qu'il n'y a pas de trous < n
+    for k, _ in pairs(t) do
+        if type(k) ~= "number" or k < 1 or k % 1 ~= 0 or k > n then
+            return false, n
+        end
+    end
+    return true, n
+end
+
+function GLOG.TableKeyCount(t)
+    if type(t) ~= "table" then return 0 end
+    local c = 0
+    for _ in pairs(t) do c = c + 1 end
+    return c
+end
+
+-- Sérialisation simple en littéral Lua (lisible, indenté).
+function GLOG.SerializeLua(v, depth)
+    depth = depth or 0
+    local t = type(v)
+    if t == "string" then return string.format("%q", v) end
+    if t == "number" or t == "boolean" or t == "nil" then return tostring(v) end
+    if t ~= "table" then return "\"<"..t..">\"" end
+
+    local indent  = string.rep("  ", depth)
+    local indent2 = string.rep("  ", depth + 1)
+    local isArray, n = GLOG.IsArrayTable(v)
+    local parts = {}
+
+    if isArray then
+        for i = 1, n do
+            parts[#parts+1] = indent2 .. GLOG.SerializeLua(v[i], depth + 1)
+        end
+    else
+        for k, val in pairs(v) do
+            local key
+            if type(k) == "string" and k:match("^%a[%w_]*$") then
+                key = k
+            else
+                key = "["..GLOG.SerializeLua(k, 0).."]"
+            end
+            parts[#parts+1] = indent2 .. key .. " = " .. GLOG.SerializeLua(val, depth + 1)
+        end
+    end
+
+    if #parts == 0 then return "{}" end
+    return "{\n" .. table.concat(parts, ",\n") .. "\n" .. indent .. "}"
+end
+
+-- Parse un littéral Lua et retourne la valeur (ou nil + msg d'erreur)
+function GLOG.DeserializeLua(text)
+    local s = tostring(text or "")
+    if s == "" then return nil, "empty" end
+    local chunk, err = loadstring("return " .. s)
+    if not chunk then return nil, err end
+    local ok, val = pcall(chunk)
+    if not ok then return nil, val end
+    return val, nil
 end

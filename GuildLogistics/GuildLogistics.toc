@@ -60,6 +60,7 @@ Tabs/Helpers_GroupTracker.lua
 Tabs/Settings.lua
 
 Tabs/Debug_Packets.lua
+Tabs/Debug_Database.lua
 
 Core/Calendar.lua
 Core/Events.lua
