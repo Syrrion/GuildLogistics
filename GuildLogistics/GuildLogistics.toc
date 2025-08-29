@@ -38,6 +38,7 @@ UI/UI_Float.lua
 UI/UI_PlainWindow.lua
 UI/UI_Slider.lua
 UI/UI_Scrollbar.lua
+UI/UI_TokenList.lua
 
 Tabs/Guild.lua
 
@@ -56,6 +57,7 @@ Tabs/Helpers_Raids.lua
 Tabs/Helpers_Crests.lua
 
 Tabs/Helpers_GroupTracker.lua
+Tabs/Tracker_Custom.lua
 
 Tabs/Settings.lua
 

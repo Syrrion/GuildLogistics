@@ -44,6 +44,10 @@ f:SetScript("OnEvent", function(self, event, name)
         if name ~= ADDON then return end
         if GLOG._EnsureDB then GLOG._EnsureDB() end
         if GLOG.ClearDebugLogs then GLOG.ClearDebugLogs() end
+        -- Seed des listes par défaut du suivi personnalisé (versionné)
+        if GLOG.GroupTracker_EnsureDefaultCustomLists then
+            GLOG.GroupTracker_EnsureDefaultCustomLists(false)
+        end
 
         -- STATUS_UPDATE automatique toutes les 3 minutes (rafraîchit localement iLvl/Clé/Côte via la fonction existante)
         if not GLOG._statusAutoTicker and C_Timer and C_Timer.NewTicker then

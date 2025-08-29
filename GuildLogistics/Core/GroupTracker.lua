@@ -40,6 +40,10 @@ _Store = function()
     s.textOpacity= tonumber(s.textOpacity or 1.00) or 1.00  -- texte
     s.btnOpacity = tonumber(s.btnOpacity  or 1.00) or 1.00  -- 🔹 boutons
     s.recording  = (s.recording == true)
+    -- 🔹 Suivi personnalisé : structure de configuration
+    s.custom = s.custom or {}
+    s.custom.columns = s.custom.columns or {}
+    s.custom.nextId  = tonumber(s.custom.nextId or 1) or 1
 
     return s
 end
@@ -65,6 +69,11 @@ local function _Store()
     s.winOpen = (s.winOpen == true)
     -- Visibilité des 3 dernières colonnes (fenêtre flottante du Tracker)
     s.colVis = s.colVis or { heal = true, util = true, stone = true }
+    -- 🔹 Suivi personnalisé : structure de configuration
+    s.custom = s.custom or {}
+    s.custom.columns = s.custom.columns or {}
+    s.custom.nextId  = tonumber(s.custom.nextId or 1) or 1
+
     return s
 end
 
@@ -230,55 +239,83 @@ local function _RebuildCategoryLookup()
     wipe(_CategoryBySpellID)
     wipe(_CategoryBySpellName)
 
-    if not (Data and Data.CONSUMABLE_CATEGORY) then return end
+    -- Source unique : Data.CONSUMABLES_TYPED (ItemIDs + SpellIDs)
+    if not (Data and Data.CONSUMABLES_TYPED) then return end
 
-    local function mapSpellFromName(name, cat)
-        if not name or name == "" then return end
-        local lower = name:lower()
-        _CategoryBySpellName[lower] = cat
+    local function mapSpellID(spellID, cat)
+        local sid = tonumber(spellID)
+        if not sid then return end
+        _CategoryBySpellID[sid] = cat
         if C_Spell and C_Spell.GetSpellInfo then
-            local si = C_Spell.GetSpellInfo(name)
-            if si and si.spellID then
-                _CategoryBySpellID[si.spellID] = cat
+            local si = C_Spell.GetSpellInfo(sid)
+            if si and si.name then
+                _CategoryBySpellName[(si.name or ""):lower()] = cat
             end
         end
     end
 
-    local function mapFromItem(itemID, cat)
-        -- Essai immédiat via GetItemSpell (souvent dispo si item en cache)
-        local spellName = GetItemSpell and GetItemSpell(itemID)
-        if spellName then
-            mapSpellFromName(spellName, cat)
-            return
-        end
-        -- Callback asynchrone : quand l'item est chargé, on mappe le sort
-        if Item and Item.CreateFromItemID then
-            local it = Item:CreateFromItemID(itemID)
+    local function mapItemID(itemID, cat)
+        local iid = tonumber(itemID)
+        if not iid then return end
+        -- Essai immédiat (si item en cache)
+        local useName, useSpellID = GetItemSpell and GetItemSpell(iid)
+        if useSpellID then mapSpellID(useSpellID, cat) end
+        if useName   then _CategoryBySpellName[tostring(useName):lower()] = cat end
+        -- Callback quand l'item est (re)chargé
+        if (not useName or not useSpellID) and Item and Item.CreateFromItemID then
+            local it = Item:CreateFromItemID(iid)
             it:ContinueOnItemLoad(function()
-                local sn = GetItemSpell and GetItemSpell(itemID)
-                if sn then mapSpellFromName(sn, cat) end
+                local n2, s2 = GetItemSpell and GetItemSpell(iid)
+                if s2 then mapSpellID(s2, cat) end
+                if n2 then _CategoryBySpellName[tostring(n2):lower()] = cat end
             end)
         end
     end
 
-    for id, cat in pairs(Data.CONSUMABLE_CATEGORY) do
-        local num = tonumber(id)
-        if num then
-            -- 1) Si c'est un SpellID valide → direct
-            local si = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(num)
-            if si and si.spellID then
-                _CategoryBySpellID[si.spellID] = cat
-                _CategoryBySpellName[(si.name or ""):lower()] = cat
-            else
-                -- 2) Sinon on interprète comme un ItemID → récupère le sort de l'objet
-                mapFromItem(num, cat)
+    for cat, lists in pairs(Data.CONSUMABLES_TYPED) do
+        if type(lists) == "table" then
+            if type(lists.spells) == "table" then
+                for _, sid in ipairs(lists.spells) do mapSpellID(sid, cat) end
             end
+            if type(lists.items) == "table" then
+                for _, iid in ipairs(lists.items) do mapItemID(iid, cat) end
+            end
+        end
+    end
+
+    -- Santé : support optionnel des Healthstones explicitement déclarées
+    if Data and Data.HEALTHSTONE_SPELLS then
+        for sid, ok in pairs(Data.HEALTHSTONE_SPELLS) do
+            if ok then mapSpellID(sid, "stone") end
         end
     end
 end
 
+-- Normalise un SpellID vers son sort « de base » (gère les overrides/talents)
+local function _NormalizeSpellID(id)
+    id = tonumber(id or 0) or 0
+    if id <= 0 then return id end
+
+    if FindBaseSpellByID then
+        local base = FindBaseSpellByID(id)
+        if base and base > 0 then return base end
+    end
+    if FindSpellOverrideByID then
+        local ov = FindSpellOverrideByID(id)
+        if ov and ov > 0 and ov ~= id then
+            if FindBaseSpellByID then
+                local base2 = FindBaseSpellByID(ov)
+                if base2 and base2 > 0 then return base2 end
+            end
+            return ov
+        end
+    end
+    return id
+end
+
 local function _detectCategory(spellID, spellName)
-    spellID = tonumber(spellID or 0) or 0
+    -- 0) Normaliser l'ID (overrides → base)
+    spellID = _NormalizeSpellID(tonumber(spellID or 0) or 0)
 
     -- (-1) Exclusions explicites (IDs, puis noms)
     if Data and Data.CONSUMABLE_EXCLUDE_SPELLS and Data.CONSUMABLE_EXCLUDE_SPELLS[spellID] then
@@ -291,57 +328,23 @@ local function _detectCategory(spellID, spellName)
         end
     end
 
-    -- 0) Mapping explicite pré-compilé (IDs directs)
+    -- 1) Mapping explicite par ID (précompilé depuis Data)
     if _CategoryBySpellID[spellID] then
         return _CategoryBySpellID[spellID]
     end
 
-    -- 🔸 Fallback dynamique : essayer de résoudre à la volée depuis les ItemIDs déclarés
-    if Data and Data.CONSUMABLE_CATEGORY then
-        for id, cat in pairs(Data.CONSUMABLE_CATEGORY) do
-            local itemID = tonumber(id)
-            if itemID then
-                local useName, useSpellID = GetItemSpell and GetItemSpell(itemID)
-                -- 1) Match direct sur l'ID du sort d'utilisation
-                if useSpellID and useSpellID == spellID then
-                    _CategoryBySpellID[spellID] = cat
-                    return cat
-                end
-                -- 2) Match par nom du sort d'utilisation
-                if useName then
-                    local si = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(useName)
-                    if si and si.spellID == spellID then
-                        _CategoryBySpellID[spellID] = cat
-                        return cat
-                    end
-                    -- 2-bis) Si l'ID diverge mais que le NOM est identique, on accepte et on mémorise
-                    if spellName and tostring(useName):lower() == tostring(spellName):lower() then
-                        _CategoryBySpellName[tostring(useName):lower()] = cat
-                        return cat
-                    end
-                end
-            end
+    -- 2) Fallback par NOM (précompilé depuis Data — sûr car limité à tes listes)
+    if spellName and spellName ~= "" then
+        local sn = tostring(spellName):lower()
+        local catByName = _CategoryBySpellName[sn]
+        if catByName then
+            return catByName
         end
     end
 
-    -- 0-bis) Si jamais Data contenait par erreur un SpellID direct (sécurité)
-    if Data and Data.CONSUMABLE_CATEGORY and Data.CONSUMABLE_CATEGORY[spellID] then
-        return Data.CONSUMABLE_CATEGORY[spellID]
-    end
-
-    -- 1) Healthstone priorité si connue
-    if Data and Data.HEALTHSTONE_SPELLS and Data.HEALTHSTONE_SPELLS[spellID] then
-        return "stone"
-    end
-
-    -- 2) Fallback par nom exact depuis Data (si on n'a pas d'ID mappé)
-    local sn = tostring(spellName or ""):lower()
-    if _CategoryBySpellName[sn] then
-        return _CategoryBySpellName[sn]
-    end
-
-    -- 3) Heuristique via icône
-    local icon = (C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID) and C_Spell.GetSpellInfo(spellID).iconID) or nil
+    -- 3) Heuristique via icône (ultime secours)
+    local si = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
+    local icon = si and si.iconID or nil
     if type(icon) == "string" then
         local ic = icon:lower()
         if ic:find("healthstone") or ic:find("inv_stone") then return "stone" end
@@ -349,6 +352,81 @@ local function _detectCategory(spellID, spellName)
     end
 
     return nil
+end
+
+
+-- ====== Suivi personnalisé : lookup rapide ======
+local _CustomBySpellID   = {}   -- [spellID] = { colId1, colId2, ... }
+local _CustomByKeyword   = {}   -- [lowerKeyword] = { colId1, colId2, ... }
+local _CustomColsOrdered = {}   -- { {id=..., label=...}, ... } (colonnes actives)
+local _CustomCooldownById= {}   -- [colId] = "heal"|"util"|"stone"|nil
+
+local function _RebuildCustomLookup()
+    wipe(_CustomCooldownById)
+    local s = _Store()
+    local cfg = s.custom or {}
+    local cols = cfg.columns or {}
+
+    local function addSpellMap(sid, colId)
+        sid = tonumber(sid)
+        if not sid then return end
+        _CustomBySpellID[sid] = _CustomBySpellID[sid] or {}
+        table.insert(_CustomBySpellID[sid], tostring(colId))
+    end
+    local function addKeyword(key, colId)
+        key = tostring(key or ""):lower()
+        if key == "" then return end
+        _CustomByKeyword[key] = _CustomByKeyword[key] or {}
+        table.insert(_CustomByKeyword[key], tostring(colId))
+    end
+
+    for idx, c in ipairs(cols) do
+        if c and (c.enabled ~= false) and (tostring(c.label or "") ~= "") then
+            local id = tostring(c.id or "")
+            if id == "" then id = tostring(idx) end
+            table.insert(_CustomColsOrdered, { id = id, label = tostring(c.label) })
+            if c.cooldownCat then
+                _CustomCooldownById[id] = tostring(c.cooldownCat)
+            end
+            if type(c.spellIDs) == "table" then
+                for _, sid in ipairs(c.spellIDs) do addSpellMap(sid, id) end
+            end
+            if type(c.itemIDs) == "table" and GetItemSpell then
+                for _, iid in ipairs(c.itemIDs) do
+                    local _, sid = GetItemSpell(tonumber(iid) or 0)
+                    if sid then addSpellMap(sid, id) end
+                end
+            end
+            if type(c.keywords) == "table" then
+                for _, kw in ipairs(c.keywords) do addKeyword(kw, id) end
+            end
+        end
+    end
+end
+
+local function _MatchCustomColumns(spellID, spellName)
+    local res, seen = {}, {}
+    local sid = tonumber(spellID) or 0
+    for _, id in ipairs(_CustomBySpellID[sid] or {}) do
+        if not seen[id] then res[#res+1] = id; seen[id] = true end
+    end
+    local name = tostring(spellName or ""):lower()
+    if name ~= "" then
+        for key, arr in pairs(_CustomByKeyword) do
+            if string.find(name, key, 1, true) then
+                for _, id in ipairs(arr) do
+                    if not seen[id] then res[#res+1] = id; seen[id] = true end
+                end
+            end
+        end
+    end
+    return res
+end
+
+local function _GetEnabledCustomColumnsOrdered()
+    local out = {}
+    for i, c in ipairs(_CustomColsOrdered) do out[i] = c end
+    return out
 end
 
 local function _isGroupSource(flags)
@@ -381,6 +459,22 @@ local function _onConsumableUsed(sourceName, cat, spellID, spellName)
 
     -- Historique live combat
     _pushEvent(full, cat, spellID, spellName, time and time() or 0)
+
+    if state.win and state.win._Refresh then state.win:_Refresh() end
+end
+
+-- Compteur pour colonnes personnalisées
+local function _onCustomUsed(sourceName, colId, spellID, spellName)
+    if not sourceName or not colId then return end
+    local full = _normalize(sourceName)
+    if full == "" then return end
+
+    state.uses[full] = state.uses[full] or { heal=0, util=0, stone=0 }
+    state.uses[full].custom = state.uses[full].custom or {}
+    state.uses[full].custom[tostring(colId)] = (state.uses[full].custom[tostring(colId)] or 0) + 1
+
+    -- Historique live combat (cat = "c:<id>")
+    _pushEvent(full, "c:"..tostring(colId), spellID, spellName, time and time() or 0)
 
     if state.win and state.win._Refresh then state.win:_Refresh() end
 end
@@ -474,8 +568,26 @@ local function _buildRows()
 end
 
 local function _CatLabel(cat)
-    if cat == "heal"  then return Tr("col_heal_potion") or "" end
-    if cat == "stone" then return Tr("col_healthstone") or "" end
+    if cat == "heal"   then return Tr("col_heal_potion")   or "" end
+    if cat == "util"   then return Tr("col_other_potions") or "" end
+    if cat == "stone"  then return Tr("col_healthstone")   or "" end
+    if cat == "cddef"  then return Tr("col_cddef")         or "" end
+
+    -- Colonnes personnalisées : "c:<id>"
+    if type(cat) == "string" and cat:find("^c:") then
+        local id = cat:match("^c:(.+)$")
+        if id and id ~= "" then
+            local s = _Store()
+            local cols = (s.custom and s.custom.columns) or {}
+            for i=1,#cols do
+                if tostring(cols[i].id) == tostring(id) then
+                    return tostring(cols[i].label or "")
+                end
+            end
+        end
+    end
+
+    -- Fallback
     return Tr("col_other_potions") or ""
 end
 
@@ -563,10 +675,11 @@ local function _ShowHistoryPopup(full)
         UI.ListView_SetScrollbarVisible(lv, false)
     end
 
-    -- ➕ Transparence (déjà en place)
+    -- ➕ Transparence
     state.popup = p
     if p then p._lv = lv end
     do
+        local a = (GLOG and GLOG.GroupTracker_GetOpacity and GLOG.GroupTracker_GetOpacity()) or 1
         if UI and UI.ListView_SetRowGradientOpacity then UI.ListView_SetRowGradientOpacity(lv, a) end
     end
 
@@ -611,22 +724,37 @@ local function _ApplyColumnsVisibilityToFrame(f)
     local s  = _Store()
     local vis = s.colVis or { heal=true, util=true, stone=true }
 
-    -- Base des colonnes : on repart du modèle d’origine si disponible
     local base = f._baseCols or lv.cols or {}
     local cols = {}
 
-    for i, c in ipairs(base) do
+    -- lookup : idCustom → "heal"|"util"|"stone" (pour colonnes en mode cooldown)
+    local cooldownById = {}
+    do
+        local cfg = s.custom or {}
+        for _, c in ipairs(cfg.columns or {}) do
+            if c and (c.enabled ~= false) and c.cooldownCat then
+                cooldownById[tostring(c.id)] = tostring(c.cooldownCat)
+            end
+        end
+    end
+
+    for _, c in ipairs(base) do
         local cc = {}
         for k, v in pairs(c) do cc[k] = v end
+        local key = tostring(cc.key or "")
+        local show = true
 
-        if cc.key == "heal" or cc.key == "util" or cc.key == "stone" then
-            local show = vis[cc.key] ~= false
-            if not show then
-                cc.w, cc.min, cc.flex = 0, 0, 0  -- masque complètement la colonne
-            else
-                -- largeur fixe standard (respecte l’intention originale)
-                cc.w, cc.min, cc.flex = 51, 51, 0
+        -- Colonnes personnalisées « cust:ID » : respectent la visibilité de leur catégorie cooldown
+        if key:find("^cust:") then
+            local id  = key:match("^cust:(.+)$")
+            local cat = id and cooldownById[id]
+            if cat and (vis[cat] == false) then
+                show = false
             end
+        end
+
+        if not show then
+            cc.w, cc.min, cc.flex = 0, 0, 0
         end
         cols[#cols+1] = cc
     end
@@ -637,7 +765,6 @@ local function _ApplyColumnsVisibilityToFrame(f)
     end
     if lv.Refresh then lv:Refresh() elseif lv.Layout then lv:Layout() end
 end
-
 
 -- Calcule la largeur minimale requise par la ListView + bordures
 local function _ComputeMinWindowWidth(f)
@@ -809,13 +936,29 @@ local function _ensureWindow()
         f.hctrl:SetPoint("RIGHT", f.header, "RIGHT", -28, 0)
     end)
 
-    -- Colonnes
+-- Colonnes
+-- Colonnes (plus de colonnes statiques heal/util/stone)
     local cols = UI.NormalizeColumns({
-        { key="name",   title=Tr("col_name"),          min=50, flex=1, justify="LEFT"  },
-        { key="heal",   title=Tr("col_heal_potion"),   w=51,  justify="CENTER" },
-        { key="util",   title=Tr("col_other_potions"), w=51,  justify="CENTER" },
-        { key="stone",  title=Tr("col_healthstone"),   w=51,  justify="CENTER" },
+        { key="name", title=Tr("col_name"), min=50, flex=1, justify="LEFT" },
     })
+
+    -- ➕ Colonnes personnalisées actives
+    local _customCols = _GetEnabledCustomColumnsOrdered()
+    for _, c in ipairs(_customCols) do
+        table.insert(cols, { key = "cust:"..tostring(c.id), title = tostring(c.label), w = 51, justify = "CENTER" })
+    end
+
+    -- Table de correspondance "colonne custom" → catégorie cooldown ('heal'|'util'|'stone')
+    local _cooldownById = {}
+    do
+        local s = _Store()
+        local cfg = s.custom or {}
+        for _, c in ipairs(cfg.columns or {}) do
+            if c and (c.enabled ~= false) and c.cooldownCat then
+                _cooldownById[tostring(c.id)] = tostring(c.cooldownCat)
+            end
+        end
+    end
 
     local lv = UI.ListView(f.content, cols, {
         topOffset = 0,
@@ -828,21 +971,23 @@ local function _ensureWindow()
                 end
             end)
             local w = {}
-            w.name  = UI.CreateNameTag(r)
-            w.heal  = UI.Label(r, { justify = "CENTER" })
-            w.util  = UI.Label(r, { justify = "CENTER" })
-            w.stone = UI.Label(r, { justify = "CENTER" })
+            w.name = UI.CreateNameTag(r)
+            -- Champs dynamiques pour toutes les colonnes personnalisées
+            if _customCols then
+                for _, c in ipairs(_customCols) do
+                    w["cust:"..tostring(c.id)] = UI.Label(r, { justify = "CENTER" })
+                end
+            end
             return w
         end,
         updateRow = function(i, r, w, it)
             if not it then return end
             r._full = it.name
 
-            -- ✅ Affichage sans serveur, tout en conservant le style (classe/couleur/icone)
+            -- ✅ Affichage sans serveur, tout en conservant le style
             if UI and UI.SetNameTagShort and w.name then
                 UI.SetNameTagShort(w.name, it.name or "")
             elseif UI and UI.SetNameTag and w.name then
-                -- Fallback si jamais la fonction n’est pas encore chargée
                 local short = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(it.name)) or (it.name or "")
                 w.name.text:SetText(short)
                 UI.SetNameTag(w.name, it.name or "")
@@ -863,9 +1008,48 @@ local function _ensureWindow()
                 end
                 return base
             end
-            w.heal:SetText(  cell(it.healR  or 0, it.healN  or 0) )
-            w.util:SetText(  cell(it.utilR  or 0, it.utilN  or 0) )
-            w.stone:SetText( cell(it.stoneR or 0, it.stoneN or 0) )
+
+            local function timerFor(cat)
+                if cat == "heal"  then return (it.healR  or 0),  (it.healN  or 0) end
+                if cat == "util"  then return (it.utilR  or 0),  (it.utilN  or 0) end
+                if cat == "stone" then return (it.stoneR or 0),  (it.stoneN or 0) end
+                return 0, 0
+            end
+
+            -- Colonnes personnalisées : certaines en cooldown (timer), les autres en compteur
+            if _customCols then
+                local s = _Store()
+                local view = tonumber(s.viewIndex or 1) or 1
+                local function customCount(full, colId)
+                    if session.inCombat and view == 0 then
+                        local cu = state.uses[full] and state.uses[full].custom or {}
+                        return tonumber(cu[tostring(colId)] or 0) or 0
+                    else
+                        if (not session.inCombat) and view == 0 then view = 1 end
+                        local seg = s.segments[view]
+                        if not seg then return 0 end
+                        local evs = (seg.data and seg.data[full] and seg.data[full].events) or {}
+                        local key = "c:"..tostring(colId)
+                        local n = 0
+                        for i=1,#evs do if evs[i].cat == key then n = n + 1 end end
+                        return n
+                    end
+                end
+
+                for _, c in ipairs(_customCols) do
+                    local field = w["cust:"..tostring(c.id)]
+                    if field and field.SetText then
+                        local cat = _cooldownById[tostring(c.id)]
+                        if cat == "heal" or cat == "util" or cat == "stone" then
+                            local rem, n = timerFor(cat)
+                            field:SetText(cell(rem, n))
+                        else
+                            local n = customCount(it.name, c.id)
+                            field:SetText((n > 0) and tostring(n) or "|cffaaaaaa—|r")
+                        end
+                    end
+                end
+            end
         end,
 
     })
@@ -921,8 +1105,7 @@ local function _ensureWindow()
         -- ====== Ton bloc : calcul du libellé et de la position ======
         local label, posStr
         if view == 0 then
-            -- session "live" (en combat) si disponible
-            local session = state.liveSession or s.liveSession or {}
+            -- session "live" (en combat)
             local inCombat = (session.inCombat == true)
             if not inCombat then
                 -- si pas en combat, on retombe sur un segment valide si possible
@@ -935,6 +1118,7 @@ local function _ensureWindow()
 
             label  = session.label or Tr("history_combat")
             posStr = "[Live]"
+
         else
             if (not s.segments or not s.segments[view]) and segCount > 0 then
                 -- garde-fou si view est hors bornes
@@ -1220,6 +1404,179 @@ function GLOG.GroupTracker_SetRowHeight(px)
     end
 end
 
+-- === API Suivi personnalisé (CRUD colonnes) ===
+function GLOG.GroupTracker_Custom_List()
+    local s = _Store()
+    return (s.custom and s.custom.columns) or {}
+end
+
+function GLOG.GroupTracker_Custom_AddOrUpdate(obj)
+    if type(obj) ~= "table" then return nil end
+    local s = _Store()
+    s.custom = s.custom or {}; s.custom.columns = s.custom.columns or {}; s.custom.nextId = tonumber(s.custom.nextId or 1) or 1
+
+    local function normList(t)
+        local out = {}
+        if type(t) == "table" then
+            for _, v in ipairs(t) do
+                local n = tonumber(v)
+                if n then table.insert(out, n) end
+            end
+        end
+        return out
+    end
+    obj.spellIDs = normList(obj.spellIDs)
+    obj.itemIDs  = normList(obj.itemIDs)
+    local kws = {}
+    if type(obj.keywords) == "table" then
+        for _, k in ipairs(obj.keywords) do
+            local s = tostring(k or ""):gsub("^%s+",""):gsub("%s+$","")
+            if s ~= "" then table.insert(kws, s) end
+        end
+    end
+    obj.keywords = kws
+
+    local id = tostring(obj.id or "")
+    if id == "" then
+        id = "C" .. tostring(s.custom.nextId)
+        s.custom.nextId = s.custom.nextId + 1
+        obj.id = id
+        table.insert(s.custom.columns, obj)
+    else
+        local found = false
+        for i, c in ipairs(s.custom.columns) do
+            if tostring(c.id) == id then
+                s.custom.columns[i] = obj
+                found = true
+                break
+            end
+        end
+        if not found then table.insert(s.custom.columns, obj) end
+    end
+
+    _RebuildCustomLookup()
+    if GLOG and GLOG.GroupTracker_RecreateWindow then GLOG.GroupTracker_RecreateWindow() end
+    return id
+end
+
+function GLOG.GroupTracker_Custom_Delete(id)
+    local s = _Store()
+    local cols = (s.custom and s.custom.columns) or {}
+    for i = #cols, 1, -1 do
+        if tostring(cols[i].id) == tostring(id) then table.remove(cols, i) end
+    end
+    _RebuildCustomLookup()
+    if GLOG and GLOG.GroupTracker_RecreateWindow then GLOG.GroupTracker_RecreateWindow() end
+end
+
+function GLOG.GroupTracker_RecreateWindow()
+    if state.win then
+        local wasOpen = state.win:IsShown()
+        state.win:Hide()
+        state.win = nil
+        if wasOpen and GLOG and GLOG.GroupTracker_ShowWindow then
+            GLOG.GroupTracker_ShowWindow(true)
+        end
+    end
+end
+
+-- === Seed des listes par défaut (Potions, Prépot, Pierre de soins) ===
+local function _EnsureDefaultCustomLists(force)
+    local s = _Store()
+    s.custom = s.custom or {}
+    s.custom.columns = s.custom.columns or {}
+    s.custom.nextId  = tonumber(s.custom.nextId or 1) or 1
+
+    local targetVer = tonumber((Data and Data.POTIONS_SEED_VERSION) or 0) or 0
+    local applied   = tonumber(s.custom.seedVersion_potions or 0) or 0
+    if not force and applied >= targetVer then
+        return
+    end
+
+    local function uniqPush(dst, seen, v)
+        local n = tonumber(v)
+        if not n then return end
+        if not seen[n] then table.insert(dst, n); seen[n] = true end
+    end
+
+    local function collectByCategory(cat)
+        local spells, items = {}, {}
+        local seenS, seenI = {}, {}
+        if Data and Data.CONSUMABLES_TYPED and Data.CONSUMABLES_TYPED[cat] then
+            local t = Data.CONSUMABLES_TYPED[cat]
+            if type(t.spells) == "table" then
+                for _, sid in ipairs(t.spells) do uniqPush(spells, seenS, sid) end
+            end
+            if type(t.items) == "table" then
+                for _, iid in ipairs(t.items) do uniqPush(items, seenI, iid) end
+            end
+        end
+        return spells, items
+    end
+
+    local healSpells, healItems   = collectByCategory("heal")
+    local utilSpells, utilItems   = collectByCategory("util")
+    local stoneSpells, stoneItems = collectByCategory("stone")
+    local cddefSpells, cddefItems = collectByCategory("cddef")
+
+    -- 1) Potions (util)
+    -- Potions de soin → catégorie 'heal'
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_POTIONS",
+        label    = Tr("col_heal_potion"),
+        enabled  = true,
+        spellIDs = healSpells,
+        itemIDs  = healItems,
+        keywords = {},
+        cooldownCat = "heal",
+    })
+
+    -- Prépot → catégorie 'util'
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_PREPOT",
+        label    = Tr("col_other_potions"),
+        enabled  = true,
+        spellIDs = utilSpells,
+        itemIDs  = utilItems,
+        keywords = {},
+        cooldownCat = "util",
+    })
+
+    -- Pierre de soins → catégorie 'stone'
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_STONE",
+        label    = Tr("col_healthstone"),
+        enabled  = true,
+        spellIDs = stoneSpells,
+        itemIDs  = stoneItems,
+        keywords = {},
+        cooldownCat = "stone",
+    })
+
+    -- Pierre de soins → catégorie 'stone'
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_CDDEF",
+        label    = Tr("col_cddef"),
+        enabled  = true,
+        spellIDs = cddefSpells,
+        itemIDs  = cddefItems,
+        keywords = {},
+    })
+
+
+    s.custom.seedVersion_potions = targetVer
+end
+
+-- API publique (appelable côté Events)
+function GLOG.GroupTracker_EnsureDefaultCustomLists(force)
+    _EnsureDefaultCustomLists(force == true)
+end
+
+
+function GLOG.GroupTracker_RebuildCustomMapping()
+    _RebuildCustomLookup()
+end
+
 function GLOG.GroupTracker_GetRecordingEnabled()
     local s = _Store()
     return s.recording == true
@@ -1279,7 +1636,13 @@ ev:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
 ev:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
         local s = _Store()
-         _RebuildCategoryLookup()
+        _RebuildCategoryLookup()
+        _RebuildCustomLookup()
+        -- Seed des listes par défaut du suivi personnalisé (versionné)
+        if GLOG and GLOG.GroupTracker_EnsureDefaultCustomLists then
+            GLOG.GroupTracker_EnsureDefaultCustomLists(false)
+        end
+
         state.enabled = (s.enabled == true)
 
         session.inCombat = UnitAffectingCombat("player") and true or false
@@ -1383,76 +1746,45 @@ ev:SetScript("OnEvent", function(_, event, ...)
         if not state.enabled then return end
         local unit, castGUID, spellID = ...
         if not unit or not spellID then return end
-        -- On ne garde que player/raidX/partyX
         if unit ~= "player" and (not unit:find("^raid") and not unit:find("^party")) then return end
+        -- On confie l'enregistrement au CLEU pour éviter tout doublon (CAST_SUCCESS/AURA_APPLIED).
+        return
 
-        local sName = (GetSpellInfo and select(1, GetSpellInfo(spellID))) or nil
-
-        -- On calcule tout de suite l'identité de l'unité
-        local name, realm = UnitName(unit)
-        if not name or name == "" then return end
-        local full = (realm and realm ~= "" and (name.."-"..realm)) or name
-        local now  = (time and time()) or 0
-        local guid = UnitGUID and UnitGUID(unit)
-
-        -- Catégorie via nos mappings (ItemID -> SpellID) et fallback par nom
-        local cat   = _detectCategory(spellID, sName)
-        if cat then
-            if _shouldAcceptEvent(guid, full, spellID, now) then
-                _onConsumableUsed(full, cat, spellID, sName)
-            end
-            return
-        end
-
-        -- 🔎 Secours : inspecter brièvement les auras pour attraper les consos à buff « décalé » (ex: Délice cavernicole)
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.15, function()
-                local function FindAuraMatch(u)
-                    if C_UnitAuras and C_UnitAuras.GetBuffDataByIndex then
-                        local i=1
-                        while true do
-                            local a = C_UnitAuras.GetBuffDataByIndex(u, i)
-                            if not a then break end
-                            local n = a.name and a.name:lower() or ""
-                            local sid = tonumber(a.spellId) or 0
-                            local c = _CategoryBySpellID[sid] or _CategoryBySpellName[n]
-                            if c then return c, sid, a.name end
-                            i=i+1
-                        end
-                    elseif UnitAura then
-                        local i=1
-                        while true do
-                            local n, _, _, _, _, _, _, _, _, sid = UnitAura(u, i, "HELPFUL")
-                            if not n then break end
-                            local lower = n:lower()
-                            local c = _CategoryBySpellID[sid or 0] or _CategoryBySpellName[lower]
-                            if c then return c, (sid or 0), n end
-                            i=i+1
-                        end
-                    end
-                end
-
-                local c2, sid2, n2 = FindAuraMatch(unit)
-                if c2 and _shouldAcceptEvent(guid, full, sid2 ~= 0 and sid2 or spellID, (time and time()) or now) then
-                    _onConsumableUsed(full, c2, sid2 ~= 0 and sid2 or spellID, n2 or sName)
-                end
-            end)
-        end
 
     elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
         if not state.enabled then return end
-        local _, sub, _, sourceGUID, sourceName, sourceFlags, _, destGUID, destName, _, _, spellID, spellName =
+        local ts, sub, _, sourceGUID, sourceName, sourceFlags, _, destGUID, destName, _, _, spellID, spellName =
             CombatLogGetCurrentEventInfo()
         if not _isGroupSource(sourceFlags) then return end
 
-        if (sub == "SPELL_CAST_SUCCESS" or sub == "SPELL_AURA_APPLIED") then
-            local cat = _detectCategory(spellID, spellName)
-            if cat then
-                local now = (time and time() or 0)
-                -- ✅ Anti-doublon : ignore APPLIED si CAST_SUCCESS vient d’arriver (et vice-versa)
-                if _shouldAcceptEvent(sourceGUID, (sourceName or destName), spellID, now) then
-                    _onConsumableUsed(sourceName or destName, cat, spellID, spellName)
+        -- On garde CAST_SUCCESS et AURA_APPLIED (utile pour potions/pierres).
+        if sub == "SPELL_CAST_SUCCESS" or sub == "SPELL_AURA_APPLIED" then
+            local normID = _NormalizeSpellID(spellID)
+            local sName  = spellName or (GetSpellInfo and select(1, GetSpellInfo(normID))) or ""
+            local cat    = _detectCategory(normID, sName)
+            local ids    = _MatchCustomColumns(normID, sName)
+
+            if not cat and #ids == 0 then return end
+
+            local now = ts or GetTime() -- même base partout pour la dédup
+            local who = sourceName or destName
+            if not _shouldAcceptEvent(sourceGUID, who, normID, now) then return end
+
+            -- 🔸 Règle d’enregistrement unique (évite les doublons et l'entrée vide) :
+            if cat == "heal" or cat == "util" or cat == "stone" then
+                -- Ces catégories alimentent le timer + compteur
+                _onConsumableUsed(who, cat, normID, sName)
+                -- Pas d'_onCustomUsed en plus : les colonnes lisent déjà ces compteurs
+            elseif cat == "cddef" then
+                -- Défensifs : uniquement le/les compteurs de colonnes custom
+                if #ids > 0 then
+                    for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
+                else
+                    _onConsumableUsed(who, "cddef", normID, sName) -- fallback si pas de colonne
                 end
+            else
+                -- Pas de cat connue mais colonnes custom matchées
+                for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
             end
         end
     end
