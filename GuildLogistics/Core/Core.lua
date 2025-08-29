@@ -101,12 +101,24 @@ local function EnsureDB()
     if GuildLogisticsUI.debugEnabled == nil then GuildLogisticsUI.debugEnabled = false end
     if GuildLogisticsUI.autoOpen   == nil then GuildLogisticsUI.autoOpen   = false  end
 
+    -- 🧹 Nettoyage : supprime les anciens timestamps par-champ désormais obsolètes
+    do
+        local db = GuildLogisticsDB
+        if db and db.players then
+            for _, rec in pairs(db.players) do
+                if type(rec) == "table" then
+                    rec.ilvlTs, rec.ilvlMaxTs, rec.mkeyTs, rec.mplusTs = nil, nil, nil, nil
+                end
+            end
+        end
+    end
+
     -- ➕ 4) Marqueur d’identification du profil (utile en debug et pour éviter les confusions)
     GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
     do
-        local n, r = (UnitFullName and UnitFullName("player"))
+        local full  = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or (UnitName and UnitName("player")) or "?"
         local gName = (GetGuildInfo and GetGuildInfo("player")) or nil
-        GuildLogisticsDB.meta.character = (n and r) and (n.."-"..r) or (n or "?")
+        GuildLogisticsDB.meta.character = full
         GuildLogisticsDB.meta.guildName = gName
     end
 end
@@ -394,14 +406,15 @@ function GLOG.NormalizePlayerKeys()
     GuildLogisticsDB.players = GuildLogisticsDB.players or {}
 
     local function dedupRealm(full)
-        full = tostring(full or "")
-        local base, realm = full:match("^(.-)%-(.+)$")
-        if not realm then
-            local rn = select(2, UnitFullName("player"))
-            return (rn and rn ~= "" and (full.."-"..rn)) or full
+        -- Utilise la normalisation générique (gère “Nom-”, multi-segments, et ajoute le realm local si manquant)
+        if ns and ns.Util and ns.Util.NormalizeFull then
+            return ns.Util.NormalizeFull(full)
         end
-        realm = realm:match("^([^%-]+)") or realm
-        return string.format("%s-%s", base, realm)
+        -- Fallback simple
+        local s = tostring(full or "")
+        if s:find("%-") then return s:gsub("%-(.+)%-(.+)$","-%1") end -- garde un seul segment de realm
+        if GetNormalizedRealmName then return s.."-"..GetNormalizedRealmName() end
+        return s
     end
 
     local rebuilt = {}
@@ -652,15 +665,12 @@ function GLOG.UpdateOwnStatusIfMain()
     -- Throttle anti-spam (fusionné)
     local nowp = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
     GLOG._statusNextSendAt = GLOG._statusNextSendAt or 0
-    if nowp < GLOG._statusNextSendAt then return end
-    GLOG._statusNextSendAt = nowp + 5.0
-
-    -- Nom canonique du joueur
-    local n, r = UnitFullName and UnitFullName("player")
-    local me = ((n or "") .. "-" .. (r or ""))
-    if ns and ns.Util and ns.Util.NormalizeFull then me = ns.Util.NormalizeFull(me) end
-
-    -- 🚫 Stop si pas dans roster/réserve (ne crée PAS d’entrée)
+    --if nowp < GLOG._statusNextSendAt then return end
+    --GLOG._statusNextSendAt = nowp
+    -- Nom canonique du joueur (robuste)
+    local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+            or ((ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull((UnitName and UnitName("player"))))
+            or (UnitName and UnitName("player")) or "?"
     if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then return end
 
     -- ===== iLvl =====
@@ -960,15 +970,15 @@ function GLOG.UpdateOwnKeystoneIfMain()
 
     -- ✅ Nom canonique (évite "Nom-" quand prealm est nil ; normalise le royaume)
     local function _MyFull()
-        local n, r = UnitFullName and UnitFullName("player")
-        if not n or n == "" then n = (UnitName and UnitName("player")) or "?" end
-        local realm = r and r:gsub("%s+",""):gsub("'","")
-        if (not realm or realm == "") then
-            realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
-            realm = realm and realm:gsub("%s+",""):gsub("'","") or ""
+        if ns and ns.Util and ns.Util.playerFullName then
+            return ns.Util.playerFullName()
         end
-        return (realm ~= "" and (n.."-"..realm)) or n
+        -- Fallback minimaliste
+        local n = (UnitName and UnitName("player")) or "?"
+        if GetNormalizedRealmName then return n.."-"..GetNormalizedRealmName() end
+        return n
     end
+
     local me = _MyFull()
     if ns and ns.Util and ns.Util.NormalizeFull then me = ns.Util.NormalizeFull(me) end
 

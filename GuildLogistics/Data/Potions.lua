@@ -1,6 +1,6 @@
 local ADDON, ns = ...
 ns.Data = ns.Data or {}
-ns.Data.POTIONS_SEED_VERSION = 1
+ns.Data.POTIONS_SEED_VERSION = 2
 
 -- Catégories explicites : "heal" (potion de soins), "util" (autres potions), "stone" (pierre de soins)
 -- Renseigne ici ce que tu veux suivre exactement (si vide, heuristique nom/icône).

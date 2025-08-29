@@ -132,14 +132,22 @@ local function UpdateRow(i, r, f, it)
     if f.actAlias then f.actAlias:Show() end
 
     local name = tostring(it.main or "")
-    -- Nom + classe
-    if f.main then ns.UI.SetNameTag(f.main, name) end
+    -- Nom
+    if f.main and ns.UI and ns.UI.SetNameTagShort then
+        ns.UI.SetNameTagShort(f.main, name)
+    elseif f.main then
+        -- fallback si SetNameTagShort indisponible
+        ns.UI.SetNameTag(f.main, name)
+    end
 
-    -- Alias textuel
+    -- Alias
     if f.alias then
-        local key   = ns.GLOG.NormName and ns.GLOG.NormName(name)
-        local alias = key and GuildLogisticsDB and GuildLogisticsDB.aliases and GuildLogisticsDB.aliases[key]
-        f.alias:SetText(alias or "")
+        local a = (ns.GLOG and ns.GLOG.GetAliasFor and ns.GLOG.GetAliasFor(name)) or ""
+        if a and a ~= "" then
+            f.alias:SetText(" "..a)   -- même espacement que dans Guild.lua
+        else
+            f.alias:SetText("")
+        end
     end
 
     -- Compteur de rerolls

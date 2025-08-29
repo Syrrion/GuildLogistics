@@ -61,11 +61,6 @@ local function CanActOn(name)
     local isMaster = GLOG.IsMaster and GLOG.IsMaster()
     if isMaster then return true, true end
     local meFull = ns.Util.playerFullName and ns.Util.playerFullName()
-    if (not meFull or meFull == "") and UnitFullName then
-        local n, rlm = UnitFullName("player")
-        local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or rlm
-        meFull = (n and rn and rn ~= "") and (n.."-"..rn) or (n or UnitName("player"))
-    end
     local isSelf = ns.Util.SamePlayer and ns.Util.SamePlayer(name, meFull)
     return isSelf, isMaster
 end

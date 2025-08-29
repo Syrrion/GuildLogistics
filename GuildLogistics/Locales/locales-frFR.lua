@@ -290,7 +290,8 @@ L["lbl_status_present_colored"]  = "|cff40ff40Présent|r"
 L["lbl_status_deleted_colored"]  = "|cffff7070Supprimé|r"
 L["lbl_db_version_prefix"]       = "DB v"
 L["lbl_id_prefix"]               = "ID "
-
+L["lbl_db_data"]                 = "BDD partagée"
+L["lbl_db_ui"]                   = "BDD personelle"
 
 -- ============================================== --
 -- ===         INVITATIONS CALENDRIER         === --

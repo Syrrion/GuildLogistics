@@ -407,18 +407,17 @@ end
 
 -- ===== iLvl (helpers main connecté) =====
 function GLOG.IsConnectedMain()
-    local pname, prealm = UnitFullName("player")
-    local me = (pname or "") .. "-" .. (prealm or "")
-    local myKey  = GLOG.NormName and GLOG.NormName(me)
+    local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+            or (UnitName and UnitName("player")) or "?"
+    local myKey   = GLOG.NormName and GLOG.NormName(me)
     local mainKey = GLOG.GetMainOf and GLOG.GetMainOf(me) or myKey
     return (mainKey == myKey)
 end
 
 function GLOG.GetConnectedMainName()
     if GLOG.IsConnectedMain and GLOG.IsConnectedMain() then
-        local pname, prealm = UnitFullName("player")
-        return (pname or "") .. "-" .. (prealm or "")
+        return (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+            or (UnitName and UnitName("player"))
     end
     return nil
 end
-

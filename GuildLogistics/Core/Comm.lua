@@ -94,7 +94,12 @@ local safenum        = (U and U.safenum)        or (_G and _G.safenum)        or
 local truthy         = (U and U.truthy)         or (_G and _G.truthy)         or function(v) v=tostring(v or ""); return (v=="1" or v:lower()=="true") end
 local now            = (U and U.now)            or (_G and _G.now)            or function() return (time and time()) or 0 end
 local normalizeStr   = (U and U.normalizeStr)   or (_G and _G.normalizeStr)   or function(s) s=tostring(s or ""):gsub("%s+",""):gsub("'",""); return s:lower() end
-local playerFullName = (U and U.playerFullName) or (_G and _G.playerFullName) or function() local n,r=UnitFullName("player"); return r and (n.."-"..r) or n end
+local playerFullName = (U and U.playerFullName) or function()
+    local n = (UnitName and UnitName("player")) or "?"
+    local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    rn = tostring(rn):gsub("%s+",""):gsub("'","")
+    return (rn ~= "" and (n.."-"..rn)) or n
+end
 local getRev         = (U and U.getRev)         or (_G and _G.getRev)         or function() local db=GuildLogisticsDB; return (db and db.meta and db.meta.rev) or 0 end
 
 local function _compressStr(s)
@@ -1033,7 +1038,8 @@ function GLOG._SnapshotApply(kv)
             local aliasS = unescText(alias)
             if aliasS == "@" then aliasS = base end
             local realm  = realmById[ridNum] or ""
-            local full   = base .. (realm ~= "" and "-"..realm or "")
+            local full   = (U and U.NormalizeFull and U.NormalizeFull(base, realm))
+                        or (realm ~= "" and (base.."-"..realm) or base)
             local balance= safenum(bal,0)
             local credit, debit = 0, 0
             if balance >= 0 then credit = balance else debit = -balance end
@@ -1507,15 +1513,12 @@ function GLOG._HandleFull(sender, msgType, kv)
         -- 🔒 Évite le double-traitement chez l'émetteur (GM) : on ignore notre propre message
         do
             local isSelf = false
-            if sender and UnitName then
-                local me, realm = UnitName("player")
-                local norm = GetNormalizedRealmName and GetNormalizedRealmName() or realm
-                local fullRealm = (realm and realm ~= "") and (me.."-"..realm) or me
-                local fullNorm  = (norm  and norm  ~= "") and (me.."-"..norm)  or nil
-                if sender == me or sender == fullRealm or (fullNorm and sender == fullNorm) then
-                    isSelf = true
-                end
+            if sender then
+                local me = playerFullName and playerFullName()
+                local same = (U and U.SamePlayer and U.SamePlayer(sender, me)) or (sender == me)
+                if same then isSelf = true end
             end
+
             if isSelf then
                 if GLOG.Debug then GLOG.Debug("RECV","EXP_SPLIT","ignored self") end
                 return
@@ -1629,6 +1632,7 @@ function GLOG._HandleFull(sender, msgType, kv)
                         p.ilvlMax = math.floor(n_ilvlMax)
                     end
                     changed = true
+                    if ns.Emit then ns.Emit("ilvl:changed", pname) end
                 end
 
                 -- ===== Clé M+ (mid/lvl) =====
@@ -1638,6 +1642,7 @@ function GLOG._HandleFull(sender, msgType, kv)
                     p.mkeyMapId = n_mid
                     p.mkeyLevel = n_lvl
                     changed = true
+                    if ns.Emit then ns.Emit("mkey:changed", pname) end
                 end
 
                 -- ✨ ===== Côte M+ =====
@@ -1645,16 +1650,14 @@ function GLOG._HandleFull(sender, msgType, kv)
                 if n_score >= 0 and n_ts >= prev then
                     p.mplusScore = n_score
                     changed = true
+                    if ns.Emit then ns.Emit("mplus:changed", pname) end
                 end
 
                 if changed and n_ts > prev then
                     p.statusTimestamp = n_ts
                 end
-
-                if changedIlvl and ns.Emit then ns.Emit("ilvl:changed", pname) end
-                if changedM    and ns.Emit then ns.Emit("mkey:changed", pname) end
-                if changedScore and ns.Emit then ns.Emit("mplus:changed", pname) end
-                if (changedIlvl or changedM or changedScore) and ns.RefreshAll then ns.RefreshAll() end
+                
+                if (changed) and ns.RefreshAll then ns.RefreshAll() end
             end
         end
 
@@ -1901,30 +1904,35 @@ function GLOG._HandleFull(sender, msgType, kv)
                 -- ✅ Appliquer aussi localement à moi (sans créer d'entrée)
                 do
                     GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-                    local p  = GuildLogisticsDB.players[me]
+                    local p  = GuildLogisticsDB.players[me]   -- ⚠️ ne crée jamais ici
                     local ts = now()
-                    local changed = false
                     if p then
-                        if ilvl > 0 and ts >= safenum(p.ilvlTs, 0) then
-                            p.ilvl   = ilvl
-                            if ilvMx > 0 then p.ilvlMax = ilvMx; p.ilvlMaxTs = ts end
-                            p.ilvlTs = ts
-                            changed = true
-                            if ns.Emit then ns.Emit("ilvl:changed", me) end
+                        local prev    = safenum(p.statusTimestamp, 0)
+                        local changed = false
+
+                        -- iLvl (équipé + max)
+                        if ilvl > 0 and ts >= prev then
+                            p.ilvl = math.floor(tonumber(ilvl) or 0)
+                            if ilvMx > 0 then p.ilvlMax = math.floor(tonumber(ilvMx) or 0) end
+                            changed = true; if ns.Emit then ns.Emit("ilvl:changed", me) end
                         end
-                        if lvl > 0 and ts >= safenum(p.mkeyTs, 0) then
+
+                        -- Clé M+
+                        if lvl > 0 and ts >= prev then
                             p.mkeyMapId = mid; p.mkeyLevel = lvl
-                            -- mkeyName n'est plus stocké
-                            p.mkeyTs = ts
-                            changed = true
-                            if ns.Emit then ns.Emit("mkey:changed", me) end
+                            changed = true; if ns.Emit then ns.Emit("mkey:changed", me) end
                         end
-                        if safenum(score, -1) >= 0 and ts >= safenum(p.mplusTs, 0) then
-                            p.mplusScore = score; p.mplusTs = ts
-                            changed = true
-                            if ns.Emit then ns.Emit("mplus:changed", me) end
+
+                        -- Côte M+
+                        if safenum(score, -1) >= 0 and ts >= prev then
+                            p.mplusScore = math.floor(tonumber(score) or 0)
+                            changed = true; if ns.Emit then ns.Emit("mplus:changed", me) end
                         end
-                        if changed and ns.RefreshAll then ns.RefreshAll() end
+
+                        if changed and ts > prev then
+                            p.statusTimestamp = ts
+                            if ns.RefreshAll then ns.RefreshAll() end
+                        end
                     end
                 end
 

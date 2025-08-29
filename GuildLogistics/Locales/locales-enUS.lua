@@ -290,6 +290,8 @@ L["lbl_status_present_colored"]  = "|cff40ff40Present|r"
 L["lbl_status_deleted_colored"]  = "|cffff7070Deleted|r"
 L["lbl_db_version_prefix"]       = "DB v"
 L["lbl_id_prefix"]               = "ID "
+L["lbl_db_data"]                 = "Shared DB"
+L["lbl_db_ui"]                   = "Personnal DB"
 
 
 -- ============================================== --

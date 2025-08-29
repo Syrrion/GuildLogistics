@@ -363,7 +363,11 @@ local _CustomCooldownById= {}   -- [colId] = "heal"|"util"|"stone"|nil
 
 local function _RebuildCustomLookup()
     wipe(_CustomCooldownById)
-    local s = _Store()
+    wipe(_CustomBySpellID)
+    wipe(_CustomByKeyword)
+    wipe(_CustomColsOrdered)
+
+    local s   = _Store()
     local cfg = s.custom or {}
     local cols = cfg.columns or {}
 
@@ -373,6 +377,7 @@ local function _RebuildCustomLookup()
         _CustomBySpellID[sid] = _CustomBySpellID[sid] or {}
         table.insert(_CustomBySpellID[sid], tostring(colId))
     end
+
     local function addKeyword(key, colId)
         key = tostring(key or ""):lower()
         if key == "" then return end
@@ -380,29 +385,37 @@ local function _RebuildCustomLookup()
         table.insert(_CustomByKeyword[key], tostring(colId))
     end
 
+    -- 🔒 Déduplication par id (évite d'empiler les colonnes à l'init)
+    local seen = {}
+
     for idx, c in ipairs(cols) do
         if c and (c.enabled ~= false) and (tostring(c.label or "") ~= "") then
             local id = tostring(c.id or "")
             if id == "" then id = tostring(idx) end
-            table.insert(_CustomColsOrdered, { id = id, label = tostring(c.label) })
-            if c.cooldownCat then
-                _CustomCooldownById[id] = tostring(c.cooldownCat)
-            end
-            if type(c.spellIDs) == "table" then
-                for _, sid in ipairs(c.spellIDs) do addSpellMap(sid, id) end
-            end
-            if type(c.itemIDs) == "table" and GetItemSpell then
-                for _, iid in ipairs(c.itemIDs) do
-                    local _, sid = GetItemSpell(tonumber(iid) or 0)
-                    if sid then addSpellMap(sid, id) end
+            if not seen[id] then
+                table.insert(_CustomColsOrdered, { id = id, label = tostring(c.label) })
+                seen[id] = true
+
+                if c.cooldownCat then
+                    _CustomCooldownById[id] = tostring(c.cooldownCat)
                 end
-            end
-            if type(c.keywords) == "table" then
-                for _, kw in ipairs(c.keywords) do addKeyword(kw, id) end
+                if type(c.spellIDs) == "table" then
+                    for _, sid in ipairs(c.spellIDs) do addSpellMap(sid, id) end
+                end
+                if type(c.itemIDs) == "table" and GetItemSpell then
+                    for _, iid in ipairs(c.itemIDs) do
+                        local _, sid = GetItemSpell(tonumber(iid) or 0)
+                        if sid then addSpellMap(sid, id) end
+                    end
+                end
+                if type(c.keywords) == "table" then
+                    for _, kw in ipairs(c.keywords) do addKeyword(kw, id) end
+                end
             end
         end
     end
 end
+
 
 local function _MatchCustomColumns(spellID, spellName)
     local res, seen = {}, {}
@@ -424,8 +437,14 @@ local function _MatchCustomColumns(spellID, spellName)
 end
 
 local function _GetEnabledCustomColumnsOrdered()
-    local out = {}
-    for i, c in ipairs(_CustomColsOrdered) do out[i] = c end
+    local out, seen = {}, {}
+    for _, c in ipairs(_CustomColsOrdered) do
+        local id = tostring(c.id or "")
+        if id ~= "" and not seen[id] then
+            table.insert(out, { id = id, label = tostring(c.label or "") })
+            seen[id] = true
+        end
+    end
     return out
 end
 
@@ -945,7 +964,7 @@ local function _ensureWindow()
     -- ➕ Colonnes personnalisées actives
     local _customCols = _GetEnabledCustomColumnsOrdered()
     for _, c in ipairs(_customCols) do
-        table.insert(cols, { key = "cust:"..tostring(c.id), title = tostring(c.label), w = 51, justify = "CENTER" })
+        table.insert(cols, { key = "cust:"..tostring(c.id), title = tostring(c.label), w = 54, justify = "CENTER" })
     end
 
     -- Table de correspondance "colonne custom" → catégorie cooldown ('heal'|'util'|'stone')
