@@ -9,14 +9,21 @@ local panel, footer
 local lv, breadcrumbFS, btnRoot, btnUp
 local currentPath = {}  -- tableau de clés (strings ou numbers)
 local Build, Refresh, Layout, UpdateRow
+-- Sélection de la base à explorer : "DB" (données) ou "DB_UI" (paramètres UI)
+local selectedRoot = "DB"
+local ddRoot
 
 local function _GetRoot()
-    -- Les alias de Core.lua font pointer GuildLogisticsDB sur la base « par personnage »
+    -- Les alias de Core.lua (Core.lua) pointent les *\_Char* en runtime
+    if selectedRoot == "DB_UI" then
+        return GuildLogisticsUI_Char or GuildLogisticsUI or {}
+    end
     return GuildLogisticsDB_Char or GuildLogisticsDB or {}
 end
 
 local function _PathToText(path)
-    local parts = {"GuildLogisticsDB_Char"}
+    local rootName = (selectedRoot == "DB_UI") and "GuildLogisticsUI_Char" or "GuildLogisticsDB_Char"
+    local parts = { rootName }
     for i = 1, #path do
         parts[#parts+1] = tostring(path[i])
     end
@@ -325,6 +332,42 @@ Build = function(container)
     breadcrumbFS = nav:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     breadcrumbFS:SetPoint("LEFT", btnUp, "RIGHT", 12, 0)
     breadcrumbFS:SetText(_PathToText(currentPath))
+
+    -- Sélecteur de base (DB / DB_UI)
+    ddRoot = UI.Dropdown(nav, { width = 160, placeholder = (Tr("lbl_db_select") or "Base : DB") })
+        :SetBuilder(function(self, level)
+            local entries = {}
+            local function info(text, checked, onClick, isTitle)
+                local i = UIDropDownMenu_CreateInfo()
+                i.text = text
+                i.checked = checked
+                i.func = onClick
+                i.isTitle = isTitle
+                i.notCheckable = isTitle
+                return i
+            end
+
+            entries[#entries+1] = info(Tr("lbl_db_data") or "DB (données)", selectedRoot == "DB", function()
+                selectedRoot = "DB"
+                ddRoot:SetSelected("DB", "DB")
+                breadcrumbFS:SetText(_PathToText(currentPath))
+                Refresh()
+            end)
+
+            entries[#entries+1] = info(Tr("lbl_db_ui") or "DB_UI (interface)", selectedRoot == "DB_UI", function()
+                selectedRoot = "DB_UI"
+                ddRoot:SetSelected("DB_UI", "DB_UI")
+                breadcrumbFS:SetText(_PathToText(currentPath))
+                Refresh()
+            end)
+
+            return entries
+        end)
+
+    ddRoot:SetPoint("RIGHT", nav, "RIGHT", 0, 0)
+    UI.AttachDropdownZFix(ddRoot, nav)
+    -- Valeur initiale affichée
+    ddRoot:SetSelected(selectedRoot, selectedRoot)
 
     btnRoot:SetOnClick(function()
         wipe(currentPath)
