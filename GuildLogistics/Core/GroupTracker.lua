@@ -654,7 +654,7 @@ local function _ShowHistoryPopup(full)
 
     -- Zone : on libère le footer et on étire la zone de contenu
     do
-        local L, R, T, B = 8, 8, 8, 8
+        local L, R, T, B = 8, 8, 70, 8
         local POP_SIDE, POP_TOP, POP_BOT = (UI.POPUP_SIDE_PAD or 6), (UI.POPUP_TOP_EXTRA_GAP or 18), (UI.POPUP_BOTTOM_LIFT or 4)
         if p.content then
             p.content:ClearAllPoints()

@@ -124,8 +124,6 @@ local function ShowEditColumnPopup(existing)
 
     y = y + LIST_H + 12
 
-    local cbEnabled = addCheck(not (existing and existing.enabled == false), Tr("custom_enabled") or "Activer")
-
     -- Pré-remplissage
     if existing then
         listSpells:SetValues(existing.spellIDs or {})
@@ -144,10 +142,12 @@ local function ShowEditColumnPopup(existing)
                 spellIDs    = listSpells:GetValues(),
                 itemIDs     = listItems:GetValues(),
                 keywords    = listKeys:GetValues(),
-                enabled     = (cbEnabled and cbEnabled:GetChecked()) and true or false,
+                -- Pas de contrôle dans la popup : on préserve l’état existant (par défaut: activé)
+                enabled     = (existing and existing.enabled == false) and false or true,
                 -- 🔒 conserve le mode cooldown invisible si présent (pour les 3 listes par défaut)
                 cooldownCat = existing and existing.cooldownCat or nil,
             }
+
             if obj.label == "" then
                 if UI.Toast then UI.Toast("|cffff6060"..(Tr("err_label_required") or "Libellé requis").."|r") end
                 return
@@ -189,7 +189,16 @@ local function Build(container)
             local w = {}
             w.label  = UI.Label(r, { justify="LEFT" })
             w.rules  = UI.Label(r, { justify="LEFT" })
-            w.active = UI.Label(r, { justify="CENTER" })
+            
+            -- Hôte de cellule + checkbox centrée
+            w.active = CreateFrame("Frame", nil, r)
+            w.active.cb = CreateFrame("CheckButton", nil, w.active, "ChatConfigCheckButtonTemplate")
+            w.active.cb:SetPoint("CENTER", w.active, "CENTER", 0, 0)
+            -- On supprime le texte natif de la checkbox (inutile en cellule)
+            if w.active.cb.Text then w.active.cb.Text:SetText("") end
+            -- Zone cliquable un peu plus large pour le confort
+            if w.active.cb.SetHitRectInsets then w.active.cb:SetHitRectInsets(-6, -6, -6, -6) end
+
             w.act    = CreateFrame("Frame", nil, r)
 
             w.btnEdit = UI.Button(w.act, Tr("btn_edit") or "Éditer", { size="sm", minWidth=68 })
@@ -203,10 +212,32 @@ local function Build(container)
             if not it then return end
             w.label:SetText(tostring(it.label or ""))
             w.rules:SetText(_Summary(it))
-            w.active:SetText((it.enabled ~= false) and (Tr("status_enabled") or "Oui") or (Tr("status_disabled") or "Non"))
+            -- État de la case selon la donnée
+            local checked = (it.enabled ~= false)
+            if w.active and w.active.cb and w.active.cb.SetChecked then
+                w.active.cb:SetChecked(checked)
+                -- Toggle direct : persiste via l’API existante
+                w.active.cb:SetScript("OnClick", function(self)
+                    local newObj = {
+                        id          = it.id,
+                        label       = it.label,
+                        spellIDs    = it.spellIDs,
+                        itemIDs     = it.itemIDs,
+                        keywords    = it.keywords,
+                        cooldownCat = it.cooldownCat,
+                        enabled     = self:GetChecked() and true or false,
+                    }
+                    if GLOG and GLOG.GroupTracker_Custom_AddOrUpdate then
+                        GLOG.GroupTracker_Custom_AddOrUpdate(newObj)
+                    end
+                    if ns and ns.RefreshAll then ns.RefreshAll() end
+                end)
+            end
+
             if w.btnEdit and w.btnEdit.SetOnClick then
                 w.btnEdit:SetOnClick(function() ShowEditColumnPopup(it) end)
             end
+
             if w.btnDel and w.btnDel.SetOnClick then
                 w.btnDel:SetOnClick(function()
                     local msg = string.format(Tr("custom_confirm_delete") or "Supprimer la colonne '%s' ?", tostring(it.label or ""))
