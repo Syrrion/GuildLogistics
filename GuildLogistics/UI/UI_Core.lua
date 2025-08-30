@@ -1624,6 +1624,29 @@ function UI.ApplyButtonsOpacity(container, scale)
     end
 end
 
+-- Alpha uniquement sur le texte du titre d'un frame (header/title connus)
+function UI.SetFrameTitleTextAlpha(frame, a)
+    if not frame then return end
+    a = tonumber(a or 1) or 1
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+
+    local function setFS(fs)
+        if fs and fs.GetObjectType and fs:GetObjectType() == "FontString" and fs.SetAlpha then
+            fs:SetAlpha(a)
+        end
+    end
+
+    -- Variantes fréquentes dans notre UI
+    if frame.title then setFS(frame.title) end
+
+    if frame.header then
+        setFS(frame.header.title)
+        setFS(frame.header.text)
+        setFS(frame.header.Title)
+        setFS(frame.header.TitleText)
+    end
+end
+
 function UI.SetFrameTitleVisibility(frame, visible)
     if not frame then return end
     local function setFS(fs)

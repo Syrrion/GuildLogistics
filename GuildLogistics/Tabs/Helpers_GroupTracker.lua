@@ -5,7 +5,7 @@ local PAD = (UI and UI.OUTER_PAD) or 16
 local ROW_GAP = 12
 
 local panel
-local btnOpen, btnClear, slOpacity, cbRecording, cbColHeal, cbColUtil, cbColStone
+local btnOpen, btnClear, slOpacity, cbRecording, cbColHeal, cbColUtil, cbColStone, slTitleTextOpacity
 
 local function _RowY(prevY, h)
     return prevY + (h or 0) + ROW_GAP
@@ -172,6 +172,28 @@ local function Build(container)
     end)
     y = _RowY(y, 26)
 
+    -- 📌 Transparence du texte du TITRE uniquement
+    if slTitleTextOpacity and slTitleTextOpacity.Hide then slTitleTextOpacity:Hide() end
+    slTitleTextOpacity = UI.Slider(panel, {
+        label   = Tr("group_tracker_title_text_opacity_label") or "Transparence du titre (texte)",
+        min     = 0,
+        max     = 100,
+        step    = 1,
+        value   = math.floor(((GLOG and GLOG.GroupTracker_GetTitleTextOpacity and GLOG.GroupTracker_GetTitleTextOpacity()) or 1) * 100),
+        width   = 360,
+        tooltip = Tr("group_tracker_title_text_opacity_tip") or "N’affecte que le texte de la barre de titre.",
+        format  = function(v) return tostring(v) .. "%" end,
+        name    = (ADDON or "GL").."_TitleTextOpacitySlider",
+    })
+    slTitleTextOpacity:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+    slTitleTextOpacity:SetOnValueChanged(function(_, v)
+        local a = math.max(0.0, math.min(1.0, (tonumber(v) or 100)/100))
+        if GLOG and GLOG.GroupTracker_SetTitleTextOpacity then
+            GLOG.GroupTracker_SetTitleTextOpacity(a)
+        end
+    end)
+    y = _RowY(y, 26)
+
         -- 📌 (NOUVEAU) Ligne 3c : Transparence des boutons (Fermer, <, >, Vider)
     if slBtnOpacity and slBtnOpacity.Hide then slBtnOpacity:Hide() end
     slBtnOpacity = UI.Slider(panel, {
@@ -244,6 +266,11 @@ function Refresh()
     if slOpacity and slOpacity.SetValue and GLOG and GLOG.GroupTracker_GetOpacity then
         local p = math.floor((GLOG.GroupTracker_GetOpacity() or 0.95)*100 + 0.5)
         slOpacity:SetValue(p)
+    end
+    -- Opacité texte du titre
+    if slTitleTextOpacity and slTitleTextOpacity.SetValue and GLOG and GLOG.GroupTracker_GetTitleTextOpacity then
+        local p = math.floor((GLOG.GroupTracker_GetTitleTextOpacity() or 1)*100 + 0.5)
+        slTitleTextOpacity:SetValue(p)
     end
 
     -- Rafraîchit l’état des cases de colonnes

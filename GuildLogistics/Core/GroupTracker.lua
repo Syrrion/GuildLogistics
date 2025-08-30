@@ -37,9 +37,10 @@ _Store = function()
     s.viewIndex  = s.viewIndex  or 1
     s.enabled    = (s.enabled == true)
     s.opacity    = tonumber(s.opacity    or 1.00) or 1.00   -- fonds/bordures
-    s.textOpacity= tonumber(s.textOpacity or 1.00) or 1.00  -- texte
+    s.textOpacity= tonumber(s.textOpacity or 1.00) or 1.00  -- texte (contenu)
+    s.titleTextOpacity = tonumber(s.titleTextOpacity or 1.00) or 1.00 -- 🔹 texte du titre uniquement
     s.btnOpacity = tonumber(s.btnOpacity  or 1.00) or 1.00  -- 🔹 boutons
-    s.recording  = (s.recording == true)
+    s.recording  = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
     -- 🔹 Suivi personnalisé : structure de configuration
     s.custom = s.custom or {}
     s.custom.columns = s.custom.columns or {}
@@ -1272,15 +1273,18 @@ function GLOG.GroupTracker_ShowWindow(show)
         end
 
         -- Applique les réglages actuels
-        local aWin  = (GLOG.GroupTracker_GetOpacity        and GLOG.GroupTracker_GetOpacity())       or 0.95
-        local aText = (GLOG.GroupTracker_GetTextOpacity    and GLOG.GroupTracker_GetTextOpacity())   or 1.00
-        local aBtnS = (GLOG.GroupTracker_GetButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity()) or 1.00
-        local rowH  = (GLOG.GroupTracker_GetRowHeight      and GLOG.GroupTracker_GetRowHeight())     or 22
+        local aWin   = (GLOG.GroupTracker_GetOpacity           and GLOG.GroupTracker_GetOpacity())            or 0.95
+        local aText  = (GLOG.GroupTracker_GetTextOpacity       and GLOG.GroupTracker_GetTextOpacity())        or 1.00
+        local aTitle = (GLOG.GroupTracker_GetTitleTextOpacity  and GLOG.GroupTracker_GetTitleTextOpacity())   or 1.00
+        local aBtnS  = (GLOG.GroupTracker_GetButtonsOpacity    and GLOG.GroupTracker_GetButtonsOpacity())     or 1.00
+        local rowH   = (GLOG.GroupTracker_GetRowHeight         and GLOG.GroupTracker_GetRowHeight())          or 22
 
-        if UI and UI.SetFrameVisualOpacity then UI.SetFrameVisualOpacity(f, aWin) end
-        if UI and UI.SetTextAlpha         then UI.SetTextAlpha(f, aText)            end
+        if UI and UI.SetFrameVisualOpacity    then UI.SetFrameVisualOpacity(f, aWin) end
+        if UI and UI.SetTextAlpha            then UI.SetTextAlpha(f, aText)          end
+        if UI and UI.SetFrameTitleTextAlpha  then UI.SetFrameTitleTextAlpha(f, aTitle) end
         if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, aWin) end
         if f._lv and UI and UI.ListView_SetRowHeight     then UI.ListView_SetRowHeight(f._lv, rowH)     end
+
         -- Respecte le masquage/affichage des colonnes choisi par l’utilisateur
         _ApplyColumnsVisibilityToFrame(f)
         -- Adapte la largeur minimale + largeur active en fonction des colonnes visibles
@@ -1353,6 +1357,27 @@ function GLOG.GroupTracker_SetTextOpacity(a)
     s.textOpacity = a
     if state.win and UI and UI.ApplyTextAlpha then
         UI.ApplyTextAlpha(state.win, a)
+        -- 🔒 Ré-applique le titre avec son alpha dédié pour le désolidariser du "texte global"
+        if UI.SetFrameTitleTextAlpha and GLOG.GroupTracker_GetTitleTextOpacity then
+            UI.SetFrameTitleTextAlpha(state.win, GLOG.GroupTracker_GetTitleTextOpacity())
+        end
+    end
+end
+
+function GLOG.GroupTracker_GetTitleTextOpacity()
+    local s = _Store()
+    local a = tonumber(s.titleTextOpacity or 1.0) or 1.0
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    return a
+end
+
+function GLOG.GroupTracker_SetTitleTextOpacity(a)
+    local s = _Store()
+    a = tonumber(a or 1.0) or 1.0
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    s.titleTextOpacity = a
+    if state.win and UI and UI.SetFrameTitleTextAlpha then
+        UI.SetFrameTitleTextAlpha(state.win, a)
     end
 end
 
