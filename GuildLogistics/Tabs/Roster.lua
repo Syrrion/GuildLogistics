@@ -292,12 +292,8 @@ local function UpdateRow(i, r, f, data)
         end
     end
     
-    -- Solde banque perso (si affiché)
-    if f.solde then
-        local balance = (GLOG.GetBalance and GLOG.GetBalance(data.name)) or 0
-        f.solde:SetText((UI and UI.MoneyText) and UI.MoneyText(balance) or tostring(balance).." po")
-    end
-    f.solde:SetText(money(GetSolde(data.name)))
+    -- Solde banque perso
+    if f.solde then f.solde:SetText(money(GetSolde(data.name))) end
 
     -- Autorisations & boutons
     local isSelf, isMaster = CanActOn(data.name)

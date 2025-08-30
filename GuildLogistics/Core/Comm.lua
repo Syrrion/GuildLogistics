@@ -1390,7 +1390,7 @@ function GLOG._HandleFull(sender, msgType, kv)
             local full = nf(kv.name or "")
             local existed = not not GuildLogisticsDB.players[full]
             local rec = GuildLogisticsDB.players[full] or { solde = 0, reserved = true }
-            rec.solde = safenum(rec.solde, 0) + safenum(d, 0)
+            rec.solde = safenum(rec.solde, 0) + safenum(kv.delta, 0)
             -- 1er mouvement reçu par le réseau => flag réserve par défaut
             if not existed and rec.reserved == nil then rec.reserved = true end
             GuildLogisticsDB.players[full] = rec
@@ -1419,7 +1419,7 @@ function GLOG._HandleFull(sender, msgType, kv)
                 local d = safenum(D[i], 0)
                 local existed = not not GuildLogisticsDB.players[full]
                 local rec = GuildLogisticsDB.players[full] or { solde = 0 }
-                rec.solde = safenum(rec.solde, 0) + safenum(delta, 0)
+                rec.solde = safenum(rec.solde, 0) + safenum(d, 0)
                 -- 1er mouvement reçu par le réseau => flag réserve par défaut
                 if not existed and rec.reserved == nil then rec.reserved = true end
                 GuildLogisticsDB.players[full] = rec
