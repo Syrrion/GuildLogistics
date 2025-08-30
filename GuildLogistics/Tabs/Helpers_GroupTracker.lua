@@ -5,7 +5,7 @@ local PAD = (UI and UI.OUTER_PAD) or 16
 local ROW_GAP = 12
 
 local panel
-local btnOpen, btnClear, slOpacity, cbRecording, cbColHeal, cbColUtil, cbColStone, slTitleTextOpacity
+local btnOpen, btnClear, slOpacity, cbRecording, cbColHeal, cbColUtil, cbColStone, cbLock, slTitleTextOpacity
 
 local function _RowY(prevY, h)
     return prevY + (h or 0) + ROW_GAP
@@ -215,6 +215,7 @@ local function Build(container)
     end)
     y = _RowY(y, 26)
 
+
     -- Crée le slider "Hauteur des lignes" s'il n'existe pas encore
     if slRowHeight and slRowHeight.Hide then slRowHeight:Hide() end
     slRowHeight = UI.Slider(panel, {
@@ -251,6 +252,40 @@ local function Build(container)
     y = _RowY(y, 26)
 
 
+    -- 🔒 Verrouiller toute interaction sur la fenêtre flottante (clic, drag, scroll, boutons…)
+    do
+        local init = (GLOG and GLOG.GroupTracker_GetLocked and GLOG.GroupTracker_GetLocked()) or false
+        if UI.Checkbox then
+            cbLock = UI.Checkbox(panel, "group_tracker_lock_label", {
+                checked = init,
+                tooltip = "group_tracker_lock_tip",
+                minWidth = 360,
+            })
+            cbLock:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+            if cbLock.SetOnValueChanged then
+                cbLock:SetOnValueChanged(function(_, checked)
+                    if GLOG and GLOG.GroupTracker_SetLocked then
+                        GLOG.GroupTracker_SetLocked(checked)
+                    end
+                end)
+            end
+        else
+            -- Fallback natif
+            cbLock = CreateFrame("CheckButton", (ADDON or "GL").."_LockTrackerCheck", panel, "UICheckButtonTemplate")
+            cbLock:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
+            cbLock:SetChecked(init)
+            local lbl = (Tr and Tr("group_tracker_lock_label")) or "Verrouiller le tracker (anti-clics/déplacement)"
+            _G[cbLock:GetName().."Text"]:SetText(lbl)
+            cbLock:SetScript("OnClick", function(self)
+                if GLOG and GLOG.GroupTracker_SetLocked then
+                    GLOG.GroupTracker_SetLocked(self:GetChecked())
+                end
+            end)
+        end
+        y = _RowY(y, 24)
+    end
+
+
     -- 📌 Ligne 5 : Astuce /glog track
     local hint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("TOPLEFT", panel, "TOPLEFT", PAD, -(y))
@@ -267,6 +302,13 @@ function Refresh()
         local p = math.floor((GLOG.GroupTracker_GetOpacity() or 0.95)*100 + 0.5)
         slOpacity:SetValue(p)
     end
+    -- 🔒 État du verrouillage
+    if cbLock then
+        local v = (GLOG and GLOG.GroupTracker_GetLocked and GLOG.GroupTracker_GetLocked()) or false
+        if cbLock.SetChecked then cbLock:SetChecked(v) end
+        if cbLock.SetValue   then cbLock:SetValue(v)   end
+    end
+
     -- Opacité texte du titre
     if slTitleTextOpacity and slTitleTextOpacity.SetValue and GLOG and GLOG.GroupTracker_GetTitleTextOpacity then
         local p = math.floor((GLOG.GroupTracker_GetTitleTextOpacity() or 1)*100 + 0.5)

@@ -1684,3 +1684,34 @@ function UI.SetFrameTitleVisibility(frame, visible)
         end
     end
 end
+
+-- Active/désactive la capture souris pour un frame et tous ses enfants (boutons inclus)
+function UI.SetMouseEnabledDeep(frame, enabled)
+    if not frame then return end
+    local function walk(obj)
+        if obj.EnableMouse then obj:EnableMouse(enabled and true or false) end
+        if obj.EnableMouseWheel then obj:EnableMouseWheel(enabled and true or false) end
+        local t = obj.GetObjectType and obj:GetObjectType()
+        if t == "Button" then
+            if not enabled and obj.Disable then obj:Disable()
+            elseif enabled and obj.Enable then obj:Enable() end
+        end
+        local n = obj.GetNumChildren and obj:GetNumChildren() or 0
+        for i=1,n do
+            local child = select(i, obj:GetChildren())
+            if child then walk(child) end
+        end
+    end
+    walk(frame)
+end
+
+-- Verrouille/déverrouille l'interaction d'une fenêtre PlainWindow (header/resize/list/etc.)
+function UI.PlainWindow_SetLocked(win, locked)
+    if not win then return end
+    locked = (locked == true)
+    -- Drag sur l'entête + coin de resize
+    if win.header and win.header.EnableMouse then win.header:EnableMouse(not locked) end
+    if win.resize and win.resize.EnableMouse then win.resize:EnableMouse(not locked) end
+    -- Tout le reste (contenu, scroll, lignes de la ListView, boutons…)
+    UI.SetMouseEnabledDeep(win, not locked)
+end

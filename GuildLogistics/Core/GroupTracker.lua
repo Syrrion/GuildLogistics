@@ -68,6 +68,8 @@ local function _Store()
     s.textOpacity = tonumber(s.textOpacity or 1.0) or 1.0 -- 🔹 transparence du TEXTE (0.1..1.0)
     s.recording = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
     s.winOpen = (s.winOpen == true)
+    -- 🔒 Verrouillage d'interactions sur la fenêtre flottante
+    s.locked = (s.locked == true)
     -- Visibilité des 3 dernières colonnes (fenêtre flottante du Tracker)
     s.colVis = s.colVis or { heal = true, util = true, stone = true }
     -- 🔹 Suivi personnalisé : structure de configuration
@@ -1289,6 +1291,11 @@ function GLOG.GroupTracker_ShowWindow(show)
         _ApplyColumnsVisibilityToFrame(f)
         -- Adapte la largeur minimale + largeur active en fonction des colonnes visibles
         _ApplyMinWidthAndResize(f, true)
+        
+        -- 🔒 Applique le lock d'interactions si actif
+        if UI and UI.PlainWindow_SetLocked and GLOG and GLOG.GroupTracker_GetLocked then
+            UI.PlainWindow_SetLocked(f, GLOG.GroupTracker_GetLocked())
+        end
 
         -- Assure une ancre gauche du titre (déjà fait côté PlainWindow, on sécurise)
         if f.title and f.header then
@@ -1309,6 +1316,23 @@ function GLOG.GroupTracker_ShowWindow(show)
         local s = _Store()
         s.winOpen = false
         if state.win then state.win:Hide() end
+    end
+end
+
+function GLOG.GroupTracker_GetLocked()
+    local s = _Store()
+    return s.locked == true
+end
+
+function GLOG.GroupTracker_SetLocked(flag)
+    local s = _Store()
+    s.locked = (flag == true)
+    if state.win and UI and UI.PlainWindow_SetLocked then
+        UI.PlainWindow_SetLocked(state.win, s.locked)
+        -- Optionnel : ré-applique l'opacité des boutons pour refléter l'état (enabled/disabled)
+        if UI.ApplyButtonsOpacity and GLOG.GroupTracker_GetButtonsOpacity then
+            UI.ApplyButtonsOpacity(state.win, GLOG.GroupTracker_GetButtonsOpacity())
+        end
     end
 end
 
