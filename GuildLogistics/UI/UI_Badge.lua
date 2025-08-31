@@ -51,7 +51,7 @@ function UI.CreateBadgeCell(parent, opts)
     if gloss.SetDrawLayer then gloss:SetDrawLayer("ARTWORK", 2) end
 
     -- LETTRE DU TIER
-    local txt = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    local txt = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     txt:SetPoint("CENTER", f, "CENTER", 0, 0)
     txt:SetText("")
 

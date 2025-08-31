@@ -14,10 +14,10 @@ local _notesFS = {}
 -- Colonnes (même moteur ListView/NormalizeColumns)
 local cols = UI.NormalizeColumns({
     { key="label",  title = (DATA and DATA.headers and DATA.headers.difficulty) , min=180, flex=2, justify="LEFT"   },
-    { key="lfr",    title = (DATA and DATA.headers and DATA.headers.lfr)        ,    w=225, justify="CENTER" },
-    { key="normal", title = (DATA and DATA.headers and DATA.headers.normal)     ,    w=225, justify="CENTER" },
-    { key="heroic", title = (DATA and DATA.headers and DATA.headers.heroic)     ,    w=225, justify="CENTER" },
-    { key="mythic", title = (DATA and DATA.headers and DATA.headers.mythic)     ,    w=225, justify="CENTER" },
+    { key="lfr",    title = (DATA and DATA.headers and DATA.headers.lfr)        ,    vsep=true,  w=225, justify="CENTER" },
+    { key="normal", title = (DATA and DATA.headers and DATA.headers.normal)     ,    vsep=true,  w=225, justify="CENTER" },
+    { key="heroic", title = (DATA and DATA.headers and DATA.headers.heroic)     ,   vsep=true,   w=225, justify="CENTER" },
+    { key="mythic", title = (DATA and DATA.headers and DATA.headers.mythic)     ,   vsep=true,   w=225, justify="CENTER" },
 })
 
 -- Rangée : champs UI

@@ -18,14 +18,14 @@ local selected = {} -- sélection : clés = index absolu dans expenses.list
 local function BuildColsFree()
     local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
     local cols = {
-        { key="qty",    title=Tr("col_qty_short"),     w=44  },
-        { key="item",   title=Tr("col_item"),   min=260, flex=1 },
-        { key="source", title=Tr("col_source"),  w=120 },
-        { key="amount", title=Tr("col_amount"), w=160 },
+        { key="qty",    title=Tr("col_qty_short"),     vsep=true,  w=44  },
+        { key="item",   title=Tr("col_item"),   vsep=true,  min=260, flex=1 },
+        { key="source", title=Tr("col_source"),  vsep=true,  w=120 },
+        { key="amount", title=Tr("col_amount"), vsep=true,  w=160 },
     }
     if isGM then
-        table.insert(cols, 1, { key="sel", title="", w=34 })
-        table.insert(cols, 6, { key="act", title="", w=40 })
+        table.insert(cols, 1, { key="sel", title="", vsep=true,  w=34 })
+        table.insert(cols, 6, { key="act", title="", vsep=true,  w=40 })
     end
     return UI.NormalizeColumns(cols)
 end
@@ -34,11 +34,11 @@ local colsFree = BuildColsFree()
 
 local colsLots = UI.NormalizeColumns({
     { key="name",   title=Tr("col_bundle"),           min=220, flex=1 },
-    { key="type",   title=Tr("col_uses"),  w=110 },
-    { key="status", title=Tr("col_remaining"),     w=110 },
-    { key="content",title=Tr("col_content"),       w=60 },
-    { key="total",  title=Tr("col_total_value"), w=120 },
-    { key="act",    title="",              w=(GLOG.IsMaster and GLOG.IsMaster()) and 40 or 0 },
+    { key="type",   title=Tr("col_uses"),  vsep=true,  w=110 },
+    { key="status", title=Tr("col_remaining"),     vsep=true,  w=110 },
+    { key="content",title=Tr("col_content"),       vsep=true,  w=60 },
+    { key="total",  title=Tr("col_total_value"), vsep=true,  w=120 },
+    { key="act",    title="",              vsep=true,  w=(GLOG.IsMaster and GLOG.IsMaster()) and 40 or 0 },
 })
 
 -- =========================
@@ -250,9 +250,9 @@ local function UpdateRowLots(i, r, f, it)
         local dlg = UI.CreatePopup({ title=Tr("lbl_bundle_contents") .. (lot.name or (Tr("lbl_lot") .. tostring(lot.id))), width=580, height=440 })
         local cols = UI.NormalizeColumns({
             { key="qty",  title=Tr("col_qty_short"),   w=40,  justify="RIGHT" },
-            { key="item", title=Tr("col_item"), min=240, flex=1 },
-            { key="src",  title=Tr("col_source"), w=70 },
-            { key="amt",  title=Tr("col_amount"), w=120, justify="RIGHT" },
+            { key="item", title=Tr("col_item"), vsep=true,  min=240, flex=1 },
+            { key="src",  title=Tr("col_source"), vsep=true,  w=70 },
+            { key="amt",  title=Tr("col_amount"), vsep=true,  w=120, justify="RIGHT" },
         })
         local lv = UI.ListView(dlg.content, cols, {
             buildRow = function(r2)

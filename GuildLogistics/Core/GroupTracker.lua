@@ -357,19 +357,28 @@ local function _NormalizeSpellID(id)
     return id
 end
 
+-- Détermine si un sort doit être exclu (par ID normalisé ou par nom)
+local function _IsExcluded(spellID, spellName)
+    local sid = _NormalizeSpellID(tonumber(spellID or 0) or 0)
+    if Data and Data.CONSUMABLE_EXCLUDE_SPELLS and Data.CONSUMABLE_EXCLUDE_SPELLS[sid] then
+        return true
+    end
+    if Data and Data.CONSUMABLE_EXCLUDE_NAMES and spellName and spellName ~= "" then
+        local sn = tostring(spellName or ""):lower()
+        if Data.CONSUMABLE_EXCLUDE_NAMES[sn] then
+            return true
+        end
+    end
+    return false
+end
+
 local function _detectCategory(spellID, spellName)
     -- 0) Normaliser l'ID (overrides → base)
     spellID = _NormalizeSpellID(tonumber(spellID or 0) or 0)
 
     -- (-1) Exclusions explicites (IDs, puis noms)
-    if Data and Data.CONSUMABLE_EXCLUDE_SPELLS and Data.CONSUMABLE_EXCLUDE_SPELLS[spellID] then
+    if _IsExcluded(spellID, spellName) then
         return nil
-    end
-    if Data and Data.CONSUMABLE_EXCLUDE_NAMES and spellName then
-        local sn = tostring(spellName or ""):lower()
-        if Data.CONSUMABLE_EXCLUDE_NAMES[sn] then
-            return nil
-        end
     end
 
     -- 1) Mapping explicite par ID (précompilé depuis Data)
@@ -631,10 +640,16 @@ local function _buildRows()
 end
 
 local function _CatLabel(cat)
-    if cat == "heal"   then return Tr("col_heal_potion")   or "" end
-    if cat == "util"   then return Tr("col_other_potions") or "" end
-    if cat == "stone"  then return Tr("col_healthstone")   or "" end
-    if cat == "cddef"  then return Tr("col_cddef")         or "" end
+    if cat == "heal"    then return Tr("col_heal_potion")   or "" end
+    if cat == "util"    then return Tr("col_other_potions") or "" end
+    if cat == "stone"   then return Tr("col_healthstone")   or "" end
+    if cat == "cddef"   then return Tr("col_cddef")         or "" end
+    if cat == "dispel"  then return Tr("col_dispel")        or "" end
+    if cat == "taunt"   then return Tr("col_taunt")         or "" end
+    if cat == "move"    then return Tr("col_move")          or "" end
+    if cat == "kick"    then return Tr("col_kick")          or "" end
+    if cat == "cc"      then return Tr("col_cc")            or "" end
+    if cat == "special" then return Tr("col_special")       or "" end
 
     -- Colonnes personnalisées : "c:<id>"
     if type(cat) == "string" and cat:find("^c:") then
@@ -668,10 +683,45 @@ local function _ShowHistoryPopup(full)
         arr = (seg and seg.data[full] and seg.data[full].events) or {}
     end
 
-    local rows = {}
-    for i=1,#arr do rows[i] = arr[i] end
+    -- Fusionne les événements d'un même cast (même seconde + même spellID)
+    -- et agrège leurs catégories (évite les doublons visuels).
+    -- ➕ Applique les exclusions globales (ID/nom) comme le moteur principal.
+    local combined, rows = {}, {}
+    for i = 1, #arr do
+        local ev = arr[i]
+        if not _IsExcluded(ev.spellID, ev.spellName) then
+            local key = tostring(ev.t or 0) .. ":" .. tostring(ev.spellID or 0)
+            local slot = combined[key]
+            local cat  = tostring(ev.cat or "")
+            if slot then
+                if cat ~= "" then
+                    slot._tagset = slot._tagset or {}
+                    if not slot._tagset[cat] then
+                        slot._tagset[cat] = true
+                        slot.tags = slot.tags or {}
+                        table.insert(slot.tags, cat)
+                    end
+                end
+            else
+                combined[key] = {
+                    t = ev.t,
+                    spellID = ev.spellID,
+                    spellName = ev.spellName,
+                    cat  = cat, -- premier tag (fallback affichage)
+                    tags = (cat ~= "" and { cat } or {}),
+                    _tagset = (cat ~= "" and { [cat] = true } or {}),
+                }
+            end
+        end
+    end
+    for _, v in pairs(combined) do
+        v._tagset = nil -- nettoyage
+        table.insert(rows, v)
+    end
     table.sort(rows, function(a,b) return (a.t or 0) > (b.t or 0) end)
 
+
+    
     -- Libellés (segment courant / live)
     local label, posStr
     if session.inCombat and s.viewIndex == 0 then
@@ -711,8 +761,8 @@ local function _ShowHistoryPopup(full)
     -- Liste : rowHeight honoré + scrollbar optionnelle masquée
     local cols = UI.NormalizeColumns({
         { key="time",  title=Tr("col_time"),     w=120,  justify="CENTER" },
-        { key="cat",   title=Tr("col_category"), w=120,  justify="CENTER" },
-        { key="icon",  title="",                 w=38,   justify="CENTER" }, -- 🔸 icône sort/objet
+        { key="cat",   title=Tr("col_category"), vsep=true,  w=120,  justify="CENTER" },
+        { key="icon",  title="",                 vsep=true,  w=38,   justify="CENTER" }, -- 🔸 icône sort/objet
         { key="spell", title=Tr("col_spell"),    min=200, flex=1, justify="LEFT" },
     })
 
@@ -733,7 +783,18 @@ local function _ShowHistoryPopup(full)
             if not it then return end
             local hhmm = date and date("%H:%M:%S", tonumber(it.t or 0)) or tostring(it.t or "")
             w.time:SetText(hhmm)
-            w.cat:SetText(_CatLabel(it.cat))
+            local catText
+            if it.tags and #it.tags > 1 then
+                local parts = {}
+                for _, tag in ipairs(it.tags) do
+                    table.insert(parts, _CatLabel(tag))
+                end
+                catText = table.concat(parts, ", ")
+            else
+                catText = _CatLabel(it.cat)
+            end
+            w.cat:SetText(catText)
+
             w.spell:SetText(it.spellName or "")
             -- 🔸 choisit l’icône d’item si le sort provient d’un objet, sinon icône du sort
             if w.icon and w.icon.SetTexture then
@@ -1594,6 +1655,31 @@ function GLOG.GroupTracker_Custom_Delete(id)
     if GLOG and GLOG.GroupTracker_RecreateWindow then GLOG.GroupTracker_RecreateWindow() end
 end
 
+-- Déplace une colonne identifiée par 'id' de 'delta' positions (+1 = descendre, -1 = monter)
+function GLOG.GroupTracker_Custom_Move(id, delta)
+    delta = tonumber(delta) or 0
+    if delta == 0 then return end
+    local s = _Store()
+    local cols = (s.custom and s.custom.columns) or {}
+    local n = #cols
+    if n <= 1 then return end
+
+    local idx = nil
+    for i = 1, n do
+        if tostring(cols[i].id) == tostring(id) then idx = i; break end
+    end
+    if not idx then return end
+
+    local newIdx = math.max(1, math.min(n, idx + delta))
+    if newIdx == idx then return end
+
+    local entry = table.remove(cols, idx)
+    table.insert(cols, newIdx, entry)
+
+    _RebuildCustomLookup()
+    if GLOG and GLOG.GroupTracker_RecreateWindow then GLOG.GroupTracker_RecreateWindow() end
+end
+
 function GLOG.GroupTracker_RecreateWindow()
     if state.win then
         local wasOpen = state.win:IsShown()
@@ -1643,6 +1729,12 @@ local function _EnsureDefaultCustomLists(force)
     local utilSpells, utilItems   = collectByCategory("util")
     local stoneSpells, stoneItems = collectByCategory("stone")
     local cddefSpells, cddefItems = collectByCategory("cddef")
+    local dispelSpells,  dispelItems  = collectByCategory("dispel")
+    local tauntSpells,   tauntItems   = collectByCategory("taunt")
+    local moveSpells,    moveItems    = collectByCategory("move")
+    local kickSpells,    kickItems    = collectByCategory("kick")
+    local ccSpells,      ccItems      = collectByCategory("cc")
+    local specialSpells, specialItems = collectByCategory("special")
 
     -- 1) Potions (util)
     -- Potions de soin → catégorie 'heal'
@@ -1687,7 +1779,65 @@ local function _EnsureDefaultCustomLists(force)
         itemIDs  = cddefItems,
         keywords = {},
     })
+    -- Dispel
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_DISPEL",
+        label    = Tr("col_dispel"),
+        enabled  = true,
+        spellIDs = dispelSpells,
+        itemIDs  = dispelItems,
+        keywords = {},
+    })
 
+    -- Taunt
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_TAUNT",
+        label    = Tr("col_taunt"),
+        enabled  = false,
+        spellIDs = tauntSpells,
+        itemIDs  = tauntItems,
+        keywords = {},
+    })
+
+    -- Move
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_MOVE",
+        label    = Tr("col_move"),
+        enabled  = false,
+        spellIDs = moveSpells,
+        itemIDs  = moveItems,
+        keywords = {},
+    })
+
+    -- Kick
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_KICK",
+        label    = Tr("col_kick"),
+        enabled  = false,
+        spellIDs = kickSpells,
+        itemIDs  = kickItems,
+        keywords = {},
+    })
+
+    -- CC
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_CC",
+        label    = Tr("col_cc"),
+        enabled  = false,
+        spellIDs = ccSpells,
+        itemIDs  = ccItems,
+        keywords = {},
+    })
+
+    -- Special
+    GLOG.GroupTracker_Custom_AddOrUpdate({
+        id       = "DEFAULT_SPECIAL",
+        label    = Tr("col_special"),
+        enabled  = false,
+        spellIDs = specialSpells,
+        itemIDs  = specialItems,
+        keywords = {},
+    })
 
     s.custom.seedVersion_potions = targetVer
 end
@@ -1896,12 +2046,13 @@ ev:SetScript("OnEvent", function(_, event, ...)
                 -- Ces catégories alimentent le timer + compteur
                 _onConsumableUsed(who, cat, normID, sName)
                 -- Pas d'_onCustomUsed en plus : les colonnes lisent déjà ces compteurs
-            elseif cat == "cddef" then
-                -- Défensifs : uniquement le/les compteurs de colonnes custom
+            elseif cat == "cddef" or cat == "dispel" or cat == "taunt" or cat == "move"
+                or cat == "kick" or cat == "cc" or cat == "special" then
+                -- Catégories « action » : uniquement le/les compteurs de colonnes custom
                 if #ids > 0 then
                     for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
                 else
-                    _onConsumableUsed(who, "cddef", normID, sName) -- fallback si pas de colonne
+                    _onConsumableUsed(who, cat, normID, sName) -- fallback si pas de colonne
                 end
             else
                 -- Pas de cat connue mais colonnes custom matchées

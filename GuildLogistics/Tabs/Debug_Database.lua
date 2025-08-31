@@ -72,9 +72,9 @@ end
 -- =========================
 local cols = UI.NormalizeColumns({
     { key="key",   title=Tr("col_key") or "Clé",        min=120, flex=0.5 },
-    { key="type",  title=Tr("col_type") or "Type",      w=100 },
-    { key="prev",  title=Tr("col_preview") or "Aperçu", min=220, flex=1.2 },
-    { key="act",   title="",                             w=160 },
+    { key="type",  title=Tr("col_type") or "Type",      vsep=true,  w=100 },
+    { key="prev",  title=Tr("col_preview") or "Aperçu", vsep=true,  min=220, flex=1.2 },
+    { key="act",   title="",                             vsep=true,  w=160 },
 })
 
 local function BuildRow(r)

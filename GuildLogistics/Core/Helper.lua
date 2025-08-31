@@ -831,6 +831,13 @@ function UI.SetPixelThickness(tex, n)
     if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(tex, h) else tex:SetHeight(h) end
 end
 
+-- Fixe la largeur d'une ligne à N pixels physiques exacts (par défaut 1).
+function UI.SetPixelWidth(tex, n)
+    n = n or 1
+    local w = UI.GetPhysicalPixel() * n
+    if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(tex, w) else tex:SetWidth(w) end
+end
+
 -- ===============================
 -- === Compat API Spell Info  ===
 -- ===============================

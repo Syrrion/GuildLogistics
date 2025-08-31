@@ -39,10 +39,10 @@ end
 
 local cols = UI.NormalizeColumns({
     { key="alias",  title=Tr("col_alias"),          w=90, justify="LEFT" },
-    { key="lvl",    title=Tr("col_level_short"),    w=44, justify="CENTER" },
-    { key="name",   title=Tr("col_name"),           min=200, flex=1 },
-    { key="act",    title="",                       w=120 },
-    { key="solde",  title=Tr("col_balance"),        w=70 },
+    { key="lvl",    title=Tr("col_level_short"),    vsep=true,  w=44, justify="CENTER" },
+    { key="name",   title=Tr("col_name"),           vsep=true,  min=200, flex=1 },
+    { key="act",    title="",                       vsep=true,  w=120 },
+    { key="solde",  title=Tr("col_balance"),        vsep=true,  w=70 },
 })
 
 -- Helpers

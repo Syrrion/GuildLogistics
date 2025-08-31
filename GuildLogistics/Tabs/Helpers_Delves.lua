@@ -15,9 +15,9 @@ local _notesFS = {}
 -- Colonnes (structure standard ListView)
 local cols = UI.NormalizeColumns({
     { key="level", title = (DATA and DATA.headers and DATA.headers.level),  w=180, justify="LEFT"   },
-    { key="chest", title = (DATA and DATA.headers and DATA.headers.chest),  w=300, justify="CENTER" },
-    { key="map",   title = (DATA and DATA.headers and DATA.headers.map),    w=300, justify="CENTER" },
-    { key="vault", title = (DATA and DATA.headers and DATA.headers.vault),  w=300, justify="CENTER" },
+    { key="chest", title = (DATA and DATA.headers and DATA.headers.chest),  vsep=true,  w=300, justify="CENTER" },
+    { key="map",   title = (DATA and DATA.headers and DATA.headers.map),    vsep=true,  w=300, justify="CENTER" },
+    { key="vault", title = (DATA and DATA.headers and DATA.headers.vault),  vsep=true,  w=300, justify="CENTER" },
 })
 
 -- == Rangée : création des cellules ==

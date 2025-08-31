@@ -178,10 +178,11 @@ local function Build(container)
 
     local cols = UI.NormalizeColumns({
         { key="label",  title=Tr("custom_col_label") or "Libellé",         min=180, flex=1 },
-        { key="rules",  title=Tr("custom_col_mappings") or "Règles",       min=280, flex=2 },
-        { key="active", title=Tr("custom_col_active") or "Actif",          w=70, justify="CENTER" },
-        { key="act",    title="",                                          w=160, justify="CENTER" },
+        { key="rules",  title=Tr("custom_col_mappings") or "Règles",       vsep=true,  min=280, flex=2 },
+        { key="active", title=Tr("custom_col_active") or "Actif",          vsep=true,  w=70, justify="CENTER" },
+        { key="act",    title="",                                          vsep=true,  w=240, justify="CENTER" },
     })
+
 
     lv = UI.ListView(panel, cols, {
         topOffset = y,
@@ -201,10 +202,14 @@ local function Build(container)
 
             w.act    = CreateFrame("Frame", nil, r)
 
+            w.btnUp   = UI.Button(w.act, Tr("btn_up") or "Up",       { size="xs", minWidth=26, padX=8, variant="ghost", tooltip = Tr("tooltip_move_up") or (Tr("btn_up") or "Monter") })
+            w.btnDown = UI.Button(w.act, Tr("btn_down") or "Down",   { size="xs", minWidth=26, padX=8, variant="ghost", tooltip = Tr("tooltip_move_down") or "Descendre" })
             w.btnEdit = UI.Button(w.act, Tr("btn_edit") or "Éditer", { size="sm", minWidth=68 })
             w.btnDel  = UI.Button(w.act, Tr("btn_delete") or "Supprimer", { size="sm", variant="danger", minWidth=68 })
+
             if UI.AttachRowRight then
-                UI.AttachRowRight(w.act, { w.btnEdit, w.btnDel }, 10, 0, { align="center" })
+                -- Ordre des actions : ↑ ↓ Éditer Supprimer
+                UI.AttachRowRight(w.act, { w.btnUp, w.btnDown, w.btnEdit, w.btnDel }, 10, 0, { align="center" })
             end
             return w
         end,
@@ -251,6 +256,32 @@ local function Build(container)
                     end
                 end)
             end
+            -- ↑ / ↓ : déplacement dans la liste
+            if w.btnUp and w.btnUp.SetOnClick then
+                w.btnUp:SetOnClick(function()
+                    if GLOG and GLOG.GroupTracker_Custom_Move then
+                        GLOG.GroupTracker_Custom_Move(it.id, -1)
+                    end
+                    if ns and ns.RefreshAll then ns.RefreshAll() end
+                end)
+            end
+            if w.btnDown and w.btnDown.SetOnClick then
+                w.btnDown:SetOnClick(function()
+                    if GLOG and GLOG.GroupTracker_Custom_Move then
+                        GLOG.GroupTracker_Custom_Move(it.id, 1)
+                    end
+                    if ns and ns.RefreshAll then ns.RefreshAll() end
+                end)
+            end
+
+            -- Désactivation des flèches aux bornes
+            local total = 0
+            if GLOG and GLOG.GroupTracker_Custom_List then
+                for _ in ipairs(GLOG.GroupTracker_Custom_List()) do total = total + 1 end
+            end
+            if w.btnUp   and w.btnUp.SetEnabled   then w.btnUp:SetEnabled(i > 1) end
+            if w.btnDown and w.btnDown.SetEnabled then w.btnDown:SetEnabled(i < total) end
+
         end,
     })
 end

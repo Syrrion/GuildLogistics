@@ -6,11 +6,11 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 local panel, lv, footer, histPane
 local cols = UI.NormalizeColumns({
     { key="date",  title=Tr("col_date"),         w=140 },
-    { key="total", title=Tr("col_total"),        w=100 },
-    { key="per",   title=Tr("col_invidual"),   w=100 },
-    { key="count", title=Tr("col_participants"), w=100 },
-    { key="state", title=Tr("col_state"),         min=180, flex=1 },
-    { key="act",   title="",      w=300 },
+    { key="total", title=Tr("col_total"),        vsep=true,  w=100 },
+    { key="per",   title=Tr("col_invidual"),   vsep=true,  w=100 },
+    { key="count", title=Tr("col_participants"), vsep=true,  w=100 },
+    { key="state", title=Tr("col_state"),         vsep=true,  min=180, flex=1 },
+    { key="act",   title="",      vsep=true,  w=300 },
 })
 
 local function histNow()
@@ -137,9 +137,9 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
             local cols = UI.NormalizeColumns({
                 { key="lot",  title=Tr("col_bundle"),    min=120 },
-                { key="qty",  title=Tr("col_qty_short"),    w=60, justify="RIGHT" },
-                { key="item", title=Tr("col_item"),  min=140, flex=1 },
-                { key="amt",  title=Tr("col_value"), w=120, justify="RIGHT" },
+                { key="qty",  title=Tr("col_qty_short"),    vsep=true,  w=60, justify="RIGHT" },
+                { key="item", title=Tr("col_item"),  vsep=true,  min=140, flex=1 },
+                { key="amt",  title=Tr("col_value"), vsep=true,  w=120, justify="RIGHT" },
             })
 
             local lv = UI.ListView(dlg.content, cols, {

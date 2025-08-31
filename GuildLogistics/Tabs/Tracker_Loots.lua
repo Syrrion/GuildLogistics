@@ -32,7 +32,7 @@ local function ShowGroupMembers(anchor, members)
     -- 2) Fallback: mini popup locale avec ListView (même rendu global)
     local cols = UI.NormalizeColumns({
         { key="idx",  title="#",    w=24,  align="CENTER" },
-        { key="name", title=Tr and Tr("col_name") or "Nom", min=200, flex=1 },
+        { key="name", title=Tr and Tr("col_name") or "Nom", vsep=true,  min=200, flex=1 },
     })
     local data = {}
     for i, name in ipairs(members) do
@@ -258,12 +258,12 @@ local function Build(container)
 
     local cols = UI.NormalizeColumns({
         { key="date",   title=Tr("col_time")       or "Heure",       w=120 },
-        { key="ilvl",   title=Tr("col_ilvl")       or "iLvl",        w=40, align="CENTER" },
-        { key="item",   title=Tr("col_item")       or "Objet",       min=300, flex=1 },
-        { key="who",    title=Tr("col_who")        or "Ramassé par", w=150 },
-        { key="inst",   title=Tr("col_instance")   or "Instance",    w=250},
-        { key="diff",   title=Tr("col_difficulty") or "Difficulté",  min=125 },
-        { key="grp",    title=Tr("col_group")      or "Groupe",      w=60,  align="CENTER" },
+        { key="ilvl",   title=Tr("col_ilvl")       or "iLvl",        vsep=true,  w=40, align="CENTER" },
+        { key="item",   title=Tr("col_item")       or "Objet",       vsep=true,  min=300, flex=1 },
+        { key="who",    title=Tr("col_who")        or "Ramassé par", vsep=true,  w=150 },
+        { key="inst",   title=Tr("col_instance")   or "Instance",    vsep=true,  w=250},
+        { key="diff",   title=Tr("col_difficulty") or "Difficulté",  vsep=true,  min=125 },
+        { key="grp",    title=Tr("col_group")      or "Groupe",      vsep=true,  w=60,  align="CENTER" },
         { key="close",  title="", min=30 },
     })
 

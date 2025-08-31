@@ -2,7 +2,7 @@
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 2.4.0
+## Version: 2.5.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char
@@ -14,7 +14,7 @@ Locales/locales-enUS.lua
 Locales/locales-frFR.lua
 
 Data/BiS_Trinkets.lua
-Data/Potions.lua
+Data/Tracker.lua
 Data/Upgrades.lua
 
 Core/Core.lua
@@ -25,6 +25,8 @@ Core/Expenses.lua
 Core/GroupTracker.lua
 Core/LootTracker.lua
 
+UI/UI_Scale.lua
+UI/UI_Fonts.lua
 UI/UI_Core.lua
 UI/UI_Cell.lua
 UI/UI_Skin.lua

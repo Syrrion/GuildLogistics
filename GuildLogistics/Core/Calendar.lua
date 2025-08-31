@@ -297,7 +297,7 @@ function showPendingInvitesPopup(items)
 
     local cols = UI.NormalizeColumns({
         { key="when",  title=Tr("col_when"),  w=180 },
-        { key="title", title=Tr("col_event"), flex=1, min=200 },
+        { key="title", title=Tr("col_event"), vsep=true,  flex=1, min=200 },
     })
     local lv = UI.ListView(listHost, cols, { emptyText = "lbl_no_data" })
     dlg._lv = lv

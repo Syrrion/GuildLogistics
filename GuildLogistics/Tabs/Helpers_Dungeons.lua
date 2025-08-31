@@ -15,9 +15,9 @@ local _notesFS = {}
 -- Colonnes
 local cols = UI.NormalizeColumns({
     { key="label",   title = ""   , w=180, flex=1, justify="LEFT" },
-    { key="loot",    title = (DATA and DATA.headers and DATA.headers.dungeonLoot), w=300, justify="CENTER" },
-    { key="vault",   title = (DATA and DATA.headers and DATA.headers.vault)      , w=300, justify="CENTER" },
-    { key="crests",  title = (DATA and DATA.headers and DATA.headers.crests)     , w=300, justify="CENTER" },
+    { key="loot",    title = (DATA and DATA.headers and DATA.headers.dungeonLoot), vsep=true,  w=300, justify="CENTER" },
+    { key="vault",   title = (DATA and DATA.headers and DATA.headers.vault)      , vsep=true,  w=300, justify="CENTER" },
+    { key="crests",  title = (DATA and DATA.headers and DATA.headers.crests)     , vsep=true,  w=300, justify="CENTER" },
 })
 
 -- ==== Header background helpers ====

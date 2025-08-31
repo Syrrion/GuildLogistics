@@ -524,14 +524,14 @@ end
 function UI.GetListViewStyle()
     return {
         -- Lignes impaires
-        oddTop        = { r = 0.20, g = 0.20, b = 0.20, a = 0.50 },
-        oddBottom     = { r = 0.20, g = 0.20, b = 0.20, a = 0.10 },
+        oddTop        = { r = 0, g = 0, b = 0, a = 0.05 },
+        oddBottom     = { r = 0, g = 0, b = 0, a = 0.20 },
         -- Lignes paires
         evenTop       = oddTop,
         evenBottom    = oddBottom,
         -- Survol & séparateur
         hover      = { r = 1.00, g = 0.82, b = 0.00, a = 0.06 },
-        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.1 },
+        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.2 },
         -- ➕ Couleur par défaut du liseré "même groupe"
         accent     = { r = 1.00, g = 0.82, b = 0.00, a = 0.90 }, -- jaune Blizzard
     }

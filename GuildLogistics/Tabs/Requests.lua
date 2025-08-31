@@ -8,9 +8,9 @@ local panel, lv
 
 local cols = UI.NormalizeColumns({
     { key="date",  title=Tr("col_date"),   w=160 },
-    { key="name",  title=Tr("col_player"), min=240, flex=1 },
-    { key="op",    title=Tr("col_operation"), w=160 },
-    { key="act",   title="", w=220 },
+    { key="name",  title=Tr("col_player"), vsep=true,  min=240, flex=1 },
+    { key="op",    title=Tr("col_operation"), vsep=true,  w=160 },
+    { key="act",   title="", vsep=true,  w=220 },
 })
 
 local function BuildRow(r)

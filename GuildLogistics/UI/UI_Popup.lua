@@ -7,6 +7,11 @@ local UI = ns.UI
 function UI.CreatePopup(opts)
     opts = opts or {}
     local f = CreateFrame("Frame", "GLOG_Popup_" .. math.random(1e8), UIParent, "BackdropTemplate")
+    if UI.Scale and UI.Scale.Register then
+        UI.Scale.Register(f, UI.Scale.TARGET_EFF_SCALE)
+    end
+
+    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f) end
     f:SetSize(opts.width or 460, opts.height or 240)
 
     -- Strate ajustable (par défaut DIALOG). Ne crée l’overlay que si enforceAction=true.
@@ -60,6 +65,8 @@ function UI.CreatePopup(opts)
     local POP_BOT   = UI.POPUP_BOTTOM_LIFT     or 4   -- remonte un peu du bas
 
     f.content = CreateFrame("Frame", nil, f)
+    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f.content) end
+
     f.content:SetPoint("TOPLEFT",     f, "TOPLEFT",     L + POP_SIDE, -(T + POP_TOP))
     -- laisse la marge latérale du contenu, mais réserve la hauteur du footer + gap
     f.content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -(R + POP_SIDE), B + ( (UI.FOOTER_H or 36) + 8 + POP_BOT))
@@ -465,7 +472,7 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         -- ➕ colonnes : Lot (flex) + Prix (droite)
         local cols = UI.NormalizeColumns({
             { key="lot",   title=Tr("lbl_used_bundles"), min=200, flex=1, justify="LEFT"  },
-            { key="price", title=Tr("col_price"),        w=120,              justify="RIGHT" },
+            { key="price", title=Tr("col_price"),        vsep=true,  w=120,              justify="RIGHT" },
         })
 
 
@@ -606,7 +613,7 @@ function UI.PopupPendingCalendarInvites(items)
 
     local cols = UI.NormalizeColumns({
         { key="when",  title=Tr("col_when"),  w=180 },
-        { key="title", title=Tr("col_event"), flex=1, min=200 },
+        { key="title", title=Tr("col_event"), vsep=true,  flex=1, min=200 },
     })
     local lv = UI.ListView(listHost, cols, { emptyText = "lbl_no_data" })
     dlg._lv = lv

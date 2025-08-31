@@ -240,9 +240,9 @@ end
 -- == Définition normalisée des colonnes de la liste == --
 local cols = UI.NormalizeColumns({
     { key="tier",  title=Tr("col_tier")       or "Tier",        w=40,  justify="CENTER" },
-    { key="item",  title=Tr("col_item")       or "Item",        min=320, flex=1 },
-    { key="owned", title=Tr("col_owned")      or "Possédé",     w=110, justify="CENTER" },
-    { key="use",   title=Tr("col_useful_for") or "Utile pour",  w=140, justify="CENTER" },
+    { key="item",  title=Tr("col_item")       or "Item",        vsep=true,  min=320, flex=1 },
+    { key="owned", title=Tr("col_owned")      or "Possédé",     vsep=true,  w=110, justify="CENTER" },
+    { key="use",   title=Tr("col_useful_for") or "Utile pour",  vsep=true,  w=140, justify="CENTER" },
 })
 
 -- == Construit les widgets d'une ligne (cellules tier/item/owned/use) == --
@@ -272,9 +272,9 @@ local function _ShowItemUsagePopup(itemID)
 
     local cols = UI.NormalizeColumns({
         { key="rank",  title=Tr("col_rank")  or "Rang",            w=40,  justify="CENTER" },
-        { key="item",  title=Tr("col_item")  or "Objet",           min=260, flex=1 },
-        { key="class", title=Tr("col_class") or "Classe",          w=180 },
-        { key="spec",  title=Tr("col_spec")  or "Spécialisation",  min=160, flex=1 },
+        { key="item",  title=Tr("col_item")  or "Objet",           vsep=true,  min=260, flex=1 },
+        { key="class", title=Tr("col_class") or "Classe",          vsep=true,  w=180 },
+        { key="spec",  title=Tr("col_spec")  or "Spécialisation",  vsep=true,  min=160, flex=1 },
     })
 
     local lv2 = UI.ListView(dlg.content, cols, {

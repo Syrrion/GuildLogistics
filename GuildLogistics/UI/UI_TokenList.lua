@@ -56,19 +56,19 @@ function UI.TokenList(parent, opts)
     if kind == "text" then
         cols = UI.NormalizeColumns({
             { key="name", title="Chaîne", min=200, flex=1 },
-            { key="act",  title="", w=80 },
+            { key="act",  title="", vsep=true,  w=80 },
         })
     elseif kind == "spell" then
         cols = UI.NormalizeColumns({
             { key="ico",  title="", w=36 },
             { key="name", title="Nom du sort", min=200, flex=1 },
-            { key="act",  title="", w=80 },
+            { key="act",  title="", vsep=true,  w=80 },
         })
     else
         cols = UI.NormalizeColumns({
             { key="ico",  title="", w=36 },
             { key="name", title="Nom de l'objet", min=200, flex=1 },
-            { key="act",  title="", w=80 },
+            { key="act",  title="", vsep=true,  w=80 },
         })
     end
 

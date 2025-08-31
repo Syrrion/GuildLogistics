@@ -340,9 +340,9 @@ local function Build(container)
     -- Titre + trait : lots utilisables
     local colsLots = UI.NormalizeColumns({
         { key="check", title="",    w=34 },
-        { key="name",  title=Tr("col_bundle"), min=260, flex=1 },
-        { key="frac",  title=Tr("col_remaining"), w=90 },
-        { key="gold",  title=Tr("col_amount"),  w=120 },
+        { key="name",  title=Tr("col_bundle"), vsep=true,  min=260, flex=1 },
+        { key="frac",  title=Tr("col_remaining"), vsep=true,  w=90 },
+        { key="gold",  title=Tr("col_amount"),  vsep=true,  w=120 },
     })
 
     -- Header + liste des lots

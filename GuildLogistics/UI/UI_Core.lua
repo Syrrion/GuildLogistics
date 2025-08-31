@@ -18,7 +18,10 @@ UI.ACCENT      = UI.ACCENT      or {0.22,0.55,0.95}
 UI.SEPARATOR_LABEL_COLOR = UI.SEPARATOR_LABEL_COLOR or { 1, 0.95, 0.3 } -- jaune doux
 
 -- Padding (px) ajouté au-dessus des lignes "séparateur" (déjà utilisé)
-UI.SEPARATOR_TOP_PAD = UI.SEPARATOR_TOP_PAD or 20
+UI.SEPARATOR_TOP_PAD = 0
+
+-- Opacité (multiplicateur) des séparateurs verticaux de ListView
+UI.VCOL_SEP_ALPHA = UI.VCOL_SEP_ALPHA or 0.05
 
 -- Récupère la ScrollBar d'un ScrollFrame "UIPanelScrollFrameTemplate"
 function UI.GetScrollBar(scroll)
@@ -84,10 +87,12 @@ function UI.ResolveColumns(totalWidth, cols, opts)
         local w   = c.w
         if w then
             fixed = fixed + w
-            out[i] = { key=c.key, w=w, justify=c.justify, pad=c.pad }
+            -- propage "vsep"
+            out[i] = { key=c.key, w=w, justify=c.justify, pad=c.pad, vsep = (c.vsep and true) or nil }
         else
             flexUnits = flexUnits + (c.flex or 0)
-            out[i] = { key=c.key, w=min, min=min, flex=c.flex or 0, justify=c.justify, pad=c.pad }
+            -- propage "vsep" aussi sur la branche flex
+            out[i] = { key=c.key, w=min, min=min, flex=c.flex or 0, justify=c.justify, pad=c.pad, vsep = (c.vsep and true) or nil }
             fixed = fixed + min
         end
     end
@@ -123,6 +128,8 @@ function UI.CreateHeader(parent, cols)
     for i, c in ipairs(cols or {}) do
         local fs = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         fs:SetText((Tr and Tr(c.title or "")) or (c.title or Tr("")))
+        if UI and UI.ApplyFont then UI.ApplyFont(fs) end
+
         fs:SetJustifyH(c.justify or "LEFT")
         labels[i] = fs
     end
@@ -130,22 +137,83 @@ function UI.CreateHeader(parent, cols)
 end
 
 function UI.LayoutHeader(header, cols, labels)
+    header._vseps = header._vseps or {}
+    local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or { sep={r=1,g=1,b=1,a=.20} }
+    local mul = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
+    if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
+
     local x = 0
+    local active = {}
+
     for i, c in ipairs(cols or {}) do
-        local w = c.w or c.min or 80
+        local w  = c.w or c.min or 80
         local fs = labels[i]
-        fs:ClearAllPoints()
-        fs:SetPoint("LEFT", header, "LEFT", x + 4, 0)
-        fs:SetWidth(w - 8)
-        fs:SetHeight(24)
+        if fs then
+            fs:ClearAllPoints()
+            fs:SetPoint("LEFT", header, "LEFT", x + 4, 0)
+            fs:SetWidth(w - 8)
+            fs:SetHeight(24)
+        end
+
+        -- Séparateur vertical à GAUCHE de la colonne si demandé
+        if c.vsep then
+            local t = header._vseps[i]
+            if not t then
+                -- Calque OVERLAY haut ➜ garanti au-dessus des fonds et des gradients
+                t = header:CreateTexture(nil, "OVERLAY", nil, 7)
+                header._vseps[i] = t
+            else
+                if t.SetDrawLayer then t:SetDrawLayer("OVERLAY", 7) end
+            end
+
+            -- couleur + snap
+            t:SetColorTexture(1,1,1,1)
+            if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) else t:SetWidth(1) end
+            t:ClearAllPoints()
+
+            -- pas de clipping sur le header
+            if header.SetClipsChildren then header:SetClipsChildren(false) end
+
+            local px = (UI.RoundToPixel and UI.RoundToPixel(x)) or x
+            if PixelUtil and PixelUtil.SetPoint then
+                PixelUtil.SetPoint(t, "TOPLEFT",    header, "TOPLEFT",    px, 0)
+                PixelUtil.SetPoint(t, "BOTTOMLEFT", header, "BOTTOMLEFT", px, 0)
+            else
+                t:SetPoint("TOPLEFT",    header, "TOPLEFT",    px, 0)
+                t:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", px, 0)
+            end
+
+            -- Alpha de base = uniquement la constante (évite double atténuation)
+            local baseA = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
+            t:SetAlpha(baseA)
+            t._baseA = baseA
+
+            if UI.SnapTexture then UI.SnapTexture(t) end
+            t:Show()
+            active[i] = true
+
+        end
+
         x = x + w
+    end
+
+    -- Cache les séparateurs non utilisés
+    for i, t in pairs(header._vseps) do
+        if not active[i] and t.Hide then t:Hide() end
     end
 end
 
 -- ===== Row =====
 function UI.LayoutRow(row, cols, fields)
+    row._vseps = row._vseps or {}
+    local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or { sep={r=1,g=1,b=1,a=.20} }
+    local mul = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
+    if mul < 0 then mul = 0 elseif mul > 1 then mul = 1 end
+
     local x = 0
-    for _, c in ipairs(cols or {}) do
+    local active = {}
+
+    for i, c in ipairs(cols or {}) do
         local w = c.w or c.min or 80
         local f = fields[c.key]
         if f then
@@ -159,7 +227,46 @@ function UI.LayoutRow(row, cols, fields)
             if UI.ApplyCellTruncation then UI.ApplyCellTruncation(f, w - 8) end
         end
 
+        if c.vsep then
+            local t = row._vseps[i]
+            if not t then
+                -- OVERLAY haut pour passer devant les backgrounds de ligne
+                t = row:CreateTexture(nil, "OVERLAY", nil, 7)
+                row._vseps[i] = t
+            else
+                if t.SetDrawLayer then t:SetDrawLayer("OVERLAY", 7) end
+            end
+
+            -- anti-clipping : la ligne ne doit jamais être masquée par les cellules
+            if row.SetClipsChildren then row:SetClipsChildren(false) end
+
+            t:SetColorTexture(1,1,1,1)
+            if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) else t:SetWidth(1) end
+            t:ClearAllPoints()
+
+            local px = (UI.RoundToPixel and UI.RoundToPixel(x)) or x
+            if PixelUtil and PixelUtil.SetPoint then
+                PixelUtil.SetPoint(t, "TOPLEFT",    row, "TOPLEFT",    px, 0)
+                PixelUtil.SetPoint(t, "BOTTOMLEFT", row, "BOTTOMLEFT", px, 0)
+            else
+                t:SetPoint("TOPLEFT",    row, "TOPLEFT",    px, 0)
+                t:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", px, 0)
+            end
+
+            local baseA = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
+            t:SetAlpha(baseA)
+            t._baseA = baseA
+
+            if UI.SnapTexture then UI.SnapTexture(t) end
+            t:Show()
+            active[i] = true
+        end
         x = x + w
+    end
+
+    -- Cache les séparateurs non utilisés
+    for i, t in pairs(row._vseps) do
+        if not active[i] and t.Hide then t:Hide() end
     end
 end
 
@@ -167,9 +274,16 @@ end
 -- + liseré gauche (caché par défaut) pour marquer "même groupe"
 function UI.DecorateRow(r)
     local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {
-        oddTop={r=.13,g=.13,b=.13,a=.35}, oddBottom={r=.08,g=.08,b=.08,a=.35},
-        evenTop={r=.15,g=.15,b=.15,a=.35}, evenBottom={r=.10,g=.10,b=.10,a=.35},
-        hover={r=1,g=.82,b=0,a=.06}, sep={r=1,g=1,b=1,a=.20}, accent={r=1,g=.82,b=0,a=.90},
+        oddTop        = { r = 0, g = 0, b = 0, a = 0.05 },
+        oddBottom     = { r = 0, g = 0, b = 0, a = 0.20 },
+        -- Lignes paires
+        evenTop       = oddTop,
+        evenBottom    = oddBottom,
+        -- Survol & séparateur
+        hover      = { r = 1.00, g = 0.82, b = 0.00, a = 0.06 },
+        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.2 },
+        -- ➕ Couleur par défaut du liseré "même groupe"
+        accent     = { r = 1.00, g = 0.82, b = 0.00, a = 0.90 }, -- jaune Blizzard
     }
     local WHITE = "Interface\\Buttons\\WHITE8x8"
 
@@ -188,22 +302,6 @@ function UI.DecorateRow(r)
     hov:Hide()
     UI.SnapTexture(hov)
     r._hover = hov
-
-    -- Séparateur haut (1 px)
-    local sepTop = r:CreateTexture(nil, "OVERLAY", nil, -1)
-    sepTop:SetTexture(WHITE)
-    UI.SetPixelThickness(sepTop, 1)
-    if PixelUtil and PixelUtil.SetPoint then
-        PixelUtil.SetPoint(sepTop, "TOPLEFT",  r, "TOPLEFT",  0, 0)
-        PixelUtil.SetPoint(sepTop, "TOPRIGHT", r, "TOPRIGHT", 0, 0)
-    else
-        sepTop:SetPoint("TOPLEFT",  r, "TOPLEFT",  0, 0)
-        sepTop:SetPoint("TOPRIGHT", r, "TOPRIGHT", 0, 0)
-    end
-    sepTop:SetVertexColor(st.sep.r, st.sep.g, st.sep.b, st.sep.a)
-    UI.SnapTexture(sepTop)
-    r._sepTop = sepTop
-    r._sepTopBaseA = st.sep.a or 1  -- 📌 alpha de référence
 
     -- Liseré gauche (optionnel)
     local acc = r:CreateTexture(nil, "ARTWORK", nil, 1)
@@ -226,7 +324,7 @@ function UI.DecorateRow(r)
     UI.SetPixelThickness(sepBot, 1)
     sepBot:SetPoint("BOTTOMLEFT",  r, "BOTTOMLEFT",  0, 0)
     sepBot:SetPoint("BOTTOMRIGHT", r, "BOTTOMRIGHT", 0, 0)
-    local botA = (st.sep.a or 1) * .55
+    local botA = (st.sep.a or 1) * .1
     sepBot:SetVertexColor(st.sep.r, st.sep.g, st.sep.b, botA)
     r._sepBot = sepBot
     r._sepBotBaseA = botA       -- 📌 alpha de référence
@@ -334,6 +432,9 @@ function UI.CreateScroll(parent)
     list:SetPoint("TOPRIGHT")
     list:SetHeight(1)
 
+    -- Police auto pour tout ce qui sera créé dans la zone scrollée (lignes/colonnes)
+    if UI and UI.AttachAutoFont then UI.AttachAutoFont(list) end
+
     if UI.SkinScrollBar then UI.SkinScrollBar(scroll) end
     if UI.StripScrollButtons then UI.StripScrollButtons(scroll) end
 
@@ -429,17 +530,7 @@ function UI.NormalizeColumns(cols)
         local key  = tostring(cc.key or "")
         local tit  = cc.title or cc.key or ""
         cc.min = cc.min or cc.w or 80
-
-        if key=="act" then
-            cc.justify = cc.justify or "CENTER"
-            cc.w = cc.w or 200
-        elseif key=="qty" or key=="count" then
-            cc.justify = cc.justify or "CENTER"
-        elseif key=="amount" or key=="total" or key=="per" or key=="solde" then
-            cc.justify = cc.justify or "RIGHT"
-        else
-            cc.justify = cc.justify or "LEFT"
-        end
+        cc.justify = cc.justify or "LEFT"
         cc.title = tit
         out[i] = cc
     end

@@ -64,12 +64,89 @@ function Build(container)
     makeRadioV(themeRadios, "HORDE",    Tr("opt_horde"))
     makeRadioV(themeRadios, "NEUTRAL",  Tr("opt_neutral"))
 
+    -- Radios "Oui/Non" sur UNE seule ligne (retourne les 2 boutons)
+    local function makeYesNoInline(group, onClickYes, onClickNo)
+        local bYes = CreateFrame("CheckButton", nil, optionsPane, "UIRadioButtonTemplate")
+        bYes:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)
+        local lYes = bYes.Text or bYes:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        if not bYes.Text then lYes:SetPoint("LEFT", bYes, "RIGHT", 6, 0); bYes.Text = lYes end
+        lYes:SetText(Tr("opt_yes"))
+
+        local bNo  = CreateFrame("CheckButton", nil, optionsPane, "UIRadioButtonTemplate")
+        bNo:SetPoint("LEFT", bYes, "RIGHT", 120, 0)
+        local lNo  = bNo.Text or bNo:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        if not bNo.Text then lNo:SetPoint("LEFT", bNo, "RIGHT", 6, 0); bNo.Text = lNo end
+        lNo:SetText(Tr("opt_no"))
+
+        bYes:SetScript("OnClick", function()
+            _SetRadioGroupChecked(group, "YES")
+            if type(onClickYes) == "function" then onClickYes() end
+        end)
+        bNo:SetScript("OnClick", function()
+            _SetRadioGroupChecked(group, "NO")
+            if type(onClickNo) == "function" then onClickNo() end
+        end)
+
+        group["YES"], group["NO"] = bYes, bNo
+        y = y + (bYes:GetHeight() or 24) + RADIO_V_SPACING
+        return bYes, bNo
+    end
+
+    -- Slider d'échelle (0.5 → 1.0), défaut 0.7
+    local savedForScale = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
+    local curScale = tonumber(savedForScale.uiScale or 0.7) or 0.7
+    if curScale < 0.5 then curScale = 0.5 elseif curScale > 1.0 then curScale = 1.0 end
+
+    local slScale = UI.Slider(optionsPane, {
+        label   = "Échelle de l’addon",
+        min     = 0.5,
+        max     = 1.0,
+        step    = 0.01,
+        value   = curScale,
+        width   = 360,
+        tooltip = "Ajuste l’échelle propre à l’addon (indépendante de l’UI globale).",
+        format  = function(v) return string.format("%d%%", math.floor((tonumber(v) or 0.7)*100 + 0.5)) end,
+        name    = (ADDON or "GL").."_UIScaleSlider",
+    })
+
+    slScale:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -(y))
+    slScale:SetOnValueChanged(function(_, v)
+        v = tonumber(v) or 0.7
+        if v < 0.5 then v = 0.5 elseif v > 1.0 then v = 1.0 end
+        -- Sauvegarde
+        local sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
+        sv.uiScale = v
+        -- Application immédiate
+        if UI.Scale then
+            UI.Scale.TARGET_EFF_SCALE = v
+            if EnumerateFrames and UI.Scale.ApplyNow then
+                local f = EnumerateFrames()
+                while f do
+                    local n = f.GetName and f:GetName() or nil
+                    if n and n:find("^GLOG_") then
+                        UI.Scale.ApplyNow(f, v)
+                    end
+                    f = EnumerateFrames(f)
+                end
+            end
+        else
+            -- Fallback minimal si le module de scale n'est pas présent
+            if UI.Main and UI.Main.SetScale then
+                local parent = UI.Main:GetParent() or UIParent
+                local pe = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
+                UI.Main:SetScale(v / pe)
+            end
+        end
+    end)
+    y = y + (slScale:GetHeight() or 26) + RADIO_V_SPACING
+
     -- === Section 2 : Ouverture auto ===
     local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH2 + 8
-    makeRadioV(autoRadios, "YES", Tr("opt_yes"))
-    makeRadioV(autoRadios, "NO",  Tr("opt_no"))
-
+    makeYesNoInline(autoRadios,
+        function() GuildLogisticsUI.autoOpen = true end,
+        function() GuildLogisticsUI.autoOpen = false end
+    )
     -- === Section 3 : Affichage des popups ===
     local headerH3 = UI.SectionHeader(optionsPane, Tr("options_notifications_title"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH3 + 8
@@ -104,14 +181,32 @@ function Build(container)
     -- === Section 4 : Activer le débug ===
     local headerH4 = UI.SectionHeader(optionsPane, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH4 + 8
-    makeRadioV(debugRadios, "YES", Tr("opt_yes"))
-    makeRadioV(debugRadios, "NO",  Tr("opt_no"))
+    makeYesNoInline(debugRadios,
+        function()
+            GuildLogisticsUI.debugEnabled = true
+            if UI.SetDebugEnabled then UI.SetDebugEnabled(true) end
+        end,
+        function()
+            GuildLogisticsUI.debugEnabled = false
+            if UI.SetDebugEnabled then UI.SetDebugEnabled(false) end
+        end
+    )
 
     -- === Section 5 : Afficher les erreurs Lua ===
     local headerH5 = UI.SectionHeader(optionsPane, Tr("opt_script_errors"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH5 + 8
-    makeRadioV(scriptErrRadios, "YES", Tr("opt_yes"))
-    makeRadioV(scriptErrRadios, "NO",  Tr("opt_no"))
+    makeYesNoInline(scriptErrRadios,
+        function()
+            if GLOG.SetScriptErrorsEnabled then
+                GLOG.SetScriptErrorsEnabled(true)
+            elseif SetCVar then pcall(SetCVar, "scriptErrors", "1") end
+        end,
+        function()
+            if GLOG.SetScriptErrorsEnabled then
+                GLOG.SetScriptErrorsEnabled(false)
+            elseif SetCVar then pcall(SetCVar, "scriptErrors", "0") end
+        end
+    )
 
     -- État initial depuis la sauvegarde
     local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}

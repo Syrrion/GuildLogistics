@@ -1,0 +1,63 @@
+local ADDON, ns = ...
+ns.UI = ns.UI or {}
+local UI = ns.UI
+
+UI.Scale = UI.Scale or {}
+local Scale = UI.Scale
+
+-- =========================
+--   Configuration
+-- =========================
+-- Active/désactive la protection d’échelle
+Scale.LOCK_ENABLED       = (Scale.LOCK_ENABLED ~= false)  -- true par défaut
+-- Échelle effective visée pour nos fenêtres (1.0 = taille “réelle” pixel)
+Scale.TARGET_EFF_SCALE   = 0.7
+
+-- Calcule et applique l'échelle locale pour atteindre l’échelle effective cible
+local function _applyFixedScale(frame, targetEffScale)
+    if not (frame and frame.SetScale) then return end
+    local parent = frame:GetParent() or UIParent
+    local parentEff = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
+    local target   = targetEffScale or Scale.TARGET_EFF_SCALE or 1
+    local localScale = target / parentEff
+    frame:SetScale(localScale)
+    frame.__glog_fixedScaleTarget = target
+end
+
+-- Registre des frames protégées
+local _evt = CreateFrame("Frame")
+_evt.frames = setmetatable({}, { __mode = "k" })  -- weak keys: si frame détruite, GC ok
+
+function Scale.Register(frame, targetEffScale)
+    if not (Scale.LOCK_ENABLED and frame) then return end
+    _evt.frames[frame] = targetEffScale or Scale.TARGET_EFF_SCALE or 1
+    _applyFixedScale(frame, _evt.frames[frame])
+end
+
+-- Réappliquer quand l’échelle globale change (ou la résolution)
+_evt:RegisterEvent("UI_SCALE_CHANGED")
+_evt:RegisterEvent("DISPLAY_SIZE_CHANGED")
+_evt:RegisterEvent("CVAR_UPDATE")
+_evt:SetScript("OnEvent", function(_, evt, cvar)
+    if evt == "CVAR_UPDATE" and (cvar ~= "uiScale" and cvar ~= "useUIScale") then return end
+    for f, target in pairs(_evt.frames) do
+        if f and f.SetScale then
+            _applyFixedScale(f, target)
+        else
+            _evt.frames[f] = nil
+        end
+    end
+end)
+
+-- Utilitaire public si besoin ponctuel
+function Scale.ApplyNow(frame, targetEffScale)
+    _applyFixedScale(frame, targetEffScale)
+end
+
+-- Debug: /glogscale -> affiche les scales
+SLASH_GLOGSCALE1 = "/glogscale"
+SlashCmdList.GLOGSCALE = function()
+    local p = UIParent:GetEffectiveScale()
+    DEFAULT_CHAT_FRAME:AddMessage(("|cffffd200GuildLogistics|r: UIParent eff=|cffffff00%.3f|r  target=|cffffff00%.3f|r")
+        :format(p, Scale.TARGET_EFF_SCALE or 1))
+end

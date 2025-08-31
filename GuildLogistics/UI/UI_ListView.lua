@@ -22,6 +22,25 @@ function UI.ListView(parent, cols, opts)
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
 
+    -- Réduction de 1 px sur tout le contenu des ListViews (header + lignes)
+    if UI and UI.SetFontDeltaForFrame then
+        UI.SetFontDeltaForFrame(lv.header, -1, true)
+        UI.SetFontDeltaForFrame(lv.list,   -1, true)
+    end
+
+    -- Assure l’auto-font sur header + contenu scrollé
+    if UI and UI.AttachAutoFont then
+        UI.AttachAutoFont(lv.header)
+        UI.AttachAutoFont(lv.list)   -- (sécurise même si CreateScroll l’a déjà fait)
+    end
+
+    -- Applique immédiatement au texte des entêtes déjà créés
+    if UI and UI.ApplyFont and lv.hLabels then
+        for _, fs in ipairs(lv.hLabels) do
+            if fs then UI.ApplyFont(fs) end
+        end
+    end
+
     -- Relie le ScrollFrame à sa ListView pour les callbacks
     lv.scroll._ownerListView = lv
 
@@ -187,6 +206,11 @@ function UI.ListView(parent, cols, opts)
         UI.LayoutHeader(self.header, resolved, self.hLabels)
         if self._forceHeaderHidden then self.header:Hide() else self.header:Show() end
 
+        -- par sécurité, aucun clipping sur l'entête (pour laisser passer les vseps)
+        if self.header and self.header.SetClipsChildren then
+            self.header:SetClipsChildren(false)
+        end
+
         -- Scroll area
         self.scroll:ClearAllPoints()
         self.scroll:SetPoint("TOPLEFT", self.header, "BOTTOMLEFT", 0, -4)
@@ -275,12 +299,14 @@ function UI.ListView(parent, cols, opts)
                 lv._containerBG = bg
             end
 
-            -- Décore toute nouvelle ligne créée
+            -- Décore toute nouvelle ligne créée + auto-font
             if lv and lv.CreateRow and not lv._decorateCR then
                 local _oldCR = lv.CreateRow
                 function lv:CreateRow(i)
                     local r = _oldCR(self, i)
                     UI.DecorateRow(r)
+                    if UI and UI.AttachAutoFont then UI.AttachAutoFont(r) end
+                    if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(r) end
                     return r
                 end
                 lv._decorateCR = true
@@ -508,6 +534,15 @@ function UI._SetRowVisualAlpha(row, a)
         local base = tonumber(row._sepBotBaseA or row._sepBot:GetAlpha() or 1) or 1
         row._sepBot:SetAlpha(base * a)
     end
+    -- Séparateurs VERTICAUX : alpha_effectif = alpha_base * a
+    if row._vseps then
+        for _, t in pairs(row._vseps) do
+            if t and t.SetAlpha then
+                local base = tonumber(t._baseA or t:GetAlpha() or 1) or 1
+                t:SetAlpha(base * a)
+            end
+        end
+    end
 
     -- Hover conservé (lisibilité)
 end
@@ -542,6 +577,16 @@ function UI.ListView_SetVisualOpacity(lv, a)
             local base = lv.header._sepBottomBaseA or lv.header._sepBottom:GetAlpha() or 1
             lv.header._sepBottom:SetAlpha(base * a)
         end
+        -- Séparateurs VERTICAUX du header
+        if lv.header._vseps then
+            for _, t in pairs(lv.header._vseps) do
+                if t and t.SetAlpha then
+                    local base = t._baseA or t:GetAlpha() or 1
+                    t:SetAlpha(base * a)
+                end
+            end
+        end
+
     end
 
     -- Rows déjà existantes

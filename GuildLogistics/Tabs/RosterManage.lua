@@ -49,12 +49,12 @@ end
 -- Colonnes normalisées
 local cols = UI.NormalizeColumns({
     { key="alias",    title=Tr("col_alias"),     w=80 },
-    { key="main",     title=Tr("col_player"),    min=180, flex=1 },
-    { key="last",     title=Tr("col_last_seen"), w=100 },
-    { key="count",    title=Tr("col_rerolls"),   w=60 },
-    { key="ver",      title=Tr("col_version"),   w=90, justify="CENTER" }, -- ➕ Version après Rerolls
-    { key="actAlias", title="",                  w=90 },
-    { key="act",      title="",                  w=240 },
+    { key="main",     title=Tr("col_player"),    vsep=true,  min=180, flex=1 },
+    { key="last",     title=Tr("col_last_seen"), vsep=true,  w=100 },
+    { key="count",    title=Tr("col_rerolls"),   vsep=true,  w=60 },
+    { key="ver",      title=Tr("col_version"),   vsep=true,  w=90, justify="CENTER" }, -- ➕ Version après Rerolls
+    { key="actAlias", title="",                  vsep=true,  w=90 },
+    { key="act",      title="",                  vsep=true,  w=240 },
 })
 
 -- Construction d’une ligne

@@ -21,24 +21,43 @@ local function _UpdateActiveKeystoneLevel()
     end
     _mplusLevel = level
     if level > 0 then
-        _mplusLevelLast = level
+        _SaveLastMPlus(level)
     end
+
 end
 
 -- Getter public pour l'UI et les fallbacks Core
 function GLOG.GetActiveKeystoneLevel()
-    -- 1) Essai API live
-    if C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo then
-        local _, lv = C_ChallengeMode.GetActiveKeystoneInfo()
-        local v = tonumber(lv or 0) or 0
-        if v > 0 then return v end
+    -- 1) Essai API "live"
+    if C_ChallengeMode then
+        if C_ChallengeMode.GetActiveKeystoneInfo then
+            local _, lv = C_ChallengeMode.GetActiveKeystoneInfo()
+            local v = tonumber(lv or 0) or 0
+            if v > 0 then _SaveLastMPlus(v); return v end
+        end
+        -- 1b) Essai info de complétion (post-coffre)
+        if C_ChallengeMode.GetCompletionInfo then
+            local ok, a,b,c,d,e,f,g = pcall(C_ChallengeMode.GetCompletionInfo)
+            if ok then
+                -- Cherche un entier plausible (2..50) dans les retours
+                local candidates = {a,b,c,d,e,f,g}
+                for _,vv in ipairs(candidates) do
+                    local n = tonumber(vv)
+                    if n and n >= 2 and n <= 50 then _SaveLastMPlus(n); return n end
+                end
+            end
+        end
     end
-    -- 2) Valeur courante suivie
+    -- 2) Valeur courante suivie (session)
     if (_mplusLevel or 0) > 0 then return _mplusLevel end
-    -- 3) Dernière valeur connue
+    -- 3) Dernière valeur connue dans la session
     if (_mplusLevelLast or 0) > 0 then return _mplusLevelLast end
+    -- 4) Fallback persistant (<=3h)
+    local saved = _LoadLastMPlus()
+    if saved > 0 then return saved end
     return 0
 end
+
 
 -- Petite frame locale pour suivre les évènements de M+
 local _mplusEvt = CreateFrame("Frame")
@@ -59,6 +78,35 @@ local function _Store()
     local s = GuildLogisticsDatas_Char
     s.equipLoots = s.equipLoots or {}  -- liste d’entrées
     return s.equipLoots
+end
+
+-- =========================
+-- ===   M+ level cache  ===
+-- =========================
+local function _SaveLastMPlus(level)
+    level = tonumber(level or 0) or 0
+    if level <= 0 then return end
+    _mplusLevelLast = level
+    GuildLogisticsDatas_Char = GuildLogisticsDatas_Char or {}
+    local s = GuildLogisticsDatas_Char
+    s._mplus = s._mplus or {}
+    s._mplus.last = level
+    s._mplus.ts   = (time and time()) or 0
+end
+
+local function _LoadLastMPlus()
+    GuildLogisticsDatas_Char = GuildLogisticsDatas_Char or {}
+    local s = GuildLogisticsDatas_Char
+    local last = tonumber(s._mplus and s._mplus.last) or 0
+    local ts   = tonumber(s._mplus and s._mplus.ts) or 0
+    -- On accepte une valeur récente (< 3h) pour du backfill post-run
+    if last > 0 and ts > 0 then
+        local now = (time and time()) or 0
+        if now == 0 or (now - ts) <= (3 * 60 * 60) then
+            return last
+        end
+    end
+    return 0
 end
 
 -- Essaie de compléter le niveau M+ pour les entrées récentes avec ce lien
@@ -139,10 +187,11 @@ local function _InstanceContext()
             end
         end
 
-        if C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo then
-            local _, level = C_ChallengeMode.GetActiveKeystoneInfo()
-            mplus = tonumber(level) or 0
+        do
+            local lv = (GLOG and GLOG.GetActiveKeystoneLevel and GLOG.GetActiveKeystoneLevel()) or 0
+            mplus = tonumber(lv) or 0
         end
+
         if (mplus == 0) and diffID == 8 then
             mplus = tonumber(_mplusLevel) or 0
         end
@@ -446,14 +495,8 @@ _evt:SetScript("OnEvent", function(self, event, ...)
         instName = (select(1, GetInstanceInfo()))
     end
 
-    local keystoneLevel = nil
-    if C_ChallengeMode and C_ChallengeMode.GetActiveKeystoneInfo then
-        local _, level = C_ChallengeMode.GetActiveKeystoneInfo()
-        local v = tonumber(level or 0) or 0
-        if v > 0 then
-            keystoneLevel = v
-        end
-    end
+    local keystoneLevel = tonumber(GLOG and GLOG.GetActiveKeystoneLevel and GLOG.GetActiveKeystoneLevel()) or nil
+
     -- Fallback : si c'est bien une M+ mais pas de niveau via l'API live, prendre notre valeur suivie
     if (not keystoneLevel or keystoneLevel == 0) and diffID == 8 and GLOG and GLOG.GetActiveKeystoneLevel then
         local lv = tonumber(GLOG.GetActiveKeystoneLevel()) or 0

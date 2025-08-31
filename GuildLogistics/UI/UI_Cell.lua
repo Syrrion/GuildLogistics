@@ -67,6 +67,7 @@ function UI.CreateClassCell(parent, opts)
 
     f.text = f:CreateFontString(nil, "ARTWORK", opts.font or "GameFontHighlight")
     f.text:SetPoint("LEFT", f.icon, "RIGHT", opts.margin or 6, 0)
+    if UI and UI.ApplyFont then UI.ApplyFont(f.text) end
     f.text:SetPoint("RIGHT", f, "RIGHT", 0, 0)
     f.text:SetJustifyH("LEFT")
 

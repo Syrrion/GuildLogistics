@@ -14,7 +14,7 @@ UI.RIGHT_PAD  = 29
 UI.TOP_PAD    = 29
 UI.BOTTOM_PAD = 29
 
-UI.ROW_H = 30
+UI.ROW_H = 28
 UI.FONT_YELLOW = {1, 0.82, 0}
 UI.MIDGREY = {0.5,0.5,0.5}
 UI.WHITE = {1,1,1}
@@ -150,6 +150,15 @@ end
 local Main = CreateFrame("Frame", "GLOG_Main", UIParent, "BackdropTemplate")
 UI.Main = Main
 local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
+
+-- Verrouille l’échelle de l’addon contre les changements globaux
+if UI.Scale and UI.Scale.Register then
+    UI.Scale.Register(Main, UI.Scale.TARGET_EFF_SCALE) -- par défaut 1.0
+end
+
+-- Applique automatiquement la police sur tous les FontString créés sous Main
+if UI and UI.AttachAutoFont then UI.AttachAutoFont(Main) end
+
 Main:SetSize(UI.DEFAULT_W, UI.DEFAULT_H)
 Main:SetFrameStrata("HIGH")
 Main:SetMovable(true)
@@ -173,6 +182,8 @@ local skin = UI.ApplyNeutralFrameSkin(Main, { showRibbon = false })
 -- Conteneur borné pour le contenu des onglets
 Main.Content = CreateFrame("Frame", nil, Main)
 local L,R,T,B = UI.OUTER_PAD, UI.OUTER_PAD, UI.OUTER_PAD, UI.OUTER_PAD
+-- Police auto pour tout ce qui sera créé dedans (onglets, listes, etc.)
+if UI and UI.AttachAutoFont then UI.AttachAutoFont(Main.Content) end
 if Main._cdzNeutral and Main._cdzNeutral.GetInsets then
     L,R,T,B = Main._cdzNeutral:GetInsets()
 end
@@ -405,6 +416,14 @@ local function ShowPanel(idx)
     for i,p in ipairs(Panels) do p:SetShown(i == idx) end
     UI._current = idx
 
+    -- Réapplique la police sur le panneau affiché (utile si les lignes se créent à l'OnShow)
+    if UI and UI.ApplyFontRecursively and Panels and Panels[idx] then
+        UI.ApplyFontRecursively(Panels[idx])
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() UI.ApplyFontRecursively(Panels[idx]) end)
+        end
+    end
+
     -- Persistance : mémorise le dernier onglet actif (par libellé)
     local def = Registered and Registered[idx]
     if def and def.label and GLOG and GLOG.SetLastActiveTabLabel then
@@ -554,6 +573,8 @@ function UI.Finalize()
         bg:SetAllPoints()
 
         if def.build then def.build(panel) end
+        -- Harmonisation police sur tout le panel déjà construit
+        if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(panel) end
 
         if not def.hidden then
             local btn = CreateTabButton(lastBtn, def.label)

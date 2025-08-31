@@ -3,6 +3,158 @@ local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
+-- ===== Rafraîchissement live des zones (hors cache) =====
+local _LiveZoneTicker, _LiveEvt, _lastRosterRefresh = nil, nil, 0
+
+-- Retourne la "vraie" zone depuis le roster si dispo, sinon fallback cache
+local function _GetLiveZoneForMember(playerName, gi)
+    gi = gi or FindGuildInfo(playerName or "")
+    if gi then
+        local idx = gi.onlineAltIdx or gi.idx
+        if idx and GetGuildRosterInfo then
+            local name, rank, rankIndex, level, classDisplayName, zone, note, officerNote, online = GetGuildRosterInfo(idx)
+            if online and zone and zone ~= "" then
+                return zone
+            end
+        end
+    end
+    -- Fallback (cache interne)
+    return (GLOG.GetAnyOnlineZone and GLOG.GetAnyOnlineZone(playerName)) or nil
+end
+
+-- Lance/arrête un ticker qui demande un refresh du roster (léger)
+local function _StartLiveZoneTicker()
+    if _LiveZoneTicker or not C_Timer then return end
+    _LiveZoneTicker = C_Timer.NewTicker(10, function()
+        -- Throttle pour éviter spam serveur
+        local now = time()
+        if now - (_lastRosterRefresh or 0) >= 5 then
+            _lastRosterRefresh = now
+            if C_GuildInfo and C_GuildInfo.GuildRoster then
+                C_GuildInfo.GuildRoster()
+            elseif GuildRoster then
+                GuildRoster() -- API legacy
+            end
+        end
+    end)
+end
+local function _StopLiveZoneTicker()
+    if _LiveZoneTicker then _LiveZoneTicker:Cancel(); _LiveZoneTicker = nil end
+end
+
+-- Événements roster : quand ça bouge, on re-render le panneau si visible
+local function _EnsureLiveZoneEvents()
+    if _LiveEvt then return end
+    _LiveEvt = CreateFrame("Frame")
+    _LiveEvt:RegisterEvent("GUILD_ROSTER_UPDATE")
+    _LiveEvt:RegisterEvent("PLAYER_GUILD_UPDATE")
+    _LiveEvt:SetScript("OnEvent", function()
+        if membersPane and membersPane:IsShown() then
+            if UI and UI.RefreshAll then UI.RefreshAll() else Refresh() end
+        end
+    end)
+end
+
+
+-- ===== Détection zones instance/raid/gouffre (robuste) =====
+local function _strip_accents(s)
+    local map = {
+        ["à"]="a",["á"]="a",["â"]="a",["ä"]="a",["ã"]="a",["å"]="a",
+        ["ç"]="c",
+        ["è"]="e",["é"]="e",["ê"]="e",["ë"]="e",
+        ["ì"]="i",["í"]="i",["î"]="i",["ï"]="i",
+        ["ñ"]="n",
+        ["ò"]="o",["ó"]="o",["ô"]="o",["ö"]="o",["õ"]="o",
+        ["ù"]="u",["ú"]="u",["û"]="u",["ü"]="u",
+        ["ý"]="y",["ÿ"]="y",
+        ["œ"]="oe",["æ"]="ae",
+        ["À"]="a",["Á"]="a",["Â"]="a",["Ä"]="a",["Ã"]="a",["Å"]="a",
+        ["Ç"]="c",
+        ["È"]="e",["É"]="e",["Ê"]="e",["Ë"]="e",
+        ["Ì"]="i",["Í"]="i",["Î"]="i",["Ï"]="i",
+        ["Ñ"]="n",
+        ["Ò"]="o",["Ó"]="o",["Ô"]="o",["Ö"]="o",["Õ"]="o",
+        ["Ù"]="u",["Ú"]="u",["Û"]="u",["Ü"]="u",
+        ["Ý"]="y",["Œ"]="oe",["Æ"]="ae",
+    }
+    return (tostring(s or ""):gsub("[%z\1-\127\194-\244][\128-\191]*", function(ch) return map[ch] or ch end))
+end
+
+local function _norm(s)
+    s = _strip_accents(s):lower()
+    -- retire espaces, ponctuation, guillemets, tirets, apostrophes (’ '), etc.
+    s = s:gsub("[^%w]", "")
+    -- enlève un éventuel "l" (pour l') collé après normalisation
+    s = s:gsub("^l", "")
+    return s
+end
+
+local _INST -- index des noms d’instances/raids/M+ normalisés
+local function _ensureInstanceIndex()
+    if _INST then return _INST end
+    _INST = {}
+
+    -- Encounter Journal (donjons + raids)
+    local function addEJ()
+        local ok = true
+        if not EJ_GetNumTiers and UIParentLoadAddOn then ok = pcall(UIParentLoadAddOn, "Blizzard_EncounterJournal") end
+        if not (ok and EJ_GetNumTiers) then return end
+        local tiers = EJ_GetNumTiers() or 0
+        for t = 1, tiers do
+            if EJ_SelectTier then EJ_SelectTier(t) end
+            for _, isRaid in ipairs({ false, true }) do
+                local idx = 1
+                while true do
+                    local id, name = EJ_GetInstanceByIndex(idx, isRaid)
+                    if not id or not name then break end
+                    _INST[_norm(name)] = true
+                    idx = idx + 1
+                end
+            end
+        end
+    end
+
+    -- Mythique+ (Challenge Mode)
+    local function addMPlus()
+        if not (C_ChallengeMode and C_ChallengeMode.GetMapTable) then return end
+        local maps = C_ChallengeMode.GetMapTable()
+        if type(maps) == "table" then
+            for _, mapID in ipairs(maps) do
+                local name = C_ChallengeMode.GetMapUIInfo and C_ChallengeMode.GetMapUIInfo(mapID)
+                if name and name ~= "" then
+                    _INST[_norm(name)] = true
+                end
+            end
+        end
+    end
+
+    addEJ()
+    addMPlus()
+
+    -- Mots-clés génériques FR/EN sur les gouffres
+    _INST["gouffre"] = true ; _INST["gouffres"] = true
+    _INST["delve"]   = true ; _INST["delves"]  = true
+
+    return _INST
+end
+
+local function _isInstanceLikeZoneName(zoneName)
+    if not zoneName or zoneName == "" then return false end
+    local z = _norm(zoneName)
+    local set = _ensureInstanceIndex()
+    if set[z] then return true end
+    -- Matching partiel (ex: "Gouffre : Les Archives", "Uldaman : l'heritage de Tyr (M+)")
+    for key in pairs(set) do
+        if #key >= 4 and (z:find(key, 1, true) or key:find(z, 1, true)) then
+            return true
+        end
+    end
+    return false
+end
+
+local function _red(t) return "|cffff4040"..tostring(t).."|r" end
+
+
 -- === Onglet "Membres de la guilde" : liste unique plein écran ===
 local panel, lv, membersArea, noGuildMsg
 
@@ -29,13 +181,13 @@ end
 local function _BuildColumns()
     local base = {
         { key="alias",  title=Tr("col_alias"),          w=90,  justify="LEFT"   },
-        { key="lvl",    title=Tr("col_level_short"),    w=44,  justify="CENTER" },
-        { key="name",   title=Tr("col_name"),           min=200, flex=1         },
-        { key="ilvl",   title=Tr("col_ilvl"),           w=100,  justify="CENTER" },
-        { key="mplus",  title=Tr("col_mplus_score"),    w=100,  justify="CENTER" },
-        { key="mkey",   title=Tr("col_mplus_key"),      w=300,  justify="LEFT"   },
-        { key="last",   title=Tr("col_attendance"),     w=100,  justify="CENTER" },
-        { key="ver",    title=Tr("col_version_short"), w=70, justify="CENTER" }
+        { key="lvl",    title=Tr("col_level_short"),    vsep=true,  w=44,  justify="CENTER" },
+        { key="name",   title=Tr("col_name"),           vsep=true,  min=50, flex=1         },
+        { key="last",   title=Tr("col_attendance"),     vsep=true,  w=200,  justify="LEFT" },
+        { key="ilvl",   title=Tr("col_ilvl"),           vsep=true,  w=100, justify="CENTER" },
+        { key="mplus",  title=Tr("col_mplus_score"),    vsep=true,  w=100,  justify="CENTER" },
+        { key="mkey",   title=Tr("col_mplus_key"),      vsep=true,  w=240,  justify="LEFT"   },
+        { key="ver",    title=Tr("col_version_short"), vsep=true,  w=60, vsep=true, justify="CENTER" }
     }
 
     return UI.NormalizeColumns(base)
@@ -142,7 +294,7 @@ function BuildRow(r)
     f.ilvl  = UI.Label(r, { justify = "CENTER" })
     f.mplus = UI.Label(r, { justify = "CENTER" })
     f.mkey  = UI.Label(r, { justify = "LEFT"   })
-    f.last  = UI.Label(r, { justify = "CENTER" })
+    f.last  = UI.Label(r, { justify = "LEFT" })
     -- ➕ Version (ajoutée uniquement si la colonne existe côté header)
     f.ver   = UI.Label(r, { justify = "CENTER" })
 
@@ -163,7 +315,7 @@ function BuildRow(r)
     f.sepTop:SetPoint("TOPRIGHT", f.sepBG, "TOPRIGHT", 0, 1)
     f.sepTop:SetHeight(2)
 
-    f.sepLabel = r:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge"); f.sepLabel:Hide()
+    f.sepLabel = r:CreateFontString(nil, "OVERLAY", "GameFontNormal"); f.sepLabel:Hide()
     f.sepLabel:SetTextColor(1, 0.95, 0.3)
 
     return f
@@ -269,10 +421,19 @@ function UpdateRow(i, r, f, it)
     -- Infos guilde agrégées
     local gi = FindGuildInfo(data.name or "")
 
-    -- Présence (last)
+    -- Présence (last) : zone "live" via GetGuildRosterInfo, fallback cache
     if f.last then
         if gi.online then
-            f.last:SetText("|cff40ff40"..Tr("status_online").."|r")
+            local loc = _GetLiveZoneForMember(data.name, gi)
+            if loc and loc ~= "" then
+                if _isInstanceLikeZoneName and _isInstanceLikeZoneName(loc) then
+                    f.last:SetText(_red(loc))
+                else
+                    f.last:SetText(tostring(loc))
+                end
+            else
+                f.last:SetText(Tr("status_online"))
+            end
         elseif gi.days or gi.hours then
             f.last:SetText(ns.Format.LastSeen(gi.days, gi.hours))
         else
@@ -401,6 +562,20 @@ function Build(container)
 
     -- Création du conteneur
     membersPane, footer = UI.CreateMainContainer(container, {footer = false})
+
+    -- Live zones: events + ticker tant que le panneau est visible
+    _EnsureLiveZoneEvents()
+    if membersPane then
+        membersPane:HookScript("OnShow", function()
+            _StartLiveZoneTicker()
+            -- Demande un roster immédiat pour un 1er affichage frais
+            if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster()
+            elseif GuildRoster then GuildRoster() end
+        end)
+        membersPane:HookScript("OnHide", function()
+            _StopLiveZoneTicker()
+        end)
+    end
 
     -- En-tête de section
     UI.SectionHeader(membersPane, Tr("lbl_guild_members"), { topPad = 2 })

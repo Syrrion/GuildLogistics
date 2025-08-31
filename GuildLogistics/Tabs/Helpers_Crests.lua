@@ -12,10 +12,10 @@ local _headerBGs
 -- Colonnes (structure ListView standard)
 local cols = UI.NormalizeColumns({
     { key="crest",   title=(DATA and DATA.headers and DATA.headers.crest)   , min=180, flex=1,  justify="CENTER"   },
-    { key="chasms",  title=(DATA and DATA.headers and DATA.headers.chasms)  , w=225, justify="CENTER" },
-    { key="dungeons",title=(DATA and DATA.headers and DATA.headers.dungeons), w=225, justify="CENTER" },
-    { key="raids",   title=(DATA and DATA.headers and DATA.headers.raids)   , w=225, justify="CENTER" },
-    { key="outdoor", title=(DATA and DATA.headers and DATA.headers.outdoor) , w=225, justify="CENTER" },
+    { key="chasms",  title=(DATA and DATA.headers and DATA.headers.chasms)  , vsep=true,  w=225, justify="CENTER" },
+    { key="dungeons",title=(DATA and DATA.headers and DATA.headers.dungeons), vsep=true,  w=225, justify="CENTER" },
+    { key="raids",   title=(DATA and DATA.headers and DATA.headers.raids)   , vsep=true,  w=225, justify="CENTER" },
+    { key="outdoor", title=(DATA and DATA.headers and DATA.headers.outdoor) , vsep=true,  w=225, justify="CENTER" },
 })
 
 -- Helpers de rendu texte (localisation & couleur)
@@ -93,7 +93,7 @@ local function BuildRow(r)
     local f = {}
 
     -- Colonne Écus 
-    f.crest = r:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    f.crest = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.crest:SetJustifyH("LEFT")
 
     -- Colonnes texte multilignes

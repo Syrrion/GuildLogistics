@@ -53,15 +53,15 @@ local HELLO_WAIT_SEC = 5
 
 local cols = UI.NormalizeColumns({
     { key="time",  title=Tr("col_time"),       w=110 },
-    { key="dir",   title=Tr("col_dir"),        w=70  },
-    { key="state", title=Tr("col_state"),        w=160 },
-    { key="type",  title=Tr("col_type"),        w=160 },
-    { key="rv",    title=Tr("col_version_short"),        w=60  }, 
-    { key="size",  title=Tr("col_size"),      w=80  },
-    { key="chan",  title=Tr("col_channel"),       w=80  },
-    { key="target",title=Tr("col_sender"),    min=200, flex=1 },
-    { key="frag",  title=Tr("col_frag"),        w=70  },
-    { key="view",  title="",           w=70  },
+    { key="dir",   title=Tr("col_dir"),        vsep=true,  w=70  },
+    { key="state", title=Tr("col_state"),        vsep=true,  w=160 },
+    { key="type",  title=Tr("col_type"),        vsep=true,  w=160 },
+    { key="rv",    title=Tr("col_version_short"),        vsep=true,  w=60  }, 
+    { key="size",  title=Tr("col_size"),      vsep=true,  w=80  },
+    { key="chan",  title=Tr("col_channel"),       vsep=true,  w=80  },
+    { key="target",title=Tr("col_sender"),    vsep=true,  min=200, flex=1 },
+    { key="frag",  title=Tr("col_frag"),        vsep=true,  w=70  },
+    { key="view",  title="",           vsep=true,  w=70  },
 })
 
 local function BuildRow(r)

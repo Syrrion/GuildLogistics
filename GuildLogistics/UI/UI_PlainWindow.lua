@@ -36,6 +36,14 @@ function UI.CreatePlainWindow(opts)
 
     -- Frame principale
     local f = CreateFrame("Frame", "GLOG_Plain_"..saveKey, UIParent)
+    
+    if UI.Scale and UI.Scale.Register then
+        UI.Scale.Register(f, UI.Scale.TARGET_EFF_SCALE)
+    end
+
+    -- Police auto sur tous les FontString créés dans cette window
+    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f) end
+
     f:SetSize(w, h)
     f:SetFrameStrata(strata)
     f:SetFrameLevel(level)
@@ -62,6 +70,7 @@ function UI.CreatePlainWindow(opts)
 
     -- Header (draggable) + fond NOIR 50%
     f.header = CreateFrame("Frame", nil, f)
+    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f.header) end
     f.header:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     f.header:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
     f.header:SetHeight(headerH)

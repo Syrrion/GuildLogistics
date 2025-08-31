@@ -1,6 +1,6 @@
 local ADDON, ns = ...
 ns.Data = ns.Data or {}
-ns.Data.POTIONS_SEED_VERSION = 3
+ns.Data.POTIONS_SEED_VERSION = 8
 
 -- Catégories explicites : "heal" (potion de soins), "util" (autres potions), "stone" (pierre de soins)
 -- Renseigne ici ce que tu veux suivre exactement (si vide, heuristique nom/icône).
@@ -92,51 +92,49 @@ ns.Data.CONSUMABLES_TYPED = ns.Data.CONSUMABLES_TYPED or {
         items = {
         }, 
         spells = {
-            18499,  -- Rage de Berserker
-            118038, -- Par le fil de l'épée
-            184364, -- Régénération enragée
-            31821,  -- Maîtrise des auras
-            498,    -- Protection divine
-            403876, -- Protection divine
-            642,    -- Bouclier divin
-            184662, -- Bouclier du vengeur
-            186265, -- Aspect de la tortue
-            109304, -- Enthousiasme
-            264735, -- Survie du plus fort
-            388035, -- Robustesse de l'ours
-            392956, -- Robustesse de l'ours
-            272679, -- Robustesse de l'ours
-            31224,  -- Cape d'ombre
-            185311, -- Fiole cramoisie
-            5277,   -- Evasion
-            1966,   -- Feinte
-            19236,  -- Prière du déséspoir
-            47585,  -- Dispersion
-            586,    -- Disparition
-            48707,  -- Carapace anti-magie
-            48792,  -- Robustesse glaciale
-            48743,  -- Pacte mortel
-            108271, -- Transfert astral
-            342245, -- Altérer le temps
-            235313, -- Barrière flamboyante
-            11426,  -- Barrière de glace
-            45438,  -- Bloc de glace
-            110959, -- Invisibilité supérieure
-            55342,  -- Image miroir
-            235450, -- Barrière prismatique
-            104773, -- Résolution interminable
-            108416, -- Sombre pacte
-            115203, -- Boisson fortifiante
-            122470, -- Toucher de karma
-            122278, -- Atténuation du mal
-            122783, -- Diffusion de la magie
-            22812,  -- Ecorce
-            61336,  -- Instincts de survie
-            108238, -- Renouveau
-            198589, -- Voile corrompu
-            196555, -- Marche du néant
-            374348, -- Brasier de rénovation
-            363916, -- Ecailles d'obsidienne
+            66, 498, 586, 642, 781, 1856, 1966, 5277, 5384, 11426, 18499, 19236, 22812, 31224, 45438, 47585, 48707, 48743, 48792, 51271, 55342, 61336, 104773, 108238, 108271, 108416, 109304, 110959, 115176, 115203, 118038, 122278, 122470, 122783, 184364, 184662, 185311, 186265, 196555, 198589, 199483, 202168, 235313, 235450, 342245, 363916, 374348, 403876, 633, 1022, 1044, 2050, 3411, 6940, 33206, 47788, 102342, 108968, 204018, 357170, 363534, 66, 498, 586, 642, 781, 1856, 1966, 5277, 5384, 11426, 18499, 19236, 22812, 31224, 45438, 47585, 48707, 48743, 48792, 51271, 55342, 61336, 104773, 108238, 108271, 108416, 109304, 110959, 115176, 115203, 118038, 122278, 122470, 122783, 184364, 184662, 185311, 186265, 196555, 198589, 199483, 202168, 235313, 235450, 342245, 363916, 374348, 403876, 31821
+        }
+    },
+    dispel = { 
+        items = {
+        }, 
+        spells = {
+            475, 527, 2782, 4987, 32375, 51886, 77130, 88423, 213634, 213644, 218164, 365585, 383013
+        }
+    },
+    taunt = { 
+        items = {
+        }, 
+        spells = {
+            355, 1161, 6795, 56222, 62124, 115546, 185245, 386071
+        }
+    },
+    move = { 
+        items = {
+        }, 
+        spells = {
+            106898, 116841, 192077, 374227, 374968, 1850, 1953, 2983, 6544, 36554, 48265, 52174, 58875, 79206, 101545, 102401, 107428, 109132, 115008, 119996, 121536, 186257, 189110, 190784, 190925, 192063, 195072, 195457, 212552, 212653, 252216, 358267, 370665
+        }
+    },
+    kick = { 
+        items = {
+        }, 
+        spells = {
+            1766, 2139, 6552, 15487, 31935, 47528, 57994, 78675, 96231, 106839, 116705, 132409, 147362, 183752, 187707, 351338, 115750, 853
+        }
+    },
+    cc = { 
+        items = {
+        }, 
+        spells = {
+            99, 408, 1776, 2094, 5211, 5484, 6789, 10326, 15487, 19577, 20066, 51514, 64044, 107570, 109248, 115078, 187650, 205364, 211881, 217832, 221562, 305483, 358385, 2484, 5246, 8122, 30283, 46968, 51485, 108920, 113724, 119381, 179057, 192058, 197214, 207167, 207684, 383121
+        }
+    },
+    special = { 
+        items = {
+        }, 
+        spells = {
+            2825, 8143, 10060, 19801, 32182, 49576, 51490, 61391, 64382, 73325, 80353, 102359, 102793, 108199, 114018, 116841, 116844, 132469, 198103, 202137, 202138, 205636, 370665, 384100, 16191, 29166, 64901
         }
     },
 }
@@ -144,5 +142,5 @@ ns.Data.CONSUMABLES_TYPED = ns.Data.CONSUMABLES_TYPED or {
 ns.Data.CONSUMABLE_CATEGORY = ns.Data.CONSUMABLE_CATEGORY or {}
 
 ns.Data.CONSUMABLE_EXCLUDE_SPELLS = ns.Data.CONSUMABLE_EXCLUDE_SPELLS or {
-    [82326] = true, -- Holy Light (Paladin) : ne doit JAMAIS être compté comme potion/prépot
+    105421
 }

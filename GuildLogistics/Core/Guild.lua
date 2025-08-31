@@ -421,3 +421,47 @@ function GLOG.GetConnectedMainName()
     end
     return nil
 end
+
+-- ➕ Récupère la zone (lieu) via l’index Roster, en restant robuste
+function GLOG.GetRosterZone(idx)
+    if not idx or not GetGuildRosterInfo then return nil end
+    -- Dans l’API Retail, la zone est le 6e retour de GetGuildRosterInfo
+    local _, _, _, _, _, zone = GetGuildRosterInfo(idx)
+    zone = type(zone) == "string" and strtrim(zone) or nil
+    return (zone ~= "" and zone) or nil
+end
+
+-- ➕ Retourne la zone d’un main : si le main est en ligne on prend sa zone,
+--     sinon celle d’un de ses rerolls en ligne (le premier trouvé).
+function GLOG.GetAnyOnlineZone(name)
+    if not name or name == "" then return nil end
+    local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+    if not rows or #rows == 0 then return nil end
+
+    local NormName = GLOG.NormName
+    local mainKey  = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or (NormName and NormName(name)) or tostring(name):lower()
+
+    local mainIdx, altIdx = nil, nil
+    for _, gr in ipairs(rows) do
+        local rowNameKey = gr.name_key or ((NormName and NormName(gr.name_amb or gr.name_raw)) or nil)
+        local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(gr.remark)) or "")
+        local belongs = (rowMainKey and rowMainKey == mainKey)
+                      or ((rowMainKey == nil or rowMainKey == "") and rowNameKey == mainKey)
+
+        if belongs then
+            if rowNameKey == mainKey then mainIdx = mainIdx or gr.idx end
+            if gr.online then
+                -- Priorité au main s’il est en ligne
+                if rowNameKey == mainKey then
+                    local z = GLOG.GetRosterZone(gr.idx)
+                    if z then return z end
+                else
+                    altIdx = altIdx or gr.idx
+                end
+            end
+        end
+    end
+
+    if altIdx then return GLOG.GetRosterZone(altIdx) end
+    return nil
+end
