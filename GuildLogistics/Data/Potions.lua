@@ -1,6 +1,6 @@
 local ADDON, ns = ...
 ns.Data = ns.Data or {}
-ns.Data.POTIONS_SEED_VERSION = 2
+ns.Data.POTIONS_SEED_VERSION = 3
 
 -- Catégories explicites : "heal" (potion de soins), "util" (autres potions), "stone" (pierre de soins)
 -- Renseigne ici ce que tu veux suivre exactement (si vide, heuristique nom/icône).
@@ -95,11 +95,17 @@ ns.Data.CONSUMABLES_TYPED = ns.Data.CONSUMABLES_TYPED or {
             18499,  -- Rage de Berserker
             118038, -- Par le fil de l'épée
             184364, -- Régénération enragée
+            31821,  -- Maîtrise des auras
+            498,    -- Protection divine
             403876, -- Protection divine
             642,    -- Bouclier divin
             184662, -- Bouclier du vengeur
             186265, -- Aspect de la tortue
             109304, -- Enthousiasme
+            264735, -- Survie du plus fort
+            388035, -- Robustesse de l'ours
+            392956, -- Robustesse de l'ours
+            272679, -- Robustesse de l'ours
             31224,  -- Cape d'ombre
             185311, -- Fiole cramoisie
             5277,   -- Evasion
@@ -140,6 +146,3 @@ ns.Data.CONSUMABLE_CATEGORY = ns.Data.CONSUMABLE_CATEGORY or {}
 ns.Data.CONSUMABLE_EXCLUDE_SPELLS = ns.Data.CONSUMABLE_EXCLUDE_SPELLS or {
     [82326] = true, -- Holy Light (Paladin) : ne doit JAMAIS être compté comme potion/prépot
 }
-
--- Healthstones explicites (si connus)
-ns.Data.HEALTHSTONE_SPELLS = ns.Data.HEALTHSTONE_SPELLS or {}

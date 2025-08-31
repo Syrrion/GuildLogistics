@@ -80,15 +80,31 @@ local function EnsureDB()
     end
 
     -- ➕ 3) Initialisation habituelle (désormais sur la base « par personnage »)
-    GuildLogisticsDB = GuildLogisticsDB or {
-        players = {},
-        history = { nextId = 1 },
-        expenses = { recording = false, list = {}, nextId = 1 },
-        lots     = { nextId = 1, list = {} },
-        ids = { counter=0, byName={}, byId={} },
-        meta = { lastModified=0, fullStamp=0, rev=0, master=nil }, -- + rev
-        requests = {},
-    }
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    do
+        local db = GuildLogisticsDB
+        db.players  = db.players  or {}
+        db.history  = db.history  or { nextId = 1 }
+        db.expenses = db.expenses or { recording = false, list = {}, nextId = 1 }
+        db.lots     = db.lots     or { nextId = 1, list = {} }
+        db.ids      = db.ids      or { counter = 0, byName = {}, byId = {} }
+        db.meta     = db.meta     or { lastModified = 0, fullStamp = 0, rev = 0, master = nil }
+        db.requests = db.requests or {}
+    end
+
+    -- Initialisation UI avec sauvegarde des valeurs existantes
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    do
+        local ui = GuildLogisticsUI
+        ui.point    = ui.point    or "CENTER"
+        ui.relTo    = (ui.relTo ~= nil) and ui.relTo or nil
+        ui.relPoint = ui.relPoint or "CENTER"
+        ui.x        = tonumber(ui.x or 0) or 0
+        ui.y        = tonumber(ui.y or 0) or 0
+        ui.width    = tonumber(ui.width  or 1160) or 1160
+        ui.height   = tonumber(ui.height or 680)  or 680
+        ui.minimap  = ui.minimap  or { hide = false, angle = 215 }
+    end
 
     GuildLogisticsUI = GuildLogisticsUI or {
         point="CENTER", relTo=nil, relPoint="CENTER", x=0, y=0, width=1160, height=680,
@@ -648,7 +664,6 @@ local function _SetIlvlLocal(name, ilvl, ts, by, ilvlMax)
         end
         p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("ilvl:changed", name) end
-        if ns.RefreshAll then ns.RefreshAll() end
     end
 end
 
@@ -659,14 +674,15 @@ local _SetMPlusScoreLocal
 
 -- ✨ Fusion : calcule iLvl (équipé + max) + Clé M+ et envoie un UNIQUE STATUS_UPDATE si changement
 function GLOG.UpdateOwnStatusIfMain()
-
     if not (GLOG.IsConnectedMain and GLOG.IsConnectedMain()) then return end
 
     -- Throttle anti-spam (fusionné)
     local nowp = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
     GLOG._statusNextSendAt = GLOG._statusNextSendAt or 0
-    --if nowp < GLOG._statusNextSendAt then return end
-    --GLOG._statusNextSendAt = nowp
+    local interval = 0.5 -- coalescer les rafales d’évènements d’équipement
+    if nowp < GLOG._statusNextSendAt then return end
+    GLOG._statusNextSendAt = nowp + interval
+
     -- Nom canonique du joueur (robuste)
     local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
             or ((ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull((UnitName and UnitName("player"))))
@@ -780,7 +796,6 @@ _SetMKeyLocal = function(name, mapId, level, mapName, ts, by)
         p.mkeyLevel = math.max(0, tonumber(level) or 0)
         p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("mkey:changed", name) end
-        if ns.RefreshAll then ns.RefreshAll() end
     end
 end
 

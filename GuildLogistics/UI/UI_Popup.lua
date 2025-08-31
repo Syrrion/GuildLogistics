@@ -269,7 +269,7 @@ function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
 end
 
 -- Popup liste des participants (inchangée côté logique, Look&Feel hérité)
-function UI.ShowParticipantsPopup(names)
+function UI.ShowParticipantsPopup(names, showState)
     local dlg = UI.CreatePopup({ title = "Participants", width = 540, height = 440 })
     local cols = {
         { key="name",   title="Nom",    min=300, justify="LEFT" },
@@ -286,6 +286,36 @@ function UI.ShowParticipantsPopup(names)
             UI.SetNameTag(f.name, item.name or "")
             f.status:SetText(item.exists and Tr("lbl_status_present_colored") or Tr("lbl_status_deleted_colored"))
 
+        end,
+    })
+    dlg._lv = lv
+
+    local pdb = (GuildLogisticsDB and GuildLogisticsDB.players) or {}
+    local arr = {}
+    for _, n in ipairs(names or {}) do arr[#arr+1] = n end
+    table.sort(arr, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
+    local data = {}
+    for _, n in ipairs(arr) do data[#data+1] = { name = n, exists = (pdb[n] ~= nil) } end
+
+    lv:SetData(data)
+    dlg:SetButtons({ { text = CLOSE, default = true } })
+    dlg:Show()
+end
+
+-- Popup liste des participants (inchangée côté logique, Look&Feel hérité)
+function UI.ShowParticipants2Popup(names)
+    local dlg = UI.CreatePopup({ title = "Participants", width = 340, height = 400 })
+    local cols = {
+        { key="name",   title="Nom",    min=300, justify="LEFT" },
+    }
+    local lv = UI.ListView(dlg.content, cols, {
+        buildRow = function(r)
+            local f = {}
+            f.name   = UI.CreateNameTag(r)
+            return f
+        end,
+        updateRow = function(i, r, f, item)
+            UI.SetNameTag(f.name, item.name or "")
         end,
     })
     dlg._lv = lv

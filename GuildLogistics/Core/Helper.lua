@@ -32,6 +32,36 @@ function GLOG.PreciseToEpoch(ts)
     return math.floor(offset + ts + 0.5)
 end
 
+-- Debounce/Throttle génériques (U)
+local _debouncers = {}
+function U.Debounce(key, delay, fn)
+    if type(fn) ~= "function" then return end
+    delay = tonumber(delay) or 0
+    local t = _debouncers[key]
+    if t and t.Cancel then t:Cancel() end
+    if C_Timer and C_Timer.NewTimer then
+        _debouncers[key] = C_Timer.NewTimer(delay, function()
+            _debouncers[key] = nil
+            local ok, err = pcall(fn)
+            if not ok then geterrorhandler()(err) end
+        end)
+    else
+        _debouncers[key] = nil
+        fn()
+    end
+end
+
+local _throttleNext = {}
+function U.Throttle(key, interval)
+    interval = tonumber(interval) or 0
+    local nowp = (GetTimePreciseSec and GetTimePreciseSec())
+              or (debugprofilestop and (debugprofilestop()/1000)) or 0
+    local nextAt = _throttleNext[key] or 0
+    if nowp < nextAt then return false end
+    _throttleNext[key] = nowp + interval
+    return true
+end
+
 -- =========================
 -- === Gestion des noms  ===
 -- =========================
@@ -298,6 +328,12 @@ U.now            = now
 U.NormalizeFull  = NormalizeFull
 U.playerFullName = playerFullName
 U.SamePlayer     = SamePlayer
+
+-- Expose aussi les helpers génériques pour éviter les comparaisons avec nil ailleurs
+U.safenum       = safenum         -- usage: U.safenum(x, default) -> number
+U.truthy        = truthy          -- usage: U.truthy(x) -> boolean
+U.now           = now             -- usage: U.now() -> epoch seconds
+U.NormalizeStr  = normalizeStr    -- usage: U.NormalizeStr(" a 'b ") -> "ab"
 
 -- -- Journal/Debug : stub sûr pour éviter les nil avant le chargement de Comm.lua
 ns.GLOG = ns.GLOG or {}

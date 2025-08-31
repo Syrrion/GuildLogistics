@@ -5,8 +5,6 @@ local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("GUILD_ROSTER_UPDATE")
-f:RegisterEvent("PLAYER_GUILD_UPDATE")  -- ➕ changement appartenance guilde
-f:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 -- ➕ iLvl: mise à jour auto du main
 f:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 f:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE")
@@ -118,27 +116,28 @@ f:SetScript("OnEvent", function(self, event, name)
             ns.Util.After(5.0, function() GLOG.UpdateOwnStatusIfMain() end)
         end
 
-    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
-        if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
+    elseif event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
+        C_Timer.After(1, function()
+            if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
+        end)
 
-    elseif event == "BAG_UPDATE_DELAYED"
-        or event == "ITEM_PUSH"
-        or event == "CHAT_MSG_LOOT"
-        or event == "GOSSIP_CLOSED"
-        or event == "CHALLENGE_MODE_KEYSTONE_SLOTTED"
+    elseif event == "CHALLENGE_MODE_KEYSTONE_SLOTTED"
         or event == "CHALLENGE_MODE_START"
         or event == "CHALLENGE_MODE_COMPLETED"
         or event == "CHALLENGE_MODE_RESET" then
 
         if GLOG.UpdateOwnStatusIfMain then
-            if event == "GOSSIP_CLOSED" and ns and ns.Util and ns.Util.After then
-                ns.Util.After(0.25, function() GLOG.UpdateOwnStatusIfMain() end)
-            else
-                GLOG.UpdateOwnStatusIfMain()
-            end
+            GLOG.UpdateOwnStatusIfMain()
         end
 
-    elseif event == "GUILD_ROSTER_UPDATE" or event == "GET_ITEM_INFO_RECEIVED" then
+    elseif event == "CHAT_MSG_LOOT" then
+        local msg = name
+        if GLOG and GLOG.LootTracker_HandleChatMsgLoot and msg then
+            GLOG.LootTracker_HandleChatMsgLoot(msg)
+        end
+
+        
+    elseif event == "GUILD_ROSTER_UPDATE" then
 
         -- ➕ Demande une mise à jour du roster côté serveur
         if C_GuildInfo and C_GuildInfo.GuildRoster then

@@ -2,10 +2,10 @@
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 2.3.1
+## Version: 2.4.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
-## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char
+## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char
 
 ## IconTexture: Interface\AddOns\GuildLogistics\Ressources\Media\LogoAddonWoW256.tga
 ## Dependencies: LibDeflate
@@ -23,6 +23,7 @@ Core/Comm.lua
 Core/Guild.lua
 Core/Expenses.lua
 Core/GroupTracker.lua
+Core/LootTracker.lua
 
 UI/UI_Core.lua
 UI/UI_Cell.lua
@@ -58,6 +59,7 @@ Tabs/Helpers_Crests.lua
 
 Tabs/Helpers_GroupTracker.lua
 Tabs/Tracker_Custom.lua
+Tabs/Tracker_Loots.lua
 
 Tabs/Settings.lua
 

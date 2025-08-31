@@ -363,7 +363,6 @@ f:RegisterEvent("LOADING_SCREEN_DISABLED")
 f:RegisterEvent("CALENDAR_UPDATE_EVENT_LIST")
 f:RegisterEvent("CALENDAR_UPDATE_PENDING_INVITES")
 f:RegisterEvent("GUILD_ROSTER_UPDATE") -- ✅ nouveau : relance quand le cache guilde est prêt
--- ➕ Pour relancer un affichage différé quand on sort de combat / change de zone (ex: quitte une instance)
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 

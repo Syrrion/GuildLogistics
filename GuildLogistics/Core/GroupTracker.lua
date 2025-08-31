@@ -237,10 +237,48 @@ end
 -- ====== Lookup Data.CONSUMABLE_CATEGORY (ItemID ou SpellID) ======
 local _CategoryBySpellID   = {}
 local _CategoryBySpellName = {} -- nom de sort (lower) → cat (fallback si ID inconnu)
+-- Cache local pour GetItemSpell (évite les appels répétés)
+local _ItemSpellCache = {} -- [itemID] = { sid = <spellID|false>, name = <useName|false> }
+
+local function _GetUseFromItem(itemID)
+    local iid = tonumber(itemID)
+    if not iid then return nil, nil end
+    local c = _ItemSpellCache[iid]
+    if c then return (c.sid or nil), (c.name or nil) end
+    local useName, useSpellID = GetItemSpell and GetItemSpell(iid)
+    _ItemSpellCache[iid] = { sid = useSpellID or false, name = useName or false }
+    return useSpellID, useName
+end
+
+-- SpellID -> ItemID (pour récupérer l'icône d'objet si le sort provient d'un item)
+local _ItemBySpellID = {}
+
+-- Icône robuste pour un sort/objet : priorité à l'item si connu, sinon icône du sort
+local function _GetSpellOrItemIcon(spellID)
+    local sid = tonumber(spellID or 0) or 0
+    if sid <= 0 then
+        return "Interface/Icons/INV_Misc_QuestionMark"
+    end
+    local iid = _ItemBySpellID[sid]
+    if iid and GetItemIcon then
+        local icon = GetItemIcon(iid)
+        if icon then return icon end
+    end
+    if C_Spell and C_Spell.GetSpellInfo then
+        local si = C_Spell.GetSpellInfo(sid)
+        if si and si.iconID then return si.iconID end
+    end
+    if GetSpellTexture then
+        local tex = GetSpellTexture(sid)
+        if tex then return tex end
+    end
+    return "Interface/Icons/INV_Misc_QuestionMark"
+end
 
 local function _RebuildCategoryLookup()
     wipe(_CategoryBySpellID)
     wipe(_CategoryBySpellName)
+    wipe(_ItemBySpellID)
 
     -- Source unique : Data.CONSUMABLES_TYPED (ItemIDs + SpellIDs)
     if not (Data and Data.CONSUMABLES_TYPED) then return end
@@ -262,15 +300,25 @@ local function _RebuildCategoryLookup()
         if not iid then return end
         -- Essai immédiat (si item en cache)
         local useName, useSpellID = GetItemSpell and GetItemSpell(iid)
-        if useSpellID then mapSpellID(useSpellID, cat) end
-        if useName   then _CategoryBySpellName[tostring(useName):lower()] = cat end
+        if useSpellID then
+            mapSpellID(useSpellID, cat)
+            _ItemBySpellID[useSpellID] = iid
+        end
+        if useName then
+            _CategoryBySpellName[tostring(useName):lower()] = cat
+        end
         -- Callback quand l'item est (re)chargé
         if (not useName or not useSpellID) and Item and Item.CreateFromItemID then
             local it = Item:CreateFromItemID(iid)
             it:ContinueOnItemLoad(function()
                 local n2, s2 = GetItemSpell and GetItemSpell(iid)
-                if s2 then mapSpellID(s2, cat) end
-                if n2 then _CategoryBySpellName[tostring(n2):lower()] = cat end
+                if s2 then
+                    mapSpellID(s2, cat)
+                    _ItemBySpellID[s2] = iid
+                end
+                if n2 then
+                    _CategoryBySpellName[tostring(n2):lower()] = cat
+                end
             end)
         end
     end
@@ -283,13 +331,6 @@ local function _RebuildCategoryLookup()
             if type(lists.items) == "table" then
                 for _, iid in ipairs(lists.items) do mapItemID(iid, cat) end
             end
-        end
-    end
-
-    -- Santé : support optionnel des Healthstones explicitement déclarées
-    if Data and Data.HEALTHSTONE_SPELLS then
-        for sid, ok in pairs(Data.HEALTHSTONE_SPELLS) do
-            if ok then mapSpellID(sid, "stone") end
         end
     end
 end
@@ -671,6 +712,7 @@ local function _ShowHistoryPopup(full)
     local cols = UI.NormalizeColumns({
         { key="time",  title=Tr("col_time"),     w=120,  justify="CENTER" },
         { key="cat",   title=Tr("col_category"), w=120,  justify="CENTER" },
+        { key="icon",  title="",                 w=38,   justify="CENTER" }, -- 🔸 icône sort/objet
         { key="spell", title=Tr("col_spell"),    min=200, flex=1, justify="LEFT" },
     })
 
@@ -680,6 +722,10 @@ local function _ShowHistoryPopup(full)
             local w = {}
             w.time  = UI.Label(r, { justify = "CENTER" })
             w.cat   = UI.Label(r, { justify = "CENTER" })
+            -- 🔸 petite texture pour l’icône (dimension ajustée à la hauteur de ligne)
+            local icon = r:CreateTexture(nil, "ARTWORK")
+            icon:SetSize(20, 20) -- sera repositionné/contraint par LayoutRow
+            w.icon  = icon
             w.spell = UI.Label(r, { justify = "LEFT" })
             return w
         end,
@@ -689,6 +735,17 @@ local function _ShowHistoryPopup(full)
             w.time:SetText(hhmm)
             w.cat:SetText(_CatLabel(it.cat))
             w.spell:SetText(it.spellName or "")
+            -- 🔸 choisit l’icône d’item si le sort provient d’un objet, sinon icône du sort
+            if w.icon and w.icon.SetTexture then
+                local iconTex = _GetSpellOrItemIcon(it.spellID)
+                w.icon:SetTexture(iconTex)
+            end
+            -- 🔸 Tooltip au survol (objet prioritaire si connu, sinon sort)
+            local sid = tonumber(it.spellID or 0) or 0
+            local iid = (sid > 0 and _ItemBySpellID and _ItemBySpellID[sid]) or 0
+            if UI and UI.BindItemOrSpellTooltip then
+                UI.BindItemOrSpellTooltip(r, iid, sid)
+            end
         end,
     })
 
@@ -1692,7 +1749,6 @@ end
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
-ev:RegisterEvent("BAG_UPDATE_DELAYED")
 ev:RegisterEvent("PLAYER_ENTERING_WORLD")
 ev:RegisterEvent("GROUP_ROSTER_UPDATE")
 ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
@@ -1750,9 +1806,6 @@ ev:SetScript("OnEvent", function(_, event, ...)
     elseif event == "PLAYER_LOGIN" then
         _RebuildCategoryLookup()
 
-    elseif event == "BAG_UPDATE_DELAYED" then
-        _RebuildCategoryLookup()
-    
     elseif event == "GROUP_ROSTER_UPDATE" then
         _PurgeStale()
         if state.win and state.win._Refresh then state.win:_Refresh() end

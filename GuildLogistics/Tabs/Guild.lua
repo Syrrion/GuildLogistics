@@ -263,7 +263,7 @@ function UpdateRow(i, r, f, it)
     -- Alias
     if f.alias then
         local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
-        if a and a ~= "" then f.alias:SetText(" "..a) else f.alias:SetText("") end
+        if a and a ~= "" then f.alias:SetText("   "..a) else f.alias:SetText(" ") end
     end
 
     -- Infos guilde agrégées

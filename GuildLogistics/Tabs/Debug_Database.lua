@@ -15,14 +15,23 @@ local ddRoot
 
 local function _GetRoot()
     -- Les alias de Core.lua (Core.lua) pointent les *\_Char* en runtime
-    if selectedRoot == "DB_UI" then
+    if selectedRoot == "DB_DATAS" then
+        return GuildLogisticsDatas_Char or GuildLogisticsDatas or {}
+    elseif selectedRoot == "DB_UI" then
         return GuildLogisticsUI_Char or GuildLogisticsUI or {}
     end
     return GuildLogisticsDB_Char or GuildLogisticsDB or {}
 end
 
 local function _PathToText(path)
-    local rootName = (selectedRoot == "DB_UI") and "GuildLogisticsUI_Char" or "GuildLogisticsDB_Char"
+    local rootName
+    if selectedRoot == "DB_DATAS" then
+        rootName = "GuildLogisticsDatas_Char"
+    elseif selectedRoot == "DB_UI" then
+        rootName = "GuildLogisticsUI_Char"
+    else
+        rootName = "GuildLogisticsDB_Char"
+    end
     local parts = { rootName }
     for i = 1, #path do
         parts[#parts+1] = tostring(path[i])
@@ -357,6 +366,13 @@ Build = function(container)
             entries[#entries+1] = info(Tr("lbl_db_ui") or "DB_UI (interface)", selectedRoot == "DB_UI", function()
                 selectedRoot = "DB_UI"
                 ddRoot:SetSelected("DB_UI", "DB_UI")
+                breadcrumbFS:SetText(_PathToText(currentPath))
+                Refresh()
+            end)
+
+            entries[#entries+1] = info(Tr("lbl_db_datas") or "DB_DATAS (trackers)", selectedRoot == "DB_DATAS", function()
+                selectedRoot = "DB_DATAS"
+                ddRoot:SetSelected("DB_DATAS", "DB_DATAS")
                 breadcrumbFS:SetText(_PathToText(currentPath))
                 Refresh()
             end)

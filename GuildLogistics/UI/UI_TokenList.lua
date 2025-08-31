@@ -132,14 +132,27 @@ function UI.TokenList(parent, opts)
         if kind == "text" then
             if fld.ico then fld.ico:Hide() end
             fld.name:SetText(tostring(it.name or it.value or ""))
+
+            -- Pas de tooltip pour "text"
+            if UI and UI.BindItemOrSpellTooltip then
+                UI.BindItemOrSpellTooltip(r, 0, 0)
+            end
         elseif kind == "spell" then
             local name, icon = SpellLabelIcon(it.value)
             if fld.ico then fld.ico:SetTexture(icon); fld.ico:Show() end
             fld.name:SetText(name or ("Spell #%d"):format(tonumber(it.value) or 0))
+
+            if UI and UI.BindItemOrSpellTooltip then
+                UI.BindItemOrSpellTooltip(r, 0, tonumber(it.value) or 0)
+            end
         else -- item
             local name, icon = ItemLabelIcon(it.value)
             if fld.ico then fld.ico:SetTexture(icon); fld.ico:Show() end
             fld.name:SetText(name or ("Item #%d"):format(tonumber(it.value) or 0))
+
+            if UI and UI.BindItemOrSpellTooltip then
+                UI.BindItemOrSpellTooltip(r, tonumber(it.value) or 0, 0)
+            end
         end
 
         r.btnRemove:SetOnClick(function()

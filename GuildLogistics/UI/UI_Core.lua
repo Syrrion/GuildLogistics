@@ -668,6 +668,35 @@ function UI.CreateItemCell(parent, opts)
     frame.text = text
     frame.btn  = btn
 
+    -- Lier une tooltip (item / sort / lien) à un frame
+    -- Usage : UI.BindItemOrSpellTooltip(frame, itemID, spellID, link, anchor)
+    function UI.BindItemOrSpellTooltip(frame, itemID, spellID, link, anchor)
+        if not frame or not frame.SetScript then return end
+        frame._itemID  = tonumber(itemID or 0) or 0
+        frame._spellID = tonumber(spellID or 0) or 0
+        frame._link    = link
+        frame:EnableMouse(true)
+        local anch = tostring(anchor or "ANCHOR_RIGHT")
+
+        frame:SetScript("OnEnter", function(self)
+            local iid, sid = tonumber(self._itemID or 0) or 0, tonumber(self._spellID or 0) or 0
+            if iid > 0 then
+                GameTooltip:SetOwner(self, anch)
+                GameTooltip:SetItemByID(iid)
+                GameTooltip:Show()
+            elseif self._link then
+                GameTooltip:SetOwner(self, anch)
+                GameTooltip:SetHyperlink(self._link)
+                GameTooltip:Show()
+            elseif sid > 0 and GameTooltip.SetSpellByID then
+                GameTooltip:SetOwner(self, anch)
+                GameTooltip:SetSpellByID(sid)
+                GameTooltip:Show()
+            end
+        end)
+        frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
     return frame
 end
 
