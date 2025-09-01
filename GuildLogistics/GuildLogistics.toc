@@ -1,8 +1,8 @@
-## Interface: 110205, 110200, 110107
+## Interface: 110205, 110200
 ## Title: Guild Logistics
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 2.5.0
+## Version: 2.5.1
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char
@@ -18,6 +18,7 @@ Data/Tracker.lua
 Data/Upgrades.lua
 
 Core/Core.lua
+Core/Events.lua
 Core/Helper.lua
 Core/Comm.lua
 Core/Guild.lua
@@ -67,6 +68,6 @@ Tabs/Settings.lua
 
 Tabs/Debug_Packets.lua
 Tabs/Debug_Database.lua
+Tabs/Debug_Events.lua
 
 Core/Calendar.lua
-Core/Events.lua

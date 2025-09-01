@@ -91,6 +91,11 @@ function Build(container)
         y = y + (bYes:GetHeight() or 24) + RADIO_V_SPACING
         return bYes, bNo
     end
+    y = y + 8
+
+    -- === Section 1 : Echelle de l'interface ===
+    local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_ui_scale_long"), { topPad = y })
+    y = y + headerH2 + 8
 
     -- Slider d'échelle (0.5 → 1.0), défaut 0.7
     local savedForScale = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
@@ -98,7 +103,7 @@ function Build(container)
     if curScale < 0.5 then curScale = 0.5 elseif curScale > 1.0 then curScale = 1.0 end
 
     local slScale = UI.Slider(optionsPane, {
-        label   = "Échelle de l’addon",
+        label   = Tr("opt_ui_scale"),
         min     = 0.5,
         max     = 1.0,
         step    = 0.01,

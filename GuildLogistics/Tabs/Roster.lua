@@ -506,7 +506,7 @@ end
 -- Build panel
 local function Build(container)
     -- Création du conteneur
-    panel, footer, footerH = UI.CreateMainContainer(container, {footer = true})
+    panel, footer = UI.CreateMainContainer(container, {footer = true})
     activeArea  = CreateFrame("Frame", nil, panel)
     reserveArea = CreateFrame("Frame", nil, panel)
 
@@ -646,11 +646,13 @@ local function Build(container)
 end
 
 -- ➕ Surveille les changements de groupe pour mettre à jour le surlignage
-local _GL_RosterGroupWatcher = CreateFrame("Frame")
-_GL_RosterGroupWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
-_GL_RosterGroupWatcher:SetScript("OnEvent", function()
-    if Refresh then Refresh() end
-end)
+do
+    local function _onGroupChanged()
+        if Refresh then Refresh() end
+    end
+    ns.Events.Register("GROUP_ROSTER_UPDATE", _onGroupChanged)
+end
+
 
 UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout, {
     category = Tr("cat_raids"),

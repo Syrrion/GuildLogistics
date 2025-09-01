@@ -1,6 +1,177 @@
 local ADDON, ns = ...
 local GLOG = ns.GLOG
 
+-- === Hub d'évènements : ns.Events (autosuffisant & safe) ===========
+ns.Events = ns.Events or {}
+local E = ns.Events
+
+if not E._inited then
+    E._inited   = true
+    E._handlers = {}
+    E._frame    = CreateFrame("Frame")
+    E._frame:SetScript("OnEvent", function(_, event, ...)
+        local list = E._handlers[event]
+        if list then
+            for i = 1, #list do
+                local h = list[i]
+                local ok, err = pcall(h.fn, h.owner, event, ...)
+                if not ok then geterrorhandler()(err) end
+            end
+        end
+        if ns.Emit then ns.Emit("evt:" .. event, ...) end
+    end)
+end
+
+-- Enregistre un callback (owner optionnel)
+function E.Register(event, owner, fn)
+    if type(owner) == "function" and fn == nil then
+        fn, owner = owner, nil
+    end
+    if type(event) ~= "string" or type(fn) ~= "function" then return end
+
+    local list = E._handlers[event]
+    if not list then
+        list = {}
+        E._handlers[event] = list
+    end
+    table.insert(list, { owner = owner, fn = fn })
+
+    -- Inscription paresseuse & idempotente
+    if E._frame and not E._frame:IsEventRegistered(event) then
+        E._frame:RegisterEvent(event)
+    end
+end
+
+-- Désinscription fine
+function E.Unregister(event, owner, fn)
+    local list = E._handlers[event]
+    if not list then return end
+    for i = #list, 1, -1 do
+        local h = list[i]
+        local okOwner = (owner == nil) or (h.owner == owner)
+        local okFn    = (fn == nil)    or (h.fn    == fn)
+        if okOwner and okFn then table.remove(list, i) end
+    end
+    if #list == 0 then
+        E._handlers[event] = nil
+        -- On ne désenregistre pas l'event du frame (inutile et source d'effets de bord)
+    end
+end
+
+-- Désinscription globale par owner (one-shot pratique)
+function E.UnregisterOwner(owner)
+    if not owner then return end
+    for _, list in pairs(E._handlers) do
+        for i = #list, 1, -1 do
+            if list[i].owner == owner then table.remove(list, i) end
+        end
+    end
+end
+
+-- === Session Event Logger (debug léger, mémoire session uniquement) ===
+do
+    local E = ns.Events
+    if E and not E._loggerHooked then
+        E._log        = {}
+        E._logMax     = 1000
+        E._logEnabled = false   -- ⬅️ pause par défaut (aucun log tant qu’on ne reprend pas)
+        E._logRev     = E._logRev or 0
+        E._logNewCnt  = 0
+        E._lastRevTs  = 0
+        E._maxArgs    = 6
+
+        function E.GetDebugLog() return E._log end
+        function E.ClearDebugLog()
+            local log = E._log
+            for i = #log, 1, -1 do log[i] = nil end
+            E._logRev = (E._logRev or 0) + 1
+        end
+        function E.SetDebugLogging(on) E._logEnabled = (on ~= false) end
+        function E.IsDebugLoggingEnabled() return E._logEnabled end
+
+        -- Compteur de révision du log (augmente à chaque modification)
+        E._logRev = E._logRev or 0
+        function E.GetDebugLogRev() return E._logRev end
+
+        -- Wrap du OnEvent du hub : on log puis on délègue à l’ancien handler
+        local prev = E._frame and E._frame:GetScript("OnEvent")
+        if not E._frame then E._frame = CreateFrame("Frame") end
+
+        local function _startsWith(s, prefix)
+            if type(s) ~= "string" or type(prefix) ~= "string" then return false end
+            return string.sub(s, 1, #prefix) == prefix
+        end
+
+        local function _isDebugOptionOn()
+            -- Option globale depuis l’onglet Réglages
+            return (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) == true
+        end
+
+        local function _shouldLog(event, ...)
+            -- 0) Si le débug UI est désactivé → ne rien historiser
+            if not _isDebugOptionOn() then
+                return false
+            end
+            
+            -- 1) Filtre CLEU à contenu vide
+            if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+                if select("#", ...) == 0 then
+                    return false
+                end
+            end
+
+            -- 2) Filtre AddonMsg : on ne log que nos messages (PREFIX == "GLOG2")
+            if event == "CHAT_MSG_ADDON" then
+                local expected = (ns and ns.GLOG and ns.GLOG.PREFIX) or "GLOG2"
+                local prefix, msg = ...
+                -- Si le param 'prefix' ne matche pas et que le 'msg' ne commence pas par expected → ignorer
+                if (prefix ~= expected) and (not _startsWith(msg, expected)) then
+                    return false
+                end
+            end
+
+            if event == "CVAR_UPDATE" then
+                return false
+            end
+
+            return true
+        end
+
+        E._frame:SetScript("OnEvent", function(self, event, ...)
+            if E._logEnabled and _shouldLog(event, ...) then
+                local ts = (GetTimePreciseSec and GetTimePreciseSec())
+                        or (GetTime and GetTime())
+                        or (time and time()) or 0
+                -- Copie bornée des args (max 6)
+                local argsN = select("#", ...)
+                local maxN  = E._maxArgs or 6
+                local argsT = {}
+                for i = 1, math.min(argsN, maxN) do
+                    argsT[i] = select(i, ...)
+                end
+
+                local entry = { ts = ts, event = event, args = argsT }
+                local log = E._log
+                log[#log+1] = entry
+                if #log > (E._logMax or 1000) then table.remove(log, 1) end
+
+                -- Coalescing des révisions : au plus ~1/sec ou sur burst≥25
+                E._logNewCnt = (E._logNewCnt or 0) + 1
+                local now = (GetTimePreciseSec and GetTimePreciseSec()) or (GetTime and GetTime()) or (time and time()) or 0
+                if (now - (E._lastRevTs or 0)) >= 0.75 or E._logNewCnt >= 25 then
+                    E._logRev  = (E._logRev or 0) + 1
+                    E._logNewCnt = 0
+                    E._lastRevTs = now
+                end
+            end
+            if type(prev) == "function" then return prev(self, event, ...) end
+        end)
+
+        E._loggerHooked = true
+    end
+end
+-- ======================================================================
+
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -166,3 +337,27 @@ if ns and ns.On then
     -- ➕ et aussi quand une clé change
     ns.On("mkey:changed", function() _ScheduleActiveTabRefresh() end)
 end
+
+-- === Dispatch hub + conservation du handler existant ================
+do
+    local prev = f:GetScript("OnEvent") -- handler déjà défini plus haut
+    f:SetScript("OnEvent", function(self, event, ...)
+        -- 1) Appel des handlers enregistrés via ns.Events
+        local E = ns.Events
+        local list = E and E._handlers and E._handlers[event]
+        if list then
+            for i = 1, #list do
+                local h = list[i]
+                local ok, err = pcall(h.fn, h.owner, event, ...)
+                if not ok then geterrorhandler()(err) end
+            end
+        end
+        -- 2) Re-broadcast interne si votre bus d'events est utilisé
+        if ns.Emit then ns.Emit("evt:" .. event, ...) end
+        -- 3) Appel du handler d’origine pour ne rien casser
+        if type(prev) == "function" then
+            return prev(self, event, ...)
+        end
+    end)
+end
+-- ===================================================================

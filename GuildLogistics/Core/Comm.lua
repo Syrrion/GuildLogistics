@@ -509,6 +509,9 @@ local OutTicker = nil
 -- Boîtes aux lettres (réassemblage fragments)
 local Inbox     = {}
 
+-- 🔁 Anti-doublon : clé = "seq@sender" (TTL court, purgé par ticker)
+local Processed = {}   -- [ "123@nom-realm" ] = ts
+
 -- ➕ Suivi d’une synchro FULL en cours par émetteur (pour piloter l’UI)
 local ActiveFullSync = ActiveFullSync or {}   -- [senderKey]=true
 
@@ -2257,6 +2260,16 @@ local function onAddonMsg(prefix, message, channel, sender)
         end
 
         if t then
+            -- 🛡️ Déduplication par séquence@expéditeur (notamment pour n=1 fragment)
+            do
+                local pkey = tostring(seq) .. "@" .. tostring(senderKey or ""):lower()
+                if Processed[pkey] then
+                    _finishSync(true) -- termine proprement un éventuel indicateur
+                    return
+                end
+                Processed[pkey] = now()
+            end
+
             -- Décodage KV + enfilement ordonné (sécurisé)
             local _ok, _err = pcall(function()
             local plain = unpackPayloadStr(full)
@@ -2418,21 +2431,12 @@ function GLOG.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, ext
     -- ✅ Application LOCALE côté GM (on n'attend pas notre propre message réseau)
     do
         local U, D, N = uids or {}, deltas or {}, names or {}
-        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         for i = 1, math.max(#U, #D, #N) do
-            local name = N[i] or (GLOG.GetNameByUID and GLOG.GetNameByUID(U[i])) or nil
+            local name  = N[i] or (GLOG.GetNameByUID and GLOG.GetNameByUID(U[i])) or nil
             local delta = safenum(D[i], 0)
             if name and delta ~= 0 then
-                if GLOG.ApplyDeltaByName then
-                    GLOG.ApplyDeltaByName(name, delta, playerFullName())
-                else
-                    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-                    local full = nf(name)
-                    local rec = GuildLogisticsDB.players[full] or { credit = 0, debit = 0 }
-                    if delta >= 0 then rec.credit = safenum(rec.credit,0) + delta
-                    else               rec.debit  = safenum(rec.debit,0)  + (-delta) end
-                    GuildLogisticsDB.players[full] = rec
-                end
+                -- Écrit dans 'solde' (source de vérité) via l’API générique
+                GLOG.ApplyDeltaByName(name, delta, playerFullName())
             end
         end
         if ns.RefreshAll then ns.RefreshAll() end
@@ -3044,20 +3048,25 @@ end
 
 
 function GLOG.Comm_Init()
+    -- 🔒 Idempotence : ne s'initialise qu'une seule fois
+    if GLOG._commReady then return end
+    GLOG._commReady = true
+
     C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 
-    if not GLOG._commFrame then
-        local f = CreateFrame("Frame")
-        f:RegisterEvent("CHAT_MSG_ADDON")
-        f:SetScript("OnEvent", function(_, _, prefix, msg, channel, sender) onAddonMsg(prefix, msg, channel, sender) end)
-        GLOG._commFrame = f
-    end
+    -- Centralisé via Core/Events.lua
+    ns.Events.Register("CHAT_MSG_ADDON", function(_, _, prefix, msg, channel, sender)
+        onAddonMsg(prefix, msg, channel, sender)
+    end)
 
     -- Nettoyage des fragments périmés
     if not GLOG._inboxCleaner then
         GLOG._inboxCleaner = C_Timer.NewTicker(10, function()
             local cutoff = now() - 30
             for k, box in pairs(Inbox) do if (box.ts or 0) < cutoff then Inbox[k] = nil end end
+            -- 🔁 Purge des messages déjà vus (anti-doublon)
+            for k, ts in pairs(Processed) do if (ts or 0) < cutoff then Processed[k] = nil end end
+
         end)
 
             -- Maintenance mémoire
@@ -3161,17 +3170,13 @@ function encode(s) return encodeKV(s) end
 
 -- ✅ Bootstrap de secours : s’assure que Comm_Init est bien appelé
 if not GLOG._autoBootstrap then
-    local boot = CreateFrame("Frame")
-    boot:RegisterEvent("ADDON_LOADED")
-    boot:RegisterEvent("PLAYER_LOGIN")
-    boot:SetScript("OnEvent", function(_, ev, name)
+    local function _maybeInit(_, ev, name)
         if ev == "ADDON_LOADED" and name and name ~= ADDON then return end
         if GLOG._commReady then return end
-        GLOG._commReady = true
-        if type(GLOG.Comm_Init) == "function" then
-            GLOG.Comm_Init()
-        end
-    end)
+        if type(GLOG.Comm_Init) == "function" then GLOG.Comm_Init() end
+    end
+    ns.Events.Register("ADDON_LOADED",  _maybeInit)
+    ns.Events.Register("PLAYER_LOGIN",  _maybeInit)
     GLOG._autoBootstrap = true
 end
 

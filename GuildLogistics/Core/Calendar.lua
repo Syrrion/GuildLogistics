@@ -355,18 +355,21 @@ local calPollActive  = false
 local calPollTries   = 0
 local guildReadyOnce = false
 
-local f = CreateFrame("Frame")
-f:RegisterEvent("PLAYER_LOGIN")
-f:RegisterEvent("PLAYER_ENTERING_WORLD")
-f:RegisterEvent("LOADING_SCREEN_ENABLED")
-f:RegisterEvent("LOADING_SCREEN_DISABLED")
-f:RegisterEvent("CALENDAR_UPDATE_EVENT_LIST")
-f:RegisterEvent("CALENDAR_UPDATE_PENDING_INVITES")
-f:RegisterEvent("GUILD_ROSTER_UPDATE") -- ✅ nouveau : relance quand le cache guilde est prêt
-f:RegisterEvent("PLAYER_REGEN_ENABLED")
-f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+-- (Frame supprimé — on passe par ns.Events dans Core/Events.lua)
+do
+    local function _dispatch(_, ev, ...) M.OnEvent(ev, ...) end
+    ns.Events.Register("PLAYER_LOGIN",                      _dispatch)
+    ns.Events.Register("PLAYER_ENTERING_WORLD",             _dispatch)
+    ns.Events.Register("LOADING_SCREEN_ENABLED",            _dispatch)
+    ns.Events.Register("LOADING_SCREEN_DISABLED",           _dispatch)
+    ns.Events.Register("CALENDAR_UPDATE_EVENT_LIST",        _dispatch)
+    ns.Events.Register("CALENDAR_UPDATE_PENDING_INVITES",   _dispatch)
+    ns.Events.Register("GUILD_ROSTER_UPDATE",               _dispatch)
+    ns.Events.Register("PLAYER_REGEN_ENABLED",              _dispatch)
+    ns.Events.Register("ZONE_CHANGED_NEW_AREA",             _dispatch)
+end
 
-f:SetScript("OnEvent", function(self, event, ...)
+function M.OnEvent(event, ...)
     if event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         -- Demande très tôt le chargement des données calendrier (en arrière-plan)
         if C_Calendar and C_Calendar.OpenCalendar then
@@ -478,4 +481,4 @@ f:SetScript("OnEvent", function(self, event, ...)
         end
         return
     end
-end)
+end

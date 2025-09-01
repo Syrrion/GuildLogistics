@@ -72,8 +72,8 @@ local function aggregateRows(rows)
 end
 
 
--- --------- Scanner asynchrone ---------
-local Scanner = CreateFrame("Frame")
+-- --------- Scanner asynchrone (centralisé via ns.Events) ---------
+local Scanner = CreateFrame("Frame")  -- on garde la frame pour réutiliser le handler existant
 Scanner.pending = false
 Scanner.callbacks = {}
 
@@ -166,12 +166,23 @@ function GLOG.RefreshGuildCache(cb)
     table.insert(Scanner.callbacks, type(cb)=="function" and cb or function() end)
     if not Scanner.pending then
         Scanner.pending = true
-        Scanner:RegisterEvent("GUILD_ROSTER_UPDATE")
+
+        -- Inscription via le hub, one-shot via UnregisterOwner
+        ns.Events.Register("GUILD_ROSTER_UPDATE", Scanner, function()
+            ns.Events.UnregisterOwner(Scanner) -- on annule l’écoute dès la 1re réponse
+            if Scanner:GetScript("OnEvent") then
+                Scanner:GetScript("OnEvent")(Scanner, "GUILD_ROSTER_UPDATE")
+            end
+        end)
+
         if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
+
         -- Fallback si l’évènement ne revient pas (latence / pas de guilde)
         if C_Timer and C_Timer.After then
             C_Timer.After(0.8, function()
                 if Scanner.pending and Scanner:GetScript("OnEvent") then
+                    -- Même traitement que l’event : un seul passage
+                    ns.Events.UnregisterOwner(Scanner)
                     Scanner:GetScript("OnEvent")(Scanner, "GUILD_ROSTER_UPDATE")
                 end
             end)

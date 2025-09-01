@@ -52,3 +52,29 @@ UI.Colors.BIS_TIER_COLORS = UI.Colors.BIS_TIER_COLORS or {
 -- Gris utilisé pour les valeurs hors-ligne / placeholders (légèrement plus sombre qu'avant)
 UI.GRAY_OFFLINE      = UI.GRAY_OFFLINE      or { 0.30, 0.30, 0.30 }                 
 UI.GRAY_OFFLINE_HEX  = UI.GRAY_OFFLINE_HEX  or (UI.RGBHex and UI.RGBHex(0.45, 0.45, 0.45)) or "999999"
+
+-- =========================
+--   Couleurs par Faction/Thème
+-- =========================
+UI.Colors.FACTION_HEADER = UI.Colors.FACTION_HEADER or {
+    ALLIANCE = { 0.17, 0.52, 0.95 }, -- bleu
+    HORDE    = { 0.85, 0.20, 0.20 }, -- rouge
+    NEUTRAL  = { 0.58, 0.42, 0.18 }, -- brun/parchemin
+}
+
+-- Renvoie la couleur d'en-tête selon UI.FRAME_THEME ("AUTO" => faction joueur)
+function UI.Colors.GetHeaderRGB()
+    local tag = (UI and UI.FRAME_THEME) or "AUTO"
+    local key = tostring(tag or "AUTO"):upper()
+
+    if key == "AUTO" then
+        local f = (UnitFactionGroup and UnitFactionGroup("player")) or "Neutral"
+        key = tostring(f):upper()
+    end
+
+    if key ~= "ALLIANCE" and key ~= "HORDE" and key ~= "NEUTRAL" then
+        key = "NEUTRAL"
+    end
+    local rgb = UI.Colors.FACTION_HEADER[key] or UI.Colors.FACTION_HEADER.NEUTRAL
+    return rgb[1], rgb[2], rgb[3]
+end

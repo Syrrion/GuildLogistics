@@ -23,6 +23,43 @@ UI.SEPARATOR_TOP_PAD = 0
 -- Opacité (multiplicateur) des séparateurs verticaux de ListView
 UI.VCOL_SEP_ALPHA = UI.VCOL_SEP_ALPHA or 0.05
 
+-- Registre (faible) des SectionHeaders pour rafraîchissement dynamique des couleurs
+UI._SECTION_HEADERS = UI._SECTION_HEADERS or setmetatable({}, { __mode = "k" })
+
+-- Fallback local si UI.Colors.GetHeaderRGB() n'existe pas (compat projets plus anciens)
+local function _HeaderRGB()
+    if UI and UI.Colors and UI.Colors.GetHeaderRGB then
+        local ok, r, g, b = pcall(UI.Colors.GetHeaderRGB)
+        if ok and r then return r, g, b end
+    end
+    local tag = tostring(UI.FRAME_THEME or "AUTO"):upper()
+    if tag == "AUTO" and UnitFactionGroup then
+        tag = tostring(UnitFactionGroup("player") or "NEUTRAL"):upper()
+    end
+    local MAP = {
+        ALLIANCE = { 0.17, 0.52, 0.95 },
+        HORDE    = { 0.85, 0.20, 0.20 },
+        NEUTRAL  = { 0.58, 0.42, 0.18 },
+    }
+    local c = MAP[tag] or MAP.NEUTRAL
+    return c[1], c[2], c[3]
+end
+
+-- API : force la recolorisation de tous les SectionHeaders existants
+function UI.RefreshSectionHeaders()
+    local r, g, b = _HeaderRGB()
+    for fs, sep in pairs(UI._SECTION_HEADERS or {}) do
+        if fs and fs.SetTextColor then fs:SetTextColor(r, g, b) end
+        if sep and sep.SetColorTexture then sep:SetColorTexture(r, g, b, 0.18) end
+    end
+end
+
+-- Enregistrement d'un header (fs = FontString, sep = Texture du séparateur)
+function UI._RegisterSectionHeader(fs, sep)
+    if not fs then return end
+    UI._SECTION_HEADERS[fs] = sep or true
+end
+
 -- Récupère la ScrollBar d'un ScrollFrame "UIPanelScrollFrameTemplate"
 function UI.GetScrollBar(scroll)
     if not scroll then return nil end
@@ -443,9 +480,9 @@ end
 
 function UI.SectionHeader(parent, title, opts)
     opts = opts or {}
-    local padL  = tonumber(opts.padLeft) or 0
-    local padR  = tonumber(opts.padRight) or 0
-    local topPad= tonumber(opts.topPad) or 0
+    local padL   = tonumber(opts.padLeft)  or 0
+    local padR   = tonumber(opts.padRight) or 0
+    local topPad = tonumber(opts.topPad)   or 0
 
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     fs:SetPoint("TOPLEFT",  parent, "TOPLEFT",  padL, -(topPad + 2))
@@ -453,11 +490,18 @@ function UI.SectionHeader(parent, title, opts)
     fs:SetJustifyH("LEFT")
     fs:SetText((Tr and Tr(title or "")) or tostring(title or ""))
 
+    -- Couleur selon le thème
+    local r, g, b = _HeaderRGB()
+    if fs.SetTextColor then fs:SetTextColor(r, g, b) end
+
     local sep = parent:CreateTexture(nil, "BORDER")
-    sep:SetColorTexture(1, 1, 1, 0.08)
+    sep:SetColorTexture(r, g, b, 0.18)
     sep:SetPoint("TOPLEFT",  fs, "BOTTOMLEFT",  0, -4)
     sep:SetPoint("TOPRIGHT", fs, "BOTTOMRIGHT", 0, -4)
     sep:SetHeight(1)
+
+    -- Enregistrer pour pouvoir rafraîchir la couleur quand on change de thème
+    if UI and UI._RegisterSectionHeader then UI._RegisterSectionHeader(fs, sep) end
 
     return UI.SECTION_HEADER_H
 end

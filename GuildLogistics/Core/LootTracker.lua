@@ -7,6 +7,7 @@ local GLOG, UI, U = ns.GLOG, ns.UI, ns.Util
 local Tr = ns.Tr or function(s) return s end
 -- Boss/loot context helpers (forward declarations)
 local _getCtx, _putCtx, _getCtxByLink
+local _SaveLastMPlus, _LoadLastMPlus, _BackfillMPlus
 
 -- Dernier niveau M+ vu (persiste tant qu'on n'a pas un nouveau > 0)
 local _mplusLevelLast = 0
@@ -53,21 +54,23 @@ function GLOG.GetActiveKeystoneLevel()
     -- 3) Dernière valeur connue dans la session
     if (_mplusLevelLast or 0) > 0 then return _mplusLevelLast end
     -- 4) Fallback persistant (<=3h)
-    local saved = _LoadLastMPlus()
+    local saved = (_LoadLastMPlus and _LoadLastMPlus()) or 0
     if saved > 0 then return saved end
     return 0
 end
 
 
--- Petite frame locale pour suivre les évènements de M+
-local _mplusEvt = CreateFrame("Frame")
-_mplusEvt:RegisterEvent("CHALLENGE_MODE_KEYSTONE_SLOTTED")
-_mplusEvt:RegisterEvent("CHALLENGE_MODE_START")
-_mplusEvt:RegisterEvent("CHALLENGE_MODE_COMPLETED")
-_mplusEvt:RegisterEvent("CHALLENGE_MODE_RESET")
-_mplusEvt:RegisterEvent("PLAYER_ENTERING_WORLD")
-_mplusEvt:SetScript("OnEvent", function() _UpdateActiveKeystoneLevel() end)
+-- Centralisation via Core/Events.lua
+do
+    local function _onMPlusEvent() _UpdateActiveKeystoneLevel() end
+    ns.Events.Register("CHALLENGE_MODE_KEYSTONE_SLOTTED", _onMPlusEvent)
+    ns.Events.Register("CHALLENGE_MODE_START",            _onMPlusEvent)
+    ns.Events.Register("CHALLENGE_MODE_COMPLETED",        _onMPlusEvent)
+    ns.Events.Register("CHALLENGE_MODE_RESET",            _onMPlusEvent)
+    ns.Events.Register("PLAYER_ENTERING_WORLD",           _onMPlusEvent)
+end
 -- Init au chargement (utile si on /reload en pleine clé)
+
 _UpdateActiveKeystoneLevel()
 
 -- =========================
@@ -80,10 +83,27 @@ local function _Store()
     return s.equipLoots
 end
 
+-- === Config (par perso) pour le log de butin =========================
+local function _Config()
+    GuildLogisticsDatas_Char = GuildLogisticsDatas_Char or {}
+    local s = GuildLogisticsDatas_Char
+    s.config = s.config or {}
+    local c = s.config
+    -- Valeurs par défaut
+    local EPIC = tonumber((Enum and Enum.ItemQuality and Enum.ItemQuality.Epic) or 4) or 4
+    if c.lootMinQuality      == nil then c.lootMinQuality      = EPIC end                    -- épique par défaut
+    if c.lootMinReqLevel     == nil then c.lootMinReqLevel     = 80 end
+    if c.lootEquippableOnly  == nil then c.lootEquippableOnly  = true end
+    if c.lootMinItemLevel    == nil then c.lootMinItemLevel    = 0 end
+    if c.lootInstanceOnly    == nil then c.lootInstanceOnly    = true end
+    return c
+end
+-- ====================================================================
+
 -- =========================
 -- ===   M+ level cache  ===
 -- =========================
-local function _SaveLastMPlus(level)
+_SaveLastMPlus = function(level)
     level = tonumber(level or 0) or 0
     if level <= 0 then return end
     _mplusLevelLast = level
@@ -94,7 +114,7 @@ local function _SaveLastMPlus(level)
     s._mplus.ts   = (time and time()) or 0
 end
 
-local function _LoadLastMPlus()
+_LoadLastMPlus = function()
     GuildLogisticsDatas_Char = GuildLogisticsDatas_Char or {}
     local s = GuildLogisticsDatas_Char
     local last = tonumber(s._mplus and s._mplus.last) or 0
@@ -110,7 +130,7 @@ local function _LoadLastMPlus()
 end
 
 -- Essaie de compléter le niveau M+ pour les entrées récentes avec ce lien
-local function _BackfillMPlus(link)
+_BackfillMPlus = function(link)
     if not link or not GLOG or not GLOG.GetActiveKeystoneLevel then return end
     local lv = tonumber(GLOG.GetActiveKeystoneLevel()) or 0
     if lv <= 0 then return end
@@ -333,22 +353,34 @@ end
 local function _AddIfEligible(link, looter)
     if not link then return end
 
-    -- Instance/Gouffre uniquement
+    -- Instance/Gouffre uniquement (paramétrable)
     local okInst, instID, diffID, mplusFromInst = _InstanceContext()
-    if not okInst then return end
+    local cfgEarly = _Config()
+    if (cfgEarly.lootInstanceOnly ~= false) and (not okInst) then return end
 
     _QueryItemInfo(link, function(info)
         if not info or not info.link then return end
-        if not _IsEquippable(info.link) then return end
 
-        -- Critères: épique+ & niveau requis >= niveau joueur
-        local EPIC      = tonumber((Enum and Enum.ItemQuality and Enum.ItemQuality.Epic) or 4) or 4
+        -- === Filtres utilisateurs (GuildLogisticsDatas_Char.config) ===
+        local cfg       = _Config()
         local quality   = tonumber(info.quality)  or 0
         local reqLevel  = tonumber(info.reqLevel) or 0
-        local playerLvl = tonumber(UnitLevel and UnitLevel("player")) or 0
-        if quality < EPIC then return end
-        if reqLevel < playerLvl then return end
-        
+        local minQ      = tonumber(cfg.lootMinQuality or 0) or 0
+        local minReq    = tonumber(cfg.lootMinReqLevel or 0) or 0
+        local minILvl   = tonumber(cfg.lootMinItemLevel or 0) or 0
+        local ilvl      = tonumber(info.itemLevel) or 0
+
+        -- 1) Équippable ou non selon la case à cocher
+        if (cfg.lootEquippableOnly ~= false) and (not _IsEquippable(info.link)) then return end
+        -- 2) Rareté minimale
+        if quality < minQ then return end
+        -- 3) Niveau requis minimal (ne s'applique qu'aux pièces d'équipement, comme l'ilvl)
+        if (minReq > 0) and _IsEquippable(info.link) and (reqLevel < minReq) then return end
+        -- 4) Ilvl minimal
+        if minILvl > 0 and _IsEquippable(info.link) then
+            if ilvl < minILvl then return end
+        end
+
         -- Contexte boss/difficulté depuis ENCOUNTER_LOOT_RECEIVED (si dispo)
         local ctx = (_getCtx and _getCtx(looter or UnitName("player"), info.link)) or (_getCtxByLink and _getCtxByLink(info.link)) or nil
         local bossName   = ctx and ctx.boss or nil
@@ -460,62 +492,54 @@ _getCtxByLink = function(link)
 end
 
 
--- Event local dédié pour ne pas toucher Core/Events.lua
-local _evt = CreateFrame("Frame")
-_evt:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
-_evt:SetScript("OnEvent", function(self, event, ...)
-    if event ~= "ENCOUNTER_LOOT_RECEIVED" then return end
-    -- ⛔ Hors instance / Delve : on ignore complètement cet event.
-    -- On utilise la fonction générique _InstanceContext() déjà définie dans ce fichier.
-    if _InstanceContext then
-        local okInst = select(1, _InstanceContext())
-        if not okInst then
-            return
+-- Centralisation via Core/Events.lua
+do
+    local function _onEncounterLoot(_, _, ...)
+        -- Filtre instance/delve paramétrable
+        local cfg = _Config()
+        if (cfg.lootInstanceOnly ~= false) and _InstanceContext then
+            local okInst = select(1, _InstanceContext())
+            if not okInst then return end
+        end
+
+        -- Args: encounterID, itemID, itemLink, quantity, player, ... , difficultyID
+        local encounterID, _, itemLink, _, player, _, _, _, _, _, _, _, difficultyID = ...
+        if not itemLink or not player then return end
+
+        local boss = nil
+        if EJ_GetEncounterInfo and tonumber(encounterID) then
+            boss = EJ_GetEncounterInfo(encounterID)
+        elseif C_EncounterJournal and C_EncounterJournal.GetEncounterInfo and tonumber(encounterID) then
+            local info = C_EncounterJournal.GetEncounterInfo(encounterID)
+            boss = (type(info) == "table" and info.name) or info
+        end
+
+        local diffID   = tonumber(difficultyID) or 0
+        local diffName = GetDifficultyInfo and GetDifficultyInfo(diffID) or nil
+        diffName = (diffName ~= "" and diffName) or nil
+
+        local instName = (GetInstanceInfo and select(1, GetInstanceInfo())) or nil
+        local keystoneLevel = tonumber(GLOG and GLOG.GetActiveKeystoneLevel and GLOG.GetActiveKeystoneLevel()) or nil
+
+        -- Fallback M+ si la valeur live est absente
+        if (not keystoneLevel or keystoneLevel == 0) and diffID == 8 and GLOG and GLOG.GetActiveKeystoneLevel then
+            local lv = tonumber(GLOG.GetActiveKeystoneLevel()) or 0
+            if lv > 0 then keystoneLevel = lv end
+        end
+
+        _putCtx(player, itemLink, {
+            boss      = boss,
+            diffID    = diffID,
+            diffName  = diffName,
+            mplus     = keystoneLevel,
+            instName  = instName,
+            player    = player,
+            link      = itemLink,
+        })
+
+        if diffID == 8 then
+            _BackfillMPlus(itemLink)
         end
     end
-
-    -- Args: encounterID, itemID, itemLink, quantity, player, class, specID, sex, isPersonal, isBonusRoll, isGuild, isLegendary, difficultyID
-    local encounterID, _, itemLink, _, player, _, _, _, _, _, _, _, difficultyID = ...
-    if not itemLink or not player then return end
-
-    local boss = nil
-    if EJ_GetEncounterInfo and tonumber(encounterID) then
-        boss = EJ_GetEncounterInfo(encounterID)
-    elseif C_EncounterJournal and C_EncounterJournal.GetEncounterInfo and tonumber(encounterID) then
-        local info = C_EncounterJournal.GetEncounterInfo(encounterID)
-        boss = (type(info) == "table" and info.name) or info
-    end
-
-    local diffID = tonumber(difficultyID) or 0
-    local diffName = GetDifficultyInfo and GetDifficultyInfo(diffID) or nil
-    diffName = (diffName ~= "" and diffName) or nil
-
-    local instName = nil
-    if GetInstanceInfo then
-        instName = (select(1, GetInstanceInfo()))
-    end
-
-    local keystoneLevel = tonumber(GLOG and GLOG.GetActiveKeystoneLevel and GLOG.GetActiveKeystoneLevel()) or nil
-
-    -- Fallback : si c'est bien une M+ mais pas de niveau via l'API live, prendre notre valeur suivie
-    if (not keystoneLevel or keystoneLevel == 0) and diffID == 8 and GLOG and GLOG.GetActiveKeystoneLevel then
-        local lv = tonumber(GLOG.GetActiveKeystoneLevel()) or 0
-        if lv > 0 then keystoneLevel = lv end
-    end
-
-    _putCtx(player, itemLink, {
-        boss      = boss,
-        diffID    = diffID,
-        diffName  = diffName,
-        mplus     = keystoneLevel,
-        instName  = instName,
-        player    = player,
-        link      = itemLink,
-    })
-    -- Si on a reçu du loot de coffre M+ et qu'on connaît maintenant le niveau, compléter les lignes déjà stockées
-    if tonumber(diffID or 0) == 8 then
-        _BackfillMPlus(itemLink)
-    end
-
-
-end)
+    ns.Events.Register("ENCOUNTER_LOOT_RECEIVED", _onEncounterLoot)
+end

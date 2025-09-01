@@ -14,7 +14,7 @@ UI.RIGHT_PAD  = 29
 UI.TOP_PAD    = 29
 UI.BOTTOM_PAD = 29
 
-UI.ROW_H = 28
+UI.ROW_H = 32
 UI.FONT_YELLOW = {1, 0.82, 0}
 UI.MIDGREY = {0.5,0.5,0.5}
 UI.WHITE = {1,1,1}
@@ -397,6 +397,60 @@ end
 local Registered, Panels, Tabs = {}, {}, {}
 UI._tabIndexByLabel = {}
 
+-- Couleur du menu de navigation (alignée sur le thème comme les headers)
+local function _NavRGB()
+    if UI and UI.Colors and UI.Colors.GetHeaderRGB then
+        local r, g, b = UI.Colors.GetHeaderRGB()
+        return r, g, b
+    end
+    return 0.17, 0.52, 0.95 -- fallback bleu (Alliance)
+end
+
+-- API : rafraîchit les couleurs des boutons de navigation existants
+function UI.RefreshNavigationColors()
+    local cr, cg, cb = _NavRGB()
+
+    -- 1) Onglets (top/sub)
+    for _, tabBtn in ipairs(Tabs or {}) do
+        if tabBtn and tabBtn.bar and tabBtn.bar.SetColorTexture then
+            tabBtn.bar:SetColorTexture(cr, cg, cb, 0.85)   -- top tabs: barre verticale
+        end
+        if tabBtn and tabBtn.sel and tabBtn.sel.SetColorTexture then
+            if tabBtn.selGrad then
+                tabBtn.sel:SetColorTexture(cr, cg, cb, 0.50) -- sub tabs: liseré
+                local startAlpha = 0.25
+                if tabBtn.selGrad.SetGradient and type(CreateColor) == "function" then
+                    tabBtn.selGrad:SetGradient("HORIZONTAL",
+                        CreateColor(cr, cg, cb, startAlpha),
+                        CreateColor(cr, cg, cb, 0)
+                    )
+                elseif tabBtn.selGrad.SetGradientAlpha then
+                    tabBtn.selGrad:SetGradientAlpha("HORIZONTAL",
+                        cr, cg, cb, startAlpha,
+                        cr, cg, cb, 0
+                    )
+                else
+                    tabBtn.selGrad:SetColorTexture(cr, cg, cb, startAlpha)
+                end
+            else
+                tabBtn.sel:SetColorTexture(cr, cg, cb, 0.22)  -- top tabs: bande sélection
+            end
+        end
+    end
+
+    -- 2) Catégories (barre latérale)
+    if UI._catBar and UI._catBar._btns then
+        for _, catBtn in ipairs(UI._catBar._btns) do
+            if catBtn and catBtn.sel and catBtn.sel.SetColorTexture then
+                catBtn.sel:SetColorTexture(cr, cg, cb, 0.22)
+            end
+            if catBtn and catBtn.bar and catBtn.bar.SetColorTexture then
+                catBtn.bar:SetColorTexture(cr, cg, cb, 0.85)
+            end
+        end
+    end
+end
+
 -- UI.RegisterTab(label, build, refresh, layout, opts?) ; opts.hidden pour masquer le bouton d’onglet
 function UI.RegisterTab(label, buildFunc, refreshFunc, layoutFunc, opts)
     opts = opts or {}
@@ -493,8 +547,10 @@ local function _SubTabButton(parent, text)
     b.hover:Hide()
 
     -- === Couleur du liseré (source du dégradé) ===
-    local cr, cg, cb, ca = 0.16, 0.82, 0.27, 0.50
+    local cr, cg, cb = _NavRGB()
+    local ca = 0.50
     if UI and UI.NAV_SUBSEL_COLOR then
+        -- Autorise une surcharge explicite si posée ailleurs
         cr = UI.NAV_SUBSEL_COLOR[1] or cr
         cg = UI.NAV_SUBSEL_COLOR[2] or cg
         cb = UI.NAV_SUBSEL_COLOR[3] or cb
@@ -894,6 +950,8 @@ function UI.SetDebugEnabled(enabled)
     -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
     if UI.SetTabVisible then
         UI.SetTabVisible(Tr("tab_debug"), GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug_db"), GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug_events"), GuildLogisticsUI.debugEnabled)
     end
 
     -- ➕ Affiche/masque les boutons d’en-tête
@@ -1126,68 +1184,68 @@ end
 Main:Hide()
 
 -- Ouvrir à l'ouverture du jeu + appliquer le thème et l'état de debug sauvegardés
-local _openAtLogin = CreateFrame("Frame")
-_openAtLogin._done = false
-_openAtLogin:RegisterEvent("PLAYER_LOGIN")
-_openAtLogin:RegisterEvent("PLAYER_ENTERING_WORLD")
-_openAtLogin:SetScript("OnEvent", function(self)
-    if self._done then return end
+do
+    local _state = { done = false }
+    local function _applyOnLogin()
+        if _state.done then return end
+        _state.done = true
+        local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
 
-    local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
+        -- Applique le thème stocké (défaut: AUTO) et re-skin global
+        if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
 
-    -- Applique le thème stocké (défaut: AUTO) et re-skin global
-    if UI.SetTheme then UI.SetTheme(saved.theme or "AUTO") end
+        -- Applique l'état de debug (défaut : false → boutons masqués)
+        local debugOn = (saved and saved.debugEnabled) == true
+        if UI.SetDebugEnabled then UI.SetDebugEnabled(debugOn) end
 
-    -- Applique l'état de debug (défaut : false → boutons masqués)
-    local debugOn = (saved and saved.debugEnabled) == true
-    if UI.SetDebugEnabled then UI.SetDebugEnabled(debugOn) end
+        -- Ouvre uniquement si activé
+        if not (saved and saved.autoOpen) then
+            self._done = true
+            return
+        end
+    
+        -- Laisse l'UI finir de s'initialiser (onglets/catégories) avant d'afficher
+        C_Timer.After(0, function()
+            if not Main:IsShown() then
+                if ns and ns.ToggleUI then
+                    -- Utilise la logique standard (restaure l'onglet précédent si possible)
+                    ns.ToggleUI()
+                else
+                    -- Fallback ultra défensif si ToggleUI indisponible
+                    Main:Show()
 
-    -- Ouvre uniquement si activé
-    if not (saved and saved.autoOpen) then
-        self._done = true
-        return
-    end
+                    -- 1) Essaye de restaurer le dernier onglet actif
+                    local restored = false
+                    local savedLabel = GLOG and GLOG.GetLastActiveTabLabel and GLOG.GetLastActiveTabLabel() or nil
+                    if type(savedLabel) == "string" and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[savedLabel] then
+                        if UI.ShowTabByLabel then UI.ShowTabByLabel(savedLabel); restored = true end
+                    end
 
-    -- Laisse l'UI finir de s'initialiser (onglets/catégories) avant d'afficher
-    C_Timer.After(0, function()
-        if not Main:IsShown() then
-            if ns and ns.ToggleUI then
-                -- Utilise la logique standard (restaure l'onglet précédent si possible)
-                ns.ToggleUI()
-            else
-                -- Fallback ultra défensif si ToggleUI indisponible
-                Main:Show()
-
-                -- 1) Essaye de restaurer le dernier onglet actif
-                local restored = false
-                local savedLabel = GLOG and GLOG.GetLastActiveTabLabel and GLOG.GetLastActiveTabLabel() or nil
-                if type(savedLabel) == "string" and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[savedLabel] then
-                    if UI.ShowTabByLabel then UI.ShowTabByLabel(savedLabel); restored = true end
-                end
-
-                -- 2) Sinon, premier onglet visible
-                if not restored then
-                    for i, def in ipairs(Registered or {}) do
-                        if def._btn and def._btn.IsShown and def._btn:IsShown() then
-                            ShowPanel(i)
-                            if def.refresh then def.refresh() end
-                            restored = true
-                            break
+                    -- 2) Sinon, premier onglet visible
+                    if not restored then
+                        for i, def in ipairs(Registered or {}) do
+                            if def._btn and def._btn.IsShown and def._btn:IsShown() then
+                                ShowPanel(i)
+                                if def.refresh then def.refresh() end
+                                restored = true
+                                break
+                            end
                         end
                     end
-                end
 
-                -- 3) Fallback ultime sur l'index 1
-                if not restored then
-                    ShowPanel(1)
-                    if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+                    -- 3) Fallback ultime sur l'index 1
+                    if not restored then
+                        ShowPanel(1)
+                        if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
+                    end
                 end
             end
-        end
-        self._done = true
-    end)
-end)
+        end)
+    end
 
+    ns.Events.Register("PLAYER_LOGIN",          _applyOnLogin)
+    ns.Events.Register("PLAYER_ENTERING_WORLD", _applyOnLogin)
+end
 
 -- ➕ Met à jour le titre selon la guilde
 function UI.RefreshTitle()
@@ -1267,7 +1325,10 @@ local function _CategoryButton(parent, text, iconPath)
     b.sel = b:CreateTexture(nil, "OVERLAY")
     b.sel:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
     b.sel:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, 0)
-    b.sel:SetColorTexture(0.16, 0.82, 0.27, 0.22) -- vert doux
+    do
+        local nr, ng, nb = _NavRGB()
+        b.sel:SetColorTexture(nr, ng, nb, 0.22)
+    end
     b.sel:Hide()
 
     -- Petite barre gauche accent
@@ -1275,8 +1336,12 @@ local function _CategoryButton(parent, text, iconPath)
     b.bar:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
     b.bar:SetPoint("BOTTOMLEFT", b, "BOTTOMLEFT", 0, 0)
     b.bar:SetWidth(3)
-    b.bar:SetColorTexture(0.16, 0.82, 0.27, 0.85)
+    do
+        local nr, ng, nb = _NavRGB()
+        b.bar:SetColorTexture(nr, ng, nb, 0.85)
+    end
     b.bar:Hide()
+
 
     -- Icône (48x48) + crop 5px + couche forcée
     b.icon = b:CreateTexture(nil, "OVERLAY", nil, 1)  -- couche haute pour éviter d’être masqué
@@ -1425,8 +1490,8 @@ function UI.CreateCategorySidebar()
     -- Catégorie par défaut
     UI._activeCategory = UI._activeCategory or firstCat
     
-    -- Rafraîchit les indicateurs globaux maintenant que la barre est construite
-    if UI.RefreshTopIndicators then UI.RefreshTopIndicators() end
+    -- Harmoniser les couleurs des catégories avec le thème courant
+    if UI.RefreshNavigationColors then UI.RefreshNavigationColors() end
 
     return bar
 end

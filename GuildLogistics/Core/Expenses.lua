@@ -275,14 +275,9 @@ function GLOG.Expenses_InstallHooks()
     }
 
     -- 1) Événements Retail HdV
-    if not GLOG._ahEventFrame then
-        local ev = CreateFrame("Frame")
-        ev:RegisterEvent("AUCTION_HOUSE_PURCHASE_COMPLETED") -- auctionID
-        ev:RegisterEvent("COMMODITY_PURCHASE_SUCCEEDED")
-        ev:RegisterEvent("COMMODITY_PURCHASE_FAILED")
-        ev:RegisterEvent("COMMODITY_PRICE_UPDATED") -- unit,total
-
-        ev:SetScript("OnEvent", function(_, event, ...)
+        -- Centralisation via Core/Events.lua (hub)
+    if not GLOG._ahEventsRegistered then
+        local function _onAHEvent(_, event, ...)
             if not GLOG.IsExpensesRecording() then return end
 
             if event == "AUCTION_HOUSE_PURCHASE_COMPLETED" then
@@ -296,10 +291,9 @@ function GLOG.Expenses_InstallHooks()
                         local unit = math.floor(spent / math.max(1, qty))
                         GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   p.itemID or p.link, p.name, qty, unit)
                     end
-
                     GLOG._pendingAH.items[auctionID] = nil
                 else
-                    -- Fallback robuste si l’entrée Start/Confirm n’a pas été vue
+                    -- Fallback robuste si Start/Confirm non vus
                     if C_AuctionHouse and C_AuctionHouse.GetAuctionInfoByID then
                         local info = C_AuctionHouse.GetAuctionInfoByID(auctionID)
                         if info then
@@ -309,7 +303,7 @@ function GLOG.Expenses_InstallHooks()
                                 local name = (link and link:match("%[(.-)%]")) or info.itemName or Tr("label_ah")
                                 local iid  = (info.itemKey and info.itemKey.itemID)
                                         or (link and GetItemInfoInstant and select(1, GetItemInfoInstant(link)))
-                                GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   iid or link,        name,   1,    amount)
+                                GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   iid or link, name, 1, amount)
                             end
                         end
                     end
@@ -319,11 +313,11 @@ function GLOG.Expenses_InstallHooks()
                 local p = table.remove(GLOG._pendingAH.commodities, 1)
                 if p then
                     local spent = tonumber(p.total)
-                            or tonumber(GLOG._pendingAH.lastTotalPrice)
-                            or ((GLOG._pendingAH.lastUnitPrice and p.qty) and (GLOG._pendingAH.lastUnitPrice * p.qty))
-                            or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
+                             or tonumber(GLOG._pendingAH.lastTotalPrice)
+                             or ((GLOG._pendingAH.lastUnitPrice and p.qty) and (GLOG._pendingAH.lastUnitPrice * p.qty))
+                             or math.max((p.preMoney or 0) - (GetMoney() or 0), 0)
                     if spent and spent > 0 then
-                        GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH,   p.itemID or p.link, p.name, p.qty or 1, spent)
+                        GLOG.LogExpense(GLOG.EXPENSE_SOURCE.AH, p.itemID or p.link, p.name, p.qty or 1, spent)
                     end
                 end
 
@@ -335,10 +329,16 @@ function GLOG.Expenses_InstallHooks()
                 GLOG._pendingAH.lastUnitPrice  = tonumber(unitPrice)
                 GLOG._pendingAH.lastTotalPrice = tonumber(totalPrice)
             end
-        end)
+        end
 
-        GLOG._ahEventFrame = ev
+        ns.Events.Register("AUCTION_HOUSE_PURCHASE_COMPLETED", _onAHEvent)
+        ns.Events.Register("COMMODITY_PURCHASE_SUCCEEDED",     _onAHEvent)
+        ns.Events.Register("COMMODITY_PURCHASE_FAILED",        _onAHEvent)
+        ns.Events.Register("COMMODITY_PRICE_UPDATED",          _onAHEvent)
+
+        GLOG._ahEventsRegistered = true
     end
+
 
     -- 2) Attente du chargement de l’UI HdV pour poser les hooks de méthode
     local function InstallAHHooks()
@@ -438,15 +438,16 @@ function GLOG.Expenses_InstallHooks()
     -- Installe tout de suite si l’API est déjà là
     InstallAHHooks()
 
-    -- Et sinon, installe dès que l’UI HdV se charge
-    if not GLOG._ahHookWaiter then
-        GLOG._ahHookWaiter = CreateFrame("Frame")
-        GLOG._ahHookWaiter:RegisterEvent("ADDON_LOADED")
-        GLOG._ahHookWaiter:SetScript("OnEvent", function(_, _, addonName)
+    -- Et sinon, installe dès que l’UI HdV se charge (centralisé)
+    if not GLOG._ahHookWaiterRegistered then
+        local AHWaiter = {}
+        ns.Events.Register("ADDON_LOADED", AHWaiter, function(_, _, addonName)
             if addonName == "Blizzard_AuctionHouse" or addonName == "Blizzard_AuctionHouseUI" then
                 InstallAHHooks()
+                ns.Events.UnregisterOwner(AHWaiter) -- one-shot
             end
         end)
+        GLOG._ahHookWaiterRegistered = true
     end
 
     -- 3) HdV Legacy (PlaceAuctionBid)

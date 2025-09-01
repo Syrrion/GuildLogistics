@@ -4,7 +4,8 @@ local GLOG, UI = ns.GLOG, ns.UI
 
 local PAD = (UI and UI.OUTER_PAD) or 8
 
-local panel, lv
+local panel, lv, listArea
+
 
 -- Affichage des membres du groupe : on réutilise la popup roster de l'onglet "Historique des raids" si elle existe
 local function ShowGroupMembers(anchor, members)
@@ -254,7 +255,153 @@ local function Build(container)
     panel = UI.CreateMainContainer(container, { footer = false })
 
     local y = 0
-    y = y + (UI.SectionHeader(panel, Tr("tab_loot_tracker") or "Loots épique+ (niv. requis ≥ joueur)", { topPad = y }) or (UI.SECTION_HEADER_H or 26)) + 8
+    y = y + (UI.SectionHeader(panel, Tr("tab_loot_tracker_settings"), { topPad = y }) or (UI.SECTION_HEADER_H or 26)) + 8
+
+        -- === Barre de paramètres de log (session → persistant dans Datas_Char.config) ===
+    local function _Cfg()
+        GuildLogisticsDatas_Char = GuildLogisticsDatas_Char or {}
+        GuildLogisticsDatas_Char.config = GuildLogisticsDatas_Char.config or {}
+        local c = GuildLogisticsDatas_Char.config
+        -- Défauts alignés avec Core/LootTracker.lua
+        local EPIC = (Enum and Enum.ItemQuality and Enum.ItemQuality.Epic) or 4
+        if c.lootMinQuality     == nil then c.lootMinQuality     = EPIC end
+        if c.lootMinReqLevel    == nil then c.lootMinReqLevel    = 80 end
+        if c.lootEquippableOnly == nil then c.lootEquippableOnly = true end
+        if c.lootMinItemLevel   == nil then c.lootMinItemLevel   = 0 end
+        if c.lootInstanceOnly   == nil then c.lootInstanceOnly   = true end
+        return c
+    end
+    local cfg = _Cfg()
+
+    -- Conteneur de la barre
+    local bar = CreateFrame("Frame", nil, panel)
+    bar:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(y))
+    bar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(y))
+    bar:SetHeight(20)
+
+    -- Libellés utilitaires
+    local function label(parent, txt)
+        local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        fs:SetText(txt)
+        fs:SetJustifyH("LEFT")
+        return fs
+    end
+
+    -- 1) Dropdown "Rareté minimale"
+    local qLbl = label(bar, (Tr and Tr("lbl_min_quality")) or "Rareté minimale")
+    qLbl:SetPoint("LEFT", bar, "LEFT", 0, 0)
+
+    local ddName = "GLOG_LootMinQualityDD_" .. tostring(math.random(100000,999999))
+    local dd = CreateFrame("Frame", ddName, bar, "UIDropDownMenuTemplate")
+    dd:SetPoint("LEFT", qLbl, "RIGHT", 0, -2)
+    UIDropDownMenu_SetWidth(dd, 140)
+
+    local qualities = { 0,1,2,3,4,5,6 }
+    local function qualityText(q)
+        local name = _G["ITEM_QUALITY"..q.."_DESC"] or tostring(q)
+        return name
+    end
+    local function setQuality(q)
+        cfg.lootMinQuality = tonumber(q) or cfg.lootMinQuality
+        UIDropDownMenu_SetText(dd, qualityText(cfg.lootMinQuality))
+    end
+    UIDropDownMenu_Initialize(dd, function(self, level)
+        for _, q in ipairs(qualities) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = qualityText(q)
+            info.checked = (tonumber(cfg.lootMinQuality) == q)
+            info.func = function() setQuality(q); CloseDropDownMenus() end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    UIDropDownMenu_SetText(dd, qualityText(cfg.lootMinQuality))
+    if UI and UI.AttachDropdownZFix then UI.AttachDropdownZFix(dd, panel) end
+
+       -- 2) Checkbox "Seulement en instance/gouffre" (sur la 1ère ligne, après la rareté)
+    local cbInst = CreateFrame("CheckButton", nil, bar, "ChatConfigCheckButtonTemplate")
+    cbInst.Text:SetText((Tr and Tr("lbl_instance_only")) or "Seulement en instance/gouffre")
+    cbInst:SetPoint("LEFT", dd, "RIGHT", 18, 2)
+    cbInst:SetChecked((cfg.lootInstanceOnly ~= false) and true or false)
+    cbInst:SetScript("OnClick", function(self)
+        cfg.lootInstanceOnly = self:GetChecked() and true or false
+    end)
+
+    -- 3) 2ème ligne : Équippable uniquement > lvl mini > ilvl mini
+    --    On déclare en avance pour le rafraîchissement d'état
+    local lvLbl, lvBox, ilvlLbl, ilvlBox
+
+    -- Fonction d'état : désactive lvl/ilvl si "Équippable uniquement" est décoché
+    local function _RefreshEquipFiltersState()
+        local enabled = (cfg.lootEquippableOnly ~= false)
+
+        if lvBox then
+            if lvBox.SetEnabled then lvBox:SetEnabled(enabled) end
+            lvBox:SetAlpha(enabled and 1 or 0.5)
+            if not enabled then lvBox:ClearFocus() end
+        end
+        if lvLbl and lvLbl.SetAlpha then lvLbl:SetAlpha(enabled and 1 or 0.5) end
+
+        if ilvlBox then
+            if ilvlBox.SetEnabled then ilvlBox:SetEnabled(enabled) end
+            ilvlBox:SetAlpha(enabled and 1 or 0.5)
+            if not enabled then ilvlBox:ClearFocus() end
+        end
+        if ilvlLbl and ilvlLbl.SetAlpha then ilvlLbl:SetAlpha(enabled and 1 or 0.5) end
+    end
+
+    -- 3.1) Checkbox "Équippable uniquement" (début 2ème ligne)
+    local cb = CreateFrame("CheckButton", nil, bar, "ChatConfigCheckButtonTemplate")
+    cb.Text:SetText((Tr and Tr("lbl_equippable_only")) or "Équippable uniquement")
+    cb:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -36)
+    cb:SetChecked(cfg.lootEquippableOnly and true or false)
+    cb:SetScript("OnClick", function(self)
+        cfg.lootEquippableOnly = self:GetChecked() and true or false
+        _RefreshEquipFiltersState()
+    end)
+
+    -- 3.2) Champ "Niveau requis minimal"
+    lvLbl = label(bar, (Tr and Tr("lbl_min_req_level")))
+    lvLbl:SetPoint("LEFT", cb, "RIGHT", 180, 2)
+
+    lvBox = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
+    lvBox:SetAutoFocus(false)
+    lvBox:SetNumeric(true)
+    lvBox:SetNumber(tonumber(cfg.lootMinReqLevel or 0) or 0)
+    lvBox:SetSize(60, 20)
+    lvBox:SetPoint("LEFT", lvLbl, "RIGHT", 8, 0)
+    lvBox:SetScript("OnEnterPressed", function(self)
+        cfg.lootMinReqLevel = tonumber(self:GetNumber() or 0) or 0
+        self:ClearFocus()
+    end)
+    lvBox:SetScript("OnEditFocusLost", function(self)
+        cfg.lootMinReqLevel = tonumber(self:GetNumber() or 0) or 0
+    end)
+
+    -- 3.3) Champ "Ilvl minimum"
+    ilvlLbl = label(bar, (Tr and Tr("lbl_min_item_level")))
+    ilvlLbl:SetPoint("LEFT", lvBox, "RIGHT", 40, 0)
+
+    ilvlBox = CreateFrame("EditBox", nil, bar, "InputBoxTemplate")
+    ilvlBox:SetAutoFocus(false)
+    ilvlBox:SetNumeric(true)
+    ilvlBox:SetNumber(tonumber(cfg.lootMinItemLevel or 0) or 0)
+    ilvlBox:SetSize(60, 20)
+    ilvlBox:SetPoint("LEFT", ilvlLbl, "RIGHT", 8, 0)
+    ilvlBox:SetScript("OnEnterPressed", function(self)
+        cfg.lootMinItemLevel = tonumber(self:GetNumber() or 0) or 0
+        self:ClearFocus()
+    end)
+    ilvlBox:SetScript("OnEditFocusLost", function(self)
+        cfg.lootMinItemLevel = tonumber(self:GetNumber() or 0) or 0
+    end)
+
+    -- État initial (désactive lvl/ilvl si nécessaire)
+    _RefreshEquipFiltersState()
+
+    -- Ajuster la hauteur utilisée par la barre (+ marge) - 2 lignes
+    y = y + 70 + PAD
+    y = y + (UI.SectionHeader(panel, Tr("tab_loot_tracker"), { topPad = y }) or (UI.SECTION_HEADER_H or 26)) + 8
+
 
     local cols = UI.NormalizeColumns({
         { key="date",   title=Tr("col_time")       or "Heure",       w=120 },
@@ -267,8 +414,16 @@ local function Build(container)
         { key="close",  title="", min=30 },
     })
 
-    lv = UI.ListView(panel, cols, {
-        topOffset = (UI.SECTION_HEADER_H or 26),
+    -- Zone de liste dédiée, ancrée sous la barre de filtres
+    listArea = CreateFrame("Frame", nil, panel)
+    listArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -y)
+    listArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -y)
+    listArea:SetPoint("BOTTOMLEFT",  panel, "BOTTOMLEFT",  0, 0)
+    listArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+
+    -- La ListView vit dans listArea → plus de chevauchement
+    lv = UI.ListView(listArea, cols, {
+        topOffset = 0,
         buildRow  = function(row) return BuildRow(row) end,
         updateRow = function(i, row, w, it) return UpdateRow(i, row, w, it) end,
     })

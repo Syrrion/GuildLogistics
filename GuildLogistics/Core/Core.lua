@@ -465,6 +465,25 @@ function GLOG.RemoveGold(name, amount)
     return GLOG.AdjustSolde(name, -math.floor(tonumber(amount) or 0))
 end
 
+-- Applique un delta de solde sur un joueur (API générique appelée par le réseau/GM)
+function GLOG.ApplyDeltaByName(name, delta, by)
+    -- 'by' conservé pour compat future (logs), pas utilisé ici
+    return GLOG.AdjustSolde(name, delta)
+end
+
+-- Applique un batch compact (mêmes structures que TX_BATCH)
+function GLOG.ApplyBatch(kv)
+    kv = kv or {}
+    local U, D, N = kv.U or {}, kv.D or {}, kv.N or {}
+    for i = 1, math.max(#U, #D, #N) do
+        local name = N[i] or (GLOG.GetNameByUID and GLOG.GetNameByUID(U[i])) or nil
+        local d = tonumber(D[i]) or 0
+        if name and d ~= 0 then
+            GLOG.AdjustSolde(name, d)
+        end
+    end
+end
+
 -- === Bus d’événements minimal ===
 ns._ev = ns._ev or {}
 function ns.On(evt, fn)

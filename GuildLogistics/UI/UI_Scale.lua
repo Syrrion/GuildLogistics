@@ -25,8 +25,8 @@ local function _applyFixedScale(frame, targetEffScale)
 end
 
 -- Registre des frames protégées
-local _evt = CreateFrame("Frame")
-_evt.frames = setmetatable({}, { __mode = "k" })  -- weak keys: si frame détruite, GC ok
+-- Hub local minimal (table) au lieu d’un frame dédié
+local _evt = { frames = setmetatable({}, { __mode = "k" }) }
 
 function Scale.Register(frame, targetEffScale)
     if not (Scale.LOCK_ENABLED and frame) then return end
@@ -34,11 +34,7 @@ function Scale.Register(frame, targetEffScale)
     _applyFixedScale(frame, _evt.frames[frame])
 end
 
--- Réappliquer quand l’échelle globale change (ou la résolution)
-_evt:RegisterEvent("UI_SCALE_CHANGED")
-_evt:RegisterEvent("DISPLAY_SIZE_CHANGED")
-_evt:RegisterEvent("CVAR_UPDATE")
-_evt:SetScript("OnEvent", function(_, evt, cvar)
+local function _OnScaleEvent(_, evt, cvar)
     if evt == "CVAR_UPDATE" and (cvar ~= "uiScale" and cvar ~= "useUIScale") then return end
     for f, target in pairs(_evt.frames) do
         if f and f.SetScale then
@@ -47,7 +43,12 @@ _evt:SetScript("OnEvent", function(_, evt, cvar)
             _evt.frames[f] = nil
         end
     end
-end)
+end
+
+ns.Events.Register("UI_SCALE_CHANGED",      _OnScaleEvent)
+ns.Events.Register("DISPLAY_SIZE_CHANGED",  _OnScaleEvent)
+ns.Events.Register("CVAR_UPDATE",           _OnScaleEvent)
+
 
 -- Utilitaire public si besoin ponctuel
 function Scale.ApplyNow(frame, targetEffScale)

@@ -518,20 +518,30 @@ end
 function UI.SetTheme(tag)
     UI.FRAME_THEME = tostring(tag or "AUTO"):upper()
     UI.ReskinAllNeutral()
+
+    -- Aligne la nav sur la couleur d'entête (Alliance/Horde/Neutre)
+    if UI.Colors and UI.Colors.GetHeaderRGB then
+        local r, g, b = UI.Colors.GetHeaderRGB()
+        UI.NAV_SUBSEL_COLOR = { r, g, b, 0.50 }  -- sub-tabs (liseré + gradient)
+    end
+
+    -- Rafraîchit immédiatement les éléments existants à l'écran
+    if UI.RefreshNavigationColors then UI.RefreshNavigationColors() end
+    if UI.RefreshSectionHeaders  then UI.RefreshSectionHeaders()  end
 end
 
 -- Styles de ListView (dégradé vertical, sans liseré)
 function UI.GetListViewStyle()
     return {
         -- Lignes impaires
-        oddTop        = { r = 0, g = 0, b = 0, a = 0.05 },
-        oddBottom     = { r = 0, g = 0, b = 0, a = 0.20 },
+        oddTop        = { r = 1, g = 1, b = 1, a = 0.02 },
+        oddBottom     = { r = 1, g = 1, b = 1, a = 0.05 },
         -- Lignes paires
         evenTop       = oddTop,
         evenBottom    = oddBottom,
         -- Survol & séparateur
         hover      = { r = 1.00, g = 0.82, b = 0.00, a = 0.06 },
-        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.2 },
+        sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.5 },
         -- ➕ Couleur par défaut du liseré "même groupe"
         accent     = { r = 1.00, g = 0.82, b = 0.00, a = 0.90 }, -- jaune Blizzard
     }

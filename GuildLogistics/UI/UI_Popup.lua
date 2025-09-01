@@ -170,12 +170,17 @@ function UI.CreatePopup(opts)
             })
 
             b:SetOnClick(function()
+                -- 🛡️ One-shot guard: empêche les doubles appels (double Enter / double clic)
+                if self._actionFired then return end
+                self._actionFired = true
+
                 if def.onClick then
                     local ok, err = pcall(def.onClick, b, self)
                     if not ok and geterrorhandler then geterrorhandler()(err) end
                 end
                 if def.close ~= false then self:Hide() end
             end)
+
             if def.default then self._defaultBtn = b end
             table.insert(arr, b); table.insert(self._btns, b)
         end
@@ -228,10 +233,17 @@ function UI.PopupPromptNumber(title, label, onAccept, opts)
     eb:SetPoint("TOP", l, "BOTTOM", 0, -8)
 
     eb:SetScript("OnEnterPressed", function(self)
-        local v = (self.GetNumber and self:GetNumber()) or (tonumber(self:GetText()) or 0)
-        if onAccept then onAccept(v) end
-        dlg:Hide()
+        -- 🔁 Valide exactement comme si on cliquait sur le bouton par défaut
+        if dlg and dlg._defaultBtn and dlg._defaultBtn.Click then
+            dlg._defaultBtn:Click()
+        else
+            -- Fallback ultra-sûr si, pour une raison X, pas de bouton par défaut
+            local v = (self.GetNumber and self:GetNumber()) or (tonumber(self:GetText()) or 0)
+            if onAccept then onAccept(v) end
+            dlg:Hide()
+        end
     end)
+
 
     dlg:SetButtons({
         { text = Tr("btn_confirm"),   default = true, onClick = function()

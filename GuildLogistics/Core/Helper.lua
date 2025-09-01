@@ -570,14 +570,17 @@ function GLOG.GetRaidSubgroupOf(name)
 
     local target = nf(name)
     if target == "" then return nil end
-    local N = (GetNumGroupMembers and GetNumGroupMembers()) or 0
-    for i = 1, N do
+
+    -- 🔁 Itération robuste : raid1..raid40 (évite les soucis HOME/INSTANCE)
+    for i = 1, 40 do
         local unit = "raid"..i
-        local rn, rr = UnitFullName and UnitFullName(unit)
-        local full = nf(rn, rr)
-        if full ~= "" and full:lower() == target:lower() then
-            local _, _, subgroup = GetRaidRosterInfo(i)
-            return tonumber(subgroup or 0) or 0
+        if UnitExists and UnitExists(unit) then
+            local rn, rr = UnitFullName and UnitFullName(unit)
+            local full = nf(rn, rr)
+            if full ~= "" and full:lower() == target:lower() then
+                local _, _, subgroup = GetRaidRosterInfo(i)
+                return tonumber(subgroup or 0) or 0
+            end
         end
     end
     return nil
@@ -630,52 +633,44 @@ end
 function GLOG.IsInMySubgroup(name)
     if not name or name == "" then return false end
 
-    -- ⚙️ Utilitaires locaux
-    local function normKey(n)  -- clé normalisée sans royaume (cf. GLOG.NormName)
+    local function normKey(n)
         return (GLOG.NormName and GLOG.NormName(n)) or (tostring(n or "")):lower()
     end
-
-    -- Récupère la clé MAIN normalisée pour un nom quelconque
     local function mainKeyOfName(n)
         if not n or n == "" then return nil end
-        -- 1) Tente le mapping via le cache guilde (prend la note "main" si dispo)
         local mk = (GLOG.GetMainOf and GLOG.GetMainOf(n)) or nil
         if mk and mk ~= "" then return mk end
-        -- 2) Fallback: le perso lui-même est son propre "main"
         return normKey(n)
     end
-
-    -- Récupère la clé MAIN normalisée pour une unité raid/party
     local function mainKeyOfUnit(unitId)
         if not (UnitExists and UnitExists(unitId)) then return nil end
         local uName = UnitName and UnitName(unitId)
-        -- NB: GLOG.NormName utilise Ambiguate → le royaume n’est pas requis
         return mainKeyOfName(uName)
     end
 
-    -- 🎯 Clé MAIN de la ligne (en Synthèse, `name` est le MAIN affiché)
     local targetMainKey = mainKeyOfName(name)
     if not targetMainKey or targetMainKey == "" then return false end
 
-    -- 🛡️ RAID : seulement si même sous-groupe
+    -- 🛡️ RAID : seulement si même sous-groupe (robuste en instance)
     if IsInRaid and IsInRaid() then
         local mySub = GLOG.GetMyRaidSubgroup and GLOG.GetMyRaidSubgroup()
         if not (tonumber(mySub or 0) > 0) then return false end
 
-        local N = (GetNumGroupMembers and GetNumGroupMembers()) or 0
-        for i = 1, N do
-            local _, _, subgroup = GetRaidRosterInfo(i)
-            if tonumber(subgroup or -1) == tonumber(mySub) then
-                local unit = "raid"..i
-                if mainKeyOfUnit(unit) == targetMainKey then
-                    return true
+        for i = 1, 40 do
+            local unit = "raid"..i
+            if UnitExists and UnitExists(unit) then
+                local _, _, subgroup = GetRaidRosterInfo(i)
+                if tonumber(subgroup or -1) == tonumber(mySub) then
+                    if mainKeyOfUnit(unit) == targetMainKey then
+                        return true
+                    end
                 end
             end
         end
         return false
     end
 
-    -- 👥 PARTY (non-raid) : n’importe quel membre du groupe (y compris moi)
+    -- 👥 PARTY (non-raid)
     if IsInGroup and IsInGroup() then
         if mainKeyOfUnit("player") == targetMainKey then return true end
         for i = 1, 4 do

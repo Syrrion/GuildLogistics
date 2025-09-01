@@ -9,7 +9,7 @@ local Tr = ns.Tr or function(s) return s end
 
 local _G = _G
 if setfenv then
-    setfenv(1, setmetatable({}, { __index = _G }))
+    setfenv(1, setmetatable({}, { __index = _G, __newindex = _G }))
 end
 
 -- =========================
@@ -21,33 +21,42 @@ local state = {
     win  = nil,        -- frame principale
     tick = nil,        -- ticker de refresh
 }
+-- Abonnements dynamiques : owner commun + forward-declare pour usage avant définition
+local GT_EVT_OWNER = "GroupTracker:active"
+local _RegisterActiveEvents -- défini plus bas
 
--- 🔹 Forward-declare la variable locale (évite la capture globale nil)
-local _Store
-
--- 🔹 Définition par assignation (ne pas redéclarer avec `local function _Store`)
-_Store = function()
-    GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
-    GuildLogisticsUI_Char.groupTracker = GuildLogisticsUI_Char.groupTracker or {}
-    local s = GuildLogisticsUI_Char.groupTracker
+-- Store unique (perso) — écrit bien dans les SavedVariables globales via _G
+local function _Store()
+    _G.GuildLogisticsUI_Char = _G.GuildLogisticsUI_Char or {}
+    _G.GuildLogisticsUI_Char.groupTracker = _G.GuildLogisticsUI_Char.groupTracker or {}
+    local s = _G.GuildLogisticsUI_Char.groupTracker
 
     s.cooldown   = s.cooldown   or { heal = 300, util = 300, stone = 300 }
-    s.expiry     = s.expiry     or {}
+    s.expiry     = s.expiry     or {}  -- [full] = { heal=epoch, util=epoch, stone=epoch }
     s.segments   = s.segments   or {}
-    s.viewIndex  = s.viewIndex  or 1
+    s.viewIndex  = s.viewIndex  or 1   -- 1 = segment le plus récent
     s.enabled    = (s.enabled == true)
-    s.opacity    = tonumber(s.opacity    or 1.00) or 1.00   -- fonds/bordures
-    s.textOpacity= tonumber(s.textOpacity or 1.00) or 1.00  -- texte (contenu)
-    s.titleTextOpacity = tonumber(s.titleTextOpacity or 1.00) or 1.00 -- 🔹 texte du titre uniquement
-    s.btnOpacity = tonumber(s.btnOpacity  or 1.00) or 1.00  -- 🔹 boutons
-    s.recording  = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
-    -- 🔹 Suivi personnalisé : structure de configuration
+
+    -- Opacités / UI
+    s.opacity          = tonumber(s.opacity          or 0.95) or 0.95
+    s.textOpacity      = tonumber(s.textOpacity      or 1.00) or 1.00
+    s.titleTextOpacity = tonumber(s.titleTextOpacity or 1.00) or 1.00
+    s.btnOpacity       = tonumber(s.btnOpacity       or 1.00) or 1.00
+
+    -- États & options
+    s.recording  = (s.recording == true)
+    s.winOpen    = (s.winOpen == true)
+    s.locked     = (s.locked == true)
+    s.colVis     = s.colVis or { heal = true, util = true, stone = true }
+
+    -- Suivi personnalisé
     s.custom = s.custom or {}
     s.custom.columns = s.custom.columns or {}
     s.custom.nextId  = tonumber(s.custom.nextId or 1) or 1
 
     return s
 end
+
 
 local function _RecomputeEnabled()
     local s = _Store()
@@ -55,29 +64,18 @@ local function _RecomputeEnabled()
     state.enabled = (winShown or s.recording) and true or false
 end
 
-local function _Store()
-    GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
-    GuildLogisticsUI_Char.groupTracker = GuildLogisticsUI_Char.groupTracker or {}
-    local s = GuildLogisticsUI_Char.groupTracker
-    s.cooldown = s.cooldown or { heal = 300, util = 300, stone = 300 }
-    s.expiry   = s.expiry   or {} -- [full] = { heal = epoch, util = epoch, stone = epoch }
-    s.segments = s.segments or {}
-    s.viewIndex = s.viewIndex or 1 -- 0 = live (uniquement en combat), 1 = segment le plus récent
-    s.enabled   = (s.enabled == true)
-    s.opacity   = tonumber(s.opacity or 0.95) or 0.95 -- transparence fenêtre (0.1..1.0)
-    s.textOpacity = tonumber(s.textOpacity or 1.0) or 1.0 -- 🔹 transparence du TEXTE (0.1..1.0)
-    s.recording = (s.recording == true) -- Enregistrement en arrière-plan (UI fermée)
-    s.winOpen = (s.winOpen == true)
-    -- 🔒 Verrouillage d'interactions sur la fenêtre flottante
-    s.locked = (s.locked == true)
-    -- Visibilité des 3 dernières colonnes (fenêtre flottante du Tracker)
-    s.colVis = s.colVis or { heal = true, util = true, stone = true }
-    -- 🔹 Suivi personnalisé : structure de configuration
-    s.custom = s.custom or {}
-    s.custom.columns = s.custom.columns or {}
-    s.custom.nextId  = tonumber(s.custom.nextId or 1) or 1
+local function _UnregisterActiveEvents()
+    ns.Events.UnregisterOwner(GT_EVT_OWNER)
+    state._activeEventsRegistered = false
+end
 
-    return s
+local function _RefreshEventSubscriptions()
+    _RecomputeEnabled()
+    if state.enabled then
+        _RegisterActiveEvents()
+    else
+        _UnregisterActiveEvents()
+    end
 end
 
 -- =========================
@@ -1375,19 +1373,27 @@ function GLOG.GroupTracker_ShowWindow(show)
         if not state.win then return end
 
         local f = state.win
-        
+
         -- 🧷 Mémorise l’ouverture et hooke OnShow/OnHide (une seule fois)
         s.winOpen = true
         if not f._openStateHooked then
             f:HookScript("OnShow", function()
                 local st = _Store()
                 st.winOpen = true
-                _RecomputeEnabled()
+                if _RefreshEventSubscriptions then
+                    _RefreshEventSubscriptions()
+                elseif _RecomputeEnabled then
+                    _RecomputeEnabled()
+                end
             end)
             f:HookScript("OnHide", function()
                 local st = _Store()
                 st.winOpen = false
-                _RecomputeEnabled()
+                if _RefreshEventSubscriptions then
+                    _RefreshEventSubscriptions()
+                elseif _RecomputeEnabled then
+                    _RecomputeEnabled()
+                end
             end)
             f._openStateHooked = true
         end
@@ -1399,9 +1405,9 @@ function GLOG.GroupTracker_ShowWindow(show)
         local aBtnS  = (GLOG.GroupTracker_GetButtonsOpacity    and GLOG.GroupTracker_GetButtonsOpacity())     or 1.00
         local rowH   = (GLOG.GroupTracker_GetRowHeight         and GLOG.GroupTracker_GetRowHeight())          or 22
 
-        if UI and UI.SetFrameVisualOpacity    then UI.SetFrameVisualOpacity(f, aWin) end
-        if UI and UI.SetTextAlpha            then UI.SetTextAlpha(f, aText)          end
-        if UI and UI.SetFrameTitleTextAlpha  then UI.SetFrameTitleTextAlpha(f, aTitle) end
+        if UI and UI.SetFrameVisualOpacity   then UI.SetFrameVisualOpacity(f, aWin)            end
+        if UI and UI.SetTextAlpha            then UI.SetTextAlpha(f, aText)                    end
+        if UI and UI.SetFrameTitleTextAlpha  then UI.SetFrameTitleTextAlpha(f, aTitle)         end
         if f._lv and UI and UI.ListView_SetVisualOpacity then UI.ListView_SetVisualOpacity(f._lv, aWin) end
         if f._lv and UI and UI.ListView_SetRowHeight     then UI.ListView_SetRowHeight(f._lv, rowH)     end
 
@@ -1409,33 +1415,50 @@ function GLOG.GroupTracker_ShowWindow(show)
         _ApplyColumnsVisibilityToFrame(f)
         -- Adapte la largeur minimale + largeur active en fonction des colonnes visibles
         _ApplyMinWidthAndResize(f, true)
-        
+
         -- 🔒 Applique le lock d'interactions si actif
         if UI and UI.PlainWindow_SetLocked and GLOG and GLOG.GroupTracker_GetLocked then
             UI.PlainWindow_SetLocked(f, GLOG.GroupTracker_GetLocked())
         end
 
-        -- Assure une ancre gauche du titre (déjà fait côté PlainWindow, on sécurise)
+        -- Assure une ancre gauche du titre (sécurité)
         if f.title and f.header then
             f.title:ClearAllPoints()
             f.title:SetPoint("LEFT", f.header, "LEFT", 8, 0)
             if f.title.SetJustifyH then f.title:SetJustifyH("LEFT") end
         end
 
-        -- Le X ferme toute la fenêtre (sécurisation)
+        -- Le X ferme la fenêtre
         if f.close then
             f.close:SetScript("OnClick", function() f:Hide() end)
         end
 
         f:Show()
         if f._Refresh then f:_Refresh() end
+
     else
+        -- 🔻 Masquer la fenêtre et ajuster l'état
         state.enabled = false
-        local s = _Store()
         s.winOpen = false
-        if state.win then state.win:Hide() end
+
+        if state.win and state.win:IsShown() then
+            state.win:Hide()  -- Déclenchera OnHide et donc _RefreshEventSubscriptions/_RecomputeEnabled
+        end
+
+        -- Par cohérence, masquer aussi la popup d’historique si ouverte
+        if state.popup and state.popup:IsShown() then
+            state.popup:Hide()
+        end
+
+        -- Si jamais aucun OnHide n’a été hooké (sécurité)
+        if _RefreshEventSubscriptions then
+            _RefreshEventSubscriptions()
+        elseif _RecomputeEnabled then
+            _RecomputeEnabled()
+        end
     end
 end
+
 
 function GLOG.GroupTracker_GetLocked()
     local s = _Store()
@@ -1862,16 +1885,14 @@ function GLOG.GroupTracker_SetRecordingEnabled(enabled)
     s.recording = (enabled == true)
 
     if s.recording then
-        -- Le suivi est activé : on ne force pas l'ouverture de la fenêtre ici.
-        -- (/glog track s'en charge si besoin)
-        _RecomputeEnabled()
+        -- Suivi actif : (ré)abonne les événements
+        _RefreshEventSubscriptions()
     else
-        -- Le suivi est désactivé : masquer la fenêtre si elle est ouverte
+        -- Suivi inactif : on masque si besoin puis on coupe les événements
         if state.win and state.win:IsShown() then
-            GLOG.GroupTracker_ShowWindow(false) -- fera aussi _RecomputeEnabled()
-        else
-            _RecomputeEnabled()
+            GLOG.GroupTracker_ShowWindow(false) -- OnHide fera aussi _RefreshEventSubscriptions()
         end
+        _RefreshEventSubscriptions()
     end
 end
 
@@ -1896,168 +1917,181 @@ end
 -- =========================
 -- ===      EVENTS      ===
 -- =========================
-local ev = CreateFrame("Frame")
-ev:RegisterEvent("ADDON_LOADED")
-ev:RegisterEvent("PLAYER_LOGIN")
-ev:RegisterEvent("PLAYER_ENTERING_WORLD")
-ev:RegisterEvent("GROUP_ROSTER_UPDATE")
-ev:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-ev:RegisterEvent("PLAYER_REGEN_DISABLED")
-ev:RegisterEvent("PLAYER_REGEN_ENABLED")
-ev:RegisterEvent("ENCOUNTER_START")
-ev:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+-- Centralisation via Core/Events.lua
+do
+    -- On garde le même dispatcher que l'ancien SetScript (copie stricte du corps)
+    local function _OnEvent(_, event, ...)
+        if event == "PLAYER_ENTERING_WORLD" then
+            local s = _Store()
+            _RebuildCategoryLookup()
+            _RebuildCustomLookup()
+            if GLOG and GLOG.GroupTracker_EnsureDefaultCustomLists then
+                GLOG.GroupTracker_EnsureDefaultCustomLists(false)
+            end
+            state.enabled = (_Store().enabled == true)
 
-ev:SetScript("OnEvent", function(_, event, ...)
-    if event == "PLAYER_ENTERING_WORLD" then
-        local s = _Store()
-        _RebuildCategoryLookup()
-        _RebuildCustomLookup()
-        -- Seed des listes par défaut du suivi personnalisé (versionné)
-        if GLOG and GLOG.GroupTracker_EnsureDefaultCustomLists then
-            GLOG.GroupTracker_EnsureDefaultCustomLists(false)
-        end
+            session.inCombat = UnitAffectingCombat("player") and true or false
+            if session.inCombat then
+                local lbl, isBoss = _computeEncounterLabel()
+                session.label  = lbl
+                session.isBoss = isBoss
+                session.start  = time and time() or 0
+                s.viewIndex = 0  -- live
+                session.roster = _BuildRosterArrayFromSet(_BuildRosterSet())
+            else
+                if #s.segments == 0 then
+                    local maxIdx = #s.segments
+                    if s.viewIndex == 0 then
+                        s.viewIndex = math.min(1, maxIdx) -- tu étais en Live → on reste sur le dernier combat créé (1)
+                    else
+                        s.viewIndex = math.min(s.viewIndex or 1, maxIdx) -- ne pas sauter vers un "nouveau" segment
+                    end
+                else
+                    if (s.viewIndex or 1) == 0 then s.viewIndex = 1 end
+                end
+            end
 
-        state.enabled = (s.enabled == true)
+            -- Démarrage : si la fenêtre était ouverte la dernière fois, on la rouvre
+            if s.winOpen == true then
+                GLOG.GroupTracker_ShowWindow(true)
+            else
+                _RecomputeEnabled() 
+            end
 
-        session.inCombat = UnitAffectingCombat("player") and true or false
-        if session.inCombat then
+        elseif event == "ADDON_LOADED" then
+            local name = ...
+            if name == ADDON then
+                _RebuildCategoryLookup()
+                _RefreshEventSubscriptions()
+            end
+
+        elseif event == "PLAYER_LOGIN" then
+            _RebuildCategoryLookup()
+            _RefreshEventSubscriptions()
+
+        elseif event == "GROUP_ROSTER_UPDATE" then
+            _PurgeStale()
+            if state.win and state.win._Refresh then state.win:_Refresh() end
+
+        elseif event == "ENCOUNTER_START" then
+            local _, encounterName = ...
+            if encounterName and encounterName ~= "" then
+                session.label  = encounterName
+                session.isBoss = true
+            end
+            if state.win and state.win._Refresh then state.win:_Refresh() end
+
+        elseif event == "PLAYER_REGEN_DISABLED" then
+            _clearLive()
+            session.inCombat = true
+            session.start    = time and time() or 0
             local lbl, isBoss = _computeEncounterLabel()
             session.label  = lbl
             session.isBoss = isBoss
-            session.start  = time and time() or 0
-            s.viewIndex = 0  -- live
             session.roster = _BuildRosterArrayFromSet(_BuildRosterSet())
-        else
-            if #s.segments == 0 then
-                local maxIdx = #s.segments
-                if s.viewIndex == 0 then
-                    s.viewIndex = math.min(1, maxIdx) -- tu étais en Live → on reste sur le dernier combat créé (1)
-                else
-                    s.viewIndex = math.min(s.viewIndex or 1, maxIdx) -- ne pas sauter vers un "nouveau" segment
-                end
-            else
-                if (s.viewIndex or 1) == 0 then s.viewIndex = 1 end
+            _Store().viewIndex = 0  -- Live
+            if state.win and state.win._Refresh then state.win:_Refresh() end
+
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            local s = _Store()
+            local seg = {
+                label  = session.label or (Tr("history_combat") or "Combat"),
+                start  = session.start or (time and time() or 0),
+                stop   = time and time() or 0,
+                isBoss = (session.isBoss == true),
+                roster = {},
+                data   = {},
+            }
+            for i=1,#session.roster do seg.roster[i] = session.roster[i] end
+            for i=1,#seg.roster do
+                local full = seg.roster[i]
+                seg.data[full] = seg.data[full] or { events = {} }
             end
-        end
+            for full, arr in pairs(session.hist) do
+                seg.data[full] = seg.data[full] or { events = {} }
+                for i=1,#arr do seg.data[full].events[i] = arr[i] end
+            end
 
-        -- Démarrage : si la fenêtre était ouverte la dernière fois, on la rouvre
-        if s.winOpen == true then
-            GLOG.GroupTracker_ShowWindow(true)
-        else
-            _RecomputeEnabled() 
-        end
+            table.insert(s.segments, 1, seg)
+            while #s.segments > 30 do table.remove(s.segments, #s.segments) end
 
-    elseif event == "ADDON_LOADED" then
-        local name = ...
-        if name == ADDON then
-            _RebuildCategoryLookup()
-        end
+            session.inCombat = false
+            _clearLive()
 
-    elseif event == "PLAYER_LOGIN" then
-        _RebuildCategoryLookup()
-
-    elseif event == "GROUP_ROSTER_UPDATE" then
-        _PurgeStale()
-        if state.win and state.win._Refresh then state.win:_Refresh() end
-
-    elseif event == "ENCOUNTER_START" then
-        local _, encounterName = ...
-        if encounterName and encounterName ~= "" then
-            session.label  = encounterName
-            session.isBoss = true
-        end
-        if state.win and state.win._Refresh then state.win:_Refresh() end
-
-    elseif event == "PLAYER_REGEN_DISABLED" then
-        _clearLive()
-        session.inCombat = true
-        session.start    = time and time() or 0
-        local lbl, isBoss = _computeEncounterLabel()
-        session.label  = lbl
-        session.isBoss = isBoss
-        session.roster = _BuildRosterArrayFromSet(_BuildRosterSet())
-        _Store().viewIndex = 0  -- Live
-        if state.win and state.win._Refresh then state.win:_Refresh() end
-
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        local s = _Store()
-        local seg = {
-            label  = session.label or (Tr("history_combat") or "Combat"),
-            start  = session.start or (time and time() or 0),
-            stop   = time and time() or 0,
-            isBoss = (session.isBoss == true),
-            roster = {},
-            data   = {},
-        }
-        for i=1,#session.roster do seg.roster[i] = session.roster[i] end
-        for i=1,#seg.roster do
-            local full = seg.roster[i]
-            seg.data[full] = seg.data[full] or { events = {} }
-        end
-        for full, arr in pairs(session.hist) do
-            seg.data[full] = seg.data[full] or { events = {} }
-            for i=1,#arr do seg.data[full].events[i] = arr[i] end
-        end
-
-        table.insert(s.segments, 1, seg)
-        while #s.segments > 30 do table.remove(s.segments, #s.segments) end
-
-        session.inCombat = false
-        _clearLive()
-
-        local maxIdx = #s.segments
-        if s.viewIndex == 0 then
-            s.viewIndex = math.min(1, maxIdx)
-        else
-            s.viewIndex = math.min(s.viewIndex or 1, maxIdx)
-        end
-        if state.win and state.win._Refresh then state.win:_Refresh() end
-
-    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
-        if not state.enabled then return end
-        local unit, castGUID, spellID = ...
-        if not unit or not spellID then return end
-        if unit ~= "player" and (not unit:find("^raid") and not unit:find("^party")) then return end
-        -- On confie l'enregistrement au CLEU pour éviter tout doublon (CAST_SUCCESS/AURA_APPLIED).
-        return
-
-
-    elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
-        if not state.enabled then return end
-        local ts, sub, _, sourceGUID, sourceName, sourceFlags, _, destGUID, destName, _, _, spellID, spellName =
-            CombatLogGetCurrentEventInfo()
-        if not _isGroupSource(sourceFlags) then return end
-
-        -- On garde CAST_SUCCESS et AURA_APPLIED (utile pour potions/pierres).
-        if sub == "SPELL_CAST_SUCCESS" or sub == "SPELL_AURA_APPLIED" then
-            local normID = _NormalizeSpellID(spellID)
-            local sName  = spellName or (GetSpellInfo and select(1, GetSpellInfo(normID))) or ""
-            local cat    = _detectCategory(normID, sName)
-            local ids    = _MatchCustomColumns(normID, sName)
-
-            if not cat and #ids == 0 then return end
-
-            local now = ts or GetTime() -- même base partout pour la dédup
-            local who = sourceName or destName
-            if not _shouldAcceptEvent(sourceGUID, who, normID, now) then return end
-
-            -- 🔸 Règle d’enregistrement unique (évite les doublons et l'entrée vide) :
-            if cat == "heal" or cat == "util" or cat == "stone" then
-                -- Ces catégories alimentent le timer + compteur
-                _onConsumableUsed(who, cat, normID, sName)
-                -- Pas d'_onCustomUsed en plus : les colonnes lisent déjà ces compteurs
-            elseif cat == "cddef" or cat == "dispel" or cat == "taunt" or cat == "move"
-                or cat == "kick" or cat == "cc" or cat == "special" then
-                -- Catégories « action » : uniquement le/les compteurs de colonnes custom
-                if #ids > 0 then
-                    for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
-                else
-                    _onConsumableUsed(who, cat, normID, sName) -- fallback si pas de colonne
-                end
+            local maxIdx = #s.segments
+            if s.viewIndex == 0 then
+                s.viewIndex = math.min(1, maxIdx)
             else
-                -- Pas de cat connue mais colonnes custom matchées
-                for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
+                s.viewIndex = math.min(s.viewIndex or 1, maxIdx)
+            end
+            if state.win and state.win._Refresh then state.win:_Refresh() end
+
+        elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+            if not state.enabled then return end
+            local unit, castGUID, spellID = ...
+            if not unit or not spellID then return end
+            if unit ~= "player" and (not unit:find("^raid") and not unit:find("^party")) then return end
+            -- On confie l'enregistrement au CLEU pour éviter tout doublon (CAST_SUCCESS/AURA_APPLIED).
+            return
+
+
+        elseif event == "COMBAT_LOG_EVENT_UNFILTERED" then
+            if not state.enabled then return end
+            local ts, sub, _, sourceGUID, sourceName, sourceFlags, _, destGUID, destName, _, _, spellID, spellName =
+                CombatLogGetCurrentEventInfo()
+            if not _isGroupSource(sourceFlags) then return end
+
+            -- On garde CAST_SUCCESS et AURA_APPLIED (utile pour potions/pierres).
+            if sub == "SPELL_CAST_SUCCESS" or sub == "SPELL_AURA_APPLIED" then
+                local normID = _NormalizeSpellID(spellID)
+                local sName  = spellName or (GetSpellInfo and select(1, GetSpellInfo(normID))) or ""
+                local cat    = _detectCategory(normID, sName)
+                local ids    = _MatchCustomColumns(normID, sName)
+
+                if not cat and #ids == 0 then return end
+
+                local now = ts or GetTime() -- même base partout pour la dédup
+                local who = sourceName or destName
+                if not _shouldAcceptEvent(sourceGUID, who, normID, now) then return end
+
+                -- 🔸 Règle d’enregistrement unique (évite les doublons et l'entrée vide) :
+                if cat == "heal" or cat == "util" or cat == "stone" then
+                    -- Ces catégories alimentent le timer + compteur
+                    _onConsumableUsed(who, cat, normID, sName)
+                    -- Pas d'_onCustomUsed en plus : les colonnes lisent déjà ces compteurs
+                elseif cat == "cddef" or cat == "dispel" or cat == "taunt" or cat == "move"
+                    or cat == "kick" or cat == "cc" or cat == "special" then
+                    -- Catégories « action » : uniquement le/les compteurs de colonnes custom
+                    if #ids > 0 then
+                        for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
+                    else
+                        _onConsumableUsed(who, cat, normID, sName) -- fallback si pas de colonne
+                    end
+                else
+                    -- Pas de cat connue mais colonnes custom matchées
+                    for _, cid in ipairs(ids) do _onCustomUsed(who, cid, normID, sName) end
+                end
             end
         end
     end
-end)
+
+    -- Abonnements dynamiques aux events du GroupTracker
+    function _RegisterActiveEvents()
+        if state._activeEventsRegistered then return end
+        ns.Events.Register("PLAYER_ENTERING_WORLD",       GT_EVT_OWNER, _OnEvent)
+        ns.Events.Register("GROUP_ROSTER_UPDATE",         GT_EVT_OWNER, _OnEvent)
+        ns.Events.Register("COMBAT_LOG_EVENT_UNFILTERED", GT_EVT_OWNER, _OnEvent)
+        ns.Events.Register("PLAYER_REGEN_DISABLED",       GT_EVT_OWNER, _OnEvent)
+        ns.Events.Register("PLAYER_REGEN_ENABLED",        GT_EVT_OWNER, _OnEvent)
+        ns.Events.Register("ENCOUNTER_START",             GT_EVT_OWNER, _OnEvent)
+        ns.Events.Register("UNIT_SPELLCAST_SUCCEEDED",    GT_EVT_OWNER, _OnEvent)
+        state._activeEventsRegistered = true
+    end
+
+    -- Bootstrap minimal : toujours écouté pour initialiser l’état
+    ns.Events.Register("ADDON_LOADED", _OnEvent)
+    ns.Events.Register("PLAYER_LOGIN", _OnEvent)
+    -- Active/arrête les autres events selon l’état courant
+    _RefreshEventSubscriptions()
+end
+

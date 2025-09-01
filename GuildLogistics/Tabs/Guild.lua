@@ -45,16 +45,18 @@ end
 -- Événements roster : quand ça bouge, on re-render le panneau si visible
 local function _EnsureLiveZoneEvents()
     if _LiveEvt then return end
-    _LiveEvt = CreateFrame("Frame")
-    _LiveEvt:RegisterEvent("GUILD_ROSTER_UPDATE")
-    _LiveEvt:RegisterEvent("PLAYER_GUILD_UPDATE")
-    _LiveEvt:SetScript("OnEvent", function()
+    _LiveEvt = {} -- marqueur de création (plus de frame)
+
+    local function _onGuildEvt()
         if membersPane and membersPane:IsShown() then
             if UI and UI.RefreshAll then UI.RefreshAll() else Refresh() end
         end
-    end)
-end
+    end
 
+    ns.Events.Register("GUILD_ROSTER_UPDATE", _onGuildEvt)
+    ns.Events.Register("PLAYER_GUILD_UPDATE", _onGuildEvt)
+    ns.Events.Register("GROUP_ROSTER_UPDATE", _onGuildEvt)
+end
 
 -- ===== Détection zones instance/raid/gouffre (robuste) =====
 local function _strip_accents(s)
@@ -208,10 +210,11 @@ local function _RecreateListView()
     lv = UI.ListView(membersPane, cols, {
         buildRow     = function(r) return BuildRow(r) end,
         updateRow    = function(i, r, f, it) UpdateRow(i, r, f, it.data or it) end,
-        topOffset    = (UI.SECTION_HEADER_H or 26) + 6,
         bottomAnchor = nil, -- plein parent => pleine hauteur
         -- 🎨 Couleur spécifique des séparateurs pour l’onglet Guilde
         sepLabelColor = UI.MIDGREY,
+        topOffset = UI.SECTION_HEADER_H or 26,
+        bottomAnchor = footer
     })
 
 end
@@ -563,6 +566,9 @@ function Build(container)
     -- Création du conteneur
     membersPane, footer = UI.CreateMainContainer(container, {footer = false})
 
+    -- En-tête de section
+    UI.SectionHeader(membersPane, Tr("lbl_guild_members"), { topPad = 2 })
+
     -- Live zones: events + ticker tant que le panneau est visible
     _EnsureLiveZoneEvents()
     if membersPane then
@@ -577,14 +583,51 @@ function Build(container)
         end)
     end
 
-    -- En-tête de section
-    UI.SectionHeader(membersPane, Tr("lbl_guild_members"), { topPad = 2 })
-
     -- 🔁 ListView dépend du mode debug → (re)création dédiée
     _RecreateListView()
 
     -- 📥 Données initiales
     Refresh()
+
+    -- 🎨 Masque de fond (même logique que Roster)
+    -- Cache le containerBG générique pour éviter le double assombrissement
+    if lv and lv._containerBG and lv._containerBG.Hide then
+        lv._containerBG:Hide()
+    end
+
+    -- Crée un fond englobant (depuis les couleurs centralisées UI.GetListViewContainerColor)
+    do
+        local col = (UI.GetListViewContainerColor and UI.GetListViewContainerColor()) or { r = 0, g = 0, b = 0, a = 0.20 }
+        local bg  = membersPane:CreateTexture(nil, "BACKGROUND")
+        bg:SetColorTexture(col.r or 0, col.g or 0, col.b or 0, col.a or 0.20)
+
+        -- Ancre sur l'entête + la zone scroll
+        if lv and lv.header and lv.scroll then
+            bg:SetPoint("TOPLEFT",     lv.header, "TOPLEFT",     0, 0)
+            bg:SetPoint("BOTTOMRIGHT", lv.scroll, "BOTTOMRIGHT", 0, 0)
+        end
+
+        -- Recalage automatique si la ListView se relayout
+        if lv and lv.Layout and not lv._synth_bg_hook then
+            local _oldLayout = lv.Layout
+            function lv:Layout(...)
+                local res = _oldLayout(self, ...)
+                if bg and self.header and self.scroll then
+                    bg:ClearAllPoints()
+                    bg:SetPoint("TOPLEFT",     self.header, "TOPLEFT",     0, 0)
+                    bg:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
+                    -- garde la teinte en phase avec le thème
+                    if UI.GetListViewContainerColor then
+                        local c = UI.GetListViewContainerColor()
+                        if c then bg:SetColorTexture(c.r or 0, c.g or 0, c.b or 0, c.a or 0.20) end
+                    end
+                end
+                return res
+            end
+            lv._synth_bg_hook = true
+        end
+    end
+
 end
 
 -- Layout : laisser la ListView gérer sa taille
