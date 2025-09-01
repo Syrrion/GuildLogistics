@@ -680,7 +680,25 @@ function UI.RefreshAll()
     -- Rafraîchit les indicateurs globaux (pastilles, icônes d'état, etc.)
     if UI.RefreshTopIndicators then UI.RefreshTopIndicators() end
 end
-ns.RefreshAll = UI.RefreshAll
+-- ⏳ Regroupe les refresh pour éviter les rafales pendant les évènements réseau
+function UI.ScheduleRefreshAll(delay)
+    delay = tonumber(delay) or 0.10
+    if UI._refreshPending then return end
+    UI._refreshPending = true
+
+    local function doRefresh()
+        UI._refreshPending = false
+        if ns and ns.UI and ns.UI.Main and ns.UI.Main.IsShown and ns.UI.Main:IsShown() then
+            if UI.RefreshAll then UI.RefreshAll() end
+        end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(delay, doRefresh) else doRefresh() end
+end
+
+-- 👉 Les appels "ns.RefreshAll()" deviennent coalescés automatiquement
+ns.ScheduleRefreshAll = UI.ScheduleRefreshAll
+
+ns.RefreshAll = UI.ScheduleRefreshAll
 
 -- ➕ Récupération du bouton d'un onglet par label
 function UI.GetTabButton(label)

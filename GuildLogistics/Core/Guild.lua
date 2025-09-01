@@ -350,6 +350,91 @@ function GLOG.GetGuildCacheTimestamp()
     return (c and c.ts) or 0
 end
 
+-- Retourne les infos agrégées (main + rerolls) pour un joueur.
+-- Recalcule un mémo interne seulement quand le cache guilde change.
+function GLOG.GetMainAggregatedInfo(playerName)
+    if not playerName or playerName == "" then return {} end
+
+    local ts = (GLOG.GetGuildCacheTimestamp and GLOG.GetGuildCacheTimestamp()) or 0
+    GLOG._mainAgg = GLOG._mainAgg or { ts = -1, byMain = {} }
+
+    if GLOG._mainAgg.ts ~= ts then
+        local rows     = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        local NormName = GLOG.NormName
+        local by = {}
+
+        for _, gr in ipairs(rows) do
+            local rowNameKey = gr.name_key or (NormName and NormName(gr.name_amb or gr.name_raw)) or nil
+            local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(strtrim(gr.remark))) or nil)
+            local mainKey    = (rowMainKey and rowMainKey ~= "" and rowMainKey) or rowNameKey
+
+            if mainKey and mainKey ~= "" then
+                local e = by[mainKey]
+                if not e then
+                    e = {
+                        online = false, days = nil, hours = nil,
+                        idx = nil, level = nil, mainBase = nil,
+                        onlineAltBase = nil, onlineAltFull = nil, onlineAltIdx = nil, altClass = nil
+                    }
+                    by[mainKey] = e
+                end
+
+                -- Détection de la ligne du main
+                if rowNameKey == mainKey then
+                    e.idx = e.idx or gr.idx
+                    if not e.mainBase then
+                        local full = gr.name_amb or gr.name_raw or ""
+                        e.mainBase = (tostring(full):match("^([^%-]+)")) or tostring(full)
+                    end
+                    if GetGuildRosterInfo and gr.idx and e.level == nil then
+                        local _, _, _, level = GetGuildRosterInfo(gr.idx)
+                        e.level = tonumber(level)
+                    end
+                end
+
+                -- Présence + alt connecté
+                if gr.online then
+                    e.online = true
+                    local full = gr.name_amb or gr.name_raw or ""
+                    local base = tostring(full):match("^([^%-]+)") or tostring(full)
+                    if e.mainBase and base ~= "" and base:lower() ~= tostring(e.mainBase):lower() then
+                        if not e.onlineAltFull then
+                            e.onlineAltBase = base
+                            e.onlineAltFull = full
+                            e.onlineAltIdx  = gr.idx
+                            e.altClass      = gr.class
+                        end
+                    end
+                end
+
+                -- Dernière activité
+                local d  = tonumber(gr.daysDerived  or nil)
+                local hr = tonumber(gr.hoursDerived or nil)
+                if gr.online then d, hr = 0, 0 end
+                if d  ~= nil then e.days  = (e.days  and math.min(e.days,  d))  or d  end
+                if hr ~= nil then e.hours = (e.hours and math.min(e.hours, hr)) or hr end
+            end
+        end
+
+        GLOG._mainAgg.ts    = ts
+        GLOG._mainAgg.byMain = by
+    end
+
+    local NormName = GLOG.NormName
+    local mainName = (GLOG.GetMainOf and GLOG.GetMainOf(playerName)) or playerName
+    local key      = (NormName and NormName(mainName)) or nil
+    local e        = key and GLOG._mainAgg.byMain[key] or nil
+    if not e then return {} end
+
+    return {
+        online = e.online, days = e.days, hours = e.hours,
+        idx = e.idx, level = e.level,
+        onlineAltBase = e.onlineAltBase, onlineAltFull = e.onlineAltFull, onlineAltIdx = e.onlineAltIdx,
+        altClass = e.altClass,
+    }
+end
+
+
 -- helper utilisé par l’onglet Joueurs
 function GLOG.GetGuildMainsAggregated()
     return GLOG.GetGuildMainsAggregatedCached()

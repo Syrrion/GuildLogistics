@@ -8,6 +8,11 @@ local Tr = ns.Tr or function(s) return s end
 -- Boss/loot context helpers (forward declarations)
 local _getCtx, _putCtx, _getCtxByLink
 local _SaveLastMPlus, _LoadLastMPlus, _BackfillMPlus
+local _GetRollFor, _RememberRoll
+
+-- Stubs de sécurité (évite tout appel sur nil pendant /reload)
+_GetRollFor   = _GetRollFor   or function() return nil, nil end
+_RememberRoll = _RememberRoll or function() end
 
 -- Dernier niveau M+ vu (persiste tant qu'on n'a pas un nouveau > 0)
 local _mplusLevelLast = 0
@@ -327,7 +332,9 @@ local function _NameInGroupFromMessage(msg)
         if cand and cand ~= "" then return cand end
     end
 
-    return UnitName("player")
+    -- Si on n'a pas pu déterminer un nom et que ce n'est pas "moi",
+    -- on renvoie nil pour éviter les attributions erronées.
+    return nil
 end
 
 
@@ -372,14 +379,15 @@ local function _AddIfEligible(link, looter)
 
         -- 1) Équippable ou non selon la case à cocher
         if (cfg.lootEquippableOnly ~= false) and (not _IsEquippable(info.link)) then return end
-        -- 2) Rareté minimale
+        -- 2) Rareté minimale (toujours appliquée)
         if quality < minQ then return end
-        -- 3) Niveau requis minimal (ne s'applique qu'aux pièces d'équipement, comme l'ilvl)
-        if (minReq > 0) and _IsEquippable(info.link) and (reqLevel < minReq) then return end
-        -- 4) Ilvl minimal
-        if minILvl > 0 and _IsEquippable(info.link) then
-            if ilvl < minILvl then return end
+        -- 3) Les filtres "Niveau requis" et "iLvl" ne s'appliquent
+        --    QUE si "Équippable uniquement" est coché
+        if (cfg.lootEquippableOnly ~= false) then
+            if (minReq > 0) and (reqLevel < minReq) then return end
+            if (minILvl > 0) and (ilvl < minILvl) then return end
         end
+
 
         -- Contexte boss/difficulté depuis ENCOUNTER_LOOT_RECEIVED (si dispo)
         local ctx = (_getCtx and _getCtx(looter or UnitName("player"), info.link)) or (_getCtxByLink and _getCtxByLink(info.link)) or nil
@@ -408,6 +416,15 @@ local function _AddIfEligible(link, looter)
             mplus     = useMPlus,
             group     = _SnapshotGroup(),
         }
+
+        -- Enrichissement : type & valeur du jet si connus (cache récent)
+        do
+            if _GetRollFor then
+                local rType, rVal = _GetRollFor(looter or (ctx and ctx.player) or "", info.link)
+                if rType then entry.roll = rType end
+                if rVal  then entry.rollV = tonumber(rVal) end
+            end
+        end
 
         local store = _Store()
         table.insert(store, 1, entry)
@@ -447,10 +464,197 @@ end
 -- Handler appelé depuis Events.lua
 function GLOG.LootTracker_HandleChatMsgLoot(message)
     local msg = tostring(message or "")
+
+    -- (si tu as déjà le filtrage "réception réelle" + la capture des rolls,
+    -- ce bloc s'insère *après* ces filtres)
+
     local link = _ExtractLink(msg)
     if not link then return end
-    local who = _NameInGroupFromMessage(msg)
+
+    local who = _NameInGroupFromMessage and _NameInGroupFromMessage(msg) or nil
+
+    -- 🔒 Hors raid / butin direct : si message SELF et nom non résolu, on te met comme looteur
+    if (not who or who == "") and _IsSelfLootMessage(msg) and UnitName then
+        who = UnitName("player")
+    end
+
     _AddIfEligible(link, who)
+end
+
+-- Vrai message "self" (loot direct/poussé sur le joueur)
+local function _IsSelfLootMessage(msg)
+    if not msg or msg == "" then return false end
+    local function pat(gs)
+        if not gs or gs == "" then return nil end
+        return tostring(gs):gsub("%%s", ".-"):gsub("%%d", "%%d+")
+    end
+    local keep = {
+        pat(LOOT_ITEM_SELF),
+        pat(LOOT_ITEM_SELF_MULTIPLE),
+        pat(LOOT_ITEM_PUSHED_SELF),
+    }
+    for _, p in ipairs(keep) do
+        if p and msg:find(p, 1, false) then return true end
+    end
+    return false
+end
+
+-- === Détection des messages de roll & cache court (joueur|lien) ===
+local function _Now() return (time and time()) or 0 end
+
+local function _EscapeForLuaPattern(s)
+    return (tostring(s or ""):gsub("([%%%^%$%(%)%.%[%]%*%+%-%?])", "%%%1"))
+end
+local function _GS2Pat(gs)
+    if not gs or gs == "" then return nil end
+    local p = _EscapeForLuaPattern(gs)
+    p = p:gsub("%%s", "(.+)")  -- capture texte/lien
+    p = p:gsub("%%d", "(%%d+)") -- capture entier
+    return p
+end
+local function _NormPlayer(name)
+    name = tostring(name or ""):gsub("%-.*$", ""):lower()
+    return name
+end
+
+-- Whitelist "vrai ramassage" (évite doublons des rolls)
+local function _IsLootReceiptMessage(msg)
+    local keep = {
+        _GS2Pat(LOOT_ITEM_SELF),
+        _GS2Pat(LOOT_ITEM_SELF_MULTIPLE),
+        _GS2Pat(LOOT_ITEM_PUSHED_SELF),
+        _GS2Pat(LOOT_ITEM),
+        _GS2Pat(LOOT_ITEM_MULTIPLE),
+        _GS2Pat(LOOT_ITEM_PUSHED),
+    }
+    for _, p in ipairs(keep) do
+        if p and msg:match(p) then return true end
+    end
+    return false
+end
+
+-- Cache: [link][playerLower] = { type="need|greed|disenchant|pass", val=98, ts=... }
+local _rollByItem = {}
+
+_RememberRoll = function(player, link, rollType, rollVal)
+    if not player or not link or not rollType then return end
+    local pn = _NormPlayer(player)
+    _rollByItem[link] = _rollByItem[link] or {}
+    local rec = _rollByItem[link][pn] or {}
+    rec.type = rollType or rec.type
+    rec.val  = tonumber(rollVal or rec.val)
+    rec.ts   = _Now()
+    _rollByItem[link][pn] = rec
+
+    -- petit nettoyage des entrées > 5 min
+    local now = rec.ts
+    for lnk, map in pairs(_rollByItem) do
+        for p, r in pairs(map) do
+            if (now - (r.ts or 0)) > 300 then map[p] = nil end
+        end
+        if not next(map) then _rollByItem[lnk] = nil end
+    end
+end
+
+_GetRollFor = function(player, link)
+    if not player or not link then return nil, nil end
+    local pn = _NormPlayer(player)
+    local rec = _rollByItem[link] and _rollByItem[link][pn]
+    if not rec then return nil, nil end
+    return rec.type, rec.val
+end
+
+-- Motifs localisés des messages de roll
+local _PAT_NEED        = _GS2Pat(LOOT_ROLL_NEED)
+local _PAT_GREED       = _GS2Pat(LOOT_ROLL_GREED)
+local _PAT_DE          = _GS2Pat(LOOT_ROLL_DISENCHANT)
+local _PAT_PASS        = _GS2Pat(LOOT_ROLL_PASSED)
+local _PAT_PASS_AUTO   = _GS2Pat(LOOT_ROLL_PASSED_AUTO)
+
+-- "X won: %s with a roll of %d for %s"
+local _PAT_WON         = _GS2Pat(LOOT_ROLL_WON)
+-- "You rolled %d (Need) for: %s" (pas de nom → on mappe sur player)
+local _PAT_ROLLED_NEED = _GS2Pat(LOOT_ROLL_ROLLED_NEED)
+local _PAT_ROLLED_GREED= _GS2Pat(LOOT_ROLL_ROLLED_GREED)
+local _PAT_ROLLED_DE   = _GS2Pat(LOOT_ROLL_ROLLED_DE)
+
+local function _ParseRollMessage(msg)
+    -- Sélections (contiennent toujours le joueur + lien)
+    if _PAT_NEED then
+        local who, link = msg:match(_PAT_NEED)
+        if who and link then return who, link, "need", nil end
+    end
+    if _PAT_GREED then
+        local who, link = msg:match(_PAT_GREED)
+        if who and link then return who, link, "greed", nil end
+    end
+    if _PAT_DE then
+        local who, link = msg:match(_PAT_DE)
+        if who and link then return who, link, "disenchant", nil end
+    end
+    if _PAT_PASS then
+        local who, link = msg:match(_PAT_PASS)
+        if who and link then return who, link, "pass", nil end
+    end
+    if _PAT_PASS_AUTO then
+        local who, link = msg:match(_PAT_PASS_AUTO)
+        if who and link then return who, link, "pass", nil end
+    end
+
+    -- Gain (on récupère surtout la valeur de jet)
+    if _PAT_WON then
+        local who, link, val = msg:match(_PAT_WON)
+        if who and link and val then return who, link, nil, tonumber(val) end
+    end
+
+    -- "You rolled %d ..." (on ne connaît pas le nom → self)
+    local me = UnitName and UnitName("player")
+    if me and _PAT_ROLLED_NEED then
+        local val, link = msg:match(_PAT_ROLLED_NEED)
+        if val and link then return me, link, "need", tonumber(val) end
+    end
+    if me and _PAT_ROLLED_GREED then
+        local val, link = msg:match(_PAT_ROLLED_GREED)
+        if val and link then return me, link, "greed", tonumber(val) end
+    end
+    if me and _PAT_ROLLED_DE then
+        local val, link = msg:match(_PAT_ROLLED_DE)
+        if val and link then return me, link, "disenchant", tonumber(val) end
+    end
+
+    return nil
+end
+
+-- Messages de loot à conserver : uniquement les messages "X reçoit du butin"
+local function _IsLootReceiptMessage(msg)
+    if not msg or msg == "" then return false end
+    local function pat(gs)
+        if not gs or gs == "" then return nil end
+        -- Convertit les GlobalStrings en motif littéral (compat FR/EN/etc.)
+        return tostring(gs):gsub("%%s", ".-"):gsub("%%d", "%%d+")
+    end
+    local keep = {
+        pat(LOOT_ITEM_SELF),
+        pat(LOOT_ITEM_SELF_MULTIPLE),
+        pat(LOOT_ITEM_PUSHED_SELF),
+        pat(LOOT_ITEM),
+        pat(LOOT_ITEM_MULTIPLE),
+        pat(LOOT_ITEM_PUSHED),
+    }
+    for _, p in ipairs(keep) do
+        if p and msg:find(p, 1, false) then return true end
+    end
+    return false
+end
+
+-- Anti-doublon court : (looter|link) vu dans les 3s => on ignore
+local _recentLoot = {}
+local function _IsRecentLoot(looter, link)
+    local k = tostring(looter or "") .. "|" .. tostring(link or "")
+    local now = (_Now and _Now()) or (time and time()) or 0
+    local last = _recentLoot[k]
+    _recentLoot[k] = now
+    return last and (now - last) <= 3
 end
 
 -- ===========

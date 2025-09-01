@@ -252,6 +252,11 @@ end
 
 -- ===== Row =====
 function UI.LayoutRow(row, cols, fields)
+    -- Alpha des v-seps centralisée + flag pour ignorer les v-seps sur les lignes "sep"
+    local baseA = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
+    if baseA < 0 then baseA = 0 elseif baseA > 1 then baseA = 1 end
+    local allowVSeps = (row._isSep ~= true)
+
     row._vseps = row._vseps or {}
     local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or { sep={r=1,g=1,b=1,a=.20} }
     local mul = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
@@ -274,7 +279,7 @@ function UI.LayoutRow(row, cols, fields)
             if UI.ApplyCellTruncation then UI.ApplyCellTruncation(f, w - 8) end
         end
 
-        if c.vsep then
+        if allowVSeps and c.vsep then
             local t = row._vseps[i]
             if not t then
                 -- OVERLAY haut pour passer devant les backgrounds de ligne
@@ -302,9 +307,11 @@ function UI.LayoutRow(row, cols, fields)
                 t:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", px, 0)
             end
 
-            local baseA = tonumber(UI.VCOL_SEP_ALPHA or 0.15) or 0.15
-            t:SetAlpha(baseA)
-            t._baseA = baseA
+            -- Ne pousse l'alpha que si elle change (évite du travail GPU inutile)
+            if t._baseA ~= baseA then
+                t:SetAlpha(baseA)
+                t._baseA = baseA
+            end
 
             if UI.SnapTexture then UI.SnapTexture(t) end
             t:Show()
@@ -443,18 +450,16 @@ function UI.SetRowAccent(row, shown, r, g, b, a)
 end
 
 function UI.SetRowAccentGradient(row, shown, r, g, b, startAlpha)
-    -- Applique/masque un dégradé horizontal sur toute la ligne,
-    -- destiné à compléter le liseré "même groupe".
-    -- startAlpha par défaut ~0.50 pour respecter la demande (50% -> 0%).
     if not row then return end
-    local sa = tonumber(startAlpha) or 0.50
+    -- ⛔ Pas d’allocation si on masque
+    if not shown then
+        if row._accentGrad then row._accentGrad:Hide() end
+        return
+    end
 
-    -- Crée la texture si nécessaire
+    local sa = tonumber(startAlpha) or 0.50
     local grad = row._accentGrad
     if not grad then
-        -- On la place dans le BACKGROUND, au-dessus du fond mais
-        -- sans gêner le hover et les textes (qui sont en OVERLAY).
-        -- NB: le fond de ligne a de l’opacité, donc ce grad reste visible.
         grad = row:CreateTexture(nil, "BACKGROUND", nil, -6)
         row._accentGrad = grad
         grad:ClearAllPoints()
@@ -464,24 +469,17 @@ function UI.SetRowAccentGradient(row, shown, r, g, b, startAlpha)
         if UI.SnapTexture then UI.SnapTexture(grad) end
     end
 
-    -- Couleur et dégradé (HORIZONTAL, sa -> 0)
     r, g, b = tonumber(r) or 1, tonumber(g) or .82, tonumber(b) or 0
     if grad.SetGradient and type(CreateColor) == "function" then
-        grad:SetGradient("HORIZONTAL",
-            CreateColor(r, g, b, sa),
-            CreateColor(r, g, b, 0)
-        )
+        grad:SetGradient("HORIZONTAL", CreateColor(r, g, b, sa), CreateColor(r, g, b, 0))
     elseif grad.SetGradientAlpha then
-        grad:SetGradientAlpha("HORIZONTAL",
-            r, g, b, sa,
-            r, g, b, 0
-        )
+        grad:SetGradientAlpha("HORIZONTAL", r, g, b, sa, r, g, b, 0)
     else
-        grad:SetVertexColor(r, g, b, sa) -- fallback (pas de vrai gradient)
+        grad:SetVertexColor(r, g, b, sa)
     end
-
-    grad:SetShown(shown and true or false)
+    grad:Show()
 end
+
 
 function UI.CreateScroll(parent)
     local scroll = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
@@ -1197,30 +1195,6 @@ function UI.SetNameTag(tag, name)
     end
 end
 
--- ✅ Nouveau : même rendu (couleur/icone) mais sans le "-Royaume" dans le texte
-function UI.SetNameTagShort(tag, name)
-    if not tag then return end
-    local display = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name or "")
-    local short   = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(display)) or display
-
-    local class, r, g, b, coords = nil, 1, 1, 1, nil
-    if GLOG and GLOG.GetNameStyle then class, r, g, b, coords = GLOG.GetNameStyle(display) end
-
-    if tag.text then
-        tag.text:SetText(short or "")
-        tag.text:SetTextColor(r or 1, g or 1, b or 1)
-    end
-
-    if tag.icon and coords then
-        tag.icon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes")
-        tag.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
-        tag.icon:Show()
-    elseif tag.icon then
-        tag.icon:SetTexture(nil)
-        tag.icon:Hide()
-    end
-end
-
 -- ✅ Nouveau : alpha dédié pour les boutons (icônes, textes & états)
 function UI.SetButtonAlpha(btn, a)
     if not btn then return end
@@ -1284,6 +1258,55 @@ function UI.SetNameTagShort(tag, name)
         tag.icon:SetTexture(nil)
         tag.icon:Hide()
     end
+end
+
+-- Icône de type de jet (Need/Greed/DE/Pass) + libellé
+function UI.SetRollIcon(tex, rollType)
+    if not tex then return end
+    if not rollType or rollType == "" then
+        if tex.SetAtlas then tex:SetAtlas(nil) end
+        tex:SetTexture(nil)
+        tex:Hide()
+        return
+    end
+
+    local ATLAS = {
+        need       = "loottoast-roll-need",
+        greed      = "loottoast-roll-greed",
+        disenchant = "loottoast-roll-disenchant",
+        pass       = "loottoast-roll-pass",
+    }
+    local FILES = {
+        need       = "Interface\\Buttons\\UI-GroupLoot-Dice-Up",
+        greed      = "Interface\\Buttons\\UI-GroupLoot-Coin-Up",
+        disenchant = "Interface\\Buttons\\UI-GroupLoot-DE-Up",
+        pass       = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
+    }
+
+    local ok = false
+    if tex.SetAtlas and C_Texture and C_Texture.GetAtlasInfo then
+        local a = ATLAS[rollType]
+        if a and C_Texture.GetAtlasInfo(a) then
+            tex:SetAtlas(a); ok = true
+        end
+    end
+    if not ok then
+        local f = FILES[rollType]
+        if f then tex:SetTexture(f); ok = true end
+    end
+
+    if ok then tex:Show() else tex:Hide() end
+end
+
+function UI.RollLabel(rollType)
+    local Tr = ns.Tr or function(s) return s end
+    local map = {
+        need       = Tr("roll_need")       or "Besoin",
+        greed      = Tr("roll_greed")      or "Cupidité",
+        disenchant = Tr("roll_disenchant") or "Désenchant.",
+        pass       = Tr("roll_pass")       or "Passer",
+    }
+    return map[rollType] or ""
 end
 
 -- 🆕 Applique une opacité uniquement sur les textes (FontString) d'un frame et ses enfants
@@ -1676,6 +1699,36 @@ end
 function UI.ResetTexCoord(tex)
     if not tex or not tex.SetTexCoord then return end
     tex:SetTexCoord(0,1,0,1)
+end
+
+-- Sécurise tout SetTexCoord en s’assurant que les UV restent dans [0,1]
+-- et que left < right, top < bottom (évite "TexCoord out of range").
+function UI.SafeSetTexCoord(tex, left, right, top, bottom)
+    if not (tex and tex.SetTexCoord) then return end
+
+    local l = tonumber(left)   or 0
+    local r = tonumber(right)  or 1
+    local t = tonumber(top)    or 0
+    local b = tonumber(bottom) or 1
+
+    -- Évite NaN
+    if l ~= l or r ~= r or t ~= t or b ~= b then
+        tex:SetTexCoord(0, 1, 0, 1)
+        return
+    end
+
+    if r < l then l, r = r, l end
+    if b < t then t, b = b, t end
+
+    -- Clamp
+    if l < 0 then l = 0 end
+    if r > 1 then r = 1 end
+    if t < 0 then t = 0 end
+    if b > 1 then b = 1 end
+    if l == r then r = math.min(1, l + 0.001) end
+    if t == b then b = math.min(1, t + 0.001) end
+
+    tex:SetTexCoord(l, r, t, b)
 end
 
 -- Force la visibilité par couche + alpha, pour éviter d’être masqué par un overlay

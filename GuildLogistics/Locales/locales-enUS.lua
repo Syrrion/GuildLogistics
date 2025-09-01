@@ -619,3 +619,4 @@ L["lbl_yes"]          = "Yes"
 L["lbl_no"]           = "No"
 -- Toasts
 L["toast_error_title"] = "New Lua Error"
+L["instance_outdoor"] = "Outdoor"

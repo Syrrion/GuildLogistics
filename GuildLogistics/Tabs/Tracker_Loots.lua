@@ -81,9 +81,39 @@ local function BuildRow(row)
 
     w.item = UI.CreateItemCell(row, { size = 16, width = 320 })
 
-    -- Qui (ramassé par)
+    -- Qui (ramassé par) + petite icône de type de roll à droite
     w.who = UI.CreateNameTag and UI.CreateNameTag(row) or row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     if w.who.SetJustifyH then w.who:SetJustifyH("LEFT") end
+
+    -- Support icône roll (14px) à droite du nom
+    w.rollBtn = CreateFrame("Button", nil, w.who)
+    w.rollBtn:SetSize(14, 14)
+    w.rollBtn:SetPoint("RIGHT", w.who, "RIGHT", 0, 0)
+    w.roll = w.rollBtn:CreateTexture(nil, "ARTWORK")
+    w.roll:SetAllPoints(w.rollBtn)
+    w.rollBtn:Hide()
+
+    -- Le texte du name tag s’arrête avant l’icône
+    if w.who.text then
+        w.who.text:ClearAllPoints()
+        local anchorLeft = (w.who.icon or w.who)
+        w.who.text:SetPoint("LEFT", anchorLeft, "RIGHT", 3, 0)
+        w.who.text:SetPoint("RIGHT", w.rollBtn, "LEFT", -3, 0)
+    end
+
+    -- Tooltip
+    w.rollBtn:SetScript("OnEnter", function(btn)
+        if not btn._rollType or btn._rollType == "" then return end
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        local lbl = (UI.RollLabel and UI.RollLabel(btn._rollType)) or btn._rollType
+        if btn._rollVal then
+            GameTooltip:AddLine(string.format("%s (%d)", lbl, btn._rollVal))
+        else
+            GameTooltip:AddLine(lbl)
+        end
+        GameTooltip:Show()
+    end)
+    w.rollBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     w.inst = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     w.inst:SetJustifyH("LEFT")
@@ -193,34 +223,55 @@ local function UpdateRow(i, row, w, it)
         end
     end
 
-    -- Qui
+    -- Qui + icône de roll si connue
     if w.who then UI.SetNameTagShort(w.who, it.looter or "") end
+    if w.roll and w.rollBtn then
+        if it.roll and UI.SetRollIcon then
+            UI.SetRollIcon(w.roll, it.roll)
+            w.rollBtn._rollType = it.roll
+            w.rollBtn._rollVal  = tonumber(it.rollV or 0) or nil
+            w.rollBtn:Show()
+        else
+            w.rollBtn._rollType, w.rollBtn._rollVal = nil, nil
+            w.rollBtn:Hide()
+        end
+    end
 
-    -- Instance (depuis instID → nom), avec cast sûr
+    -- Instance (depuis instID → nom) ; si diffID==0 → "Extérieur"
     if w.inst then
         local instID = tonumber(it.instID or 0) or 0
-        local instName = GLOG.ResolveInstanceName(instID)
+        local diffID = tonumber(it.diffID or 0) or 0
+        local instName
+        if diffID == 0 then
+            instName = (Tr and Tr("instance_outdoor")) or "Outdoor"
+        else
+            instName = (GLOG and GLOG.ResolveInstanceName and GLOG.ResolveInstanceName(instID)) or ""
+        end
         w.inst:SetText(instName or "")
     end
 
     -- Difficulté (+ niveau de clé M+) depuis diffID, avec fallback dynamique
     if w.diff then
-        local parts = {}
         local diffID = tonumber(it.diffID or 0) or 0
-        local diff = (GetDifficultyInfo and GetDifficultyInfo(diffID)) or ""
-        if diff and diff ~= "" then parts[#parts+1] = diff end
+        if diffID == 0 then
+            -- hors instance : tiret demandé
+            w.diff:SetText("-")
+        else
+            local parts = {}
+            local diff = (GetDifficultyInfo and GetDifficultyInfo(diffID)) or ""
+            if diff and diff ~= "" then parts[#parts+1] = diff end
 
-        local mplus = tonumber(it.mplus or 0) or 0
-        if (mplus == 0) and (diffID == 8) and GLOG and GLOG.GetActiveKeystoneLevel then
-            local live = tonumber(GLOG.GetActiveKeystoneLevel()) or 0
-            if live > 0 then mplus = live end
+            local mplus = tonumber(it.mplus or 0) or 0
+            if (mplus == 0) and (diffID == 8) and GLOG and GLOG.GetActiveKeystoneLevel then
+                local live = tonumber(GLOG.GetActiveKeystoneLevel()) or 0
+                if live > 0 then mplus = live end
+            end
+            if (mplus > 0) or (diffID == 8) then
+                parts[#parts+1] = (mplus > 0) and ("|cffffa500+"..mplus.."|r") or "+|cffffa500?|r"
+            end
+
+            w.diff:SetText(#parts > 0 and table.concat(parts, " ") or "-")
         end
-
-        if (mplus > 0) or (diffID == 8) then
-            parts[#parts+1] = (mplus > 0) and ("|cffffa500+"..mplus.."|r") or "+|cffffa500?|r"
-        end
-
-        w.diff:SetText(#parts > 0 and table.concat(parts, " ") or "")
     end
 
     -- Bouton Groupe -> affiche la liste des membres (et montre le nombre)
@@ -405,13 +456,13 @@ local function Build(container)
 
     local cols = UI.NormalizeColumns({
         { key="date",   title=Tr("col_time")       or "Heure",       w=120 },
-        { key="ilvl",   title=Tr("col_ilvl")       or "iLvl",        vsep=true,  w=40, align="CENTER" },
+        { key="ilvl",   title=Tr("col_ilvl")       or "iLvl",        vsep=true,  w=40, justify="CENTER" },
         { key="item",   title=Tr("col_item")       or "Objet",       vsep=true,  min=300, flex=1 },
         { key="who",    title=Tr("col_who")        or "Ramassé par", vsep=true,  w=150 },
-        { key="inst",   title=Tr("col_instance")   or "Instance",    vsep=true,  w=250},
-        { key="diff",   title=Tr("col_difficulty") or "Difficulté",  vsep=true,  min=125 },
-        { key="grp",    title=Tr("col_group")      or "Groupe",      vsep=true,  w=60,  align="CENTER" },
-        { key="close",  title="", min=30 },
+        { key="inst",   title=Tr("col_instance")   or "Instance",    vsep=true,  w=240},
+        { key="diff",   title=Tr("col_difficulty") or "Difficulté",  vsep=true,  min=125,  justify="CENTER" },
+        { key="grp",    title=Tr("col_group")      or "Groupe",      vsep=true,  w=60,  justify="CENTER" },
+        { key="close",  title="X", min=30,  vsep=true,justify="CENTER" },
     })
 
     -- Zone de liste dédiée, ancrée sous la barre de filtres

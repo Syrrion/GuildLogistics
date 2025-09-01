@@ -224,16 +224,31 @@ function UI.ListView(parent, cols, opts)
 
         -- Lignes
         local y = 0
+
+        -- 🔒 Signature de layout pour éviter de relayout inutilement les cellules/v-seps
+        local sigParts = { tostring(cW), tostring(#resolved) }
+        for i = 1, #resolved do
+            local c = resolved[i]
+            sigParts[#sigParts+1] = tostring(c.w or c.min or 0)
+        end
+        local _layoutSig = table.concat(sigParts, "|")
+
         for _, r in ipairs(self.rows) do
             if r:IsShown() then
                 r:SetWidth(cW)
                 r:ClearAllPoints()
                 r:SetPoint("TOPLEFT", self.list, "TOPLEFT", 0, -y)
                 y = y + r:GetHeight()
-                UI.LayoutRow(r, resolved, r._fields or {})
+
+                -- Ne réaligne les champs + v-seps que si la géométrie des colonnes a changé
+                if r._layoutSig ~= _layoutSig then
+                    UI.LayoutRow(r, resolved, r._fields or {})
+                    r._layoutSig = _layoutSig
+                end
             end
         end
         self.list:SetHeight(y)
+
 
         -- Force le recalcul immédiat de la plage de scroll (sinon elle arrive parfois au frame suivant)
         if self.scroll and self.scroll.UpdateScrollChildRect then
@@ -422,7 +437,7 @@ function UI.ListView(parent, cols, opts)
             for _, t in pairs(H._vseps) do
                 if t and t.IsShown and t:IsShown() then
                     if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
-                    if UI.SnapRegion   then UI.SnapRegion(t)   end
+                    -- ❌ plus de SnapRegion ici non plus
                 end
             end
         end
@@ -434,7 +449,7 @@ function UI.ListView(parent, cols, opts)
                     for _, t in pairs(r._vseps) do
                         if t and t.IsShown and t:IsShown() then
                             if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
-                            if UI.SnapRegion   then UI.SnapRegion(t)   end
+                            -- ❌ plus de SnapRegion ici non plus
                         end
                     end
                 end
@@ -600,6 +615,7 @@ function UI.ListView(parent, cols, opts)
                                     t:SetPoint("TOPLEFT",    r, "TOPLEFT",    xOfs, -pad)
                                     t:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", xOfs,  0)
                                 end
+                                if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
                             end
                         end
                     end

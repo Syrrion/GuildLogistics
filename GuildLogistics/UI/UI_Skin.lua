@@ -556,21 +556,44 @@ end
 
 
 function UI.ApplyTiledBackdrop(frame, bgFile, tileSize, alpha, insets)
-    if not (frame and frame.SetBackdrop and bgFile) then return end
+    -- Remplace le Backdrop tuilé par une texture tuilée "safe" (UV dans [0,1])
+    if not (frame and bgFile) then return end
 
-    local bd = frame._cdzBD or {}
-    bd.bgFile   = bgFile
-    bd.edgeFile = nil
-    bd.tile     = true
-    bd.tileSize = tonumber(tileSize) or 256
-    bd.edgeSize = 0
-    bd.insets   = insets or bd.insets or { left = 0, right = 0, top = 0, bottom = 0 }
+    -- Si un Backdrop existe (ou si ElvUI a posé un template), on l'efface pour éviter
+    -- que Backdrop.lua recalcule des TexCoord > 1.
+    if frame.SetBackdrop then pcall(frame.SetBackdrop, frame, nil) end
+    frame._cdzBD = nil
 
-    frame._cdzBD = bd
-    frame:SetBackdrop(bd)
-    frame:SetBackdropColor(1, 1, 1, alpha or 1) -- alpha facultatif
+    -- Insets
+    local ins = insets or { left = 0, right = 0, top = 0, bottom = 0 }
+    ins.left   = tonumber(ins.left)   or 0
+    ins.right  = tonumber(ins.right)  or 0
+    ins.top    = tonumber(ins.top)    or 0
+    ins.bottom = tonumber(ins.bottom) or 0
 
-    return bd
+    -- Texture de fond persistante
+    local bg = frame._cdzTiledBG
+    if not bg then
+        bg = frame:CreateTexture(nil, "BACKGROUND")
+        frame._cdzTiledBG = bg
+    end
+
+    bg:ClearAllPoints()
+    bg:SetPoint("TOPLEFT",     ins.left,  -ins.top)
+    bg:SetPoint("BOTTOMRIGHT", -ins.right, ins.bottom)
+
+    bg:SetTexture(bgFile)
+    bg:SetHorizTile(true)
+    bg:SetVertTile(true)
+
+    -- IMPORTANT : Toujours des UV valides
+    bg:SetTexCoord(0, 1, 0, 1)
+
+    -- Opacité (couleur laissée à 1,1,1)
+    bg:SetAlpha(alpha or 1)
+
+    -- Retourne la texture pour usage optionnel
+    return bg
 end
 
 -- Applique une "opacité visuelle" à une frame skinnée (fonds/bordures uniquement)

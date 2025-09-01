@@ -6,6 +6,13 @@ local UI = ns.UI
 
 local GLOG, U = ns.GLOG, ns.Util
 
+-- 🔢 Petit compteur de frames pour le throttle UI.SnapRegion
+if not UI._tickFrame then
+    UI._tick = 0
+    UI._tickFrame = CreateFrame("Frame")
+    UI._tickFrame:SetScript("OnUpdate", function() UI._tick = (UI._tick + 1) % 1000000000 end)
+end
+
 -- =========================
 -- ===== Fonctions util =====
 -- =========================
@@ -684,6 +691,50 @@ function GLOG.IsInMySubgroup(name)
     return false
 end
 
+-- True si au moins un perso du même MAIN que `name` est dans MON groupe (party) ou MON raid (peu importe le sous-groupe).
+function GLOG.IsInMyGroup(name)
+    if not name or name == "" then return false end
+
+    local function mainKeyOf(n)
+        if not n or n == "" then return nil end
+        local mk = (GLOG.GetMainOf and GLOG.GetMainOf(n)) or nil
+        if mk and mk ~= "" then
+            return (GLOG.NormName and GLOG.NormName(mk)) or tostring(mk):lower()
+        end
+        return (GLOG.NormName and GLOG.NormName(n)) or tostring(n):lower()
+    end
+
+    local target = mainKeyOf(name)
+    if not target then return false end
+
+    if IsInRaid and IsInRaid() then
+        for i=1,40 do
+            local unit = "raid"..i
+            if UnitExists and UnitExists(unit) then
+                local uName = UnitName and UnitName(unit)
+                if mainKeyOf(uName) == target then return true end
+            end
+        end
+        return false
+    end
+
+    if IsInGroup and IsInGroup() then
+        local pName = UnitName and UnitName("player")
+        if mainKeyOf(pName) == target then return true end
+        for i=1,4 do
+            local unit = "party"..i
+            if UnitExists and UnitExists(unit) then
+                local uName = UnitName and UnitName(unit)
+                if mainKeyOf(uName) == target then return true end
+            end
+        end
+        return false
+    end
+
+    return false
+end
+
+
 -- == BiS / Tiers : constantes & helpers réutilisables ==
 ns.Util.TIER_ORDER = ns.Util.TIER_ORDER or { "S","A","B","C","D","E","F" }
 
@@ -803,8 +854,20 @@ function UI.SnapTexture(tex)
     return tex
 end
 
+-- ⚡ Snap "pixel-perfect" avec throttle : 1x/region/frame max
 function UI.SnapRegion(region)
     if not region then return end
+
+    -- ⛔ Si la région est cachée / non visible on ne fait rien
+    if region.IsVisible and not region:IsVisible() then return end
+
+    -- 🔁 Throttle par frame : évite re-snap en rafale
+    UI._tick = UI._tick or 0
+    if region._lastSnapTick and region._lastSnapTick == UI._tick then
+        return
+    end
+    region._lastSnapTick = UI._tick
+
     local function Q(v)
         if UI.RoundToPixelOn then return UI.RoundToPixelOn(region, v) end
         return UI.RoundToPixel(v)
@@ -821,17 +884,16 @@ function UI.SnapRegion(region)
         if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(region, qh) else region:SetHeight(qh) end
     end
 
-    -- Points d'ancrage
+    -- Points d'ancrage (on ne touche que si ça change réellement)
     local n = region:GetNumPoints()
     if n and n > 0 then
         for i = 1, n do
             local p, rel, rp, x, y = region:GetPoint(i)
             if p then
                 local nx, ny = Q(x or 0), Q(y or 0)
-                local changed = (not x) or (not y)
-                    or math.abs((x or 0) - nx) > 1e-3
-                    or math.abs((y or 0) - ny) > 1e-3
-                if changed then
+                if (not x) or (not y)
+                   or math.abs((x or 0) - nx) > 1e-3
+                   or math.abs((y or 0) - ny) > 1e-3 then
                     if PixelUtil and PixelUtil.SetPoint then
                         PixelUtil.SetPoint(region, p, rel, rp, nx, ny)
                     else
@@ -842,6 +904,7 @@ function UI.SnapRegion(region)
         end
     end
 end
+
 
 -- Fixe l'épaisseur d'une ligne à N pixels physiques exacts (par défaut 1).
 function UI.SetPixelThickness(tex, n)

@@ -184,6 +184,6 @@ function UI.ToastError(text, opts)
     opts.variant = "error"
     opts.icon    = opts.icon or "Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew"
     opts.title   = opts.title or (Tr and Tr("toast_error_title")) or "Lua Error"
-    opts.sound   = (opts.sound ~= false) and (SOUNDKIT and SOUNDKIT.RAID_WARNING) or nil
+    opts.sound   = false--(opts.sound ~= false) and (SOUNDKIT and SOUNDKIT.RAID_WARNING) or nil
     return UI.Toast(opts)
 end

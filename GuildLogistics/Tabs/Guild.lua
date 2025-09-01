@@ -219,72 +219,11 @@ local function _RecreateListView()
 
 end
 
--- Recherche d’infos agrégées guilde (main + rerolls)
+-- Recherche d’infos agrégées guilde (main + rerolls) – O(1)
 local function FindGuildInfo(playerName)
-    local guildRows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
-    local NormName = GLOG.NormName
-    if not playerName or playerName == "" then return {} end
-
-    -- Détermine le main affiché et sa clé
-    local mainName = (GLOG.GetMainOf and GLOG.GetMainOf(playerName)) or playerName
-    local mainKey  = NormName and NormName(mainName)
-    local mainBase = (tostring(mainName):match('^([^%-]+)') or tostring(mainName))
-
-    local info = {}
-
-    -- Conserve idx/level du main uniquement
-    for _, gr in ipairs(guildRows) do
-        local rowKey = (gr.name_key) or (NormName and NormName(gr.name_amb or gr.name_raw))
-        if rowKey == mainKey then
-            info.idx = gr.idx
-            if GetGuildRosterInfo and gr.idx then
-                local _, _, _, level = GetGuildRosterInfo(gr.idx)
-                info.level = tonumber(level)
-            end
-            break
-        end
-    end
-
-    -- Agrège la présence et le "last seen"
-    local anyOnline, minDays, minHours = false, nil, nil
-    for _, gr in ipairs(guildRows) do
-        local rowNameKey = (gr.name_key) or ((NormName and NormName(gr.name_amb or gr.name_raw)) or nil)
-        local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(strtrim(gr.remark))) or nil)
-
-        local belongsToMain =
-            (rowMainKey and rowMainKey == mainKey)
-            or ((rowMainKey == nil or rowMainKey == "") and rowNameKey == mainKey)
-
-        if belongsToMain then
-            if gr.online then anyOnline = true end
-
-            -- Si un reroll (différent du main) est en ligne, capture son nom + classe
-            if gr.online then
-                local full = gr.name_amb or gr.name_raw or ""
-                local base = tostring(full):match("^([^%-]+)") or tostring(full)
-                if base ~= "" and base:lower() ~= tostring(mainBase or ""):lower() then
-                    info.onlineAltBase = base
-                    info.onlineAltFull = full
-                    info.onlineAltIdx  = gr.idx
-                    if gr.class and tostring(gr.class) ~= "" then
-                        info.altClass = gr.class
-                    end
-                end
-            end
-
-            local d  = tonumber(gr.daysDerived  or nil)
-            local hr = tonumber(gr.hoursDerived or nil)
-            if gr.online then d, hr = 0, 0 end
-            if d ~= nil then minDays  = (minDays  and math.min(minDays,  d))  or d end
-            if hr ~= nil then minHours = (minHours and math.min(minHours, hr)) or hr end
-        end
-    end
-
-    info.online = anyOnline
-    info.days   = minDays
-    info.hours  = minHours
-    return info
+    return (GLOG.GetMainAggregatedInfo and GLOG.GetMainAggregatedInfo(playerName)) or {}
 end
+
 
 -- Construction d’une ligne
 function BuildRow(r)
@@ -401,9 +340,9 @@ function UpdateRow(i, r, f, it)
         end
     end
 
-    -- ➕ Marquage "même groupe/sous-groupe"
+    -- ➕ Marquage "dans mon groupe/raid (tous sous-groupes confondus)"
     do
-        local same = (GLOG.IsInMySubgroup and GLOG.IsInMySubgroup(data.name)) or false
+        local same = (GLOG.IsInMyGroup and GLOG.IsInMyGroup(data.name)) or false
         local st = (UI.GetListViewStyle and UI.GetListViewStyle()) or {}
         local c  = st.accent or { r = 1, g = 0.82, b = 0.00, a = 0.90 }
 

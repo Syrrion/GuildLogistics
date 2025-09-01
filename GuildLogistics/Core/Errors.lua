@@ -13,15 +13,22 @@ local function playerFullName()
     return tostring(n or "player")
 end
 
--- Détection filtre: ne reporter que les erreurs qui concernent notre AddOn
-local function _isOurError(msg, stack)
-    msg   = tostring(msg or "")
-    stack = tostring(stack or "")
-    if msg:find("GuildLogistics", 1, true) then return true end
-    if stack == "" and debugstack then stack = debugstack(3) or "" end
-    if stack:find("[\\/]AddOns[\\/]GuildLogistics[\\/]", 1) then return true end
+-- Ne garde que les erreurs dont **la ligne fautive** (1ʳᵉ ligne du message)
+-- pointe dans notre AddOn. On **ignore la pile d'appel**.
+local function _isOurError(msg, _stack)
+    local m = tostring(msg or "")
+    -- Extraire uniquement la 1ʳᵉ ligne (format standard WoW: "Interface\AddOns\...\file.lua:123: ...")
+    local first = m:match("^[^\r\n]+") or ""
+
+    -- Détection stricte sur le chemin de la 1ʳᵉ ligne
+    if first:find("[\\/]AddOns[\\/]GuildLogistics[\\/]", 1) then
+        return true
+    end
+
+    -- Si la 1ʳᵉ ligne n'indique pas un fichier de notre AddOn, on rejette
     return false
 end
+
 
 -- Anti-spam par signature (mémoire session)
 local _seen = {}
@@ -62,6 +69,16 @@ local function _ensureJournal()
 end
 
 function GLOG.Errors_AddIncomingReport(kv, sender)
+    -- Filtrage version : n'accepter que si ver(emetteur) >= ver(GM)
+    local myVer  = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+    local hisVer = tostring(kv and kv.ver or "")
+    if hisVer == "" then
+        return -- version inconnue côté émetteur -> on ignore
+    end
+    if U and U.CompareVersions and U.CompareVersions(hisVer, myVer) < 0 then
+        return -- émetteur plus ancien que le GM -> on ignore
+    end
+
     _ensureJournal()
     local t = GuildLogisticsDB.errors
     t.list   = t.list   or {}
