@@ -903,10 +903,13 @@ end
 
 -- ➕ Visibilité des onglets selon l'appartenance à une guilde
 function UI.ApplyTabsForGuildMembership(inGuild)
-    local keepInfo     = Tr("tab_roster")     -- renommé « Info » via locales
-    local keepSettings = Tr("tab_settings")
-    local keepDebug    = Tr("tab_debug")
-    local reqLabel     = Tr("tab_requests")
+    local keepInfo        = Tr("tab_roster")     -- renommé « Info » via locales
+    local keepSettings    = Tr("tab_settings")
+    local keepDebug       = Tr("tab_debug")
+    -- Les deux sous-onglets Debug peuvent ne pas être localisés : prévoir un libellé de secours
+    local keepDebugDB     = Tr("tab_debug_db")      or "Base de donnée"
+    local keepDebugEvents = Tr("tab_debug_events")  or "Historique des évènements"
+    local reqLabel        = Tr("tab_requests")
 
     -- État GM + nombre de demandes en attente
     local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
@@ -920,8 +923,8 @@ function UI.ApplyTabsForGuildMembership(inGuild)
         local lab = def.label
         local shown
 
-        if lab == keepDebug then
-            -- Le débug reste contrôlé par l’option UI
+        if (lab == keepDebug) or (lab == keepDebugDB) or (lab == keepDebugEvents) then
+            -- Tous les onglets liés au Debug suivent l’option UI
             shown = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
 
         elseif lab == reqLabel then

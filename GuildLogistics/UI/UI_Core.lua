@@ -18,7 +18,7 @@ UI.ACCENT      = UI.ACCENT      or {0.22,0.55,0.95}
 UI.SEPARATOR_LABEL_COLOR = UI.SEPARATOR_LABEL_COLOR or { 1, 0.95, 0.3 } -- jaune doux
 
 -- Padding (px) ajouté au-dessus des lignes "séparateur" (déjà utilisé)
-UI.SEPARATOR_TOP_PAD = 0
+UI.SEPARATOR_TOP_PAD = 20
 
 -- Opacité (multiplicateur) des séparateurs verticaux de ListView
 UI.VCOL_SEP_ALPHA = UI.VCOL_SEP_ALPHA or 0.05
@@ -211,7 +211,8 @@ function UI.LayoutHeader(header, cols, labels)
             -- pas de clipping sur le header
             if header.SetClipsChildren then header:SetClipsChildren(false) end
 
-            local px = (UI.RoundToPixel and UI.RoundToPixel(x)) or x
+            local px = (UI.RoundToPixelOn and UI.RoundToPixelOn(header, x))
+                    or (UI.RoundToPixel and UI.RoundToPixel(x)) or x
             if PixelUtil and PixelUtil.SetPoint then
                 PixelUtil.SetPoint(t, "TOPLEFT",    header, "TOPLEFT",    px, 0)
                 PixelUtil.SetPoint(t, "BOTTOMLEFT", header, "BOTTOMLEFT", px, 0)
@@ -238,7 +239,16 @@ function UI.LayoutHeader(header, cols, labels)
     for i, t in pairs(header._vseps) do
         if not active[i] and t.Hide then t:Hide() end
     end
+
+    -- Ne pas afficher les séparateurs verticaux dans l'entête
+    if UI.SetVSepsVisible then
+        UI.SetVSepsVisible(header, false)
+    elseif header._vseps then
+        for _, t in pairs(header._vseps) do if t and t.Hide then t:Hide() end end
+    end
+
 end
+
 
 -- ===== Row =====
 function UI.LayoutRow(row, cols, fields)
@@ -281,7 +291,9 @@ function UI.LayoutRow(row, cols, fields)
             if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) else t:SetWidth(1) end
             t:ClearAllPoints()
 
-            local px = (UI.RoundToPixel and UI.RoundToPixel(x)) or x
+            local px = (UI.RoundToPixelOn and UI.RoundToPixelOn(row, x))
+                or (UI.RoundToPixel and UI.RoundToPixel(x)) or x
+
             if PixelUtil and PixelUtil.SetPoint then
                 PixelUtil.SetPoint(t, "TOPLEFT",    row, "TOPLEFT",    px, 0)
                 PixelUtil.SetPoint(t, "BOTTOMLEFT", row, "BOTTOMLEFT", px, 0)
@@ -305,6 +317,16 @@ function UI.LayoutRow(row, cols, fields)
     for i, t in pairs(row._vseps) do
         if not active[i] and t.Hide then t:Hide() end
     end
+
+    -- Masquer tous les v-seps pour les lignes "sep"
+    if row._isSep then
+        if row._vseps then
+            for _, t in pairs(row._vseps) do
+                if t and t.Hide then t:Hide() end
+            end
+        end
+    end
+
 end
 
 -- Déco de base d'une ligne : dégradé vertical + hover + séparateur TOP 1px (pixel-perfect)

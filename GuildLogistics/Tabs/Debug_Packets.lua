@@ -53,15 +53,15 @@ local HELLO_WAIT_SEC = 5
 
 local cols = UI.NormalizeColumns({
     { key="time",  title=Tr("col_time"),       w=110 },
-    { key="dir",   title=Tr("col_dir"),        vsep=true,  w=70  },
-    { key="state", title=Tr("col_state"),        vsep=true,  w=160 },
+    { key="dir",   title=Tr("col_dir"),        vsep=true,  w=70 , justify="CENTER" },
+    { key="state", title=Tr("col_state"),        vsep=true,  w=120 },
     { key="type",  title=Tr("col_type"),        vsep=true,  w=160 },
-    { key="rv",    title=Tr("col_version_short"),        vsep=true,  w=60  }, 
-    { key="size",  title=Tr("col_size"),      vsep=true,  w=80  },
-    { key="chan",  title=Tr("col_channel"),       vsep=true,  w=80  },
+    { key="rv",    title=Tr("lbl_db_version_prefix"),        vsep=true,  w=60, justify="CENTER"  }, 
+    { key="size",  title=Tr("col_size"),      vsep=true,  w=60, justify="CENTER"  },
+    { key="chan",  title=Tr("col_channel"),       vsep=true,  w=80, justify="CENTER"  },
     { key="target",title=Tr("col_sender"),    vsep=true,  min=200, flex=1 },
-    { key="frag",  title=Tr("col_frag"),        vsep=true,  w=70  },
-    { key="view",  title="",           vsep=true,  w=70  },
+    { key="frag",  title=Tr("col_frag"),        vsep=true,  w=70, justify="CENTER"  },
+    { key="view",  title="",           vsep=true,  w=80  },
 })
 
 local function BuildRow(r)
@@ -451,7 +451,7 @@ local function Build(container)
         pendingArea:ClearAllPoints()
         pendingArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, -(topOff + hRecv + gap + hSend + gap))
         pendingArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, -(topOff + hRecv + gap + hSend + gap))
-        pendingArea:SetPoint("BOTTOMLEFT",  footer, "TOPLEFT",  0, 0)
+        pendingArea:SetPoint("BOTTOMLEFT",  footer, "TOPLEFT",  0, 33)
         pendingArea:SetPoint("BOTTOMRIGHT", footer, "TOPRIGHT", 0, 0)
 
         if lvRecv and lvRecv.Layout then lvRecv:Layout() end

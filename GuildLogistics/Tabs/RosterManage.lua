@@ -275,7 +275,7 @@ local function buildItemsFromAgg(agg)
     local items = {}
 
     if #actives > 0 then
-        table.insert(items, { kind="sep", label=Tr("lbl_recent_online") })
+        table.insert(items, { kind="sep", extraTop = 0, label=Tr("lbl_recent_online") })
         for _, e in ipairs(actives) do
             table.insert(items, {
                 kind="data",

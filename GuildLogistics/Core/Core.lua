@@ -103,7 +103,7 @@ local function EnsureDB()
         ui.y        = tonumber(ui.y or 0) or 0
         ui.width    = tonumber(ui.width  or 1160) or 1160
         ui.height   = tonumber(ui.height or 680)  or 680
-        ui.uiScale  = tonumber(ui.uiScale or 0.7) or 0.7
+        ui.uiScale  = tonumber(ui.uiScale or 0.75) or 0.75
         ui.minimap  = ui.minimap  or { hide = false, angle = 215 }
     end
 

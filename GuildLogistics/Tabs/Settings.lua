@@ -19,7 +19,7 @@ function Build(container)
     optionsPane = CreateFrame("Frame", nil, panel)
     
     local RADIO_V_SPACING = 8
-    local y = UI.SECTION_HEADER_H
+    local y = 8
     
     -- === Section 1 : Thème de l'interface ===
     local headerH1 = UI.SectionHeader(optionsPane, Tr("opt_ui_theme"), { topPad = y })
@@ -97,34 +97,40 @@ function Build(container)
     local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_ui_scale_long"), { topPad = y })
     y = y + headerH2 + 8
 
-    -- Slider d'échelle (0.5 → 1.0), défaut 0.7
+    -- Slider d'échelle (0.5 → 1.0), défaut 0.75
     local savedForScale = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
-    local curScale = tonumber(savedForScale.uiScale or 0.7) or 0.7
+    local curScale = tonumber(savedForScale.uiScale or 0.75) or 0.75
     if curScale < 0.5 then curScale = 0.5 elseif curScale > 1.0 then curScale = 1.0 end
 
     local slScale = UI.Slider(optionsPane, {
         label   = Tr("opt_ui_scale"),
         min     = 0.5,
         max     = 1.0,
-        step    = 0.01,
+        step    = 0.05,
         value   = curScale,
         width   = 360,
         tooltip = "Ajuste l’échelle propre à l’addon (indépendante de l’UI globale).",
         format  = function(v) return string.format("%d%%", math.floor((tonumber(v) or 0.7)*100 + 0.5)) end,
+        applyOnRelease = true, -- ✅ commit seulement au relâchement
         name    = (ADDON or "GL").."_UIScaleSlider",
     })
+
 
     slScale:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -(y))
     slScale:SetOnValueChanged(function(_, v)
         v = tonumber(v) or 0.7
         if v < 0.5 then v = 0.5 elseif v > 1.0 then v = 1.0 end
+
         -- Sauvegarde
         local sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
         sv.uiScale = v
-        -- Application immédiate
-        if UI.Scale then
-            UI.Scale.TARGET_EFF_SCALE = v
-            if EnumerateFrames and UI.Scale.ApplyNow then
+
+        -- Application UNIFORME (commit au release grâce à applyOnRelease=true)
+        if UI.Scale and UI.Scale.ApplyAll then
+            UI.Scale.ApplyAll(v)
+        else
+            -- Fallback : enumerates toutes les frames GLOG_
+            if EnumerateFrames and UI.Scale and UI.Scale.ApplyNow then
                 local f = EnumerateFrames()
                 while f do
                     local n = f.GetName and f:GetName() or nil
@@ -134,15 +140,14 @@ function Build(container)
                     f = EnumerateFrames(f)
                 end
             end
-        else
-            -- Fallback minimal si le module de scale n'est pas présent
-            if UI.Main and UI.Main.SetScale then
-                local parent = UI.Main:GetParent() or UIParent
-                local pe = (parent.GetEffectiveScale and parent:GetEffectiveScale()) or 1
-                UI.Main:SetScale(v / pe)
-            end
+        end
+
+        -- Relayout + resnap de toutes les ListViews pour un rendu pixel-perfect
+        if UI and UI.ListView_RelayoutAll then
+            UI.ListView_RelayoutAll()
         end
     end)
+
     y = y + (slScale:GetHeight() or 26) + RADIO_V_SPACING
 
     -- === Section 2 : Ouverture auto ===

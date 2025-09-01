@@ -28,13 +28,6 @@ function UI.CreateBadgeCell(parent, opts)
     bg:SetVertexColor(0.30, 0.30, 0.30, 1)
     if bg.SetDrawLayer then bg:SetDrawLayer("ARTWORK", 0) end
 
-    -- ANNEAU discret façon quickslot (au-dessus du fond)
-    local ring = f:CreateTexture(nil, "ARTWORK")
-    ring:SetPoint("CENTER", f, "CENTER")
-    ring:SetSize(h * 0.9, h * 0.9)
-    ring:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-    ring:SetAlpha(0.20)
-    if ring.SetDrawLayer then ring:SetDrawLayer("ARTWORK", 1) end
 
     -- GLOSS fin, additif (ne “grise” plus la couleur)
     local gloss = f:CreateTexture(nil, "ARTWORK")

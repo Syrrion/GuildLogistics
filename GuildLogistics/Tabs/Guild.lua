@@ -681,7 +681,7 @@ function Refresh()
     -- Injecte les séparateurs
     local out = {}
     if #online > 0 then
-        table.insert(out, { kind = "sep", label = Tr("lbl_sep_online") or Tr("status_online") })
+        table.insert(out, { kind = "sep", extraTop = 0,  label = Tr("lbl_sep_online") or Tr("status_online") })
         for _, x in ipairs(online)  do table.insert(out, x) end
     end
     if #offline > 0 then

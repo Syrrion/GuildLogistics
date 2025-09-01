@@ -11,7 +11,16 @@ local Scale = UI.Scale
 -- Active/désactive la protection d’échelle
 Scale.LOCK_ENABLED       = (Scale.LOCK_ENABLED ~= false)  -- true par défaut
 -- Échelle effective visée pour nos fenêtres (1.0 = taille “réelle” pixel)
-Scale.TARGET_EFF_SCALE   = 0.7
+Scale.TARGET_EFF_SCALE   = 0.75
+
+-- 📦 Pré-initialisation : utilise la valeur sauvegardée SI disponible dès le chargement
+do
+    local sv = rawget(_G, "GuildLogisticsUI_Char") or rawget(_G, "GuildLogisticsUI")
+    local v  = sv and tonumber(sv.uiScale)
+    if v and v >= 0.5 and v <= 1.25 then
+        Scale.TARGET_EFF_SCALE = v
+    end
+end
 
 -- Calcule et applique l'échelle locale pour atteindre l’échelle effective cible
 local function _applyFixedScale(frame, targetEffScale)
@@ -53,6 +62,18 @@ ns.Events.Register("CVAR_UPDATE",           _OnScaleEvent)
 -- Utilitaire public si besoin ponctuel
 function Scale.ApplyNow(frame, targetEffScale)
     _applyFixedScale(frame, targetEffScale)
+end
+
+-- Applique le scale cible à TOUTES les frames enregistrées (une seule passe)
+function Scale.ApplyAll(targetEffScale)
+    if targetEffScale then Scale.TARGET_EFF_SCALE = targetEffScale end
+    for f, _ in pairs(_evt.frames) do
+        if f and f.SetScale then
+            _applyFixedScale(f, Scale.TARGET_EFF_SCALE)
+        else
+            _evt.frames[f] = nil
+        end
+    end
 end
 
 -- Debug: /glogscale -> affiche les scales

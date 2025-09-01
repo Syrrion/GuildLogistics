@@ -212,6 +212,28 @@ f:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" then
         if name ~= ADDON then return end
         if GLOG._EnsureDB then GLOG._EnsureDB() end
+
+        -- 🎯 Applique immédiatement l’échelle sauvegardée à toutes les frames protégées
+        do
+            local v = (GuildLogisticsUI and tonumber(GuildLogisticsUI.uiScale)) or nil
+            if ns and ns.UI and ns.UI.Scale then
+                if v then ns.UI.Scale.TARGET_EFF_SCALE = v end
+                if ns.UI.Scale.ApplyAll then
+                    -- petit délai 0 pour laisser finir les constructions de frames
+                    if C_Timer and C_Timer.After then
+                        C_Timer.After(0, function()
+                            ns.UI.Scale.ApplyAll(v or ns.UI.Scale.TARGET_EFF_SCALE)
+                            -- relayout des listviews pour purger tout jitter de scale
+                            if ns.UI.ListView_RelayoutAll then ns.UI.ListView_RelayoutAll() end
+                        end)
+                    else
+                        ns.UI.Scale.ApplyAll(v or ns.UI.Scale.TARGET_EFF_SCALE)
+                        if ns.UI.ListView_RelayoutAll then ns.UI.ListView_RelayoutAll() end
+                    end
+                end
+            end
+        end
+
         if GLOG.ClearDebugLogs then GLOG.ClearDebugLogs() end
         -- Seed des listes par défaut du suivi personnalisé (versionné)
         if GLOG.GroupTracker_EnsureDefaultCustomLists then

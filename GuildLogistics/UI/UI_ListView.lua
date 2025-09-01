@@ -336,6 +336,21 @@ function UI.ListView(parent, cols, opts)
                 lv._bgLayoutHooked = true
             end
 
+            -- 🔧 Recalage automatique quand l’échelle UI change
+            if ns and ns.Events and ns.Events.Register then
+                ns.Events.Register("UI_SCALE_CHANGED", lv, function()
+                    if lv and lv.Layout then lv:Layout() end
+                end)
+                ns.Events.Register("DISPLAY_SIZE_CHANGED", lv, function()
+                    if lv and lv.Layout then lv:Layout() end
+                end)
+                ns.Events.Register("CVAR_UPDATE", lv, function(_, cvar)
+                    if cvar == "uiScale" or cvar == "useUIScale" then
+                        if lv and lv.Layout then lv:Layout() end
+                    end
+                end)
+            end
+
             return lv
         end
     end
@@ -366,13 +381,67 @@ function UI.ListView(parent, cols, opts)
                             row._sepTop:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
                         end
                     end
+                    -- ➕ Recalage des séparateurs verticaux selon le padding stocké
+                    if row._vseps then
+                        local pad = tonumber(row._sepPadTop) or 0
+                        for _, t in pairs(row._vseps) do
+                            if t and t.GetPoint then
+                                local _, _, _, xOfs = t:GetPoint(1)
+                                xOfs = tonumber(xOfs) or 0
+                                t:ClearAllPoints()
+                                if PixelUtil and PixelUtil.SetPoint then
+                                    PixelUtil.SetPoint(t, "TOPLEFT",    row, "TOPLEFT",    xOfs, -pad)
+                                    PixelUtil.SetPoint(t, "BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0)
+                                else
+                                    t:SetPoint("TOPLEFT",    row, "TOPLEFT",    xOfs, -pad)
+                                    t:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0)
+                                end
+                            end
+                        end
+                    end
+
                 end
             end
+            -- 🔧 Après chaque layout, on resnap les séparateurs verticaux
+            if UI and UI.ListView_ResnapVSeps then
+                UI.ListView_ResnapVSeps(self)
+            end
+
             return res
         end
         lv._snapLayoutHooked = true
     end
     
+    -- Resnap ciblé des séparateurs verticaux (header + rows)
+    function UI.ListView_ResnapVSeps(lv)
+        if not lv then return end
+
+        -- Header
+        local H = lv.header
+        if H and H._vseps then
+            for _, t in pairs(H._vseps) do
+                if t and t.IsShown and t:IsShown() then
+                    if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
+                    if UI.SnapRegion   then UI.SnapRegion(t)   end
+                end
+            end
+        end
+
+        -- Rows
+        if lv.rows then
+            for _, r in ipairs(lv.rows) do
+                if r and r._vseps then
+                    for _, t in pairs(r._vseps) do
+                        if t and t.IsShown and t:IsShown() then
+                            if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
+                            if UI.SnapRegion   then UI.SnapRegion(t)   end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     -- SetData ne touche qu'au gradient & séparateurs, JAMAIS au SetColorTexture du fond
     function lv:SetData(data)
         data = data or {}
@@ -410,9 +479,14 @@ function UI.ListView(parent, cols, opts)
                 -- Padding supplémentaire pour les lignes 'sep'
                 local extraTop = 0
                 if it.kind == "sep" then
-                    extraTop = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 0
-                    if extraTop < 0 then extraTop = 0 end
+                    if not it.extraTop then
+                        extraTop = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 0
+                        if extraTop < 0 then extraTop = 0 end
+                    end
                 end
+                
+                -- Flag interne pour que LayoutRow sache masquer les v-seps
+                r._isSep = (it.kind == "sep")
 
                 local targetH = baseHWithPad + extraTop
                 if r._targetH ~= targetH then
@@ -458,6 +532,42 @@ function UI.ListView(parent, cols, opts)
                         end
                     end
 
+                    -- Les séparateurs verticaux ne doivent pas envahir la zone de padding
+                    if r._vseps then
+                        for _, t in pairs(r._vseps) do
+                            if t and t.GetPoint then
+                                local _, _, _, x = t:GetPoint(1)
+                                x = tonumber(x) or 0
+                                if PixelUtil and PixelUtil.SetPoint then
+                                    PixelUtil.SetPoint(t, "TOPLEFT",    r, "TOPLEFT",    UI.RoundToPixel and UI.RoundToPixel(x) or x, -pad)
+                                    PixelUtil.SetPoint(t, "BOTTOMLEFT", r, "BOTTOMLEFT", UI.RoundToPixel and UI.RoundToPixel(x) or x, 0)
+                                else
+                                    t:ClearAllPoints()
+                                    t:SetPoint("TOPLEFT",    r, "TOPLEFT",    x, -pad)
+                                    t:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", x, 0)
+                                end
+                                if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
+                                if UI.SnapRegion   then UI.SnapRegion(t)   end
+                            end
+                        end
+                    end
+
+                    -- Synchronise l'affichage des v-seps selon le type de ligne
+                    local isSep = it and it.kind == "sep"
+                    if UI.SetVSepsVisible then
+                        UI.SetVSepsVisible(r, not isSep)
+                    elseif r._vseps then
+                        for _, t in pairs(r._vseps) do
+                            if t then
+                                if isSep then
+                                    if t.Hide then t:Hide() end
+                                else
+                                    if t.Show then t:Show() end
+                                end
+                            end
+                        end
+                    end
+
                     -- Couleur du libellé "séparateur"
                     if f.sepLabel then
                         local col = self.opts.sepLabelColor or UI.SEPARATOR_LABEL_COLOR or {1, 1, 1}
@@ -474,9 +584,30 @@ function UI.ListView(parent, cols, opts)
                             f.sepLabel:SetPoint("LEFT", r, "LEFT", 8, -math.floor(pad/2))
                         end
                     end
+                    -- ➕ Ajuste les séparateurs verticaux pour ignorer la zone de padding (extraTop)
+                    -- et mémorise le pad pour les futurs Layouts.
+                    r._sepPadTop = pad
+                    if r._vseps then
+                        for _, t in pairs(r._vseps) do
+                            if t and t.GetPoint then
+                                local _, _, _, xOfs = t:GetPoint(1)  -- conserve l’offset X existant
+                                xOfs = tonumber(xOfs) or 0
+                                t:ClearAllPoints()
+                                if PixelUtil and PixelUtil.SetPoint then
+                                    PixelUtil.SetPoint(t, "TOPLEFT",    r, "TOPLEFT",    xOfs, -pad)
+                                    PixelUtil.SetPoint(t, "BOTTOMLEFT", r, "BOTTOMLEFT", xOfs,  0)
+                                else
+                                    t:SetPoint("TOPLEFT",    r, "TOPLEFT",    xOfs, -pad)
+                                    t:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", xOfs,  0)
+                                end
+                            end
+                        end
+                    end
+
                 end
             else
                 r:Hide()
+                r._isSep = false
                 if r._sepTop then r._sepTop:Hide() end
             end
         end
@@ -791,4 +922,55 @@ function UI.ListView_SyncScrollbar(lv, immediate)
             C_Timer.After(0, pass2)
         end)
     end
+end
+
+-- === Registre des ListViews + utilitaires de (re)layout/snap ===
+UI.__allListViews = UI.__allListViews or setmetatable({}, { __mode = "k" })
+
+-- Inscription automatique à la création (hook de l’enveloppe existante)
+do
+    local _Old = UI.ListView
+    UI.ListView = function(...)
+        local lv = _Old(...)
+        if lv then UI.__allListViews[lv] = true end
+        return lv
+    end
+end
+
+-- Resnap ciblé des séparateurs verticaux (header + rows)
+function UI.ListView_ResnapVSeps(lv)
+    if not lv then return end
+    local function resnapBucket(b)
+        if not b then return end
+        for _, t in pairs(b) do
+            if t and t.IsShown and t:IsShown() then
+                if UI.SetPixelWidth then UI.SetPixelWidth(t, 1) end
+                if UI.SnapRegion   then UI.SnapRegion(t)   end
+            end
+        end
+    end
+    if lv.header and lv.header._vseps then resnapBucket(lv.header._vseps) end
+    if lv.rows then
+        for _, r in ipairs(lv.rows) do
+            if r and r._vseps then resnapBucket(r._vseps) end
+        end
+    end
+end
+
+-- Relayout + resnap de TOUTES les ListViews (appelé quand l’échelle change)
+function UI.ListView_RelayoutAll()
+    if not UI.__allListViews then return end
+    for lv in pairs(UI.__allListViews) do
+        if lv and lv.Layout then
+            lv:Layout()
+            if UI.ListView_ResnapVSeps then UI.ListView_ResnapVSeps(lv) end
+        end
+    end
+end
+
+-- Suivre les changements d’échelle globaux (fallback si slider non utilisé)
+if ns and ns.Events and ns.Events.Register then
+    ns.Events.Register("UI_SCALE_CHANGED",     UI, function() if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end end)
+    ns.Events.Register("DISPLAY_SIZE_CHANGED", UI, function() if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end end)
+    ns.Events.Register("CVAR_UPDATE",          UI, function(_, cvar) if cvar=="uiScale" or cvar=="useUIScale" then if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end end end)
 end

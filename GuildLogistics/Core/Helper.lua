@@ -778,6 +778,23 @@ function UI.RoundToPixel(v)
     return math.floor((v / p) + 0.5) * p
 end
 
+-- Pixel physique ramené à l'échelle EFFECTIVE d'une région
+function UI.GetPhysicalPixelFor(region)
+    local _, ph = GetPhysicalScreenSize()
+    local eff = (region and region.GetEffectiveScale and region:GetEffectiveScale())
+             or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale())
+             or 1
+    if not ph or ph <= 0 then ph = 768 end
+    if not eff or eff <= 0 then eff = 1 end
+    return 768 / ph / eff
+end
+
+-- Arrondi au pixel pour une région donnée (évite les sous-pixels quand la frame est scalée)
+function UI.RoundToPixelOn(region, v)
+    local p = UI.GetPhysicalPixelFor(region)
+    return math.floor((v / p) + 0.5) * p
+end
+
 function UI.SnapTexture(tex)
     if tex and tex.SetSnapToPixelGrid then
         tex:SetSnapToPixelGrid(true)
@@ -788,22 +805,29 @@ end
 
 function UI.SnapRegion(region)
     if not region then return end
+    local function Q(v)
+        if UI.RoundToPixelOn then return UI.RoundToPixelOn(region, v) end
+        return UI.RoundToPixel(v)
+    end
+
     -- Taille
     local w, h = region:GetSize()
     if w and w > 0 then
-        if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(region, UI.RoundToPixel(w)) else region:SetWidth(UI.RoundToPixel(w)) end
+        local qw = Q(w)
+        if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(region, qw) else region:SetWidth(qw) end
     end
     if h and h > 0 then
-        if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(region, UI.RoundToPixel(h)) else region:SetHeight(UI.RoundToPixel(h)) end
+        local qh = Q(h)
+        if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(region, qh) else region:SetHeight(qh) end
     end
+
     -- Points d'ancrage
     local n = region:GetNumPoints()
     if n and n > 0 then
         for i = 1, n do
             local p, rel, rp, x, y = region:GetPoint(i)
             if p then
-                local nx, ny = UI.RoundToPixel(x or 0), UI.RoundToPixel(y or 0)
-                -- 🔒 évite les SetPoint redondants (qui déclenchent des relayouts en cascade)
+                local nx, ny = Q(x or 0), Q(y or 0)
                 local changed = (not x) or (not y)
                     or math.abs((x or 0) - nx) > 1e-3
                     or math.abs((y or 0) - ny) > 1e-3
@@ -822,16 +846,16 @@ end
 -- Fixe l'épaisseur d'une ligne à N pixels physiques exacts (par défaut 1).
 function UI.SetPixelThickness(tex, n)
     n = n or 1
-    local h = UI.GetPhysicalPixel() * n
+    local h = (UI.GetPhysicalPixelFor and UI.GetPhysicalPixelFor(tex) or UI.GetPhysicalPixel()) * n
     if PixelUtil and PixelUtil.SetHeight then PixelUtil.SetHeight(tex, h) else tex:SetHeight(h) end
 end
 
--- Fixe la largeur d'une ligne à N pixels physiques exacts (par défaut 1).
 function UI.SetPixelWidth(tex, n)
     n = n or 1
-    local w = UI.GetPhysicalPixel() * n
+    local w = (UI.GetPhysicalPixelFor and UI.GetPhysicalPixelFor(tex) or UI.GetPhysicalPixel()) * n
     if PixelUtil and PixelUtil.SetWidth then PixelUtil.SetWidth(tex, w) else tex:SetWidth(w) end
 end
+
 
 -- ===============================
 -- === Compat API Spell Info  ===
@@ -943,4 +967,18 @@ function GLOG.DeserializeLua(text)
     local ok, val = pcall(chunk)
     if not ok then return nil, val end
     return val, nil
+end
+
+-- Contrôle d'affichage des séparateurs verticaux attachés à une région (header/row)
+function UI.SetVSepsVisible(region, visible)
+    if not region or not region._vseps then return end
+    for _, t in pairs(region._vseps) do
+        if t then
+            if visible == false then
+                if t.Hide then t:Hide() end
+            else
+                if t.Show then t:Show() end
+            end
+        end
+    end
 end

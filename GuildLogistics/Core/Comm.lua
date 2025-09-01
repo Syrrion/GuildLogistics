@@ -80,7 +80,7 @@ local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
-local OUT_MAX_PER_SEC = 1
+local OUT_MAX_PER_SEC = -1
 
 -- Compression via LibDeflate (obligatoire)
 local LD = assert(LibStub and LibStub:GetLibrary("LibDeflate"),  "LibDeflate requis")
@@ -735,7 +735,7 @@ local function _ensureTicker()
 
     OutTicker = C_Timer.NewTicker(0.1, function()
         local t = now()
-        if (t - last) < (1.0 / OUT_MAX_PER_SEC) then return end
+        if OUT_MAX_PER_SEC > 0 and (t - last) < (1.0 / OUT_MAX_PER_SEC) then return end
         last = t
 
         local item = table.remove(OutQ, 1)
@@ -1611,56 +1611,134 @@ function GLOG._HandleFull(sender, msgType, kv)
         if ns.Emit then ns.Emit("expenses:changed") end
 
     elseif msgType == "STATUS_UPDATE" then
-        -- Unifié : iLvl (+max) / Clé Mythique (mid,lvl) / ✨ Côte M+ (score)
-        local pname = tostring(kv.name or "")
-        local by    = tostring(kv.by   or sender or "")
-        
-        local v_status = tostring(kv.ver or "")
-        if v_status ~= "" and GLOG.SetPlayerAddonVersion then GLOG.SetPlayerAddonVersion(pname or sender, v_status, tonumber(kv.ts) or time(), sender) end
+        -- Unifié : iLvl (+max) / Clé M+ (mid,lvl) / ✨ Score M+ (score)
+        -- ➕ Extension : accepte un batch kv.S avec entrées "uid;ts;ilvl;ilvlMax;mid;lvl;score" (séparateur ';' → aucun anti-slash).
+        --    Autorité = statusTimestamp (ts le plus récent l’emporte).
+        --    ⚠️ N'initialise pas de nouveaux joueurs (on met à jour uniquement ceux existants).
 
-        if pname ~= "" and GLOG.NormName and (GLOG.NormName(pname) == GLOG.NormName(by)) then
+        -- Compat: conserve le traçage de version d'addon si présent
+        do
+            local v_status = tostring(kv.ver or "")
+            if v_status ~= "" and GLOG.SetPlayerAddonVersion then
+                local who = tostring(kv.name or sender or "")
+                GLOG.SetPlayerAddonVersion(who, v_status, tonumber(kv.ts) or time(), sender)
+            end
+        end
+
+        local function _applyOne(pname, info)
+            if not pname or pname == "" then return end
             GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
             local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
-            if p then
-                local n_ts = safenum(kv.ts, now())
-                local prev = safenum(p.statusTimestamp, 0)
-                local changed = false
+            if not p then return end
 
-                -- ===== iLvl =====
-                local n_ilvl    = safenum(kv.ilvl, -1)
-                local n_ilvlMax = safenum(kv.ilvlMax, -1)
-                if n_ilvl >= 0 and n_ts >= prev then
-                    p.ilvl = math.floor(n_ilvl)
-                    if n_ilvlMax >= 0 then
-                        p.ilvlMax = math.floor(n_ilvlMax)
+            local n_ts   = safenum(info.ts, now())
+            local prev   = safenum(p.statusTimestamp, 0)
+            local changed= false
+
+            -- ===== iLvl =====
+            local n_ilvl    = safenum(info.ilvl, -1)
+            local n_ilvlMax = safenum(info.ilvlMax, -1)
+            if n_ilvl >= 0 and n_ts >= prev then
+                p.ilvl = math.floor(n_ilvl)
+                if n_ilvlMax >= 0 then p.ilvlMax = math.floor(n_ilvlMax) end
+                changed = true; if ns.Emit then ns.Emit("ilvl:changed", pname) end
+            end
+
+            -- ===== Clé M+ (mid/lvl) =====
+            local n_mid = safenum(info.mid, -1)
+            local n_lvl = safenum(info.lvl, -1)
+            if (n_mid >= 0 or n_lvl >= 0) and n_ts >= prev then
+                if n_mid >= 0 then p.mkeyMapId = n_mid end
+                if n_lvl >= 0 then p.mkeyLevel = n_lvl end
+                changed = true; if ns.Emit then ns.Emit("mkey:changed", pname) end
+            end
+
+            -- ✨ ===== Score M+ =====
+            local n_score = safenum(info.score, -1)
+            if n_score >= 0 and n_ts >= prev then
+                p.mplusScore = n_score
+                changed = true; if ns.Emit then ns.Emit("mplus:changed", pname) end
+            end
+
+            if changed and n_ts > prev then p.statusTimestamp = n_ts end
+            if changed and ns.RefreshAll then ns.RefreshAll() end
+        end
+
+        local function _applyByUID(uid, info)
+            uid = safenum(uid, -1)
+            if uid < 0 then return end
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if not name or name == "" then return end -- ⚠️ on n'invente pas d'entrée
+            _applyOne(name, info)
+        end
+
+        -- 1) Batch (nouveau) : kv.S peut être une liste de chaînes "uid;ts;ilvl;ilvlMax;mid;lvl;score"
+        if type(kv.S) == "table" then
+            for _, rec in ipairs(kv.S) do
+                if type(rec) == "string" then
+                    -- Format UID + ';'
+                    local uid, ts, ilvl, ilvlMax, mid, lvl, score =
+                        rec:match("^([%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+)$")
+                    if uid and ts then
+                        _applyByUID(uid, {
+                            ts = safenum(ts, now()),
+                            ilvl = safenum(ilvl, -1),
+                            ilvlMax = safenum(ilvlMax, -1),
+                            mid = safenum(mid, -1),
+                            lvl = safenum(lvl, -1),
+                            score = safenum(score, -1),
+                        })
+                    else
+                        -- 🔁 Compat lecture ancien CSV à la virgule, soit "name,..." soit "uid,..."
+                        local a,b,c,d,e,f,g = rec:match("^(.-),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+                        if a and b then
+                            local maybeUID = tonumber(a)
+                            if maybeUID then
+                                _applyByUID(maybeUID, {
+                                    ts = safenum(b, now()),
+                                    ilvl = safenum(c, -1), ilvlMax = safenum(d, -1),
+                                    mid = safenum(e, -1),   lvl = safenum(f, -1),
+                                    score = safenum(g, -1),
+                                })
+                            else
+                                _applyOne(tostring(a or ""), {
+                                    ts = safenum(b, now()),
+                                    ilvl = safenum(c, -1), ilvlMax = safenum(d, -1),
+                                    mid = safenum(e, -1),   lvl = safenum(f, -1),
+                                    score = safenum(g, -1),
+                                })
+                            end
+                        end
                     end
-                    changed = true
-                    if ns.Emit then ns.Emit("ilvl:changed", pname) end
+                elseif type(rec) == "table" then
+                    local uid = rec.uid or rec.u
+                    local name = rec.name or rec.n
+                    local info = {
+                        ts = safenum(rec.ts, now()),
+                        ilvl = rec.ilvl, ilvlMax = rec.ilvlMax,
+                        mid = rec.mid,   lvl = rec.lvl,
+                        score = rec.score,
+                    }
+                    if uid then _applyByUID(uid, info)
+                    elseif name then _applyOne(name, info) end
                 end
+            end
+        end
 
-                -- ===== Clé M+ (mid/lvl) =====
-                local n_mid = safenum(kv.mid, 0)
-                local n_lvl = safenum(kv.lvl, 0)
-                if n_lvl > 0 and n_ts >= prev then
-                    p.mkeyMapId = n_mid
-                    p.mkeyLevel = n_lvl
-                    changed = true
-                    if ns.Emit then ns.Emit("mkey:changed", pname) end
-                end
-
-                -- ✨ ===== Côte M+ =====
-                local n_score = safenum(kv.score, -1)
-                if n_score >= 0 and n_ts >= prev then
-                    p.mplusScore = n_score
-                    changed = true
-                    if ns.Emit then ns.Emit("mplus:changed", pname) end
-                end
-
-                if changed and n_ts > prev then
-                    p.statusTimestamp = n_ts
-                end
-                
-                if (changed) and ns.RefreshAll then ns.RefreshAll() end
+        -- 2) Compat (ancien) : enregistrement unitaire (accepte aussi kv.uid)
+        do
+            local uid  = safenum(kv.uid, -1)
+            local name = tostring(kv.name or "")
+            local info = {
+                ts = safenum(kv.ts, now()),
+                ilvl = kv.ilvl, ilvlMax = kv.ilvlMax,
+                mid  = kv.mid,  lvl     = kv.lvl,
+                score= kv.score,
+            }
+            if uid >= 0 then
+                _applyByUID(uid, info)
+            elseif name ~= "" then
+                _applyOne(name, info)
             end
         end
 
@@ -2872,8 +2950,9 @@ function GLOG.BroadcastStatusUpdate(overrides)
     end
 
     -- ✉️ Diffusion réseau
+    local myUID = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or (ns.Util and ns.Util.GetOrAssignUID and ns.Util.GetOrAssignUID(me)) or nil
     local payload = {
-        name = me, ts = ts, by = by,
+        name = me, ts = ts, by = by, uid = myUID,  -- ➕ uid de l’émetteur
     }
     if ilvl    ~= nil then payload.ilvl    = math.floor(tonumber(ilvl)    or 0) end
     if ilvlMax ~= nil then payload.ilvlMax = math.floor(tonumber(ilvlMax) or 0) end
@@ -2883,7 +2962,33 @@ function GLOG.BroadcastStatusUpdate(overrides)
         payload.lvl = safenum(lvl, 0)
     end
 
+    -- ➕ NOUVEAU : batch 'S' de statuts connus localement
+    -- Format compact par entrée : "uid;ts;ilvl;ilvlMax;mid;lvl;score"  (séparateur ';' → aucun antislash à l'encodage)
+    do
+        GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+        local S = {}
+        for full, rec in pairs(GuildLogisticsDB.players) do
+            local ts2 = safenum(rec.statusTimestamp, 0)
+            if ts2 > 0 then
+                -- Assigne un UID si absent (sur ENTRÉE existante uniquement)
+                local uid = tonumber(rec.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+                if uid then
+                    local il   = (rec.ilvl       ~= nil) and math.floor(tonumber(rec.ilvl)    or 0) or -1
+                    local ilMx = (rec.ilvlMax    ~= nil) and math.floor(tonumber(rec.ilvlMax) or 0) or -1
+                    local mid2 = (rec.mkeyMapId  ~= nil) and safenum(rec.mkeyMapId,  -1)          or -1
+                    local lvl2 = (rec.mkeyLevel  ~= nil) and safenum(rec.mkeyLevel,  -1)          or -1
+                    local sc   = (rec.mplusScore ~= nil) and safenum(rec.mplusScore, -1)          or -1
+                    if (il >= 0) or (ilMx >= 0) or (mid2 >= 0) or (lvl2 >= 0) or (sc >= 0) then
+                        S[#S+1] = string.format("%d;%d;%d;%d;%d;%d;%d", uid, ts2, il, ilMx, mid2, lvl2, sc)
+                    end
+                end
+            end
+        end
+        if #S > 0 then payload.S = S end
+    end
+
     GLOG.Comm_Broadcast("STATUS_UPDATE", payload)
+
 end
 
 -- 🧭 Compat : redirige les anciens appels vers le nouveau message unifié

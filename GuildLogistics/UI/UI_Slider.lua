@@ -90,7 +90,19 @@ function UI.Slider(parent, opts)
     s:SetScript("OnValueChanged", function(self, v)
         v = math.floor((tonumber(v) or minV) / step + 0.5) * step
         _apply(v)
-        if wrap._onChange then wrap._onChange(wrap, v) end
+        wrap._pendingValue = v
+        -- Commit live seulement si on ne veut pas le différer
+        if not opts.applyOnRelease and wrap._onChange then
+            wrap._onChange(wrap, v)
+        end
+    end)
+
+    -- Application différée : commit au relâchement de la souris
+    s:HookScript("OnMouseUp", function(self)
+        if opts.applyOnRelease and wrap._onChange then
+            local v = wrap._pendingValue or self:GetValue()
+            wrap._onChange(wrap, v)
+        end
     end)
 
     s:SetValue(value)
