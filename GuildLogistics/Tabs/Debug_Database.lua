@@ -249,7 +249,7 @@ UpdateRow = function(i, r, f, it)
     r.btnOpen:SetShown(isTbl)                  -- visible seulement si table
     r.btnEdit:SetShown(isGM and not isTbl)              -- édition scalaire uniquement (inchangé)
 
-    r.btnDel:SetShown(isGM)
+    --r.btnDel:SetShown(isGM)
 
     -- Reflow (les shows/hides impactent le layout)
     if UI.AttachRowRight and f.act then

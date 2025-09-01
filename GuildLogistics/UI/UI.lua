@@ -952,9 +952,10 @@ function UI.SetDebugEnabled(enabled)
 
     -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
     if UI.SetTabVisible then
-        UI.SetTabVisible(Tr("tab_debug"), GuildLogisticsUI.debugEnabled)
-        UI.SetTabVisible(Tr("tab_debug_db"), GuildLogisticsUI.debugEnabled)
-        UI.SetTabVisible(Tr("tab_debug_events"), GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug"),         GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug_db"),      GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug_events"),  GuildLogisticsUI.debugEnabled)
+        UI.SetTabVisible(Tr("tab_debug_errors"),  GuildLogisticsUI.debugEnabled)
     end
 
     -- ➕ Affiche/masque les boutons d’en-tête
@@ -1602,3 +1603,28 @@ if UI.Main and UI.Main.SetScript then
     end)
 end
 if UI and UI._catBar and UI.CreateSidebarSyncFooter then UI.CreateSidebarSyncFooter() end
+
+-- Ouvre uniquement si la fenêtre principale n'est pas déjà visible
+function UI.IsOpen()
+    return (UI.Main and UI.Main.IsShown and UI.Main:IsShown()) or false
+end
+
+function UI.Open()
+    if not UI.IsOpen() then
+        if ns and ns.ToggleUI then
+            ns.ToggleUI()
+        elseif UI.Main and UI.Main.Show then
+            UI.Main:Show()
+        elseif _G and _G["GLOG_Main"] and _G["GLOG_Main"].Show then
+            _G["GLOG_Main"]:Show()
+        end
+    end
+end
+
+-- Ouvre l'addon si fermé puis affiche l'onglet par label (ne referme jamais)
+function UI.OpenAndShowTab(label)
+    UI.Open()
+    if label and UI.ShowTabByLabel then
+        UI.ShowTabByLabel(label)
+    end
+end

@@ -607,3 +607,15 @@ L["lbl_min_item_level"] = "Minimum ilvl"
 L["lbl_instance_only"]  = "Only in instance"
 L["opt_ui_scale_long"] = "Interface scale"
 L["opt_ui_scale"] = "Scale"
+
+-- === Debug: Errors ===
+L["tab_debug_errors"] = "Lua Errors"
+L["col_message"]      = "Message"
+L["col_done"]         = "Handled"
+L["lbl_error"]        = "Error"
+L["lbl_stacktrace"]   = "Stack trace"
+L["btn_copy"]         = "Copy"
+L["lbl_yes"]          = "Yes"
+L["lbl_no"]           = "No"
+-- Toasts
+L["toast_error_title"] = "New Lua Error"

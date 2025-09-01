@@ -81,15 +81,18 @@ local function EnsureDB()
 
     -- ➕ 3) Initialisation habituelle (désormais sur la base « par personnage »)
     GuildLogisticsDB = GuildLogisticsDB or {}
-    do
+do
         local db = GuildLogisticsDB
         db.players  = db.players  or {}
         db.history  = db.history  or { nextId = 1 }
         db.expenses = db.expenses or { recording = false, list = {}, nextId = 1 }
         db.lots     = db.lots     or { nextId = 1, list = {} }
-        db.ids      = db.ids      or { counter = 0, byName = {}, byId = {} }
         db.meta     = db.meta     or { lastModified = 0, fullStamp = 0, rev = 0, master = nil }
         db.requests = db.requests or {}
+
+        -- Journal d'erreurs (côté GM)
+        db.errors   = db.errors   or { list = {}, nextId = 1 }
+        -- ⚠️ pas de errOutbox ici : on réutilise GuildLogisticsDB.pending (Comm)
     end
 
     -- Initialisation UI avec sauvegarde des valeurs existantes
@@ -979,6 +982,7 @@ end
 
 -- ➕ Lecture immédiate de mon iLvl équipé (sans diffusion)
 if not GLOG.ReadOwnEquippedIlvl then
+
     function GLOG.ReadOwnEquippedIlvl()
         local equipped
         if GetAverageItemLevel then
@@ -1199,7 +1203,6 @@ function GLOG.WipeAllData()
         history       = { nextId = 1 },
         expenses      = { recording = false, list = {}, nextId = 1 },
         lots          = { nextId = 1, list = {} },
-        ids           = { counter=0, byName={}, byId={} },
         meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
         requests      = {},
     }
@@ -1225,7 +1228,6 @@ function GLOG.WipeAllSaved()
         history       = { nextId = 1 },
         expenses      = { recording = false, list = {}, nextId = 1 },
         lots          = { nextId = 1, list = {} },
-        ids           = { counter=0, byName={}, byId={} },
         meta          = { lastModified=0, fullStamp=0, rev=keepRev, master=keepMaster },
         requests      = {},
     }

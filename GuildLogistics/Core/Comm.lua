@@ -1380,6 +1380,26 @@ function GLOG._HandleFull(sender, msgType, kv)
             )
         end
 
+    -- ➕ Rapport d'erreur (whisper → GM, journalisé côté GM)
+    elseif msgType == "ERR_REPORT" then
+        -- Seul le GM les consomme et journalise
+        if not (GLOG.IsMaster and GLOG.IsMaster()) then
+            return
+        end
+        if GLOG.Errors_AddIncomingReport then
+            GLOG.Errors_AddIncomingReport(kv, sender)
+        else
+            -- Fallback minimal si le module n'est pas chargé
+            GuildLogisticsDB = GuildLogisticsDB or {}
+            GuildLogisticsDB.errors = GuildLogisticsDB.errors or { list = {}, nextId = 1 }
+            local t = GuildLogisticsDB.errors
+            local id = tonumber(t.nextId or 1) or 1
+            t.list[#t.list+1] = { id = id, ts = kv.ts, who = kv.who or sender, ver = kv.ver, msg = kv.msg, st = kv.st }
+            t.nextId = id + 1
+            if ns.Emit then ns.Emit("errors:changed") end
+        end
+
+
     elseif msgType == "TX_APPLIED" then
         if not shouldApply() then return end
         local applied = false
@@ -2662,19 +2682,39 @@ function GLOG.Pending_AddTXREQ(kv)
     P.txreq = P.txreq or {}
     kv = kv or {}
     kv.id = kv.id or (tostring(now()) .. "-" .. tostring(math.random(1000,9999)))
+    kv.ts = kv.ts or now() -- ⇦ horodatage pour l’affichage Pending
     table.insert(P.txreq, kv)
     if ns.Emit then ns.Emit("debug:changed") end
     return kv.id
 end
+
 
 function GLOG.Pending_ListTXREQ()
     local P = GuildLogisticsDB and GuildLogisticsDB.pending or {}
     return (P and P.txreq) or {}
 end
 
+-- File d'attente des rapports d'erreurs (même principe que TX_REQ)
+function GLOG.Pending_AddERRRPT(kv)
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.pending = GuildLogisticsDB.pending or {}
+    local P = GuildLogisticsDB.pending
+    P.err = P.err or {}
+    kv = kv or {}
+    kv.id = kv.id or (tostring(now()) .. "-" .. tostring(math.random(1000,9999)))
+    table.insert(P.err, kv)
+    if ns.Emit then ns.Emit("debug:changed") end
+    return kv.id
+end
+
+function GLOG.Pending_ListERRRPT()
+    local P = GuildLogisticsDB and GuildLogisticsDB.pending or {}
+    return (P and P.err) or {}
+end
+
 function GLOG.Pending_FlushToMaster(master)
     local P = GuildLogisticsDB and GuildLogisticsDB.pending or {}
-    if not P or not P.txreq or #P.txreq == 0 then return 0 end
+    if not P then return 0 end
 
     -- Destinataire par défaut : GM effectif (rang 0)
     if not master or master == "" then
@@ -2683,21 +2723,41 @@ function GLOG.Pending_FlushToMaster(master)
     if not master or master == "" then return 0 end
 
     local sent = 0
-    for i = 1, #P.txreq do
-        local kv = P.txreq[i]
-        if kv then
-            GLOG.Comm_Whisper(master, "TX_REQ", kv)
-            sent = sent + 1
+
+    -- 1) Flush des TX_REQ (historique)
+    if P.txreq and #P.txreq > 0 then
+        for i = 1, #P.txreq do
+            local kv = P.txreq[i]
+            if kv then
+                GLOG.Comm_Whisper(master, "TX_REQ", kv)
+                sent = sent + 1
+            end
         end
+        P.txreq = {}
     end
-    P.txreq = {}
+
+    -- 2) Flush des rapports d'erreurs (nouveau)
+    if P.err and #P.err > 0 then
+        for i = 1, #P.err do
+            local kv = P.err[i]
+            if kv then
+                GLOG.Comm_Whisper(master, "ERR_REPORT", kv)
+                sent = sent + 1
+            end
+        end
+        P.err = {}
+    end
+
     if ns.Emit then ns.Emit("debug:changed") end
     return sent
 end
 
+
 -- (Optionnel pour l’UI Debug — si tu veux alimenter une 3e liste)
 function GLOG.GetPendingOutbox()
     local t = {}
+
+    -- TX_REQ
     for _, kv in ipairs(GLOG.Pending_ListTXREQ() or {}) do
         t[#t+1] = {
             ts   = safenum(kv.ts, 0),
@@ -2706,9 +2766,25 @@ function GLOG.GetPendingOutbox()
             id   = tostring(kv.id or ""),
         }
     end
+
+    -- ERR_REPORT
+    if GLOG.Pending_ListERRRPT then
+        for _, kv in ipairs(GLOG.Pending_ListERRRPT() or {}) do
+            local preview = tostring(kv.msg or ""):gsub("\r",""):match("([^\n]+)") or (kv.msg or "")
+            if #preview > 80 then preview = preview:sub(1,79) .. "…" end
+            t[#t+1] = {
+                ts   = safenum(kv.ts, 0),
+                type = "ERR_REPORT",
+                info = string.format("Erreur %s : %s", tostring(kv.who or "?"), preview),
+                id   = tostring(kv.id or ""),
+            }
+        end
+    end
+
     table.sort(t, function(a,b) return safenum(a.ts,0) > safenum(b.ts,0) end)
     return t
 end
+
 
 -- ===== Dépenses/Lots (émission GM) =====
 -- Diffusion : création d’un lot (utilisé par Core.Lot_Create)

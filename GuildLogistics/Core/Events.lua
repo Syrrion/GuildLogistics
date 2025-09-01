@@ -212,7 +212,6 @@ f:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" then
         if name ~= ADDON then return end
         if GLOG._EnsureDB then GLOG._EnsureDB() end
-
         -- 🎯 Applique immédiatement l’échelle sauvegardée à toutes les frames protégées
         do
             local v = (GuildLogisticsUI and tonumber(GuildLogisticsUI.uiScale)) or nil

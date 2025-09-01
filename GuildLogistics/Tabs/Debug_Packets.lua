@@ -190,6 +190,14 @@ local function UpdateRow(i, r, f, it)
     end)
 end
 
+-- Formattage des lignes de la file d'attente (Pending)
+local function UpdatePendingRow(i, r, f, it)
+    local epoch = tonumber(it.ts or 0) or 0
+    if epoch <= 0 then epoch = (time and time()) or 0 end
+    f.time:SetText(date("%H:%M:%S", epoch))
+    f.type:SetText(tostring(it.type or ""))
+    f.info:SetText(tostring(it.info or ""))
+end
 
 -- Regroupe les fragments et décode rv/lm
 local function groupLogs(raw)
@@ -406,16 +414,24 @@ local function Build(container)
     pendingArea = CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(recvArea,    Tr("lbl_incoming_packets"))
-    lvRecv    = UI.ListView(recvArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvRecv    = UI.ListView(recvArea, cols, {
+        buildRow  = BuildRow,
+        updateRow = UpdateRow,
+        topOffset = UI.SECTION_HEADER_H or 26,
+        rowHeight = 28, -- ⇦ hauteur de ligne fixée
+    })
 
-    UI.SectionHeader(sendArea,    Tr("lbl_outgoing_packets"))
-    lvSend    = UI.ListView(sendArea, cols, { buildRow = BuildRow, updateRow = UpdateRow, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvSend    = UI.ListView(sendArea, cols, {
+        buildRow  = BuildRow,
+        updateRow = UpdateRow,
+        topOffset = UI.SECTION_HEADER_H or 26,
+        rowHeight = 28, -- ⇦ hauteur de ligne fixée
+    })
 
-    UI.SectionHeader(pendingArea, Tr("lbl_pending_queue"))
     lvPending = UI.ListView(pendingArea, {
         { key="time", title=Tr("col_time"), w=110 },
         { key="type", title=Tr("col_type"), w=100 },
-        { key="info", title=Tr("col_request"), min=240, flex=1 },
+        { key="info", title=Tr("col_request"), min=240, flex=1, justify = "LEFT"},
     }, {
         buildRow = function(r)
             local f = {}
@@ -425,8 +441,10 @@ local function Build(container)
             return f
         end,
         updateRow = UpdatePendingRow,
-        topOffset = UI.SECTION_HEADER_H or 26
+        topOffset = UI.SECTION_HEADER_H or 26,
+        rowHeight = 28, -- ⇦ hauteur de ligne fixée
     })
+
 
     -- Placement type Synthese : zones au-dessus du footer
     local function PositionAreas()
