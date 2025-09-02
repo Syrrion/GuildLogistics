@@ -322,10 +322,10 @@ f:SetScript("OnEvent", function(self, event, name)
             GLOG.UpdateOwnStatusIfMain()
         end
 
-    elseif event == "CHAT_MSG_LOOT" then
+    elseif event == "CHAT_MSG_SYSTEM" then
         local msg = name
-        if GLOG and GLOG.LootTracker_HandleChatMsgLoot and msg then
-            GLOG.LootTracker_HandleChatMsgLoot(msg)
+        if GLOG and GLOG.LootTracker_HandleChatMsgSystem and msg then
+            GLOG.LootTracker_HandleChatMsgSystem(msg)
         end
 
         
@@ -334,8 +334,6 @@ f:SetScript("OnEvent", function(self, event, name)
         -- ➕ Demande une mise à jour du roster côté serveur
         if C_GuildInfo and C_GuildInfo.GuildRoster then
             C_GuildInfo.GuildRoster()
-        elseif GuildRoster then
-            GuildRoster()
         end
 
         -- ➕ Recharge notre cache local

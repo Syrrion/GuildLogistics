@@ -9,6 +9,7 @@ local Tr = ns.Tr or function(s) return s end
 local _getCtx, _putCtx, _getCtxByLink
 local _SaveLastMPlus, _LoadLastMPlus, _BackfillMPlus
 local _GetRollFor, _RememberRoll
+local _IsLootReceiptMessage, _IsSelfLootMessage
 
 -- Stubs de sécurité (évite tout appel sur nil pendant /reload)
 _GetRollFor   = _GetRollFor   or function() return nil, nil end
@@ -465,8 +466,8 @@ end
 function GLOG.LootTracker_HandleChatMsgLoot(message)
     local msg = tostring(message or "")
 
-    -- (si tu as déjà le filtrage "réception réelle" + la capture des rolls,
-    -- ce bloc s'insère *après* ces filtres)
+    -- On ne traite que les vraies réceptions d’objets
+    if not _IsLootReceiptMessage(msg) then return end
 
     local link = _ExtractLink(msg)
     if not link then return end
@@ -482,7 +483,7 @@ function GLOG.LootTracker_HandleChatMsgLoot(message)
 end
 
 -- Vrai message "self" (loot direct/poussé sur le joueur)
-local function _IsSelfLootMessage(msg)
+_IsSelfLootMessage = function(msg)
     if not msg or msg == "" then return false end
     local function pat(gs)
         if not gs or gs == "" then return nil end
@@ -515,22 +516,6 @@ end
 local function _NormPlayer(name)
     name = tostring(name or ""):gsub("%-.*$", ""):lower()
     return name
-end
-
--- Whitelist "vrai ramassage" (évite doublons des rolls)
-local function _IsLootReceiptMessage(msg)
-    local keep = {
-        _GS2Pat(LOOT_ITEM_SELF),
-        _GS2Pat(LOOT_ITEM_SELF_MULTIPLE),
-        _GS2Pat(LOOT_ITEM_PUSHED_SELF),
-        _GS2Pat(LOOT_ITEM),
-        _GS2Pat(LOOT_ITEM_MULTIPLE),
-        _GS2Pat(LOOT_ITEM_PUSHED),
-    }
-    for _, p in ipairs(keep) do
-        if p and msg:match(p) then return true end
-    end
-    return false
 end
 
 -- Cache: [link][playerLower] = { type="need|greed|disenchant|pass", val=98, ts=... }
@@ -625,12 +610,32 @@ local function _ParseRollMessage(msg)
     return nil
 end
 
+-- Handler : messages système de jets (Need/Greed/DE/Pass/Won)
+function GLOG.LootTracker_HandleChatMsgSystem(message)
+    local msg = tostring(message or "")
+    if msg == "" then return end
+
+    local who, link, rType, rVal = _ParseRollMessage(msg)
+    if not who or not link then return end
+
+    -- Si on ne reçoit que la valeur (ex: "X won ... roll of %d"), on tente de
+    -- récupérer le type déjà mémorisé pour (joueur, lien) et on met à jour.
+    if (not rType) and rVal and _GetRollFor then
+        local prevType = _GetRollFor(who, link)
+        if prevType then rType = prevType end
+    end
+
+    if rType then
+        _RememberRoll(who, link, rType, rVal) -- met en cache 5 min
+    end
+end
+
 -- Messages de loot à conserver : uniquement les messages "X reçoit du butin"
-local function _IsLootReceiptMessage(msg)
+_IsLootReceiptMessage = function(msg)
     if not msg or msg == "" then return false end
     local function pat(gs)
         if not gs or gs == "" then return nil end
-        -- Convertit les GlobalStrings en motif littéral (compat FR/EN/etc.)
+        -- Convertit les GlobalStrings en motif littéral (compatible FR/EN/etc.)
         return tostring(gs):gsub("%%s", ".-"):gsub("%%d", "%%d+")
     end
     local keep = {
@@ -646,6 +651,7 @@ local function _IsLootReceiptMessage(msg)
     end
     return false
 end
+
 
 -- Anti-doublon court : (looter|link) vu dans les 3s => on ignore
 local _recentLoot = {}

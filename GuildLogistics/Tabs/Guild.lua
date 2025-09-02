@@ -32,8 +32,6 @@ local function _StartLiveZoneTicker()
             _lastRosterRefresh = now
             if C_GuildInfo and C_GuildInfo.GuildRoster then
                 C_GuildInfo.GuildRoster()
-            elseif GuildRoster then
-                GuildRoster() -- API legacy
             end
         end
     end)
@@ -189,7 +187,7 @@ local function _BuildColumns()
         { key="ilvl",   title=Tr("col_ilvl"),           vsep=true,  w=100, justify="CENTER" },
         { key="mplus",  title=Tr("col_mplus_score"),    vsep=true,  w=100,  justify="CENTER" },
         { key="mkey",   title=Tr("col_mplus_key"),      vsep=true,  w=240,  justify="LEFT"   },
-        { key="ver",    title=Tr("col_version_short"), vsep=true,  w=60, vsep=true, justify="CENTER" }
+        { key="ver",    title=Tr("col_version_short"),  vsep=true,  w=60,  justify="CENTER" }
     }
 
     return UI.NormalizeColumns(base)
@@ -210,7 +208,6 @@ local function _RecreateListView()
     lv = UI.ListView(membersPane, cols, {
         buildRow     = function(r) return BuildRow(r) end,
         updateRow    = function(i, r, f, it) UpdateRow(i, r, f, it.data or it) end,
-        bottomAnchor = nil, -- plein parent => pleine hauteur
         -- 🎨 Couleur spécifique des séparateurs pour l’onglet Guilde
         sepLabelColor = UI.MIDGREY,
         topOffset = UI.SECTION_HEADER_H or 26,
@@ -514,8 +511,7 @@ function Build(container)
         membersPane:HookScript("OnShow", function()
             _StartLiveZoneTicker()
             -- Demande un roster immédiat pour un 1er affichage frais
-            if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster()
-            elseif GuildRoster then GuildRoster() end
+            if C_GuildInfo and C_GuildInfo.GuildRoster then C_GuildInfo.GuildRoster() end
         end)
         membersPane:HookScript("OnHide", function()
             _StopLiveZoneTicker()

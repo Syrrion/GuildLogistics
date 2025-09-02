@@ -392,17 +392,21 @@ function GLOG.GetMainAggregatedInfo(playerName)
                     end
                 end
 
-                -- Présence + alt connecté
+                -- Présence + alt connecté (indépendant de l'ordre d'itération)
                 if gr.online then
                     e.online = true
                     local full = gr.name_amb or gr.name_raw or ""
                     local base = tostring(full):match("^([^%-]+)") or tostring(full)
-                    if e.mainBase and base ~= "" and base:lower() ~= tostring(e.mainBase):lower() then
+
+                    -- Si la ligne courante n'est pas celle du main, c'est un alt.
+                    -- (Ne dépend plus de e.mainBase, qui peut ne pas être défini si le main n'a pas encore été vu)
+                    if rowNameKey and mainKey and rowNameKey ~= mainKey then
                         if not e.onlineAltFull then
                             e.onlineAltBase = base
                             e.onlineAltFull = full
                             e.onlineAltIdx  = gr.idx
-                            e.altClass      = gr.class
+                            -- Privilégie la clé de classe exploitable par les icônes
+                            e.altClass      = gr.classFile or gr.classTag or gr.class
                         end
                     end
                 end

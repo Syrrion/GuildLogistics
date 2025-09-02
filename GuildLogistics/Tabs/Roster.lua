@@ -66,77 +66,8 @@ local function CanActOn(name)
 end
 
 -- Retourne des infos d'agrégation par MAIN + le reroll en ligne (nom + classe)
-function FindGuildInfo(playerName)
-    local guildRows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
-    local NormName = GLOG.NormName
-    if not playerName or playerName == "" then return {} end
-
-    -- Détermine le main affiché et sa clé
-    local mainName = (GLOG.GetMainOf and GLOG.GetMainOf(playerName)) or playerName
-    local mainKey  = NormName and NormName(mainName)
-    local mainBase = (tostring(mainName):match('^([^%-]+)') or tostring(mainName))
-
-    local info = {}
-
-    -- Conserve idx/level du main uniquement (ne pas toucher aux autres éléments)
-    for _, gr in ipairs(guildRows) do
-        local rowKey = (gr.name_key) or (NormName and NormName(gr.name_amb or gr.name_raw))
-        if rowKey == mainKey then
-            info.idx = gr.idx
-            if GetGuildRosterInfo and gr.idx then
-                local _, _, _, level = GetGuildRosterInfo(gr.idx)
-                info.level = tonumber(level)
-            end
-            break
-        end
-    end
-
-    -- Agrège la présence sur tous les rerolls rattachés au main
-    local anyOnline, minDays, minHours = false, nil, nil
-    for _, gr in ipairs(guildRows) do
-        local rowNameKey = (gr.name_key) or ((NormName and NormName(gr.name_amb or gr.name_raw)) or nil)
-        local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(strtrim(gr.remark))) or nil)
-
-        -- Appartenance au même main
-        local belongsToMain =
-            (rowMainKey and rowMainKey == mainKey)
-            or ((rowMainKey == nil or rowMainKey == "") and rowNameKey == mainKey)
-
-        if belongsToMain then
-            if gr.online then anyOnline = true end
-
-            -- Si un reroll (différent du main) est en ligne, capture son nom + classe
-            if gr.online then
-                local full = gr.name_amb or gr.name_raw or ""
-                local base = tostring(full):match("^([^%-]+)") or tostring(full)
-                if base ~= "" and base:lower() ~= tostring(mainBase or ""):lower() then
-                    info.onlineAltBase = base      -- "Altruis"
-                    info.onlineAltFull = full      -- "Altruis-KirinTor"
-                    info.onlineAltIdx  = gr.idx
-
-                    -- Classe du reroll via roster guilde
-                    local classTag = nil
-                    if GetGuildRosterInfo and gr.idx then
-                        classTag = select(11, GetGuildRosterInfo(gr.idx))  -- classFileName (ex: "DEMONHUNTER")
-                    end
-                    -- Fallbacks éventuels selon votre cache
-                    classTag = classTag or gr.classFile or gr.classTag or gr.class
-                    info.onlineAltClassTag = classTag
-                end
-            end
-
-            local d = gr.online and 0 or tonumber(gr.daysDerived)
-            local h = gr.online and 0 or tonumber(gr.hoursDerived)
-            if d ~= nil then minDays  = (minDays  == nil or d < minDays)  and d or minDays end
-            if h ~= nil then minHours = (minHours == nil or h < minHours) and h or minHours end
-        end
-    end
-
-    info.online = anyOnline
-    info.days   = minDays
-    info.hours  = minHours
-
-    return info
+local function FindGuildInfo(playerName)
+    return (GLOG.GetMainAggregatedInfo and GLOG.GetMainAggregatedInfo(playerName)) or {}
 end
 
 -- Gestion robuste du solde : accepte soit l'objet "data" de ligne, soit un nom de joueur (string)
@@ -180,21 +111,6 @@ local function AttachWithdrawHandler(btn, name, canAct, isMaster)
                     if GLOG.RequestAdjust then GLOG.RequestAdjust(name, delta) end
                 end
             end
-        end)
-    end)
-end
-
-local function AttachDeleteHandler(btn, name, isMaster)
-    btn:SetScript("OnClick", function()
-        if not isMaster then return end
-        UI.PopupConfirm(Tr("prefix_delete")..(name or "").." "..Tr("lbl_from_roster_question"), function()
-            if GLOG.RemovePlayer then
-                GLOG.RemovePlayer(name)
-            elseif GLOG.BroadcastRosterRemove then
-                local uid = (GLOG.GetUID and GLOG.GetUID(name)) or nil
-                GLOG.BroadcastRosterRemove(uid or name)
-            end
-            if ns.RefreshAll then ns.RefreshAll() end
         end)
     end)
 end
