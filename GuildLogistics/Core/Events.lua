@@ -184,7 +184,6 @@ f:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE")
 f:RegisterEvent("BAG_UPDATE_DELAYED")
 -- ➕ plus robustes quand la clé est donnée par un PNJ / lootée
 f:RegisterEvent("ITEM_PUSH")
-f:RegisterEvent("CHAT_MSG_LOOT")
 f:RegisterEvent("GOSSIP_CLOSED")
 -- ➕ utile quand on insère/enlève la clé dans le réceptacle
 f:RegisterEvent("CHALLENGE_MODE_KEYSTONE_SLOTTED")

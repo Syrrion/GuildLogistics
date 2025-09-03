@@ -359,6 +359,12 @@ local function _QueryItemInfo(link, cb, tries)
 end
 
 local function _AddIfEligible(link, looter)
+    -- Anti-doublon court : si (looter|link) vient d'être vu, on ignore
+    local who = tostring(looter or (UnitName and UnitName("player")) or "")
+    if _IsRecentLoot and _IsRecentLoot(who, link) then
+        return
+    end
+
     if not link then return end
 
     -- Instance/Gouffre uniquement (paramétrable)
@@ -389,10 +395,8 @@ local function _AddIfEligible(link, looter)
             if (minILvl > 0) and (ilvl < minILvl) then return end
         end
 
-
         -- Contexte boss/difficulté depuis ENCOUNTER_LOOT_RECEIVED (si dispo)
         local ctx = (_getCtx and _getCtx(looter or UnitName("player"), info.link)) or (_getCtxByLink and _getCtxByLink(info.link)) or nil
-        local bossName   = ctx and ctx.boss or nil
         local useDiffID  = tonumber((ctx and ctx.diffID)  or diffID        or 0) or 0
         local useMPlus   = tonumber((ctx and ctx.mplus)   or mplusFromInst or 0) or 0
         -- Fallback final si c'est une clé mythique sans niveau capturé
@@ -701,6 +705,14 @@ _getCtxByLink = function(link)
     return best
 end
 
+do
+    local function _onChatMsgLoot(_, _, msg)
+        if msg and GLOG and GLOG.LootTracker_HandleChatMsgLoot then
+            GLOG.LootTracker_HandleChatMsgLoot(msg)
+        end
+    end
+    ns.Events.Register("CHAT_MSG_LOOT", _onChatMsgLoot)
+end
 
 -- Centralisation via Core/Events.lua
 do
