@@ -81,7 +81,10 @@ local function EnsureDB()
 
     -- ➕ 3) Initialisation habituelle (désormais sur la base « par personnage »)
     GuildLogisticsDB = GuildLogisticsDB or {}
-do
+    -- Expose l'initialisation DB comme API publique (et conserve l'alias legacy)
+    GLOG.EnsureDB  = EnsureDB
+
+    do
         local db = GuildLogisticsDB
         db.players  = db.players  or {}
         db.history  = db.history  or { nextId = 1 }
@@ -143,8 +146,7 @@ do
     end
 end
 
-
-GLOG._EnsureDB = EnsureDB
+GLOG.EnsureDB  = EnsureDB
 
 -- ➕ API : état du débug
 function GLOG.IsDebugEnabled()
@@ -1269,7 +1271,7 @@ end
 -- "Ressources libres" (dépenses non rattachées).
 
 local function _ensureLots()
-    GLOG._EnsureDB()
+    GLOG.EnsureDB()
     GuildLogisticsDB.lots     = GuildLogisticsDB.lots     or { nextId = 1, list = {} }
     GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { recording=false, list = {}, nextId = 1 }
 end
@@ -1590,6 +1592,15 @@ function GLOG.SaveWindow(point, relTo, relPoint, x, y)
     GuildLogisticsUI.relPoint = relPoint
     GuildLogisticsUI.x        = x
     GuildLogisticsUI.y        = y
+end
+
+-- Lecture d'une option de popup (défaut = true si non défini)
+function GLOG.IsPopupEnabled(key)
+    local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or GuildLogisticsUI or {}
+    saved.popups = saved.popups or {}
+    local v = saved.popups[key]
+    if v == nil then return true end
+    return v and true or false
 end
 
 -- ➕ Persistance : dernier onglet actif (par personnage)

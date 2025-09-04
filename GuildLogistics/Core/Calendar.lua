@@ -50,68 +50,25 @@ local function _markSeen(list)
     end
 end
 
--- ➕ Déclaration anticipée : la fonction est appelée plus haut (déferrement/poll)
-local showPendingInvitesPopup
-
 -- ➕ Déclenchement conditionnel d'affichage (hors combat / hors instance)
 local _deferredItems = nil
-
-
-local function _canShowPopupNow()
-    -- Conserver la logique de fin de loading pour éviter le clipping
-    if loadingScreenActive then return false end
-
-    -- Pas en combat
-    if (InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) then
-        return false
-    end
-
-    -- Pas dans une instance
-    if IsInInstance then
-        local inInstance = IsInInstance()
-        if inInstance == true then return false end
-        -- (En Retail, IsInInstance() renvoie bool,instanceType)
-        local b = select(1, IsInInstance())
-        if b == true then return false end
-    end
-
-    return true
-end
-
--- ➕ Lecture option (valide par défaut si non paramétrée)
-local function _isPopupEnabled(key)
-    -- Utilise le même stockage que les autres options UI (onglet Debug > Options)
-    local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or GuildLogisticsUI or {}
-    saved.popups = saved.popups or {}
-    local v = saved.popups[key]
-    if v == nil then return true end -- ✅ par défaut, on considère cochée
-    return v and true or false
-end
 
 local function _tryShowOrDefer(items)
     if not items or #items == 0 then return end
     -- ✅ Respecte l’option existante : Notification d'invitation dans le calendrier
-    if not _isPopupEnabled("calendarInvite") then return end
+    if not (GLOG and GLOG.IsPopupEnabled and GLOG.IsPopupEnabled("calendarInvite")) then return end
 
-    if _canShowPopupNow() then
-        showPendingInvitesPopup(items)
-
+    if UI and UI.CanOpenModalNow and UI.CanOpenModalNow() then
+        if UI.PopupPendingCalendarInvites then
+            UI.PopupPendingCalendarInvites(items)
+        end
         _markSeen(items)
         shownThisSession = true
         pendingCache = nil
         _deferredItems = nil
     else
-        -- Mémorise pour un affichage dès que les conditions sont favorables
         _deferredItems = items
     end
-end
-
-local function currentCalendarTS()
-    local ct = C_DateAndTime and C_DateAndTime.GetCurrentCalendarTime and C_DateAndTime.GetCurrentCalendarTime()
-    if ct then
-        return time({ year=ct.year, month=ct.month, day=ct.monthDay, hour=ct.hour, min=ct.minute, sec=0 })
-    end
-    return time()
 end
 
 -- ➕ Tentative prudente pour déduire un "lieu" sans jamais ouvrir l'évènement
@@ -189,11 +146,11 @@ end
 
 -- Collecte les invitations "Invited" à venir, filtrées "auteur ∈ guilde".
 -- 🔁 Retourne: list, needsRetry (bool) → needsRetry=true si certains auteurs étaient encore "indisponibles".
-function collectPending(rangeDays)
+function CollectPending(rangeDays)
     local res, needsRetry = {}, false
     if not C_Calendar or not C_Calendar.OpenCalendar then return res, needsRetry end
 
-    local nowTS   = currentCalendarTS()
+    local nowTS   = (GLOG and GLOG.GetCurrentCalendarEpoch and GLOG.GetCurrentCalendarEpoch()) or time()
     local limitTS = nowTS + (tonumber(rangeDays) or 31) * SECS_PER_DAY
 
     C_Calendar.OpenCalendar()
@@ -244,108 +201,13 @@ end
 
 -- ⚠️ API publique inchangée (compat) : ne retourne QUE la liste
 function M.GetPendingInvites(daysAhead)
-    local list = select(1, collectPending(daysAhead or 31))
+    local list = select(1, CollectPending(daysAhead or 31))
     return list
-end
-
--- ➕ Utilitaires d'ouverture du calendrier sans le refermer s'il est déjà visible
-local function _isCalendarOpen()
-    return CalendarFrame and CalendarFrame:IsShown()
-end
-
-local function _openCalendarUI()
-    -- Ne rien faire si déjà ouvert
-    if _isCalendarOpen() then return end
-
-    -- S'assurer que l'addon Blizzard_Calendar est chargé
-    if not CalendarFrame then
-        if UIParentLoadAddOn then
-            UIParentLoadAddOn("Blizzard_Calendar")
-        elseif LoadAddOn then
-            pcall(LoadAddOn, "Blizzard_Calendar")
-        end
-    end
-
-    -- Ouvrir explicitement (sans toggle) si possible, sinon fallback
-    if CalendarFrame and CalendarFrame.Show then
-        CalendarFrame:Show()
-    elseif ToggleCalendar then
-        ToggleCalendar()
-    elseif Calendar_Toggle then
-        Calendar_Toggle()
-    end
-end
-
--- Affiche la popup avec la liste
-function showPendingInvitesPopup(items)
-    if not UI or not UI.CreatePopup then return end
-
-    -- Verrouillage natif via UI.CreatePopup(enforceAction = true)
-    local dlg = UI.CreatePopup({ title = "pending_invites_title", width = 560, height = 360, enforceAction = true })
-
-    -- Message d’explication (haut du contenu) avec marges
-    local msg = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    msg:SetJustifyH("LEFT"); msg:SetJustifyV("TOP")
-    msg:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 10, -10)
-    msg:SetPoint("RIGHT",   dlg.content, "RIGHT",   -10, 0)
-    msg:SetText(Tr("pending_invites_message_fmt"):format(#items))
-
-    -- Conteneur liste sous le message (un peu plus d'espace)
-    local listHost = CreateFrame("Frame", nil, dlg.content)
-    listHost:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  10, -70)
-    listHost:SetPoint("BOTTOMRIGHT", dlg.content, "BOTTOMRIGHT", -10, -10)
-
-    local cols = UI.NormalizeColumns({
-        { key="when",  title=Tr("col_when"),  w=180 },
-        { key="title", title=Tr("col_event"), vsep=true,  flex=1, min=200 },
-    })
-    local lv = UI.ListView(listHost, cols, { emptyText = "lbl_no_data" })
-    dlg._lv = lv
-
-    local function weekdayName(ts)
-        local w = tonumber(date("%w", ts))
-        if w == 0 then return Tr("weekday_sun")
-        elseif w == 1 then return Tr("weekday_mon")
-        elseif w == 2 then return Tr("weekday_tue")
-        elseif w == 3 then return Tr("weekday_wed")
-        elseif w == 4 then return Tr("weekday_thu")
-        elseif w == 5 then return Tr("weekday_fri")
-        else return Tr("weekday_sat") end
-    end
-    local function fmtWhen(it)
-        return string.format("%s %02d/%02d %02d:%02d",
-            weekdayName(it.when), it.day or 0, it.month or 0, it.hour or 0, it.minute or 0)
-    end
-
-    local function buildRow(r)
-        local f = {}
-        f.when  = UI.Label(r)
-        f.title = UI.Label(r)
-        return f
-    end
-    local function updateRow(i, r, f, it)
-        f.when:SetText(fmtWhen(it))
-        f.title:SetText(it.loc or it.title or "?")
-    end
-    lv.opts.buildRow  = buildRow
-    lv.opts.updateRow = updateRow
-    lv:SetData(items)
-
-    dlg:SetButtons({
-        { text = "btn_open_calendar", default = true, w = 180, onClick = function()
-            -- Ouvrir sans refermer si déjà ouvert, et sans naviguer sur l'invitation
-            _openCalendarUI()
-            -- Fermeture uniquement via cette action
-            if dlg.Hide then dlg:Hide() end
-        end },
-    })
-    dlg:Show()
 end
 
 -- Au login: ouvrir le calendrier, attendre la mise à jour, puis afficher si besoin.
 -- ➕ Anti-clipping d'UI : on n'affiche la popup qu'après la fin du loading screen.
 local shownThisSession = false
-local loadingScreenActive = true
 local pendingCache = nil
 
 -- ➕ Sonde “arrière-plan” pour récupérer les événements sans ouvrir le calendrier
@@ -378,13 +240,9 @@ function M.OnEvent(event, ...)
         return
 
     elseif event == "LOADING_SCREEN_ENABLED" then
-        loadingScreenActive = true
         return
 
     elseif event == "LOADING_SCREEN_DISABLED" then
-        loadingScreenActive = false
-
-        -- Sécurise la demande de données juste après la fin du chargement
         if C_Calendar and C_Calendar.OpenCalendar then
             C_Calendar.OpenCalendar()
         end
@@ -405,7 +263,7 @@ function M.OnEvent(event, ...)
 
             local function step()
                 calPollTries = calPollTries + 1
-                local items, needsRetry = collectPending(31)
+                local items, needsRetry = CollectPending(31)
 
                 if items and #items > 0 then
                     local newItems = _extractNewInvites(items)
@@ -436,7 +294,7 @@ function M.OnEvent(event, ...)
 
     elseif event == "CALENDAR_UPDATE_EVENT_LIST" or event == "CALENDAR_UPDATE_PENDING_INVITES" then
         local needRetry
-        pendingCache, needRetry = collectPending(31)
+        pendingCache, needRetry = CollectPending(31)
 
         if pendingCache and #pendingCache > 0 then
             local newItems = _extractNewInvites(pendingCache)
@@ -448,7 +306,7 @@ function M.OnEvent(event, ...)
         -- 🔁 Si l’auteur n’était pas encore résolu, refait une passe très vite
         if needRetry and C_Timer and C_Timer.After then
             C_Timer.After(0.6, function()
-                local again, _need = collectPending(31)
+                local again, _need = CollectPending(31)
                 if again and #again > 0 then
                     local newItems2 = _extractNewInvites(again)
                     if #newItems2 > 0 then
@@ -463,7 +321,7 @@ function M.OnEvent(event, ...)
         -- ✅ Nouveau : relance une collecte dès que le cache guilde devient prêt
         if (not guildReadyOnce) and GLOG and GLOG.IsGuildCacheReady and GLOG.IsGuildCacheReady() then
             guildReadyOnce = true
-            local items, _need = collectPending(31)
+            local items, _need = CollectPending(31)
             if items and #items > 0 then
                 local newItems = _extractNewInvites(items)
                 if #newItems > 0 then
@@ -476,8 +334,8 @@ function M.OnEvent(event, ...)
 
     -- Reprise d'un affichage différé quand on sort de combat / change de zone
     if event == "PLAYER_REGEN_ENABLED" or event == "ZONE_CHANGED_NEW_AREA" then
-        if _deferredItems and _canShowPopupNow() then
-            _tryShowOrDefer(_deferredItems)  -- tentera d'afficher et videra _deferredItems si succès
+        if _deferredItems and UI and UI.CanOpenModalNow and UI.CanOpenModalNow() then
+            _tryShowOrDefer(_deferredItems)
         end
         return
     end

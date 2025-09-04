@@ -210,7 +210,7 @@ end
 f:SetScript("OnEvent", function(self, event, name)
     if event == "ADDON_LOADED" then
         if name ~= ADDON then return end
-        if GLOG._EnsureDB then GLOG._EnsureDB() end
+        if GLOG.EnsureDB then GLOG.EnsureDB() end
         -- 🎯 Applique immédiatement l’échelle sauvegardée à toutes les frames protégées
         do
             local v = (GuildLogisticsUI and tonumber(GuildLogisticsUI.uiScale)) or nil
@@ -379,3 +379,15 @@ do
     end)
 end
 -- ===================================================================
+-- === App state (centralisé) : écran de chargement ===
+ns.App = ns.App or {}
+ns.App.loadingActive = false
+
+-- Flag global alimenté par les évènements natifs
+ns.Events.Register("LOADING_SCREEN_ENABLED", "core.loadingflag", function()
+    ns.App.loadingActive = true
+end)
+
+ns.Events.Register("LOADING_SCREEN_DISABLED", "core.loadingflag", function()
+    ns.App.loadingActive = false
+end)

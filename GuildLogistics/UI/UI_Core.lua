@@ -1404,7 +1404,7 @@ end
 
 -- ========== MINIMAP (ex-Minimap.lua) ==========
 function GLOG.Minimap_Init()
-    if GLOG._EnsureDB then GLOG._EnsureDB() end
+    if GLOG.EnsureDB then GLOG.EnsureDB() end
     GuildLogisticsUI = GuildLogisticsUI or {}
     GuildLogisticsUI.minimap = GuildLogisticsUI.minimap or { hide=false, angle=215 }
     if GuildLogisticsUI.minimap.angle == nil then
@@ -1953,4 +1953,85 @@ function UI.PlainWindow_SetLocked(win, locked)
     if win.resize and win.resize.EnableMouse then win.resize:EnableMouse(not locked) end
     -- Tout le reste (contenu, scroll, lignes de la ListView, boutons…)
     UI.SetMouseEnabledDeep(win, not locked)
+end
+
+-- Peut-on afficher une modale maintenant ? (combat/instance/loading)
+function UI.CanOpenModalNow()
+    if ns and ns.App and ns.App.loadingActive then return false end
+    if (InCombatLockdown and InCombatLockdown()) or (UnitAffectingCombat and UnitAffectingCombat("player")) then
+        return false
+    end
+    local inInstance = IsInInstance and select(1, IsInInstance())
+    if inInstance then return false end
+    return true
+end
+
+-- Le calendrier est-il visible ?
+function UI.IsCalendarOpen()
+    return CalendarFrame and CalendarFrame:IsShown()
+end
+
+-- Ouvrir l’UI calendrier (idempotent)
+function UI.OpenCalendar()
+    if UI.IsCalendarOpen() then return end
+    if not CalendarFrame then
+        if UIParentLoadAddOn then
+            UIParentLoadAddOn("Blizzard_Calendar")
+        elseif LoadAddOn then
+            pcall(LoadAddOn, "Blizzard_Calendar")
+        end
+    end
+    if CalendarFrame and CalendarFrame.Show then
+        CalendarFrame:Show()
+    elseif ToggleCalendar then
+        ToggleCalendar()
+    elseif Calendar_Toggle then
+        Calendar_Toggle()
+    end
+end
+
+-- === Suspension globale de l'UI & exceptions "always-on" ===
+UI._alwaysOnFrames = UI._alwaysOnFrames or setmetatable({}, { __mode = "k" })
+
+local function _isOpen()
+    if UI and UI.IsOpen then return UI.IsOpen() end
+    return (UI and UI.Main and UI.Main.IsShown and UI.Main:IsShown()) or false
+end
+
+local function _isDescendantOf(child, parent)
+    if not (child and parent and child.GetParent) then return false end
+    local p = child
+    while p do
+        if p == parent then return true end
+        p = p:GetParent()
+    end
+    return false
+end
+
+-- Marque/démarque une frame comme autorisée même UI fermée (ex: tracker flottant)
+function UI.MarkAlwaysOn(frame, on)
+    if not frame then return end
+    if on == false then
+        UI._alwaysOnFrames[frame] = nil
+    else
+        UI._alwaysOnFrames[frame] = true
+    end
+end
+
+-- La frame (ou l'un de ses parents) appartient-elle à une zone "always-on" visible ?
+function UI.IsWithinAlwaysOn(frame)
+    if not (frame and frame.GetParent) then return false end
+    for f in pairs(UI._alwaysOnFrames) do
+        if f and f.IsShown and f:IsShown() and _isDescendantOf(frame, f) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Doit-on exécuter un traitement UI ? (true si UI ouverte OU frame dans une zone always-on)
+function UI.ShouldProcess(ownerFrame)
+    if _isOpen() then return true end
+    if ownerFrame and UI.IsWithinAlwaysOn(ownerFrame) then return true end
+    return false
 end

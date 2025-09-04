@@ -333,13 +333,6 @@ function GLOG.IsGuildCharacter(name)
     return (k ~= nil and by[k] ~= nil) and true or false
 end
 
--- ✏️ Est-ce que le GM effectif (rang 0) est en ligne ?
-function GLOG.IsMasterOnline()
-    if not GLOG.GetGuildMasterCached then return false end
-    local gmName, gmRow = GLOG.GetGuildMasterCached()
-    return gmRow and gmRow.online and true or false
-end
-
 function GLOG.IsGuildCacheReady()
     local c = GLOG._guildCache
     return c and c.rows and #c.rows > 0

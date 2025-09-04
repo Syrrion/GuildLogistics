@@ -980,6 +980,11 @@ local function _ensureWindow()
     })
     state.win = f
 
+    -- Autorise cette fenêtre à continuer de se rafraîchir même si l'UI principale est fermée
+    if UI and UI.MarkAlwaysOn then
+        UI.MarkAlwaysOn(f, true)
+    end
+
     -- Conteneur stable pour les boutons de navigation + reset
     if f.hctrl and f.   hctrl.Hide then f.hctrl:Hide() end
     f.hctrl = CreateFrame("Frame", nil, f.header)
@@ -1478,10 +1483,7 @@ function GLOG.GroupTracker_SetLocked(flag)
 end
 
 function GLOG.GroupTracker_GetOpacity()
-    local s = _Store()
-    local a = tonumber(s.opacity or 1) or 1
-    if a < 0 then a = 0 elseif a > 1 then a = 1 end
-    return a
+    return ns.Util.GetClampedOption(_Store(), "opacity", 1, 0, 1)
 end
 
 function GLOG.GroupTracker_SetOpacity(a)
@@ -1509,11 +1511,9 @@ function GLOG.GroupTracker_SetOpacity(a)
 end
 
 function GLOG.GroupTracker_GetTextOpacity()
-    local s = _Store()
-    local a = tonumber(s.textOpacity or 1.0) or 1.0
-    if a < 0.1 then a = 0.1 elseif a > 1 then a = 1 end
-    return a
+    return ns.Util.GetClampedOption(_Store(), "textOpacity", 1.0, 0.1, 1)
 end
+
 
 function GLOG.GroupTracker_SetTextOpacity(a)
     local s = _Store()
@@ -1547,10 +1547,7 @@ function GLOG.GroupTracker_SetTitleTextOpacity(a)
 end
 
 function GLOG.GroupTracker_GetButtonsOpacity()
-    local s = _Store()
-    local a = tonumber(s.btnOpacity or 1.0) or 1.0
-    if a < 0 then a = 0 elseif a > 1 then a = 1 end
-    return a
+    return ns.Util.GetClampedOption(_Store(), "btnOpacity", 1.0, 0, 1)
 end
 
 function GLOG.GroupTracker_SetButtonsOpacity(a)

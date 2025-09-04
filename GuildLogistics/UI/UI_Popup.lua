@@ -608,6 +608,7 @@ function UI.PopupPendingCalendarInvites(items)
         title  = "pending_invites_title",
         width  = 560,
         height = 360,
+        enforceAction = true,
     })
 
     local Tr = ns and ns.Tr or function(s) return s end

@@ -209,10 +209,12 @@ local function Build(container)
 end
 
 local function Refresh()
-    if not lv or not lv.SetData then return end
-    lv:SetData(_GetErrors())
-    UpdateBadges()
+    if lv then
+        lv:RefreshData(_GetErrors())
+        UpdateBadges()
+    end
 end
+
 
 local function Layout()
     if lv and lv.Layout then lv:Layout() end

@@ -123,14 +123,10 @@ local function Layout()
     _LayoutHeaderBGs()
 end
 
--- == REFRESH (structure standard) ==
 local function Refresh()
-    local rows = (DATA and DATA.rows) or {}
-    if lv then
-        lv:SetData(rows)
-        lv:Layout()
-        _LayoutHeaderBGs()
-    end
+    if not lv then return end
+    lv:RefreshData((DATA and DATA.rows) or {})
+    _LayoutHeaderBGs()
 end
 
 -- Enregistrement dans la catégorie "Helpers"

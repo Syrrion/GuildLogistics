@@ -156,12 +156,10 @@ local function Layout()
     _LayoutHeaderBGs()
 end
 
--- == REFRESH ==
 local function Refresh()
-    if not lv then return end
-    local rows = (DATA and DATA.rows) or {}
-    lv:SetData(rows)
-    Layout()
+    if lv then
+        lv:RefreshData((DATA and DATA.rows) or {})
+    end
 end
 
 -- Enregistrement dans la catégorie Helpers

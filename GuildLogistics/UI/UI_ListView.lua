@@ -130,6 +130,10 @@ function UI.ListView(parent, cols, opts)
 
     -- Mise en page
     function lv:Layout()
+        -- Empêche les boucles Layout <-> SyncScrollbar / OnSizeChanged
+        if self._inLayout then return end
+        self._inLayout = true
+
         local top  = tonumber(self.opts.topOffset) or 0
         local pW   = self.parent:GetWidth() or 800
 
@@ -288,6 +292,17 @@ function UI.ListView(parent, cols, opts)
                 self._showScrollbar = need and true or false
             end
         end
+        self._inLayout = nil
+    end
+
+    -- Refresh standard : SetData + Layout
+    function lv:RefreshData(rows)
+        if rows ~= nil and self.SetData then
+            self:SetData(rows)
+        end
+        if self.Layout then
+            self:Layout()
+        end
     end
 
     -- Données
@@ -371,61 +386,84 @@ function UI.ListView(parent, cols, opts)
     end
     
     -- Étend le hook de Layout pour quantifier lignes et séparateurs à la fin du layout.
-    function UI._AttachListViewPixelSnap(lv)
-        if not lv or lv._snapLayoutHooked then return end
-        if not lv.Layout then return end
+-- UI/UI_ListView.lua
+function UI._AttachListViewPixelSnap(lv)
+    if not lv or lv._snapLayoutHooked then return end
+    if not lv.Layout then return end
 
-        local _oldLayout = lv.Layout
-        function lv:Layout(...)
-            local res = _oldLayout(self, ...)
-            -- Passe "pixel-perfect"
-            if self.rows then
-                local px = UI.GetPhysicalPixel()
-                for _, row in ipairs(self.rows) do
-                    -- Hauteur/points arrondis
-                    UI.SnapRegion(row)
-                    -- Garde le séparateur à 1 px exact et bien ancré
-                    if row._sepTop then
-                        UI.SetPixelThickness(row._sepTop, 1)
-                        if PixelUtil and PixelUtil.SetPoint then
-                            PixelUtil.SetPoint(row._sepTop, "TOPLEFT",  row, "TOPLEFT",  0, 0)
-                            PixelUtil.SetPoint(row._sepTop, "TOPRIGHT", row, "TOPRIGHT", 0, 0)
-                        else
-                            row._sepTop:ClearAllPoints()
-                            row._sepTop:SetPoint("TOPLEFT",  row, "TOPLEFT",  0, 0)
-                            row._sepTop:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
-                        end
-                    end
-                    -- ➕ Recalage des séparateurs verticaux selon le padding stocké
-                    if row._vseps then
-                        local pad = tonumber(row._sepPadTop) or 0
-                        for _, t in pairs(row._vseps) do
-                            if t and t.GetPoint then
+    local _oldLayout = lv.Layout
+    function lv:Layout(...)
+        -- ✋ évite les boucles Layout <-> SetPoint : si on re-rentre pendant un snap, on sort de suite
+        if self._snapInProgress then
+            return _oldLayout(self, ...)
+        end
+
+        self._snapInProgress = true
+        local res = _oldLayout(self, ...)
+
+        -- Passe "pixel-perfect" (idempotente : change seulement si nécessaire)
+        if self.rows then
+            for _, row in ipairs(self.rows) do
+                UI.SnapRegion(row)
+
+                -- Barre de séparation supérieure (1px) : re-anchorer seulement si ça change
+                if row._sepTop then
+                    UI.SetPixelThickness(row._sepTop, 1)
+                    UI.SetPoints2IfChanged(
+                        row._sepTop,
+                        {"TOPLEFT",  row, "TOPLEFT",  0, 0},
+                        {"TOPRIGHT", row, "TOPRIGHT", 0, 0}
+                    )
+                end
+
+                -- Séparateurs verticaux : seulement si pad change
+                if row and row.IsShown and row:IsShown() and row._vseps then
+                    local pad = tonumber(row._sepPadTop) or 0
+                    for _, t in pairs(row._vseps) do
+                        if t and t.GetPoint then
+                            if t._lastPad ~= pad then
                                 local _, _, _, xOfs = t:GetPoint(1)
                                 xOfs = tonumber(xOfs) or 0
-                                t:ClearAllPoints()
-                                if PixelUtil and PixelUtil.SetPoint then
-                                    PixelUtil.SetPoint(t, "TOPLEFT",    row, "TOPLEFT",    xOfs, -pad)
-                                    PixelUtil.SetPoint(t, "BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0)
+                                if UI.SetPoints2IfChanged then
+                                    UI.SetPoints2IfChanged(
+                                        t,
+                                        {"TOPLEFT",    row, "TOPLEFT",    xOfs, -pad},
+                                        {"BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0}
+                                    )
                                 else
-                                    t:SetPoint("TOPLEFT",    row, "TOPLEFT",    xOfs, -pad)
-                                    t:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0)
+                                    t:ClearAllPoints()
+                                    if PixelUtil and PixelUtil.SetPoint then
+                                        PixelUtil.SetPoint(t, "TOPLEFT",    row, "TOPLEFT",    xOfs, -pad)
+                                        PixelUtil.SetPoint(t, "BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0)
+                                    else
+                                        t:SetPoint("TOPLEFT",    row, "TOPLEFT",    xOfs, -pad)
+                                        t:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", xOfs,  0)
+                                    end
                                 end
+                                t._lastPad = pad
                             end
                         end
                     end
-
                 end
             end
-            -- 🔧 Après chaque layout, on resnap les séparateurs verticaux
-            if UI and UI.ListView_ResnapVSeps then
-                UI.ListView_ResnapVSeps(self)
-            end
-
-            return res
         end
-        lv._snapLayoutHooked = true
+
+        -- 🔧 Resnap différé (frame suivante) pour éviter tout rebond immédiat pendant Layout
+        if not self._resnapQueued then
+            self._resnapQueued = true
+            C_Timer.After(0, function()
+                self._resnapQueued = nil
+                if UI and UI.ListView_ResnapVSeps then
+                    UI.ListView_ResnapVSeps(self)
+                end
+            end)
+        end
+
+        self._snapInProgress = nil
+        return res
     end
+    lv._snapLayoutHooked = true
+end
     
     -- Resnap ciblé des séparateurs verticaux (header + rows)
     function UI.ListView_ResnapVSeps(lv)
@@ -864,10 +902,17 @@ function UI.ListView_SetScrollbarVisible(lv, show)
         if sb.SetAlpha    then sb:SetAlpha(0) end
     end
 
-    if prev ~= lv._showScrollbar and lv.Layout then
-        lv:Layout()
+    if prev ~= lv._showScrollbar then
+        if ns and ns.Util and ns.Util.Debounce and lv.Layout then
+            ns.Util.Debounce("ListView.Layout." .. tostring(lv), 0, function()
+                if lv and lv.Layout then lv:Layout() end
+            end)
+        elseif lv and lv.Layout then
+            C_Timer.After(0, function() if lv and lv.Layout then lv:Layout() end end)
+        end
     end
 end
+
 
 
 function UI.ListView_SetRowHeight(lv, h)
@@ -891,16 +936,21 @@ end
 
 -- Synchronise l'état d'affichage de la ScrollBar avec la plage réelle du ScrollFrame.
 -- immediate=true => calcule maintenant ; sinon programme au frame suivant (évite les races de sizing).
+-- UI/UI_ListView.lua
 function UI.ListView_SyncScrollbar(lv, immediate)
     if not (lv and lv.scroll) then return end
+
+    -- ⏸️ Pause globale : n'agir que si l'UI est ouverte ou si la liste appartient à une zone always-on (tracker)
+    if UI and UI.ShouldProcess and not UI.ShouldProcess(lv.parent or lv.scroll or lv.list) then
+        return
+    end
 
     local function computeNeed()
         local yr = (lv.scroll.GetVerticalScrollRange and lv.scroll:GetVerticalScrollRange()) or 0
         local need = (yr > 0)
         if not need then
-            -- Fallback si la plage n'est pas encore à jour : compare contenu vs viewport
-            local listH   = (lv.list and lv.list.GetHeight and lv.list:GetHeight()) or 0
-            local viewH   = (lv.scroll and lv.scroll.GetHeight and lv.scroll:GetHeight()) or 0
+            local listH = (lv.list and lv.list.GetHeight and lv.list:GetHeight()) or 0
+            local viewH = (lv.scroll and lv.scroll.GetHeight and lv.scroll:GetHeight()) or 0
             need = (listH > (viewH + 1))
         end
         if lv._scrollbarAllowed == false then need = false end
@@ -921,19 +971,16 @@ function UI.ListView_SyncScrollbar(lv, immediate)
     if immediate then
         doSync()
     else
-        -- Deux passes déférées pour laisser UpdateScrollChildRect() et la range se stabiliser
         lv._sbSyncTicket = (lv._sbSyncTicket or 0) + 1
         local ticket = lv._sbSyncTicket
-
         local function pass2()
             if not (lv and lv.scroll) then return end
-            -- si un nouveau ticket est arrivé entre temps, on laisse la prochaine passe gérer
-            if lv._sbSyncTicket ~= ticket then return end
+            if ticket ~= lv._sbSyncTicket then return end
             doSync()
         end
-
         C_Timer.After(0, function()
             if not (lv and lv.scroll) then return end
+            if ticket ~= lv._sbSyncTicket then return end
             doSync()
             C_Timer.After(0, pass2)
         end)
@@ -948,10 +995,24 @@ do
     local _Old = UI.ListView
     UI.ListView = function(...)
         local lv = _Old(...)
-        if lv then UI.__allListViews[lv] = true end
+        if lv then
+            UI.__allListViews[lv] = true
+            if lv.Layout and not lv._gatedLayout then
+                local _orig = lv.Layout
+                function lv:Layout(...)
+                    -- ⏸️ Ne layout que si l'UI est active ou si la liste est dans une zone always-on (tracker)
+                    if UI and UI.ShouldProcess and not UI.ShouldProcess(self.parent or self.list or self.scroll) then
+                        return
+                    end
+                    return _orig(self, ...)
+                end
+                lv._gatedLayout = true
+            end
+        end
         return lv
     end
 end
+
 
 -- Resnap ciblé des séparateurs verticaux (header + rows)
 function UI.ListView_ResnapVSeps(lv)
@@ -968,21 +1029,29 @@ function UI.ListView_ResnapVSeps(lv)
     if lv.header and lv.header._vseps then resnapBucket(lv.header._vseps) end
     if lv.rows then
         for _, r in ipairs(lv.rows) do
-            if r and r._vseps then resnapBucket(r._vseps) end
+            if r and r.IsShown and r:IsShown() and r._vseps then
+                resnapBucket(r._vseps)
+            end
         end
     end
 end
 
 -- Relayout + resnap de TOUTES les ListViews (appelé quand l’échelle change)
+-- UI/UI_ListView.lua
 function UI.ListView_RelayoutAll()
     if not UI.__allListViews then return end
+    local uiOpen = (UI and UI.IsOpen and UI.IsOpen()) or (UI and UI.Main and UI.Main.IsShown and UI.Main:IsShown()) or false
     for lv in pairs(UI.__allListViews) do
         if lv and lv.Layout then
-            lv:Layout()
-            if UI.ListView_ResnapVSeps then UI.ListView_ResnapVSeps(lv) end
+            local owner = lv.parent or lv.list or lv.scroll
+            if uiOpen or (UI and UI.ShouldProcess and UI.ShouldProcess(owner)) then
+                lv:Layout()
+                if UI.ListView_ResnapVSeps then UI.ListView_ResnapVSeps(lv) end
+            end
         end
     end
 end
+
 
 -- Suivre les changements d’échelle globaux (fallback si slider non utilisé)
 if ns and ns.Events and ns.Events.Register then

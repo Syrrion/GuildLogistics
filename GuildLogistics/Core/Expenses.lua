@@ -3,7 +3,7 @@ local Tr = ns and ns.Tr
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
-local function EnsureDB() if GLOG._EnsureDB then GLOG._EnsureDB() end end
+local EnsureDB = GLOG.EnsureDB
 
 -- ====== State & API ======
 function GLOG.IsExpensesRecording()

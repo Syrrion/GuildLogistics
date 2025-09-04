@@ -2,7 +2,7 @@
 ## Title: |cffffa500Guild Logistics|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 2.6.6
+## Version: 2.6.7
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char
@@ -18,8 +18,23 @@ Data/Tracker.lua
 Data/Upgrades.lua
 
 Core/Core.lua
-Core/Events.lua
 Core/Helper.lua
+Core/Core/Time.lua
+Core/Core/Timers.lua
+Core/Core/Addon.lua
+Core/Core/Debug.lua
+
+Core/Events.lua
+Core/Core/Serialize.lua
+Core/Game/Spell.lua
+Core/Core/Tiers.lua
+Core/Player/Name.lua
+Data/Players.lua
+Core/Player/Class.lua
+Core/Guild/Core.lua
+Core/Group/Party.lua
+Core/Group/Raid.lua
+Core/Core/Legacy.lua
 Core/Errors.lua
 Core/Comm.lua
 Core/Guild.lua
@@ -27,6 +42,8 @@ Core/Expenses.lua
 Core/GroupTracker.lua
 Core/LootTracker.lua
 
+UI/Layout.lua
+UI/Pixel.lua
 UI/UI_Scale.lua
 UI/UI_Fonts.lua
 UI/UI_Core.lua
@@ -47,27 +64,22 @@ UI/UI_TokenList.lua
 UI/UI_Toast.lua
 
 Tabs/Guild.lua
-
 Tabs/Roster.lua
 Tabs/RosterManage.lua
 Tabs/RaidHistory.lua
 Tabs/RaidStart.lua
 Tabs/Resources.lua
 Tabs/Requests.lua
-
 Tabs/BiS.lua
 Tabs/Helpers_Upgrades.lua
 Tabs/Helpers_Delves.lua
 Tabs/Helpers_Dungeons.lua
 Tabs/Helpers_Raids.lua
 Tabs/Helpers_Crests.lua
-
 Tabs/Helpers_GroupTracker.lua
 Tabs/Tracker_Custom.lua
 Tabs/Tracker_Loots.lua
-
 Tabs/Settings.lua
-
 Tabs/Debug_Packets.lua
 Tabs/Debug_Database.lua
 Tabs/Debug_Events.lua

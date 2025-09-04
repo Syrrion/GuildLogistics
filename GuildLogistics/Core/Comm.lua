@@ -14,16 +14,9 @@ GLOG.EnsureRosterLocal = GLOG.EnsureRosterLocal or (ns.Util and ns.Util.EnsureRo
 
 if not GLOG.GetOrAssignUID then
     -- Fallback minimal basé uniquement sur players[*].uid (aucune table uids)
-    local function _ensureDB()
-        GuildLogisticsDB = GuildLogisticsDB or {}
-        GuildLogisticsDB.meta    = GuildLogisticsDB.meta    or {}
-        GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-        GuildLogisticsDB.meta.uidSeq = GuildLogisticsDB.meta.uidSeq or 1
-        return GuildLogisticsDB
-    end
 
     function GLOG.GetOrAssignUID(name)
-        local db   = _ensureDB()
+        local db   = GLOG.EnsureDB()
         local full = tostring(name or "")
         db.players[full] = db.players[full] or { solde = 0, reserved = true }
         if db.players[full].uid then return db.players[full].uid end
@@ -34,7 +27,7 @@ if not GLOG.GetOrAssignUID then
     end
 
     function GLOG.GetNameByUID(uid)
-        local db = _ensureDB()
+        local db = GLOG.EnsureDB()
         local n  = tonumber(uid)
         if not n then return nil end
         for full, rec in pairs(db.players or {}) do
@@ -44,7 +37,7 @@ if not GLOG.GetOrAssignUID then
     end
 
     function GLOG.MapUID(uid, name)
-        local db   = _ensureDB()
+        local db   = GLOG.EnsureDB()
         local full =
             (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true }))
             or (type(name)=="string" and name:find("%-") and name)
@@ -57,7 +50,7 @@ if not GLOG.GetOrAssignUID then
     end
 
     function GLOG.UnmapUID(uid)
-        local db = _ensureDB()
+        local db = GLOG.EnsureDB()
         local n  = tonumber(uid)
         if not n then return end
         for _, rec in pairs(db.players or {}) do
@@ -66,7 +59,7 @@ if not GLOG.GetOrAssignUID then
     end
 
     function GLOG.EnsureRosterLocal(name)
-        local db   = _ensureDB()
+        local db   = GLOG.EnsureDB()
         local full = tostring(name or "")
         db.players[full] = db.players[full] or { solde=0, reserved=true }
         if db.players[full].reserved == nil then db.players[full].reserved = true end

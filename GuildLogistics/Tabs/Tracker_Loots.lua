@@ -481,14 +481,12 @@ local function Build(container)
 end
 
 local function Refresh()
-    if not lv or not lv.SetData then return end
+    if not lv then return end
     local list = {}
     if GLOG and GLOG.LootTracker_List then
-        for _, it in ipairs(GLOG.LootTracker_List()) do
-            list[#list+1] = it
-        end
+        for _, it in ipairs(GLOG.LootTracker_List()) do list[#list+1] = it end
     end
-    lv:SetData(list)
+    lv:RefreshData(list)
 end
 
 local function Layout() end
