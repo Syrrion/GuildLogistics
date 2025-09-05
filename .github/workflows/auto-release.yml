@@ -155,7 +155,7 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail -r ${{ github.repository }} -t ${{ needs.check-version-change.outputs.tag_name }}
+          args: -g retail -z
           
       # Debug: List generated files
       - name: List generated files
