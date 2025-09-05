@@ -129,6 +129,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           fetch-depth: 0
+          ref: ${{ needs.check-version-change.outputs.tag_name }}
 
       # Install zip, required by BigWigs packager
       - name: Install zip
@@ -148,13 +149,13 @@ jobs:
         run: cp LATEST_CHANGELOG.md CHANGELOG.md
 
       # Run BigWigs packager to build the .zip and upload to CurseForge
-      # Le .pkgmeta gère l'exclusion des fichiers de développement
+      # Force le packaging même pour les tags récents
       - name: Run BigWigs Packager (Retail)
         uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60 # v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail -r ${{ github.repository }} -p ${{ needs.check-version-change.outputs.tag_name }}
+          args: -g retail -r ${{ github.repository }} -t ${{ needs.check-version-change.outputs.tag_name }}
           
       # Debug: List generated files
       - name: List generated files

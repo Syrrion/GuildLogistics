@@ -2,7 +2,7 @@
 ## Title: |cffffa500Guild Logistics|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 2.7.6
+## Version: 2.7.7
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char, GuildLogisticsDB_Backup, GuildLogisticsDB_Previous
