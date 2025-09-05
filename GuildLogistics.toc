@@ -1,8 +1,8 @@
 ## Interface: 110200
-## Title: |cffffa500Guild Logistics|r
+## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 3.0.1
+## Version: 3.0.2
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char, GuildLogisticsDB_Backup, GuildLogisticsDB_Previous
@@ -12,6 +12,8 @@
 
 Locales/locales-enUS.lua
 Locales/locales-frFR.lua
+
+Core/Debug/EarlyErrorHandler.lua
 
 Data/BiS_Trinkets.lua
 Data/Tracker.lua
@@ -23,6 +25,10 @@ Core/Core/Time.lua
 Core/Core/Timers.lua
 Core/Core/Addon.lua
 Core/Core/Debug.lua
+
+Core/Debug/ErrorHandler.lua
+Core/Debug/ErrorJournal.lua
+Core/Debug/ErrorComm.lua
 
 Core/Core/Events.lua
 Core/Player/Alias.lua
@@ -42,9 +48,6 @@ Core/Guild/Core.lua
 Core/Group/Party.lua
 Core/Group/Raid.lua
 Core/Core/Legacy.lua
-Core/Debug/ErrorHandler.lua
-Core/Debug/ErrorJournal.lua
-Core/Debug/ErrorComm.lua
 
 Core/Comm/Serialization.lua
 Core/Comm/DebugLogging.lua

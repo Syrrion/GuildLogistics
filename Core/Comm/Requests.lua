@@ -138,6 +138,25 @@ function GLOG.Pending_ClearTXREQ()
     if ns.Emit then ns.Emit("pending:changed") end
 end
 
+-- ===== File d'attente persistante des ERR_REPORT (client) =====
+function GLOG.Pending_AddERRRPT(rep)
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.pending = GuildLogisticsDB.pending or {}
+    local P = GuildLogisticsDB.pending
+    P.err = P.err or {}
+    
+    rep = rep or {}
+    local currentTime = (time and time()) or 0
+    rep.id = rep.id or (tostring(currentTime) .. "-" .. tostring(math.random(1000,9999)))
+    rep.ts = rep.ts or currentTime -- horodatage pour l'affichage Pending
+    
+    table.insert(P.err, rep)
+    
+    if ns.Emit then 
+        ns.Emit("pending:changed") 
+    end
+end
+
 -- ===== Flush des demandes en attente =====
 function GLOG.Pending_FlushTXREQ(targetGM)
     local P = GuildLogisticsDB and GuildLogisticsDB.pending
@@ -164,38 +183,59 @@ end
 -- ===== Flush global des demandes en attente =====
 function GLOG.Pending_FlushToMaster(master)
     local P = GuildLogisticsDB and GuildLogisticsDB.pending or {}
-    if not P then return 0 end
+    if not P then 
+        return 0 
+    end
 
     -- Destinataire par défaut : GM effectif (rang 0)
     if not master or master == "" then
         if GLOG.GetGuildMasterCached then master = select(1, GLOG.GetGuildMasterCached()) end
     end
-    if not master or master == "" then return 0 end
+    if not master or master == "" then 
+        return 0 
+    end
+
+    -- Vérifier si le GM est vraiment en ligne avant de flush
+    local gmOnline = (GLOG.IsMasterOnline and GLOG.IsMasterOnline()) or false
+    if not gmOnline then
+        -- GM pas en ligne, ne pas flush - garder en attente
+        return 0
+    end
 
     local sent = 0
 
     -- 1) Flush des TX_REQ
     if P.txreq and #P.txreq > 0 then
+        local sentTxReq = {}
         for i = 1, #P.txreq do
             local kv = P.txreq[i]
             if kv and GLOG.Comm_Whisper then
                 GLOG.Comm_Whisper(master, "TX_REQ", kv)
                 sent = sent + 1
+                sentTxReq[#sentTxReq + 1] = i
             end
         end
-        P.txreq = {}
+        -- Supprimer seulement les éléments envoyés avec succès
+        for j = #sentTxReq, 1, -1 do
+            table.remove(P.txreq, sentTxReq[j])
+        end
     end
 
     -- 2) Flush des rapports d'erreurs
     if P.err and #P.err > 0 then
+        local sentErr = {}
         for i = 1, #P.err do
             local kv = P.err[i]
             if kv and GLOG.Comm_Whisper then
                 GLOG.Comm_Whisper(master, "ERR_REPORT", kv)
                 sent = sent + 1
+                sentErr[#sentErr + 1] = i
             end
         end
-        P.err = {}
+        -- Supprimer seulement les éléments envoyés avec succès
+        for j = #sentErr, 1, -1 do
+            table.remove(P.err, sentErr[j])
+        end
     end
 
     if ns.Emit then ns.Emit("debug:changed") end

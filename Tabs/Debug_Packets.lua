@@ -226,7 +226,7 @@ local function groupLogs(raw)
         g.parts[e.part or 1] = e.raw
 
         -- Comptage précis des fragments TRANSMIS (sans compter les "pending")
-        if e.state == "sent" then
+        if e.state == "sent" or (e.dir == "send" and e.part and e.part > 0) then
             g._sent = g._sent or {}
             local p = e.part or 1
             if not g._sent[p] then

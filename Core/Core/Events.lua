@@ -293,6 +293,12 @@ f:SetScript("OnEvent", function(self, event, name)
         end
 
         if GLOG.ClearDebugLogs then GLOG.ClearDebugLogs() end
+        
+        -- Traiter les erreurs précoces capturées pendant le chargement
+        if GLOG.ErrorHandler_ProcessEarlyErrors then
+            GLOG.ErrorHandler_ProcessEarlyErrors()
+        end
+        
         -- Seed des listes par défaut du suivi personnalisé (versionné)
         if GLOG.GroupTracker_EnsureDefaultCustomLists then
             GLOG.GroupTracker_EnsureDefaultCustomLists(false)

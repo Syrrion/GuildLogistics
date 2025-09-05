@@ -32,8 +32,8 @@ local function isOurError(msg, _stack)
     -- Extraire uniquement la 1ʳᵉ ligne (format standard WoW: "Interface\AddOns\...\file.lua:123: ...")
     local first = m:match("^[^\r\n]+") or ""
 
-    -- Détection stricte sur le chemin de la 1ʳᵉ ligne
-    if first:find("[\\/]AddOns[\\/]GuildLogistics[\\/]", 1) then
+    -- Détection plus flexible - chercher GuildLogistics dans le chemin
+    if first:find("GuildLogistics", 1, true) then
         return true
     end
 
@@ -95,6 +95,78 @@ function GLOG.ErrorHandler_BuildReport(msg)
     return buildReport(msg)
 end
 
+-- Traiter les erreurs précoces capturées avant l'init
+function GLOG.ErrorHandler_ProcessEarlyErrors()
+    if not ns.GetEarlyErrors then return end
+    
+    local earlyErrors = ns.GetEarlyErrors()
+    if not earlyErrors or #earlyErrors == 0 then return end
+    
+    -- Vérifier si le système de communication est prêt
+    if not GLOG.GetGuildMasterCached or not GLOG.ErrorComm_SendOrQueue then
+        -- Programmer un délai pour réessayer quand le système sera prêt
+        C_Timer.After(5, function()
+            GLOG.ErrorHandler_ProcessEarlyErrors()
+        end)
+        return
+    end
+    
+    for _, errorInfo in ipairs(earlyErrors) do
+        -- Anti-spam : ignorer si vue récemment
+        if not isSpamError(errorInfo.msg, errorInfo.stack) then
+            local rep = {
+                ts = errorInfo.ts,
+                who = playerFullName(),
+                ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or "",
+                msg = errorInfo.msg,
+                st = errorInfo.stack,
+                early = true
+            }
+            
+            -- Routing selon le rôle
+            if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+                -- GM : ajout direct au journal local
+                if GLOG.ErrorJournal_AddReport then
+                    GLOG.ErrorJournal_AddReport(rep, rep.who)
+                else
+                    -- Fallback si module journal pas encore chargé
+                    GuildLogisticsDB = GuildLogisticsDB or {}
+                    GuildLogisticsDB.errors = GuildLogisticsDB.errors or { list = {}, nextId = 1 }
+                    local t = GuildLogisticsDB.errors
+                    local id = tonumber(t.nextId or 1) or 1
+                    rep.id = id
+                    rep.done = false
+                    t.list[#t.list+1] = rep
+                    t.nextId = id + 1
+                    if ns.Emit then ns.Emit("errors:changed") end
+                end
+            else
+                -- Client : Pour les erreurs précoces, forcer l'ajout à la queue pending
+                -- même si le GM semble offline (système pas encore initialisé)
+                if GLOG.Pending_AddERRRPT then
+                    GLOG.Pending_AddERRRPT(rep)
+                end
+            end
+        end
+    end
+    
+    -- Effacer les erreurs traitées pour éviter de les retraiter
+    if ns.ClearEarlyErrors then
+        ns.ClearEarlyErrors()
+    end
+    
+    -- Programmer un flush dans quelques secondes pour s'assurer que les erreurs précoces
+    -- soient envoyées quand le système sera complètement prêt
+    C_Timer.After(10, function()
+        if GLOG.Pending_FlushToMaster then
+            local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached())
+            if gmName then
+                GLOG.Pending_FlushToMaster(gmName)
+            end
+        end
+    end)
+end
+
 -- =========================
 -- === Hook global handler ===
 -- =========================
@@ -103,14 +175,18 @@ end
 do
     local prev = geterrorhandler and geterrorhandler() or nil
     local function handler(msg)
-        local ok = pcall(function()
+        local ok, err = pcall(function()
             local stack = (debugstack and debugstack(3)) or ""
             
             -- Filtrage : seulement nos erreurs
-            if not isOurError(msg, stack) then return end
+            if not isOurError(msg, stack) then 
+                return 
+            end
 
             -- Anti-spam : ignorer si vue récemment
-            if isSpamError(msg, stack) then return end
+            if isSpamError(msg, stack) then 
+                return 
+            end
 
             -- Construire le rapport
             local rep = buildReport(msg)
@@ -144,5 +220,10 @@ do
         if prev then prev(msg) end
     end
     
-    if seterrorhandler then seterrorhandler(handler) end
+    if seterrorhandler then 
+        seterrorhandler(handler)
+    else
+        -- Fallback : hook sur geterrorhandler si seterrorhandler n'existe pas
+        _G.geterrorhandler = function() return handler end
+    end
 end
