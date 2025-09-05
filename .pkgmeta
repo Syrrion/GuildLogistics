@@ -2,11 +2,11 @@ package-as: GuildLogistics
 
 manual-changelog: CHANGELOG.md
 
-# Approche inclusive : on spécifie explicitement ce qu'on veut
+# Utilisation d'include pour être explicite sur ce qu'on veut
 include:
     - GuildLogistics/
 
-# Ignorer seulement les fichiers/dossiers de développement à la racine
+# Ignorer les fichiers de développement
 ignore:
     - .github/
     - .git/
@@ -19,6 +19,6 @@ ignore:
     - CHANGELOG.md
     - .pkgmeta
 
-# Déplacer le contenu de GuildLogistics/ à la racine de l'archive
+# Remonter le contenu de GuildLogistics à la racine du package
 move-folders:
     GuildLogistics: /
