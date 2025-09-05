@@ -8,7 +8,7 @@ permissions:
 on:
   push:
     branches: [main]
-    paths: ['GuildLogistics/GuildLogistics.toc']
+    paths: ['GuildLogistics.toc']
 
 jobs:
   check-version-change:
@@ -31,10 +31,10 @@ jobs:
         id: check-version
         run: |
           # Version actuelle
-          CURRENT_VERSION=$(grep "^## Version:" GuildLogistics/GuildLogistics.toc | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          CURRENT_VERSION=$(grep "^## Version:" GuildLogistics.toc | sed 's/## Version: //' | tr -d '\r\n' | xargs)
           
           # Version précédente (commit parent)
-          PREVIOUS_VERSION=$(git show HEAD~1:GuildLogistics/GuildLogistics.toc | grep "^## Version:" | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          PREVIOUS_VERSION=$(git show HEAD~1:GuildLogistics.toc | grep "^## Version:" | sed 's/## Version: //' | tr -d '\r\n' | xargs)
           
           echo "Version actuelle: $CURRENT_VERSION"
           echo "Version précédente: $PREVIOUS_VERSION"

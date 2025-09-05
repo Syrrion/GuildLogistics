@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['GuildLogistics/**']
+    paths: ['**/*.lua', '**/*.toc', '**/*.xml']
 
 jobs:
   update-pkgmeta:
@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Générer dynamiquement la liste des addons à ignorer
+      # Générer dynamiquement la liste des fichiers à ignorer
       - name: Generate dynamic .pkgmeta
         run: |
           echo "📦 Génération dynamique du .pkgmeta..."
@@ -30,10 +30,6 @@ jobs:
           package-as: GuildLogistics
           
           manual-changelog: CHANGELOG.md
-          
-          # Approche inclusive : on spécifie explicitement ce qu'on veut
-          include:
-              - GuildLogistics/
           
           # Fichiers/dossiers de développement à ignorer
           ignore:
@@ -49,27 +45,7 @@ jobs:
               - .pkgmeta
           EOF
           
-          # Ajouter dynamiquement tous les autres dossiers d'addons
-          echo "" >> .pkgmeta
-          echo "    # Autres addons détectés automatiquement :" >> .pkgmeta
-          
-          # Lister tous les dossiers sauf GuildLogistics et les dossiers système
-          find . -maxdepth 1 -type d -name "[!.]*" ! -name "GuildLogistics" | \
-          sort | \
-          while read dir; do
-            dirname=$(basename "$dir")
-            echo "    - $dirname/" >> .pkgmeta
-          done
-          
-          # Ajouter la section move-folders
-          cat >> .pkgmeta << 'EOF'
-          
-          # Déplacer le contenu de GuildLogistics/ à la racine de l'archive
-          move-folders:
-              GuildLogistics: /
-          EOF
-          
-          echo "✅ .pkgmeta généré avec les addons actuels"
+          echo "✅ .pkgmeta généré pour structure directe"
           echo ""
           echo "📋 Contenu généré :"
           cat .pkgmeta
