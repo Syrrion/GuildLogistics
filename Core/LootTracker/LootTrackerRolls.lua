@@ -15,7 +15,7 @@ local function _GS2Pat(gs)
     if not gs or gs == "" then return nil end
     local p = _EscapeForLuaPattern(gs)
     p = p:gsub("%%s", "(.+)")  -- capture texte/lien
-    p = p:gsub("%%d", "(%%d+)") -- capture entier
+    p = p:gsub("%%d", "(%d+)") -- capture entier
     return p
 end
 
