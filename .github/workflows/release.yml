@@ -1,4 +1,4 @@
-name: Package & Upload (CurseForge) + Persist Changelog
+name: Déploiement sur CurseForge
 
 permissions:
   contents: write
@@ -74,41 +74,3 @@ jobs:
           body_path: LATEST_CHANGELOG.md
           append_body: false      # overwrite, don't append
           make_latest: true
-
-  persist-changelog:
-    name: Open PR with full CHANGELOG.md
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      # Checkout again (this job is separate)
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
-        with:
-          fetch-depth: 0
-
-      # Generate the full changelog (all tags)
-      - name: Generate full changelog (all tags)
-        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
-        with:
-          output: CHANGELOG.md
-
-      # Open a PR with the updated CHANGELOG.md (persist full history into repo)
-      - name: Create Pull Request with CHANGELOG.md
-        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
-        with:
-          base: main
-          branch: "chore/update-changelog-${{ needs.release.outputs.tag_name || github.ref_name }}"
-          title: "chore: update CHANGELOG for ${{ needs.release.outputs.tag_name || github.ref_name }}"
-          commit-message: "chore: update CHANGELOG for ${{ needs.release.outputs.tag_name || github.ref_name }}"
-          add-paths: |
-            CHANGELOG.md
-          labels: |
-            merge when passing
-          body: |
-            This PR persists the generated CHANGELOG for **${{ needs.release.outputs.tag_name || github.ref_name }}**.
-            - Release body used: LATEST_CHANGELOG.md (single tag)
-            - Repo file updated to full history: CHANGELOG.md
