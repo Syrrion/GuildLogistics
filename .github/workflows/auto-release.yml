@@ -1,0 +1,167 @@
+name: Auto Release on TOC Version Change
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  push:
+    branches: [main]
+    paths: ['GuildLogistics.toc']
+
+jobs:
+  check-and-release:
+    name: Check version, tag, and release
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version_changed: ${{ steps.check-version.outputs.version_changed }}
+      version: ${{ steps.check-version.outputs.version }}
+      tag_name: ${{ steps.check-version.outputs.tag_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2  # Besoin de 2 commits pour comparer
+          token: ${{ secrets.PAT_TOKEN }}  # Utiliser le PAT au lieu du token par défaut
+
+      # Vérifier si la version a changé dans le .toc
+      - name: Check version change
+        id: check-version
+        run: |
+          # Version actuelle
+          CURRENT_VERSION=$(grep "^## Version:" GuildLogistics.toc | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          
+          # Version précédente (commit parent)
+          PREVIOUS_VERSION=$(git show HEAD~1:GuildLogistics.toc | grep "^## Version:" | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          
+          echo "Version actuelle: $CURRENT_VERSION"
+          echo "Version précédente: $PREVIOUS_VERSION"
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "✅ Version changée de $PREVIOUS_VERSION vers $CURRENT_VERSION"
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "tag_name=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Version inchangée: $CURRENT_VERSION"
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Créer et pusher le tag Git si la version a changé
+      - name: Create and Push Git Tag
+        if: steps.check-version.outputs.version_changed == 'true'
+        run: |
+          # Configurer Git avec le PAT pour l'authentification
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config url."https://${{ secrets.PAT_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          
+          TAG_NAME="${{ steps.check-version.outputs.tag_name }}"
+          VERSION="${{ steps.check-version.outputs.version }}"
+          
+          # Vérifier si le tag existe déjà
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "⚠️ Le tag $TAG_NAME existe déjà localement"
+            git tag -d "$TAG_NAME"  # Supprimer le tag local s'il existe
+          fi
+          
+          echo "🏷️ Création du tag: $TAG_NAME"
+          git tag -a "$TAG_NAME" -m "Release version $VERSION"
+          
+          echo "📤 Push du tag vers GitHub avec PAT: $TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "✅ Tag créé et poussé avec PAT: $TAG_NAME"
+
+      # Install zip, required by BigWigs packager
+      - name: Install zip
+        if: steps.check-version.outputs.version_changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      # Generate the "latest" changelog section
+      - name: Generate changelog for latest tag (scoped)
+        if: steps.check-version.outputs.version_changed == 'true'
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
+        with:
+          args: --latest
+          output: LATEST_CHANGELOG.md
+
+      # Copy LATEST_CHANGELOG.md into CHANGELOG.md
+      - name: Copy latest → CHANGELOG.md for packager
+        if: steps.check-version.outputs.version_changed == 'true'
+        run: cp LATEST_CHANGELOG.md CHANGELOG.md
+
+      # Run BigWigs packager (maintenant que le tag existe sur GitHub)
+      - name: Run BigWigs Packager (Retail)
+        if: steps.check-version.outputs.version_changed == 'true'
+        uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60 # v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        with:
+          args: -g retail
+
+      # Créer la release GitHub
+      - name: Create GitHub Release
+        if: steps.check-version.outputs.version_changed == 'true'
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
+        with:
+          tag_name: ${{ steps.check-version.outputs.tag_name }}
+          name: "GuildLogistics ${{ steps.check-version.outputs.version }}"
+          body_path: LATEST_CHANGELOG.md
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      # Notification finale
+      - name: Final Summary
+        if: steps.check-version.outputs.version_changed == 'true'
+        run: |
+          echo "## 🎉 Release complète automatique" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.check-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${{ steps.check-version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release**: ✅ Créée" >> $GITHUB_STEP_SUMMARY
+          echo "- **CurseForge**: ✅ Package uploadé" >> $GITHUB_STEP_SUMMARY
+
+  persist-changelog:
+    name: Open PR with full CHANGELOG.md
+    needs: check-and-release
+    if: needs.check-and-release.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      # Checkout again (this job is separate)
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}  # Utiliser le PAT pour ce job aussi
+
+      # Generate the full changelog (all tags)
+      - name: Generate full changelog (all tags)
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
+        with:
+          output: CHANGELOG.md
+
+      # Open a PR with the updated CHANGELOG.md (persist full history into repo)
+      - name: Create Pull Request with CHANGELOG.md
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
+        with:
+          base: main
+          branch: "chore/update-changelog-${{ needs.check-and-release.outputs.tag_name }}"
+          title: "chore: update CHANGELOG for ${{ needs.check-and-release.outputs.tag_name }}"
+          commit-message: "chore: update CHANGELOG for ${{ needs.check-and-release.outputs.tag_name }}"
+          add-paths: |
+            CHANGELOG.md
+          labels: |
+            merge when passing
+          body: |
+            This PR persists the generated CHANGELOG for **${{ needs.check-and-release.outputs.tag_name }}**.
+            - Release body used: LATEST_CHANGELOG.md (single tag)
+            - Repo file updated to full history: CHANGELOG.md
