@@ -1,0 +1,118 @@
+name: Auto Release on TOC Version Change
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  push:
+    branches: [main]
+    paths: ['GuildLogistics.toc']
+
+jobs:
+  check-version-change:
+    name: Check if TOC version changed
+    runs-on: ubuntu-latest
+    
+    outputs:
+      version_changed: ${{ steps.check-version.outputs.version_changed }}
+      version: ${{ steps.check-version.outputs.version }}
+      tag_name: ${{ steps.check-version.outputs.tag_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 2  # Besoin de 2 commits pour comparer
+
+      # Vérifier si la version a changé dans le .toc
+      - name: Check version change
+        id: check-version
+        run: |
+          # Version actuelle
+          CURRENT_VERSION=$(grep "^## Version:" GuildLogistics.toc | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          
+          # Version précédente (commit parent)
+          PREVIOUS_VERSION=$(git show HEAD~1:GuildLogistics.toc | grep "^## Version:" | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          
+          echo "Version actuelle: $CURRENT_VERSION"
+          echo "Version précédente: $PREVIOUS_VERSION"
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "✅ Version changée de $PREVIOUS_VERSION vers $CURRENT_VERSION"
+            echo "version_changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "tag_name=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "ℹ️ Version inchangée: $CURRENT_VERSION"
+            echo "version_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+  create-release:
+    name: Create release for new version
+    needs: check-version-change
+    if: needs.check-version-change.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      # Vérifier si le tag existe déjà
+      - name: Check if tag exists
+        id: check-tag
+        run: |
+          TAG_NAME="${{ needs.check-version-change.outputs.tag_name }}"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "⚠️ Le tag $TAG_NAME existe déjà"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Le tag $TAG_NAME sera créé"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Créer le tag Git
+      - name: Create Git Tag
+        if: steps.check-tag.outputs.tag_exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          TAG_NAME="${{ needs.check-version-change.outputs.tag_name }}"
+          VERSION="${{ needs.check-version-change.outputs.version }}"
+          
+          echo "🏷️ Création du tag: $TAG_NAME"
+          git tag -a "$TAG_NAME" -m "Release version $VERSION"
+          git push origin "$TAG_NAME"
+
+      # Générer le changelog
+      - name: Generate changelog
+        if: steps.check-tag.outputs.tag_exists == 'false'
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
+        with:
+          args: --latest
+          output: RELEASE_NOTES.md
+
+      # Créer la release GitHub
+      - name: Create GitHub Release
+        if: steps.check-tag.outputs.tag_exists == 'false'
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
+        with:
+          tag_name: ${{ needs.check-version-change.outputs.tag_name }}
+          name: "GuildLogistics ${{ needs.check-version-change.outputs.version }}"
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      # Notification
+      - name: Summary
+        if: steps.check-tag.outputs.tag_exists == 'false'
+        run: |
+          echo "## 🚀 Release automatique créée" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.check-version-change.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${{ needs.check-version-change.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Déclencheur**: Changement de version dans GuildLogistics.toc" >> $GITHUB_STEP_SUMMARY

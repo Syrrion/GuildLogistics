@@ -1,0 +1,60 @@
+[changelog]
+# Configuration du changelog pour GuildLogistics
+header = """
+# Changelog
+Toutes les modifications notables de ce projet seront documentées dans ce fichier.
+
+Le format est basé sur [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+et ce projet adhère au [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+"""
+
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+## {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+{%- if commit.scope -%}
+- **{{ commit.scope }}**: {{ commit.message | upper_first }}
+{%- else -%}
+- {{ commit.message | upper_first }}
+{%- endif -%}
+{%- if commit.breaking -%}
+{%- raw %} ⚠ BREAKING{%- endraw -%}
+{%- endif -%}
+{% endfor -%}
+{% endfor -%}
+
+"""
+
+trim = true
+footer = ""
+
+[git]
+# parse les commits conventionnels
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_preprocessors = []
+commit_parsers = [
+    { message = "^feat", group = "✨ Features" },
+    { message = "^fix", group = "🐛 Bug Fixes" },
+    { message = "^doc", group = "📚 Documentation" },
+    { message = "^perf", group = "⚡ Performance" },
+    { message = "^refactor", group = "♻️ Refactor" },
+    { message = "^style", group = "🎨 Styling" },
+    { message = "^test", group = "🧪 Testing" },
+    { message = "^chore\\(release\\): prepare for", skip = true },
+    { message = "^chore\\(deps\\)", skip = true },
+    { message = "^chore\\(pr\\)", skip = true },
+    { message = "^chore\\(pull\\)", skip = true },
+    { message = "^chore|^ci", group = "⚙️ Miscellaneous Tasks" },
+    { body = ".*security", group = "🛡️ Security" },
+    { message = "^revert", group = "◀️ Revert" },
+]
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "v[0-9].*"
+skip_tags = "v0.1.0-beta.1"
+ignore_tags = ""
+topo_order = false
+sort_commits = "oldest"
