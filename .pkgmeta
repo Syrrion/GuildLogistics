@@ -1,14 +1,17 @@
 package-as: GuildLogistics
 
-manual-changelog: CHANGELOG.md
-
-# Fichiers et dossiers de développement à exclure du package
 ignore:
-    - .github/
-    - .gitignore
-    - .vscode/
-    - .pkgmeta
-    - cliff.toml
-    - README.md
-    - CHANGELOG.md
-    - LATEST_CHANGELOG.md
+  # VCS & tooling
+  - .git
+  - .github
+  - .vscode
+  - .gitignore
+  - .editorconfig
+
+  # Assets you don't want in the zip
+  - LATEST_CHANGELOG.md
+
+enable-nolib-creation: no
+
+curseforge:
+  project-id: 1331099
