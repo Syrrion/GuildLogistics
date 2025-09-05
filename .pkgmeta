@@ -7,6 +7,10 @@ ignore:
   - .vscode
   - .gitignore
   - .editorconfig
+  - .pkgmeta
+  - cliff.toml
+  - README.md
+  - CHANGELOG.md
 
   # Assets you don't want in the zip
   - LATEST_CHANGELOG.md
