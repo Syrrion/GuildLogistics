@@ -6,7 +6,7 @@ manual-changelog: CHANGELOG.md
 include:
     - GuildLogistics/
 
-# Ignorer seulement les fichiers/dossiers de développement à la racine
+# Fichiers/dossiers de développement à ignorer
 ignore:
     - .github/
     - .git/
@@ -18,6 +18,8 @@ ignore:
     - LATEST_CHANGELOG.md
     - CHANGELOG.md
     - .pkgmeta
+
+    # Autres addons détectés automatiquement :
 
 # Déplacer le contenu de GuildLogistics/ à la racine de l'archive
 move-folders:
