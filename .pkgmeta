@@ -2,4 +2,13 @@ package-as: GuildLogistics
 
 manual-changelog: CHANGELOG.md
 
-# Le workspace est nettoyé avant packaging, donc pas besoin d'ignore complexe
+# Fichiers et dossiers de développement à exclure du package
+ignore:
+    - .github/
+    - .gitignore
+    - .vscode/
+    - .pkgmeta
+    - cliff.toml
+    - README.md
+    - CHANGELOG.md
+    - LATEST_CHANGELOG.md

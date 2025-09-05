@@ -57,43 +57,14 @@ jobs:
       - name: Copy latest → CHANGELOG.md for packager
         run: cp LATEST_CHANGELOG.md CHANGELOG.md
 
-      # Nettoyer le workspace avant packaging - nous sommes déjà dans GuildLogistics
-      - name: Clean workspace for packaging
-        run: |
-          echo "🧹 Nettoyage du workspace pour le packaging..."
-          
-          # Créer un dossier temporaire pour GuildLogistics
-          mkdir -p /tmp/clean-workspace/GuildLogistics
-          
-          # Copier tous les fichiers de l'addon (sauf les fichiers de développement)
-          find . -maxdepth 1 -type f \( -name "*.lua" -o -name "*.toc" -o -name "*.xml" \) -exec cp {} /tmp/clean-workspace/GuildLogistics/ \;
-          
-          # Copier les dossiers de l'addon
-          for dir in Core Data Locales Ressources Tabs UI; do
-            if [ -d "$dir" ]; then
-              cp -r "$dir" /tmp/clean-workspace/GuildLogistics/
-            fi
-          done
-          
-          # Copier le changelog s'il existe
-          cp CHANGELOG.md /tmp/clean-workspace/ 2>/dev/null || echo "No CHANGELOG.md to copy"
-          
-          # Remplacer le contenu du workspace
-          rm -rf * .github .pkgmeta cliff.toml .git* 2>/dev/null || true
-          cp -r /tmp/clean-workspace/* ./
-          
-          echo "✅ Workspace nettoyé - contenu restant:"
-          ls -la
-
       # Run BigWigs packager to build the .zip and upload to CurseForge
+      # Le .pkgmeta gère maintenant l'exclusion des fichiers de développement
       - name: Run BigWigs Packager (Retail)
         uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60 # v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
           args: -g retail
-          # If `.pkgmeta` has `manual-changelog: CHANGELOG.md`, packager will use that file
-          # Otherwise, it will use the GitHub release body (updated below)
 
       # Update the GitHub release body with the latest changelog section
       - name: Update GitHub release body with generated changelog

@@ -25,24 +25,22 @@ jobs:
         run: |
           echo "📦 Génération dynamique du .pkgmeta..."
           
-          # Créer le début du fichier
+          # Créer le fichier .pkgmeta
           cat > .pkgmeta << 'EOF'
           package-as: GuildLogistics
           
           manual-changelog: CHANGELOG.md
           
-          # Fichiers/dossiers de développement à ignorer
+          # Fichiers et dossiers de développement à exclure du package
           ignore:
               - .github/
-              - .git/
               - .gitignore
-              - .gitlab/
               - .vscode/
-              - README.md
-              - cliff.toml
-              - LATEST_CHANGELOG.md
-              - CHANGELOG.md
               - .pkgmeta
+              - cliff.toml
+              - README.md
+              - CHANGELOG.md
+              - LATEST_CHANGELOG.md
           EOF
           
           echo "✅ .pkgmeta généré pour structure directe"
