@@ -62,7 +62,8 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail
+          args: -g retail -z
+          # -z option forces the packager to use the directory structure as-is
           # If `.pkgmeta` has `manual-changelog: CHANGELOG.md`, packager will use that file
           # Otherwise, it will use the GitHub release body (updated below)
 
