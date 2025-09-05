@@ -1,7 +1,5 @@
 package-as: GuildLogistics
 
-externals: {}   # libs already embedded
-
 ignore:
   # VCS & tooling
   - .git
