@@ -57,14 +57,30 @@ jobs:
       - name: Copy latest → CHANGELOG.md for packager
         run: cp LATEST_CHANGELOG.md CHANGELOG.md
 
+      # Nettoyer le workspace avant packaging - garder seulement GuildLogistics
+      - name: Clean workspace for packaging
+        run: |
+          echo "🧹 Nettoyage du workspace pour le packaging..."
+          
+          # Créer un dossier temporaire pour GuildLogistics
+          mkdir -p /tmp/clean-workspace
+          cp -r GuildLogistics /tmp/clean-workspace/
+          cp CHANGELOG.md /tmp/clean-workspace/ 2>/dev/null || echo "No CHANGELOG.md to copy"
+          
+          # Remplacer le contenu du workspace
+          rm -rf * .github .pkgmeta cliff.toml .git* 2>/dev/null || true
+          cp -r /tmp/clean-workspace/* ./
+          
+          echo "✅ Workspace nettoyé - contenu restant:"
+          ls -la
+
       # Run BigWigs packager to build the .zip and upload to CurseForge
       - name: Run BigWigs Packager (Retail)
         uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60 # v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail -z
-          # -z option forces the packager to use the directory structure as-is
+          args: -g retail
           # If `.pkgmeta` has `manual-changelog: CHANGELOG.md`, packager will use that file
           # Otherwise, it will use the GitHub release body (updated below)
 

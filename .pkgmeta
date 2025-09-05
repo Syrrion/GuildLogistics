@@ -2,19 +2,4 @@ package-as: GuildLogistics
 
 manual-changelog: CHANGELOG.md
 
-# Approche inclusive : on spécifie explicitement ce qu'on veut inclure
-include:
-    - GuildLogistics/
-
-# Ignorer seulement les fichiers/dossiers de développement à la racine
-ignore:
-    - .github/
-    - .git/
-    - .gitignore
-    - .gitlab/
-    - .vscode/
-    - README.md
-    - cliff.toml
-    - LATEST_CHANGELOG.md
-    - CHANGELOG.md
-    - .pkgmeta
+# Le workspace est nettoyé avant packaging, donc pas besoin d'ignore complexe
