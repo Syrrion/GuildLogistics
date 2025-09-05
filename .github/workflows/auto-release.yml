@@ -154,7 +154,14 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail -u
+          args: -g retail -r ${{ github.repository }} -p ${{ needs.check-version-change.outputs.tag_name }}
+          
+      # Debug: List generated files
+      - name: List generated files
+        run: |
+          echo "📁 Fichiers générés par le packager:"
+          find . -name "*.zip" -type f 2>/dev/null || echo "Aucun fichier .zip trouvé"
+          find . -name "*GuildLogistics*" -type f 2>/dev/null || echo "Aucun fichier GuildLogistics trouvé"
           
       # Debug: Check if CF_API_KEY is set (without exposing it)
       - name: Debug API Key Status
@@ -163,6 +170,8 @@ jobs:
             echo "❌ CF_API_KEY secret is not set or empty"
           else
             echo "✅ CF_API_KEY secret is set"
+            echo "📦 Repository: ${{ github.repository }}"
+            echo "🏷️ Tag: ${{ needs.check-version-change.outputs.tag_name }}"
           fi
 
       # Update the GitHub release body with the latest changelog section
