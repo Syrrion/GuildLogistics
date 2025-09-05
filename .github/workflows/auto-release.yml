@@ -154,7 +154,18 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail
+          args: -g retail -v
+          
+      # Debug: Check if CF_API_KEY is set (without exposing it)
+      - name: Debug API Key Status
+        run: |
+          if [ -z "${{ secrets.CF_API_KEY }}" ]; then
+            echo "❌ CF_API_KEY secret is not set or empty"
+          else
+            echo "✅ CF_API_KEY secret is set (length: ${#CF_API_KEY})"
+          fi
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
 
       # Update the GitHub release body with the latest changelog section
       - name: Update GitHub release body with generated changelog
