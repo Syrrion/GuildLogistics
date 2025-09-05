@@ -11,7 +11,44 @@ function UI.CreatePopup(opts)
         UI.Scale.Register(f, UI.Scale.TARGET_EFF_SCALE)
     end
 
-    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f) end
+    -- Fonction pour hooker récursivement CreateFontString sur une frame et toutes ses futures sous-frames
+    local function hookCreateFontStringRecursive(frame)
+        if not frame or frame.__glog_fontHooked then return end
+        
+        -- Hook CreateFontString sur cette frame
+        if frame.CreateFontString then
+            local originalCreateFontString = frame.CreateFontString
+            frame.CreateFontString = function(self, ...)
+                local fs = originalCreateFontString(self, ...)
+                if UI and UI.ApplyFont and fs then
+                    UI.ApplyFont(fs)
+                end
+                return fs
+            end
+        end
+        
+        -- Hook CreateFrame pour capturer les nouvelles sous-frames ET appliquer la police aux contrôles
+        if frame.CreateFrame then
+            local originalCreateFrame = frame.CreateFrame
+            frame.CreateFrame = function(self, frameType, name, parent, template, ...)
+                local newFrame = originalCreateFrame(self, frameType, name, parent, template, ...)
+                hookCreateFontStringRecursive(newFrame)
+                
+                -- Applique la police immédiatement pour certains types de contrôles
+                if UI and UI.ApplyFontRecursively then
+                    UI.ApplyFontRecursively(newFrame)
+                end
+                
+                return newFrame
+            end
+        end
+        
+        frame.__glog_fontHooked = true
+    end
+    
+    -- Hook la frame principale et applique récursivement
+    hookCreateFontStringRecursive(f)
+
     f:SetSize(opts.width or 460, opts.height or 240)
 
     -- Strate ajustable (par défaut DIALOG). Ne crée l’overlay que si enforceAction=true.
@@ -46,6 +83,11 @@ function UI.CreatePopup(opts)
     f.title = drag:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     f.title:SetText(Tr(opts.title or "popup_info_title"))
     f.title:SetTextColor(0.98, 0.95, 0.80)
+    
+    -- Applique immédiatement la police au titre
+    if UI and UI.ApplyFont and f.title then
+        UI.ApplyFont(f.title)
+    end
 
     if UI.PositionTitle then
         UI.PositionTitle(f.title, drag, -85)
@@ -65,7 +107,6 @@ function UI.CreatePopup(opts)
     local POP_BOT   = UI.POPUP_BOTTOM_LIFT     or 4   -- remonte un peu du bas
 
     f.content = CreateFrame("Frame", nil, f)
-    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f.content) end
 
     f.content:SetPoint("TOPLEFT",     f, "TOPLEFT",     L + POP_SIDE, -(T + POP_TOP))
     -- laisse la marge latérale du contenu, mais réserve la hauteur du footer + gap
@@ -150,6 +191,11 @@ function UI.CreatePopup(opts)
             self.msgFS:SetPoint("BOTTOMRIGHT", self.content, "BOTTOMRIGHT", 0, 0)
             self.msgFS:SetJustifyH("CENTER")
             self.msgFS:SetJustifyV("MIDDLE")
+            
+            -- Applique la police au message
+            if UI and UI.ApplyFont and self.msgFS then
+                UI.ApplyFont(self.msgFS)
+            end
         end
         self.msgFS:SetText(text or "")
     end
@@ -190,6 +236,11 @@ function UI.CreatePopup(opts)
         end
     end
 
+    -- Applique la police à tous les FontString existants dans le popup
+    if UI and UI.ApplyFontRecursively then
+        UI.ApplyFontRecursively(f)
+    end
+
     return f
 end
 
@@ -227,10 +278,20 @@ function UI.PopupPromptNumber(title, label, onAccept, opts)
     local l = stack:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     l:SetText(label or "")
     l:SetPoint("TOP", stack, "TOP", 0, 0)
+    
+    -- Applique la police au label
+    if UI and UI.ApplyFont and l then
+        UI.ApplyFont(l)
+    end
 
     local eb = CreateFrame("EditBox", nil, stack, "InputBoxTemplate")
     eb:SetAutoFocus(true); eb:SetNumeric(true); eb:SetSize(220, 28)
     eb:SetPoint("TOP", l, "BOTTOM", 0, -8)
+
+    -- Applique la police à l'EditBox
+    if UI and UI.ApplyFontRecursively then
+        UI.ApplyFontRecursively(eb)
+    end
 
     eb:SetScript("OnEnterPressed", function(self)
         -- 🔁 Valide exactement comme si on cliquait sur le bouton par défaut
@@ -299,6 +360,12 @@ function UI.ShowParticipantsPopup(names, showState)
             local f = {}
             f.name   = UI.CreateNameTag(r)
             f.status = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            
+            -- Applique la police au status
+            if UI and UI.ApplyFont and f.status then
+                UI.ApplyFont(f.status)
+            end
+            
             return f
         end,
         updateRow = function(i, r, f, item)
@@ -373,6 +440,11 @@ function UI.PopupDualText(title, topLabel, topText, bottomLabel, bottomText, opt
     local lblTop = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     lblTop:SetText((Tr and Tr(topLabel or "")) or (topLabel or ""))
     lblTop:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -8)
+    
+    -- Applique la police au label supérieur
+    if UI and UI.ApplyFont and lblTop then
+        UI.ApplyFont(lblTop)
+    end
 
     -- Zone supérieure (scroll + EditBox sélectionnable)
     local sfTop = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
@@ -386,11 +458,21 @@ function UI.PopupDualText(title, topLabel, topText, bottomLabel, bottomText, opt
     ebTop:SetJustifyH("LEFT"); ebTop:SetJustifyV("TOP")
     ebTop:SetText(topText or ""); ebTop:ClearFocus(); ebTop:SetCursorPosition(0)
     sfTop:SetScrollChild(ebTop)
+    
+    -- Applique la police à l'EditBox du haut
+    if UI and UI.ApplyFontRecursively then
+        UI.ApplyFontRecursively(ebTop)
+    end
 
     -- Label inférieur
     local lblBottom = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     lblBottom:SetText((Tr and Tr(bottomLabel or "")) or (bottomLabel or ""))
     lblBottom:SetPoint("TOPLEFT", sfTop, "BOTTOMLEFT", 0, -10)
+    
+    -- Applique la police au label inférieur
+    if UI and UI.ApplyFont and lblBottom then
+        UI.ApplyFont(lblBottom)
+    end
 
     -- Zone inférieure (scroll + EditBox sélectionnable)
     local sfBottom = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
@@ -402,6 +484,11 @@ function UI.PopupDualText(title, topLabel, topText, bottomLabel, bottomText, opt
     ebBottom:SetFontObject("ChatFontNormal")
     ebBottom:SetJustifyH("LEFT"); ebBottom:SetJustifyV("TOP")
     ebBottom:SetText(bottomText or ""); ebBottom:ClearFocus(); ebBottom:SetCursorPosition(0)
+    
+    -- Applique la police aux EditBox
+    if UI and UI.ApplyFontRecursively then
+        UI.ApplyFontRecursively(ebBottom)
+    end
     sfBottom:SetScrollChild(ebBottom)
 
     -- Ajuste la largeur des EditBox quand la fenêtre change de taille
@@ -442,6 +529,11 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     titleFS:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  0, -12)  -- marge haute
     titleFS:SetPoint("TOPRIGHT", dlg.content, "TOPRIGHT", 0, -12)
     titleFS:SetText(Tr("msg_good_raid"))
+    
+    -- Applique la police au titre
+    if UI and UI.ApplyFont and titleFS then
+        UI.ApplyFont(titleFS)
+    end
 
     -- Lignes séparées pour contrôler précisément les espacements
     local dedFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -451,6 +543,11 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     dedFS:SetText( Tr("popup_deducted_amount_fmt"):format(
         UI.MoneyText(math.floor(tonumber(deducted) or 0))
     ) )
+    
+    -- Applique la police au montant déduit
+    if UI and UI.ApplyFont and dedFS then
+        UI.ApplyFont(dedFS)
+    end
 
     local restFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     restFS:SetJustifyH("CENTER")
@@ -459,6 +556,11 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
     restFS:SetText( Tr("popup_remaining_balance_fmt"):format(
         UI.MoneyText(math.floor(tonumber(after) or 0))
     ) )
+    
+    -- Applique la police au solde restant
+    if UI and UI.ApplyFont and restFS then
+        UI.ApplyFont(restFS)
+    end
 
     -- Forcer le wrapping si la largeur est connue
     local cw = dlg.content:GetWidth() or 0
@@ -504,6 +606,13 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
                 local f = {}
                 f.lot   = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
                 f.price = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+                
+                -- Applique la police aux FontStrings de la ligne
+                if UI and UI.ApplyFont then
+                    if f.lot then UI.ApplyFont(f.lot) end
+                    if f.price then UI.ApplyFont(f.price) end
+                end
+                
                 return f
             end,
             updateRow = function(_, _, f, row)
@@ -580,10 +689,20 @@ function UI.PopupPromptText(title, label, onAccept, opts)
     local l = stack:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     l:SetText(label or "")
     l:SetPoint("TOP", stack, "TOP", 0, 0)
+    
+    -- Applique la police au label de saisie de texte
+    if UI and UI.ApplyFont and l then
+        UI.ApplyFont(l)
+    end
 
     local eb = CreateFrame("EditBox", nil, stack, "InputBoxTemplate")
     eb:SetAutoFocus(true); eb:SetSize(260, 28)
     eb:SetPoint("TOP", l, "BOTTOM", 0, -8)
+
+    -- Applique la police à l'EditBox de saisie de texte
+    if UI and UI.ApplyFontRecursively then
+        UI.ApplyFontRecursively(eb)
+    end
 
     eb:SetScript("OnEnterPressed", function(self)
         local v = tostring(self:GetText() or "")
@@ -619,6 +738,11 @@ function UI.PopupPendingCalendarInvites(items)
     msg:SetPoint("TOPLEFT", dlg.content, "TOPLEFT", 10, -10)
     msg:SetPoint("RIGHT",   dlg.content, "RIGHT",   -10, 0)
     msg:SetText(Tr("pending_invites_message_fmt"):format(#(items or {})))
+    
+    -- Applique la police au message des invitations en attente
+    if UI and UI.ApplyFont and msg then
+        UI.ApplyFont(msg)
+    end
 
     local listHost = CreateFrame("Frame", nil, dlg.content)
     listHost:SetPoint("TOPLEFT",  dlg.content, "TOPLEFT",  10, -70)
@@ -686,7 +810,17 @@ function UI.ShowOutdatedAddonPopup(currentVer, latestVer, fromPlayer)
         l3 = l3 .. "\n" .. string.format(Tr("msg_outdated_from"), tostring(fromPlayer))
     end
     msg:SetText(l1.."\n"..l2.."\n\n"..l3)
+    
+    -- Applique la police au message de version obsolète
+    if UI and UI.ApplyFont and msg then
+        UI.ApplyFont(msg)
+    end
     msg:SetJustifyH("LEFT"); msg:SetJustifyV("TOP")
+    
+    -- Applique la police au message
+    if UI and UI.ApplyFont and msg then
+        UI.ApplyFont(msg)
+    end
     msg:SetPoint("TOPLEFT", content, "TOPLEFT", 12, -12)
     msg:SetPoint("RIGHT", content, "RIGHT", -12, 0)
 

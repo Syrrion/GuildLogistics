@@ -89,23 +89,58 @@ end
 -- Filtre "évènement système Blizzard" (non joueur)
 -- Renvoie true si l'évènement n’est pas un évènement joueur ("PLAYER"),
 -- ou s’il s’agit d’un "Holiday", d’un reset/lockout, etc.
+-- ⚠️ DÉPLACÉ vers Guild.lua : _isSystemCalendarEvent()
 local function _isSystemCalendarEvent(ev, info)
-    local calType = (ev and ev.calendarType) or (info and info.calendarType)
+    -- Déléguer vers Guild.lua (fonction intégrée dans IsCalendarEventFromGuildMember)
+    return false -- Désactivé : filtrage fait maintenant dans Guild.lua
+end
+
+-- ➕ Helper : vérifie que l'évènement (mo,day,idx) provient d'un membre de la guilde
+-- Déplacé depuis Guild.lua pour meilleure séparation des responsabilités
+function GLOG.IsCalendarEventFromGuildMember(monthOffset, day, index)
+    if not C_Calendar or not C_Calendar.OpenEvent then return false end
+
+    -- Ouvre les infos de l'évènement (data-only, pas l'UI)
+    local ok = pcall(C_Calendar.OpenEvent, monthOffset, day, index)
+    if not ok then return nil end
+
+    local info = C_Calendar.GetEventInfo and C_Calendar.GetEventInfo() or nil
+    if not info then return nil end
+
+    -- 🛑 Exclure immédiatement les évènements système Blizzard
+    local calType = (info and info.calendarType)
     if type(calType) == "string" and calType ~= "PLAYER" then
-        return true
+        return false
     end
 
-    local evType = (ev and ev.eventType) or (info and info.eventType)
+    local evType = (info and info.eventType)
     if evType and Enum and Enum.CalendarEventType and evType == Enum.CalendarEventType.Holiday then
-        return true
+        return false
     end
 
-    local isHoliday = (ev and ev.isHoliday) or (info and info.isHoliday)
+    local isHoliday = (info and info.isHoliday)
     if isHoliday then
-        return true
+        return false
     end
 
-    return false
+    -- Tant que le cache de guilde n'est pas prêt, on reporte la décision
+    if not GLOG.IsGuildCacheReady() then
+        return nil
+    end
+
+    -- Auteur de l'évènement (selon le type, le champ diffère)
+    local by = info.invitedBy or info.inviter or info.creator or info.organizer or info.owner or ""
+    by = tostring(by or "")
+    if by == "" then
+        -- Pas d'auteur joueur → ce n'est pas un évènement de guilde
+        return false
+    end
+
+    -- Normalisation & test appartenance guilde
+    local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(by)) or by
+    local inG  = GLOG.IsGuildCharacter(full)
+    if inG == nil then return nil end
+    return inG and true or false
 end
 
 -- ➕ Helper : vérifie que l'évènement (mo,day,idx) provient d'un membre de la guilde
@@ -164,15 +199,15 @@ function CollectPending(rangeDays)
                 for i = 1, num do
                     local ev = C_Calendar.GetDayEvent and C_Calendar.GetDayEvent(monthOffset, day, i)
 
-                    -- On ne traite que les INVITED non-système (PLAYER uniquement)
-                    if ev and ev.inviteStatus == Enum.CalendarStatus.Invited and not _isSystemCalendarEvent(ev) then
+                    -- On ne traite que les INVITED (le filtrage système sera fait par IsCalendarEventFromGuildMember)
+                    if ev and ev.inviteStatus == Enum.CalendarStatus.Invited then
                         local h  = ev.hour   or (ev.startTime and ev.startTime.hour)   or 0
                         local m  = ev.minute or (ev.startTime and ev.startTime.minute) or 0
                         local ts = time({ year = year, month = month, day = day, hour = h, min = m, sec = 0 })
 
                         if ts and ts >= nowTS and ts <= limitTS then
                             -- Filtre "créé par un membre de la guilde" (avec retry si info pas prête)
-                            local ok, fromGuild = pcall(_isEventFromGuildMember, monthOffset, day, i)
+                            local ok, fromGuild = pcall(GLOG.IsCalendarEventFromGuildMember, monthOffset, day, i)
                             if not ok then
                                 needsRetry = true
                             else

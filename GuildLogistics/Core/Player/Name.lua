@@ -3,6 +3,34 @@ ns.GLOG = ns.GLOG or {}
 ns.Util = ns.Util or {}
 local GLOG, U = ns.GLOG, ns.Util
 
+-- Mémoïseur léger (faible empreinte mémoire)
+GLOG._normCache = GLOG._normCache or setmetatable({}, { __mode = "kv" })
+
+-- Hot path: normalisation de nom ultra-fréquente → on mémorise
+function GLOG.NormName(name)
+    if not name or name == "" then return nil end
+    local key = tostring(name)
+
+    local cached = GLOG._normCache[key]
+    if cached ~= nil then return cached end
+
+    local amb = Ambiguate(key, "none")
+    amb = strtrim(amb or "")
+    if amb == "" then
+        GLOG._normCache[key] = nil
+        return nil
+    end
+
+    local p = amb:find("-", 1, true)
+    local base = p and amb:sub(1, p-1) or amb
+    local out  = base:lower()
+
+    -- on mémorise à la fois l'entrée brute et l'ambiguée
+    GLOG._normCache[key] = out
+    if amb ~= key then GLOG._normCache[amb] = out end
+    return out
+end
+
 -- Expose aussi CleanFullName pour compat ascendante (certains appels peuvent l'utiliser)
 U.CleanFullName = U.CleanFullName or CleanFullName
 
@@ -73,63 +101,107 @@ local function playerFullName()
     return short
 end
 
--- Résout un nom (avec/without royaume) en "Nom-Royaume" exact via DB et unités.
--- opts.strict = true => n'ajoute pas le royaume local si introuvable.
-function GLOG.ResolveFullName(name, opts)
-    opts = opts or {}
-    local raw = tostring(name or "")
-    if raw == "" then return nil end
+-- Résout un nom court en "Nom-Royaume" en s'appuyant sur le roster en cache.
+-- Nettoie aussi les doublons de royaume éventuels.
+function GLOG.ResolveFullName(name)
+    local n = tostring(name or "")
+    if n == "" then return n end
 
-    if raw:find("%-") then
-        return CleanFullName(raw)
+    -- ⚙️ Si on reçoit déjà "Nom-...", on le nettoie (évite "Royaume-Royaume-...")
+    if n:find("%-") then
+        local cleaner = ns and ns.Util and ns.Util.CleanFullName
+        return (cleaner and cleaner(n)) or n
     end
 
-    local baseKey = (GLOG.NormName and GLOG.NormName(raw)) or raw:lower()
-
-    if GuildLogisticsDB and GuildLogisticsDB.players then
-        local candidate = nil
-        for full in pairs(GuildLogisticsDB.players) do
-            local base = full:match("^([^%-]+)%-.+$")
-            if base and base:lower() == baseKey then
-                if candidate and candidate ~= full then
-                    candidate = "__AMB__"; break
-                end
-                candidate = full
+    -- Sinon, essaie de résoudre via le cache de guilde (sans inventer le royaume local)
+    local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+    local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+    for _, r in ipairs(rows) do
+        local full = r.name_raw or r.name_amb or r.name or ""
+        if full ~= "" then
+            local base = (full:match("^([^%-]+)%-") or full)
+            if base and (base:lower() == key) then
+                local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                return (cleaner and cleaner(full)) or full
             end
         end
-        if candidate and candidate ~= "__AMB__" then return candidate end
+    end
+    return n
+end
+
+-- Variante stricte : retourne "Nom-Royaume" ou nil si introuvable (aucun fallback local).
+function GLOG.ResolveFullNameStrict(name)
+    local n = tostring(name or "")
+    if n == "" then return nil end
+
+    -- Déjà complet → nettoyage simple
+    if n:find("%-") then
+        local cleaner = ns and ns.Util and ns.Util.CleanFullName
+        return (cleaner and cleaner(n)) or n
     end
 
+    -- 1) Cache guilde (identique à ResolveFullName, mais nil si non trouvé)
+    do
+        local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+        for _, r in ipairs(rows) do
+            local full = r.name_raw or r.name_amb or r.name or ""
+            if full ~= "" then
+                local base = (full:match("^([^%-]+)%-") or full)
+                if base and (base:lower() == key) then
+                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                    return (cleaner and cleaner(full)) or full
+                end
+            end
+        end
+    end
+
+    -- 2) Déduire depuis la DB locale si UNE seule correspondance existe
+    do
+        if GuildLogisticsDB and GuildLogisticsDB.players then
+            local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+            local found
+            for full,_ in pairs(GuildLogisticsDB.players) do
+                local base = full:match("^([^%-]+)%-")
+                if base then
+                    local bk = (GLOG.NormName and GLOG.NormName(base)) or base:lower()
+                    if bk == key then
+                        if found and found ~= full then found = "__AMB__"; break end
+                        found = full
+                    end
+                end
+            end
+            if found and found ~= "__AMB__" then
+                local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                return (cleaner and cleaner(found)) or found
+            end
+        end
+    end
+
+    -- 3) Unités (raid/party/target/mouseover)
     local function tryUnit(u)
         if not UnitExists or not UnitExists(u) then return nil end
-        local n, r = UnitName(u)
-        if not n or n == "" then return nil end
-        local k = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
-        if k ~= baseKey then return nil end
-        local realm = (r and r ~= "" and r)
-                   or (GetNormalizedRealmName and GetNormalizedRealmName())
-                   or (GetRealmName and GetRealmName())
-                   or ""
-        realm = tostring(realm):gsub("%s+", ""):gsub("'", "")
-        if realm == "" then return nil end
-        return n .. "-" .. realm
+        local nn, rr = UnitName(u)
+        if not nn or nn == "" then return nil end
+        local ok = ((GLOG.NormName and GLOG.NormName(nn)) or nn:lower())
+                   == ((GLOG.NormName and GLOG.NormName(n)) or n:lower())
+        if not ok then return nil end
+        return (rr and rr ~= "" and (nn.."-"..rr)) or nil
     end
-
-    local full = tryUnit("player") or tryUnit("target") or tryUnit("mouseover")
-    if not full then
-        for i = 1, 40 do full = tryUnit("raid" .. i); if full then break end end
+    local full = tryUnit("player") or tryUnit("target") or tryUnit("mouseover") or tryUnit("focus")
+    if not full and IsInRaid and IsInRaid() then
+        for i=1,40 do full = tryUnit("raid"..i); if full then break end end
     end
     if not full then
-        for i = 1, 4 do full = tryUnit("party" .. i); if full then break end end
+        for i=1,4 do full = tryUnit("party"..i); if full then break end end
     end
-    if full then return full end
+    if full then
+        local cleaner = ns and ns.Util and ns.Util.CleanFullName
+        return (cleaner and cleaner(full)) or full
+    end
 
-    if opts.strict then return nil end
-
-    local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
-    realm = tostring(realm):gsub("%s+", ""):gsub("'", "")
-    if realm == "" then return raw end
-    return raw .. "-" .. realm
+    -- 4) Strict: inconnu
+    return nil
 end
 
 -- Force la clé DB au format "Nom-Royaume" (utilise NormalizeFull ou ResolveFullName).

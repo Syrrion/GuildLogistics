@@ -109,7 +109,7 @@ function UI.ColorizeLevel(level)
         -- Fallback simple si l'API n'est pas dispo
         local pl   = (UnitLevel and UnitLevel("player")) or lvl
         local diff = (lvl - pl)
-        local greenRange = (GetQuestGreenRange and GetQuestGreenRange()) or 5
+        local greenRange = 5
         if diff >= 5 then
             c = { r=1,   g=0.1, b=0.1 }       -- rouge
         elseif diff >= 3 then
@@ -155,9 +155,6 @@ local saved = GLOG.GetSavedWindow and GLOG.GetSavedWindow() or {}
 if UI.Scale and UI.Scale.Register then
     UI.Scale.Register(Main, UI.Scale.TARGET_EFF_SCALE) -- par défaut 1.0
 end
-
--- Applique automatiquement la police sur tous les FontString créés sous Main
-if UI and UI.AttachAutoFont then UI.AttachAutoFont(Main) end
 
 Main:SetSize(UI.DEFAULT_W, UI.DEFAULT_H)
 Main:SetFrameStrata("HIGH")
@@ -283,13 +280,6 @@ local function PositionSyncIndicator()
         local padL = tonumber(UI.SIDEBAR_FOOTER_PAD_LEFT or 8) or 8
         syncPanel:SetPoint("LEFT", footer, "LEFT", padL, 0)
 
-        -- Texte aligné à gauche quand il est dans la barre latérale
-        if syncText and syncText.GetObjectType then
-            syncText:ClearAllPoints()
-            syncText:SetPoint("LEFT", syncPanel, "LEFT", 0, 0)
-            syncText:SetJustifyH("LEFT")
-        end
-
         -- Hauteur discrète pour s'intégrer à la barre latérale
         syncPanel:SetHeight(18)
         return
@@ -307,13 +297,6 @@ local function PositionSyncIndicator()
         syncPanel:SetPoint("TOPRIGHT", reloadBtn, "TOPLEFT", -12, 0)
     else
         syncPanel:SetPoint("TOPRIGHT", Main, "TOPRIGHT", -64, -2)
-    end
-
-    -- Texte aligné à droite pour le fallback historique
-    if syncText and syncText.GetObjectType then
-        syncText:ClearAllPoints()
-        syncText:SetPoint("RIGHT", syncPanel, "RIGHT", 0, 0)
-        syncText:SetJustifyH("RIGHT")
     end
 
     syncPanel:SetHeight(20)
@@ -339,11 +322,16 @@ local function _startSyncAnim(base)
     syncPanel:Show()
     syncText:SetText(base .. "…")
     syncPanel:SetWidth(syncText:GetStringWidth() + 4)
-    syncTicker = C_Timer.NewTicker(0.4, function()
+    -- Optimisation : réduit la fréquence de 0.4s à 0.8s pour diminuer les performances CPU
+    syncTicker = C_Timer.NewTicker(0.8, function()
         dots = (dots % 3) + 1
         local suffix = string.rep(".", dots)
         syncText:SetText(string.format("%s%s", base, suffix))
-        syncPanel:SetWidth(syncText:GetStringWidth() + 4)
+        -- Cache la largeur du texte pour éviter les recalculs constants
+        local textWidth = syncText:GetStringWidth()
+        if math.abs(syncPanel:GetWidth() - textWidth - 4) > 1 then  -- Seuil de tolérance
+            syncPanel:SetWidth(textWidth + 4)
+        end
     end)
 end
 
@@ -466,17 +454,24 @@ function UI.RegisterTab(label, buildFunc, refreshFunc, layoutFunc, opts)
 end
 
 local function ShowPanel(idx)
+    -- Applique la police AVANT d'afficher (évite l'effet visuel)
+    if UI and UI.ApplyFontRecursively and Panels and Panels[idx] then
+        UI.ApplyFontRecursively(Panels[idx])
+    end
+    
     -- Affiche uniquement le panneau sélectionné
     for i,p in ipairs(Panels) do p:SetShown(i == idx) end
     UI._current = idx
 
-    -- Réapplique la police sur le panneau affiché (utile si les lignes se créent à l'OnShow)
-    if UI and UI.ApplyFontRecursively and Panels and Panels[idx] then
-        UI.ApplyFontRecursively(Panels[idx])
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0, function() UI.ApplyFontRecursively(Panels[idx]) end)
-        end
+    -- Applique à nouveau la police après un court délai pour les éléments créés dynamiquement
+    if Panels and Panels[idx] and UI and UI.ApplyFontRecursively and C_Timer and C_Timer.After then
+        C_Timer.After(0.05, function()
+            if Panels[idx] and Panels[idx]:IsShown() then
+                UI.ApplyFontRecursively(Panels[idx])
+            end
+        end)
     end
+
 
     -- Persistance : mémorise le dernier onglet actif (par libellé)
     local def = Registered and Registered[idx]
@@ -579,11 +574,6 @@ local function _SubTabButton(parent, text)
             CreateColor(cr, cg, cb, startAlpha),
             CreateColor(cr, cg, cb, 0)
         )
-    elseif b.selGrad.SetGradientAlpha then
-        b.selGrad:SetGradientAlpha("HORIZONTAL",
-            cr, cg, cb, startAlpha,
-            cr, cg, cb, 0
-        )
     else
         -- Fallback très ancien client
         b.selGrad:SetColorTexture(cr, cg, cb, startAlpha)
@@ -628,9 +618,20 @@ function UI.Finalize()
         bg:SetColorTexture(1,1,1,0.03)
         bg:SetAllPoints()
 
-        if def.build then def.build(panel) end
-        -- Harmonisation police sur tout le panel déjà construit
-        if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(panel) end
+        -- Hook OnShow pour appliquer la police avant affichage
+        panel:HookScript("OnShow", function(self)
+            if UI and UI.ApplyFontRecursively then
+                UI.ApplyFontRecursively(self)
+            end
+        end)
+
+        if def.build then 
+            def.build(panel) 
+            -- Applique la police immédiatement après construction
+            if UI and UI.ApplyFontRecursively then
+                UI.ApplyFontRecursively(panel)
+            end
+        end
 
         if not def.hidden then
             local btn = CreateTabButton(lastBtn, def.label)
@@ -651,26 +652,6 @@ function UI.Finalize()
     -- Applique le filtre catégorie sur les boutons (si la barre existe)
     if UI._activeCategory and UI.SetActiveCategory then
         UI.SetActiveCategory(UI._activeCategory)
-    end
-end
-
--- Navigation par label
-function UI.ShowTabByLabel(label)
-    -- Si l'onglet n'est pas visible dans la catégorie courante, on bascule vers la bonne catégorie
-    if UI.SelectCategoryForLabel and UI.SelectCategoryForLabel(label) then
-        -- la catégorie a été ajustée pour révéler cet onglet
-    end
-
-    local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
-    if idx then
-        -- Rendre visible le bouton si caché uniquement par le filtre de catégorie
-        local def = Registered[idx]
-        if def and def._btn and def._sysShown ~= false then
-            def._btn:Show()
-        end
-        ShowPanel(idx)
-        if def and def.refresh then def.refresh() end
-        UI.RelayoutTabs()
     end
 end
 
@@ -1045,38 +1026,6 @@ function UI.GetCategoryButton(catLabel)
     return nil
 end
 
--- ➕ Indicateur d’enregistrement « Ressources »
-function UI.UpdateResourcesRecordingIcon()
-    local on = (ns.GLOG and ns.GLOG.IsExpensesRecording and ns.GLOG.IsExpensesRecording()) or false
-
-    -- Sous-onglet « Ressources »
-    local tabBtn = UI.GetTabButton and UI.GetTabButton(Tr("tab_resources")) or nil
-    if tabBtn and UI.AttachStateIcon then
-        local ico = UI.AttachStateIcon(tabBtn, { size = 12 })
-        if tabBtn.txt and ico.AnchorTo then
-            ico:AnchorTo(tabBtn.txt, "LEFT", "RIGHT", 8, 0)
-        end
-        ico:SetOn(on)
-    end
-
-    -- Catégorie mère « Raids »
-    local catBtn = UI.GetCategoryButton and UI.GetCategoryButton(Tr("cat_raids")) or nil
-    if catBtn and UI.AttachStateIcon then
-        local ico = UI.AttachStateIcon(catBtn, { size = 12 })
-        if catBtn.txt and ico.AnchorTo then
-            ico:AnchorTo(catBtn.txt, "LEFT", "RIGHT", 8, 0)
-        end
-        ico:SetOn(on)
-    end
-end
-
--- ➕ Regroupe les indicateurs globaux à rafraîchir
-function UI.RefreshTopIndicators()
-    if UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
-    if UI.UpdateResourcesRecordingIcon then UI.UpdateResourcesRecordingIcon() end
-end
-
-
 -- ➕ Règle métier pour l'onglet "Demandes"
 function UI.UpdateRequestsBadge()
     local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
@@ -1220,12 +1169,6 @@ do
         local debugOn = (saved and saved.debugEnabled) == true
         if UI.SetDebugEnabled then UI.SetDebugEnabled(debugOn) end
 
-        -- Ouvre uniquement si activé
-        if not (saved and saved.autoOpen) then
-            self._done = true
-            return
-        end
-    
         -- Laisse l'UI finir de s'initialiser (onglets/catégories) avant d'afficher
         C_Timer.After(0, function()
             if not Main:IsShown() then
@@ -1431,7 +1374,7 @@ function UI.CreateCategorySidebar()
     bar:SetPoint("BOTTOMLEFT",  Main, "BOTTOMLEFT",  L + 4,  B + 2)
     bar:SetWidth(192)
 
-    -- Fond tuilé (style parchemin Blizzard)
+    -- Fond tuilé (configuration originale qui fonctionnait)
     if UI.ApplyTiledBackdrop then
         UI.ApplyTiledBackdrop(
             bar,
@@ -1591,7 +1534,6 @@ function UI.CreateSidebarSyncFooter()
     end
 
     -- ❌ Aucun décor : ni fond, ni bordure, ni ombre/séparateur
-    if footer.SetBackdrop then footer:SetBackdrop(nil) end
     if footer.SetBackdropColor then footer:SetBackdropColor(0,0,0,0) end
     if footer.SetBackdropBorderColor then footer:SetBackdropBorderColor(0,0,0,0) end
     if footer._bg then footer._bg:Hide(); footer._bg:SetTexture(nil); footer._bg = nil end

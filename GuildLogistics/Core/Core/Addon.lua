@@ -60,3 +60,75 @@ local function getRev()
 end
 
 _G.getRev = _G.getRev or getRev
+
+-- ===== Gestion des versions d'addon des autres joueurs =====
+
+-- Cache des versions des autres joueurs
+-- Structure : { [playerName] = { version = "2.3.1", timestamp = 123456789, seenBy = "PlayerWhoReported" } }
+GLOG._playerVersions = GLOG._playerVersions or {}
+
+-- Enregistrer la version d'un autre joueur
+-- @param name: string - nom du joueur (avec realm)
+-- @param version: string - version de l'addon 
+-- @param timestamp: number - timestamp de la dernière vue
+-- @param reportedBy: string - joueur qui a rapporté cette version
+function GLOG.SetPlayerAddonVersion(name, version, timestamp, reportedBy)
+    if not name or name == "" or not version or version == "" then return end
+    
+    local key = tostring(name)
+    local ts = tonumber(timestamp) or time()
+    local by = tostring(reportedBy or "")
+    
+    -- Ne mettre à jour que si la version est plus récente
+    local existing = GLOG._playerVersions[key]
+    if existing and tonumber(existing.timestamp or 0) > ts then
+        return -- Version existante plus récente
+    end
+    
+    GLOG._playerVersions[key] = {
+        version = tostring(version),
+        timestamp = ts,
+        seenBy = by
+    }
+end
+
+-- Obtenir la version d'un autre joueur
+-- @param name: string - nom du joueur
+-- @return string|nil: version de l'addon ou nil si inconnue
+function GLOG.GetPlayerAddonVersion(name)
+    if not name or name == "" then return nil end
+    
+    local key = tostring(name)
+    local data = GLOG._playerVersions[key]
+    
+    if not data then return nil end
+    
+    -- Expirer les données anciennes (plus de 7 jours)
+    local cutoff = time() - (7 * 24 * 60 * 60)
+    if tonumber(data.timestamp or 0) < cutoff then
+        GLOG._playerVersions[key] = nil
+        return nil
+    end
+    
+    return data.version
+end
+
+-- Nettoyer les versions anciennes
+-- @param maxAge: number - âge maximum en secondes (défaut: 7 jours)
+function GLOG.CleanupPlayerVersions(maxAge)
+    maxAge = tonumber(maxAge) or (7 * 24 * 60 * 60) -- 7 jours par défaut
+    local cutoff = time() - maxAge
+    local cleaned = 0
+    
+    for name, data in pairs(GLOG._playerVersions or {}) do
+        if tonumber(data.timestamp or 0) < cutoff then
+            GLOG._playerVersions[name] = nil
+            cleaned = cleaned + 1
+        end
+    end
+    
+    return cleaned
+end
+
+-- Aliases pour compatibilité
+GLOG.playerVersions = GLOG._playerVersions

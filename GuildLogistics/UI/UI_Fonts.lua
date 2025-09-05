@@ -64,11 +64,61 @@ end
 
 function UI.ApplyFontRecursively(frame)
     if not (UI.GLOBAL_FONT_ENABLED and frame and frame.GetRegions) then return end
+    
     for _, r in ipairs({ frame:GetRegions() }) do
         if r and r.GetObjectType and r:GetObjectType() == "FontString" then
             _apply(r)
         end
     end
+    
+    -- Traite les contrôles spéciaux avec FontString intégrées
+    local objectType = (frame.GetObjectType and frame:GetObjectType()) or ""
+    if objectType == "EditBox" then
+        -- EditBox a souvent des FontString intégrées accessible via GetTextInsets, etc.
+        if frame.GetFont and frame.SetFont then
+            local font, size, flags = frame:GetFont()
+            if font then
+                _ensureBase(frame)
+                frame.__glog_baseFontFile = font
+                frame.__glog_baseFontSize = size or 12
+                frame.__glog_baseFontFlags = flags
+                
+                local baseSize = frame.__glog_baseFontSize or 12
+                local newFlags = UI.GLOBAL_FONT_FLAGS or frame.__glog_baseFontFlags
+                local path = UI.GLOBAL_FONT_PATH
+                local scaled = math.floor(baseSize * (UI.GLOBAL_FONT_SCALE or 1.0) + 0.5)
+                local final = scaled + _accumDelta(frame)
+                if final < 6 then final = 6 end
+                
+                frame:SetFont(path, final, newFlags)
+            end
+        end
+    elseif objectType == "Button" then
+        -- Les boutons ont souvent des FontString pour leur texte
+        if frame.GetFontString then
+            local fs = frame:GetFontString()
+            if fs then _apply(fs) end
+        end
+        if frame.GetFont and frame.SetFont then
+            local font, size, flags = frame:GetFont()
+            if font then
+                _ensureBase(frame)
+                frame.__glog_baseFontFile = font
+                frame.__glog_baseFontSize = size or 12
+                frame.__glog_baseFontFlags = flags
+                
+                local baseSize = frame.__glog_baseFontSize or 12
+                local newFlags = UI.GLOBAL_FONT_FLAGS or frame.__glog_baseFontFlags
+                local path = UI.GLOBAL_FONT_PATH
+                local scaled = math.floor(baseSize * (UI.GLOBAL_FONT_SCALE or 1.0) + 0.5)
+                local final = scaled + _accumDelta(frame)
+                if final < 6 then final = 6 end
+                
+                frame:SetFont(path, final, newFlags)
+            end
+        end
+    end
+    
     if frame.GetChildren then
         for _, child in ipairs({ frame:GetChildren() }) do
             UI.ApplyFontRecursively(child)
@@ -99,7 +149,7 @@ end
 
 -- =========================================================================
 -- Application globale : parcourt tous les frames "GLOG_*" déjà créés
--- (utile si la police est chargée après la construction d’une partie de l’UI)
+-- (utile si la police est chargée après la construction d'une partie de l'UI)
 -- =========================================================================
 local function _applyAllGLOGFrames()
     if not (UI and UI.ApplyFontRecursively) then return end
@@ -107,7 +157,7 @@ local function _applyAllGLOGFrames()
     local f = EnumerateFrames()
     while f do
         local n = (f.GetName and f:GetName()) or nil
-        if n and n:find("^GLOG_") then
+        if n and (n:find("^GLOG_") or n:find("^GLOG_Popup_")) then
             UI.ApplyFontRecursively(f)
         end
         f = EnumerateFrames(f)
@@ -129,7 +179,28 @@ end
 -- API publique si besoin ailleurs
 UI.ApplyFontNow = _applyNow
 
--- Événements : applique à l’init + à l’entrée monde
+-- Hook sélectif uniquement pour nos frames GLOG_
+local function hookGLOGFrames()
+    if not EnumerateFrames then return end
+    local f = EnumerateFrames()
+    while f do
+        local name = (f.GetName and f:GetName()) or ""
+        if (name:find("^GLOG_") or name:find("^GLOG_Popup_")) and f.CreateFontString and not f.__glog_fontHooked then
+            local originalCreateFontString = f.CreateFontString
+            f.CreateFontString = function(self, ...)
+                local fs = originalCreateFontString(self, ...)
+                if UI.GLOBAL_FONT_ENABLED and fs then
+                    _apply(fs)
+                end
+                return fs
+            end
+            f.__glog_fontHooked = true
+        end
+        f = EnumerateFrames(f)
+    end
+end
+
+-- Événements : applique à l'init + à l'entrée monde
 local _evt = CreateFrame("Frame")
 _evt:RegisterEvent("ADDON_LOADED")
 _evt:RegisterEvent("PLAYER_LOGIN")
@@ -139,7 +210,9 @@ _evt:SetScript("OnEvent", function(_, evt, arg1)
     if evt == "ADDON_LOADED" then
         if tostring(arg1) ~= tostring(ADDON) then return end
         _applyNow(false)
+        hookGLOGFrames()
     else
         _applyNow(false)
+        hookGLOGFrames()
     end
 end)

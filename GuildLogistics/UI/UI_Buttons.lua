@@ -65,6 +65,11 @@ function UI.Button(parent, text, opts)
     if opts.tooltip then UI.SetTooltip(b, (Tr and Tr(opts.tooltip)) or opts.tooltip) end
     applyVariant(b, opts.variant)
 
+    -- Applique la police au bouton
+    if UI and UI.ApplyFontRecursively then
+        UI.ApplyFontRecursively(b)
+    end
+
     local _SetText = b.SetText
     b.SetText = function(self, t) _SetText(self, (Tr and Tr(t)) or t); UI.SizeToText(self, opts) end
 

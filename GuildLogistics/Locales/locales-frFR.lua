@@ -294,6 +294,8 @@ L["lbl_id_prefix"]               = "ID "
 L["lbl_db_data"]                 = "BDD partagée"
 L["lbl_db_ui"]                   = "BDD personelle"
 L["lbl_db_datas"]                = "BDD historique"
+L["lbl_db_backup"]               = "BDD sauvegarde"
+L["lbl_db_previous"]             = "BDD précédente"
 
 -- ============================================== --
 -- ===         INVITATIONS CALENDRIER         === --
@@ -621,3 +623,24 @@ L["lbl_yes"]          = "Oui"
 L["lbl_no"]           = "Non"
 L["toast_error_title"] = "Nouvelle erreur Lua"
 L["instance_outdoor"] = "Extérieur"
+
+-- ============================================== --
+-- ===              BACKUP/RESTORE            === --
+-- ============================================== --
+L["btn_create_backup"]    = "Créer un backup"
+L["btn_restore_backup"]   = "Restaurer le backup"
+L["tooltip_create_backup"] = "Créer une sauvegarde complète de la base de données"
+L["tooltip_restore_backup"] = "Restaurer la base de données depuis le dernier backup"
+L["err_no_main_db"]      = "Aucune base de données principale trouvée"
+L["err_no_backup"]       = "Aucun backup trouvé"
+L["err_invalid_backup"]  = "Backup invalide"
+L["msg_backup_created"]  = "Backup créé avec succès (%d éléments)"
+L["msg_backup_restored"] = "Base de données restaurée depuis le backup du %s"
+L["msg_backup_deleted"]  = "Backup supprimé"
+L["unknown_date"]        = "Date inconnue"
+L["confirm_create_backup"] = "Créer un backup de la base de données ?"
+L["confirm_restore_backup"] = "Restaurer la base de données depuis le backup ?\n\nCela remplacera toutes les données actuelles.\nLa base actuelle sera sauvegardée comme 'previous'."
+L["lbl_backup_info"]     = "Info backup"
+L["lbl_backup_date"]     = "Date : %s"
+L["lbl_backup_size"]     = "Taille : %d éléments"
+L["lbl_no_backup_available"] = "Aucun backup disponible"

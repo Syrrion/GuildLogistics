@@ -22,16 +22,22 @@ function UI.ListView(parent, cols, opts)
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
 
+    -- Hook CreateFontString sur la liste pour capturer toutes les créations
+    if lv.list and lv.list.CreateFontString then
+        local originalCreateFontString = lv.list.CreateFontString
+        lv.list.CreateFontString = function(self, ...)
+            local fs = originalCreateFontString(self, ...)
+            if UI.GLOBAL_FONT_ENABLED and UI and UI.ApplyFont and fs then
+                UI.ApplyFont(fs)
+            end
+            return fs
+        end
+    end
+
     -- Réduction de 1 px sur tout le contenu des ListViews (header + lignes)
     if UI and UI.SetFontDeltaForFrame then
         UI.SetFontDeltaForFrame(lv.header, -1, true)
         UI.SetFontDeltaForFrame(lv.list,   -1, true)
-    end
-
-    -- Assure l’auto-font sur header + contenu scrollé
-    if UI and UI.AttachAutoFont then
-        UI.AttachAutoFont(lv.header)
-        UI.AttachAutoFont(lv.list)   -- (sécurise même si CreateScroll l’a déjà fait)
     end
 
     -- Applique immédiatement au texte des entêtes déjà créés
@@ -335,8 +341,6 @@ function UI.ListView(parent, cols, opts)
                 function lv:CreateRow(i)
                     local r = _oldCR(self, i)
                     UI.DecorateRow(r)
-                    if UI and UI.AttachAutoFont then UI.AttachAutoFont(r) end
-                    if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(r) end
                     return r
                 end
                 lv._decorateCR = true
@@ -451,7 +455,7 @@ function UI._AttachListViewPixelSnap(lv)
         -- 🔧 Resnap différé (frame suivante) pour éviter tout rebond immédiat pendant Layout
         if not self._resnapQueued then
             self._resnapQueued = true
-            C_Timer.After(0, function()
+            UI.NextFrame(function()
                 self._resnapQueued = nil
                 if UI and UI.ListView_ResnapVSeps then
                     UI.ListView_ResnapVSeps(self)
@@ -511,6 +515,11 @@ end
             UI.DecorateRow(r)
             r._fields = (self.opts.buildRow and self.opts.buildRow(r)) or {}
             self.rows[i] = r
+            
+            -- Applique immédiatement la police aux nouvelles lignes
+            if UI and UI.ApplyFontRecursively then
+                UI.ApplyFontRecursively(r)
+            end
         end
 
         -- Première ligne visible (pour masquer son séparateur TOP)
@@ -559,6 +568,10 @@ end
                 -- Mise à jour spécifique à la liste (cellules, textes, etc.)
                 if self.opts.updateRow then
                     self.opts.updateRow(i, r, r._fields, it)
+                    -- Applique la police après mise à jour du contenu
+                    if UI and UI.ApplyFontRecursively then
+                        UI.ApplyFontRecursively(r)
+                    end
                 end
 
                 -- Recalage générique des widgets 'sep' pour respecter le padding haut
@@ -908,7 +921,7 @@ function UI.ListView_SetScrollbarVisible(lv, show)
                 if lv and lv.Layout then lv:Layout() end
             end)
         elseif lv and lv.Layout then
-            C_Timer.After(0, function() if lv and lv.Layout then lv:Layout() end end)
+            UI.NextFrame(function() if lv and lv.Layout then lv:Layout() end end)
         end
     end
 end
@@ -978,11 +991,11 @@ function UI.ListView_SyncScrollbar(lv, immediate)
             if ticket ~= lv._sbSyncTicket then return end
             doSync()
         end
-        C_Timer.After(0, function()
+        UI.NextFrame(function()
             if not (lv and lv.scroll) then return end
             if ticket ~= lv._sbSyncTicket then return end
             doSync()
-            C_Timer.After(0, pass2)
+            UI.NextFrame(pass2)
         end)
     end
 end

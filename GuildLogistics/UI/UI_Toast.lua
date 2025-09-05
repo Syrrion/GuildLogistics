@@ -104,6 +104,11 @@ local function _CreateToast(opts)
     f.title:SetPoint("RIGHT", f, "RIGHT", -10, 0)
     f.title:SetJustifyH("LEFT")
     f.title:SetText(opts.title or "Notification")
+    
+    -- Applique la police au titre
+    if UI and UI.ApplyFont and f.title then
+        UI.ApplyFont(f.title)
+    end
 
     -- Texte
     f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -112,6 +117,11 @@ local function _CreateToast(opts)
     f.text:SetJustifyH("LEFT")
     f.text:SetSpacing(2)
     f.text:SetText(opts.text or "")
+    
+    -- Applique la police au texte
+    if UI and UI.ApplyFont and f.text then
+        UI.ApplyFont(f.text)
+    end
 
     -- Bouton action (optionnel)
     if opts.actionText and opts.onAction then

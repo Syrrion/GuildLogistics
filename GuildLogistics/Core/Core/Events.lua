@@ -1,5 +1,65 @@
 local ADDON, ns = ...
+ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
+
+-- ===== Bus d'événements internes pour GuildLogistics =====
+-- Structure : { [eventName] = { callback1, callback2, ... } }
+GLOG.__evt = GLOG.__evt or {}
+
+-- S'abonner à un événement interne
+-- @param event: string - nom de l'événement (ex: "roster:updated", "expenses:changed")
+-- @param callback: function - fonction appelée quand l'événement est émis
+function GLOG.On(event, callback)
+    if type(event) ~= "string" or type(callback) ~= "function" then 
+        return false
+    end
+    
+    local L = GLOG.__evt[event]
+    if not L then 
+        L = {}
+        GLOG.__evt[event] = L 
+    end
+    
+    table.insert(L, callback)
+    return true
+end
+
+-- Se désabonner d'un événement interne
+-- @param event: string - nom de l'événement
+-- @param callback: function - callback exact à supprimer
+function GLOG.Off(event, callback)
+    local L = GLOG.__evt and GLOG.__evt[event]
+    if not L then return end
+    
+    for i = #L, 1, -1 do
+        if L[i] == callback then 
+            table.remove(L, i)
+        end
+    end
+    
+    -- Nettoyer la liste si elle est vide
+    if #L == 0 then
+        GLOG.__evt[event] = nil
+    end
+end
+
+-- Émettre un événement interne avec des paramètres
+-- @param event: string - nom de l'événement
+-- @param ...: any - paramètres passés aux callbacks
+function GLOG.Emit(event, ...)
+    local L = GLOG.__evt and GLOG.__evt[event]
+    if not L then return end
+    
+    for i = 1, #L do
+        local ok = pcall(L[i], ...)
+        -- Ignorer les erreurs pour ne pas casser la chaîne de traitement
+    end
+end
+
+-- Alias pour ns.Emit (compatibilité avec d'autres modules)
+if ns then
+    ns.Emit = GLOG.Emit
+end
 
 -- === Hub d'évènements : ns.Events (autosuffisant & safe) ===========
 ns.Events = ns.Events or {}

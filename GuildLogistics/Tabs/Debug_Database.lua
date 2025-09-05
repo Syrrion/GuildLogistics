@@ -6,9 +6,9 @@ local GLOG, UI = ns.GLOG, ns.UI
 -- =====   NAV STATE   =====
 -- =========================
 local panel, footer
-local lv, breadcrumbFS, btnRoot, btnUp
+local lv, breadcrumbFS, btnRoot, btnUp, backupInfoFS, ddRoot
 local currentPath = {}  -- tableau de clés (strings ou numbers)
-local Build, Refresh, Layout, UpdateRow
+local Build, Refresh, Layout, UpdateRow, updateBackupInfo, refreshDropdown
 -- Sélection de la base à explorer : "DB" (données) ou "DB_UI" (paramètres UI)
 local selectedRoot = "DB"
 local ddRoot
@@ -19,6 +19,10 @@ local function _GetRoot()
         return GuildLogisticsDatas_Char or GuildLogisticsDatas or {}
     elseif selectedRoot == "DB_UI" then
         return GuildLogisticsUI_Char or GuildLogisticsUI or {}
+    elseif selectedRoot == "DB_BACKUP" then
+        return GuildLogisticsDB_Backup or {}
+    elseif selectedRoot == "DB_PREVIOUS" then
+        return GuildLogisticsDB_Previous or {}
     end
     return GuildLogisticsDB_Char or GuildLogisticsDB or {}
 end
@@ -29,6 +33,10 @@ local function _PathToText(path)
         rootName = "GuildLogisticsDatas_Char"
     elseif selectedRoot == "DB_UI" then
         rootName = "GuildLogisticsUI_Char"
+    elseif selectedRoot == "DB_BACKUP" then
+        rootName = "GuildLogisticsDB_Backup"
+    elseif selectedRoot == "DB_PREVIOUS" then
+        rootName = "GuildLogisticsDB_Previous"
     else
         rootName = "GuildLogisticsDB_Char"
     end
@@ -377,6 +385,20 @@ Build = function(container)
                 Refresh()
             end)
 
+            entries[#entries+1] = info(Tr("lbl_db_backup") or "DB_BACKUP (backup)", selectedRoot == "DB_BACKUP", function()
+                selectedRoot = "DB_BACKUP"
+                ddRoot:SetSelected("DB_BACKUP", "DB_BACKUP")
+                breadcrumbFS:SetText(_PathToText(currentPath))
+                Refresh()
+            end)
+
+            entries[#entries+1] = info(Tr("lbl_db_previous") or "DB_PREVIOUS (restore safety)", selectedRoot == "DB_PREVIOUS", function()
+                selectedRoot = "DB_PREVIOUS"
+                ddRoot:SetSelected("DB_PREVIOUS", "DB_PREVIOUS")
+                breadcrumbFS:SetText(_PathToText(currentPath))
+                Refresh()
+            end)
+
             return entries
         end)
 
@@ -384,6 +406,51 @@ Build = function(container)
     UI.AttachDropdownZFix(ddRoot, nav)
     -- Valeur initiale affichée
     ddRoot:SetSelected(selectedRoot, selectedRoot)
+
+    -- ===== AFFICHAGE INFO BACKUP =====
+    backupInfoFS = nav:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    backupInfoFS:SetPoint("RIGHT", ddRoot, "LEFT", -12, 0)
+    backupInfoFS:SetJustifyH("RIGHT")
+    
+    updateBackupInfo = function()
+        if GLOG.GetBackupInfo then
+            local info = GLOG.GetBackupInfo()
+            if info then
+                local text = string.format("|cff7dff9a%s|r (%s)", 
+                    Tr("lbl_backup_info") or "Backup", 
+                    info.date or (Tr("unknown_date") or "date inconnue")
+                )
+                backupInfoFS:SetText(text)
+            else
+                backupInfoFS:SetText("|cff808080" .. (Tr("lbl_no_backup_available") or "Aucun backup") .. "|r")
+            end
+        else
+            backupInfoFS:SetText("")
+        end
+    end
+    updateBackupInfo() -- Affichage initial
+
+    -- Fonction pour rafraîchir le dropdown après création/suppression de backup
+    refreshDropdown = function()
+        if ddRoot then            
+            -- Méthode alternative : forcer la réinitialisation du dropdown
+            if UIDropDownMenu_Initialize and ddRoot._builder then
+                UIDropDownMenu_Initialize(ddRoot, function(frame, level, menuList)
+                    if not ddRoot._builder then return end
+                    local items = ddRoot:_builder(level or 1, menuList)
+                    if type(items) ~= "table" then return end
+                    for i = 1, #items do
+                        UIDropDownMenu_AddButton(items[i], level)
+                    end
+                end)
+            end
+            
+            -- Forcer la mise à jour de l'affichage
+            if UIDropDownMenu_RefreshAll then
+                UIDropDownMenu_RefreshAll(ddRoot)
+            end
+        end
+    end
 
     btnRoot:SetOnClick(function()
         wipe(currentPath)
@@ -409,10 +476,103 @@ Build = function(container)
         btnAdd:SetOnClick(function()
             ShowAddFieldPopup()
         end)
-        if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer, { btnAdd }, 8, 0)
-        end
         btnAdd:SetShown((GLOG.IsGM and GLOG.IsGM()) or false)
+
+        -- ===== NOUVEAUX BOUTONS BACKUP/RESTORE =====
+        local btnBackup = UI.Button(footer, Tr("btn_create_backup") or "Créer un backup", { 
+            size="sm", 
+            minWidth=140, 
+            tooltip=Tr("tooltip_create_backup") or "Créer une sauvegarde complète de la base de données" 
+        })
+        
+        local btnRestore = UI.Button(footer, Tr("btn_restore_backup") or "Restaurer le backup", { 
+            size="sm", 
+            minWidth=140, 
+            variant="ghost",
+            tooltip=Tr("tooltip_restore_backup") or "Restaurer la base de données depuis le dernier backup" 
+        })
+
+        -- Actions des boutons backup
+        btnBackup:SetOnClick(function()
+            UI.PopupConfirm(Tr("confirm_create_backup") or "Créer un backup de la base de données ?", function()
+                if GLOG.CreateDatabaseBackup then
+                    local success, message = GLOG.CreateDatabaseBackup()
+                    if success then
+                        if UI.Toast then UI.Toast("|cff7dff9a" .. message .. "|r") end
+                        -- Rafraîchir l'état du bouton restore et l'affichage
+                        btnRestore:SetEnabled(GLOG.HasValidBackup and GLOG.HasValidBackup() or false)
+                        if updateBackupInfo then updateBackupInfo() end
+                        -- Délai pour s'assurer que les données sont à jour
+                        C_Timer.After(0.1, function()
+                            if refreshDropdown then 
+                                refreshDropdown() 
+                            end
+                        end)
+                    else
+                        if UI.Toast then UI.Toast("|cffff6060Erreur : " .. message .. "|r") end
+                    end
+                else
+                    if UI.Toast then UI.Toast("|cffff6060Fonction de backup non disponible|r") end
+                end
+            end, nil, { strata = "FULLSCREEN_DIALOG" })
+        end)
+
+        btnRestore:SetOnClick(function()
+            if not (GLOG.HasValidBackup and GLOG.HasValidBackup()) then
+                if UI.Toast then UI.Toast("|cffff6060" .. (Tr("err_no_backup") or "Aucun backup trouvé") .. "|r") end
+                return
+            end
+
+            -- Afficher les infos du backup dans la confirmation
+            local backupInfo = GLOG.GetBackupInfo and GLOG.GetBackupInfo()
+            local confirmText = Tr("confirm_restore_backup") or "Restaurer la base de données depuis le backup ?\n\nCela remplacera toutes les données actuelles.\nLa base actuelle sera sauvegardée comme 'previous'."
+            
+            if backupInfo and backupInfo.date then
+                confirmText = confirmText .. "\n\n" .. string.format(Tr("lbl_backup_date") or "Date : %s", backupInfo.date)
+                if backupInfo.size then
+                    confirmText = confirmText .. "\n" .. string.format(Tr("lbl_backup_size") or "Taille : %d éléments", backupInfo.size)
+                end
+            end
+
+            UI.PopupConfirm(confirmText, function()
+                if GLOG.RestoreDatabaseFromBackup then
+                    local success, message = GLOG.RestoreDatabaseFromBackup()
+                    if success then
+                        if UI.Toast then UI.Toast("|cff7dff9a" .. message .. "|r") end
+                        -- Rafraîchir l'affichage après restore
+                        if Refresh then Refresh() end
+                        if updateBackupInfo then updateBackupInfo() end
+                        -- Délai pour s'assurer que les données sont à jour
+                        C_Timer.After(0.1, function()
+                            if refreshDropdown then 
+                                refreshDropdown() 
+                            end
+                        end)
+                    else
+                        if UI.Toast then UI.Toast("|cffff6060Erreur : " .. message .. "|r") end
+                    end
+                else
+                    if UI.Toast then UI.Toast("|cffff6060Fonction de restore non disponible|r") end
+                end
+            end, nil, { strata = "FULLSCREEN_DIALOG" })
+        end)
+
+        -- État initial du bouton restore (actif seulement si backup existe)
+        btnRestore:SetEnabled(GLOG.HasValidBackup and GLOG.HasValidBackup() or false)
+        
+        -- Les boutons backup ne s'affichent que si on a une DB principale
+        local hasMainDB = GuildLogisticsDB_Char and type(GuildLogisticsDB_Char) == "table"
+        btnBackup:SetShown(hasMainDB)
+        btnRestore:SetShown(hasMainDB)
+
+        if UI.AttachButtonsFooterRight then
+            local buttons = { btnAdd }
+            if hasMainDB then
+                table.insert(buttons, btnBackup)
+                table.insert(buttons, btnRestore)
+            end
+            UI.AttachButtonsFooterRight(footer, buttons, 8, 0)
+        end
     end
 
     -- Assure un rafraîchissement quand on revient sur l’onglet
@@ -425,6 +585,15 @@ Refresh = function()
     if breadcrumbFS then breadcrumbFS:SetText(_PathToText(currentPath)) end
     if not lv or not lv.SetData then return end
     lv:SetData(_BuildItems())
+    
+    -- Mettre à jour l'affichage des infos de backup
+    if updateBackupInfo then updateBackupInfo() end
+    -- Délai pour s'assurer que les données sont à jour
+    C_Timer.After(0.05, function()
+        if refreshDropdown then 
+            refreshDropdown() 
+        end
+    end)
 end
 
 Layout = function()

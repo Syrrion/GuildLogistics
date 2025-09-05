@@ -294,6 +294,8 @@ L["lbl_id_prefix"]               = "ID "
 L["lbl_db_data"]                 = "Shared DB"
 L["lbl_db_ui"]                   = "Personnal DB"
 L["lbl_db_datas"]                = "History DB"
+L["lbl_db_backup"]               = "Backup DB"
+L["lbl_db_previous"]             = "Previous DB"
 
 
 -- ============================================== --
@@ -620,3 +622,24 @@ L["lbl_no"]           = "No"
 -- Toasts
 L["toast_error_title"] = "New Lua Error"
 L["instance_outdoor"] = "Outdoor"
+
+-- ============================================== --
+-- ===              BACKUP/RESTORE            === --
+-- ============================================== --
+L["btn_create_backup"]    = "Create Backup"
+L["btn_restore_backup"]   = "Restore Backup"
+L["tooltip_create_backup"] = "Create a complete backup of the database"
+L["tooltip_restore_backup"] = "Restore database from the last backup"
+L["err_no_main_db"]      = "No main database found"
+L["err_no_backup"]       = "No backup found"
+L["err_invalid_backup"]  = "Invalid backup"
+L["msg_backup_created"]  = "Backup created successfully (%d elements)"
+L["msg_backup_restored"] = "Database restored from backup dated %s"
+L["msg_backup_deleted"]  = "Backup deleted"
+L["unknown_date"]        = "Unknown date"
+L["confirm_create_backup"] = "Create a database backup?"
+L["confirm_restore_backup"] = "Restore database from backup?\n\nThis will replace all current data.\nThe current database will be saved as 'previous'."
+L["lbl_backup_info"]     = "Backup info"
+L["lbl_backup_date"]     = "Date: %s"
+L["lbl_backup_size"]     = "Size: %d elements"
+L["lbl_no_backup_available"] = "No backup available"

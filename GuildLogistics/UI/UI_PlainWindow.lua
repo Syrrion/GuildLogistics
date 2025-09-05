@@ -41,9 +41,6 @@ function UI.CreatePlainWindow(opts)
         UI.Scale.Register(f, UI.Scale.TARGET_EFF_SCALE)
     end
 
-    -- Police auto sur tous les FontString créés dans cette window
-    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f) end
-
     f:SetSize(w, h)
     f:SetFrameStrata(strata)
     f:SetFrameLevel(level)
@@ -70,7 +67,6 @@ function UI.CreatePlainWindow(opts)
 
     -- Header (draggable) + fond NOIR 50%
     f.header = CreateFrame("Frame", nil, f)
-    if UI and UI.AttachAutoFont then UI.AttachAutoFont(f.header) end
     f.header:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
     f.header:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
     f.header:SetHeight(headerH)
@@ -88,6 +84,11 @@ function UI.CreatePlainWindow(opts)
     f.title = f.header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     f.title:SetPoint("LEFT", f.header, "LEFT", 8, 0)
     f.title:SetText(titleText)
+    
+    -- Applique immédiatement la police au titre
+    if UI and UI.ApplyFont and f.title then
+        UI.ApplyFont(f.title)
+    end
 
     -- Bouton fermer (croix) à droite
     f.close = CreateFrame("Button", nil, f.header, "UIPanelCloseButton")

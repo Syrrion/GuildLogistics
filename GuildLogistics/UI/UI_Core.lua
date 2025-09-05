@@ -4,6 +4,40 @@ ns.UI = ns.UI or {}
 local UI = ns.UI
 local GLOG = ns.GLOG
 
+-- ===== SYSTÈME D'OPTIMISATION DES TIMERS =====
+-- Accumule les tâches à exécuter sur le prochain frame pour éviter les timers multiples
+local _batchedTasks = {}
+local _batchTimer = nil
+
+local function ExecuteBatchedTasks()
+    local tasks = _batchedTasks
+    _batchedTasks = {}
+    _batchTimer = nil
+    
+    for i = 1, #tasks do
+        local task = tasks[i]
+        if task and type(task) == "function" then
+            local success, err = pcall(task)
+            if not success then
+                -- Optionnel : log l'erreur sans arrêter les autres tâches
+                -- print("Erreur tâche batch UI:", err)
+            end
+        end
+    end
+end
+
+-- Fonction optimisée pour remplacer C_Timer.After(0, func)
+function UI.NextFrame(func)
+    if type(func) ~= "function" then return end
+    
+    _batchedTasks[#_batchedTasks + 1] = func
+    
+    -- Démarre le timer seulement s'il n'y en a pas déjà un
+    if not _batchTimer then
+        _batchTimer = C_Timer.After(0, ExecuteBatchedTasks)
+    end
+end
+
 -- Thème de cadre (NEUTRAL | ALLIANCE | HORDE)
 UI.FRAME_THEME = "AUTO"
 
@@ -489,9 +523,6 @@ function UI.CreateScroll(parent)
     list:SetPoint("TOPRIGHT")
     list:SetHeight(1)
 
-    -- Police auto pour tout ce qui sera créé dans la zone scrollée (lignes/colonnes)
-    if UI and UI.AttachAutoFont then UI.AttachAutoFont(list) end
-
     if UI.SkinScrollBar then UI.SkinScrollBar(scroll) end
     if UI.StripScrollButtons then UI.StripScrollButtons(scroll) end
 
@@ -612,6 +643,12 @@ function UI.Label(parent, opts)
         local c = opts.color
         fs:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1)
     end
+    
+    -- Applique immédiatement la police personnalisée
+    if UI and UI.ApplyFont and fs then
+        UI.ApplyFont(fs)
+    end
+    
     return fs
 end
 

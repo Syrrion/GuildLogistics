@@ -35,12 +35,22 @@ function UI.Slider(parent, opts)
     fs:SetJustifyH("LEFT")
     fs:SetText((Tr and Tr(label)) or label)
     wrap.label = fs
+    
+    -- Applique la police au libellé
+    if UI and UI.ApplyFont and fs then
+        UI.ApplyFont(fs)
+    end
 
     -- Valeur formatée (ligne du haut, à droite)
     local vfs = wrap:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     vfs:SetPoint("TOPRIGHT", wrap, "TOPRIGHT", 0, 0)
     vfs:SetJustifyH("RIGHT")
     wrap.valueFS = vfs
+    
+    -- Applique la police à la valeur
+    if UI and UI.ApplyFont and vfs then
+        UI.ApplyFont(vfs)
+    end
 
     -- Le libellé prend la place disponible à gauche de la valeur
     fs:SetPoint("RIGHT", vfs, "LEFT", -8, 0)

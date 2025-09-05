@@ -35,7 +35,9 @@ function UI.TokenList(parent, opts)
     local holderText  = tostring(opts.placeholder or "")
     local ROW_H       = UI.ROW_H or 30
 
-    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    -- Génère un nom unique avec le préfixe GLOG_ pour bénéficier du système de police automatique
+    local tokenListId = "GLOG_TokenList_" .. math.random(1e8)
+    local f = CreateFrame("Frame", tokenListId, parent, "BackdropTemplate")
     f:SetSize(W, H)
 
     f.values = {}
@@ -81,9 +83,6 @@ function UI.TokenList(parent, opts)
             local info = C_Spell.GetSpellInfo(id)
             if info then name, icon = info.name, info.iconID end
         end
-        if not name and GetSpellInfo then
-            local n, _, ic = GetSpellInfo(id); name, icon = n, ic
-        end
         if not name then name = ("Spell #%d"):format(id) end
         return name, icon or 136243
     end
@@ -91,9 +90,9 @@ function UI.TokenList(parent, opts)
     local function ItemLabelIcon(id)
         id = tonumber(id)
         if not id then return nil end
-        local name = (GetItemInfo and GetItemInfo(id)) or nil
+        local name = C_Item.GetItemInfo(id) or nil
         local icon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(id))
-                  or (GetItemIcon and GetItemIcon(id))
+                  or C_Item.GetItemInfo(id)
                   or 134400
         if not name then name = ("Item #%d"):format(id) end
         return name, icon or 134400

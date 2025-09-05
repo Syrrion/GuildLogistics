@@ -93,3 +93,78 @@ _G.safenum       = _G.safenum or safenum
 _G.truthy        = _G.truthy or truthy
 _G.normalizeStr  = _G.normalizeStr or normalizeStr
 _G.now           = _G.now or now
+
+-- =========================
+-- ===== UI UTILITIES ======
+-- =========================
+
+-- Constante d'icône centrale de l'addon
+local GLOG = ns.GLOG
+GLOG.ICON_TEXTURE = GLOG.ICON_TEXTURE or "Interface\\AddOns\\GuildLogistics\\Ressources\\Media\\LogoAddonWoW128.tga"
+
+-- Sélecteur intelligent de taille d'icône basé sur la taille demandée
+function GLOG.GetAddonIconTexture(size)
+    local base = "Interface\\AddOns\\GuildLogistics\\Ressources\\Media\\LogoAddonWoW"
+    local pick
+    if type(size) == "number" then
+        if size <= 16 then       pick = "16"
+        elseif size <= 32 then   pick = "32"
+        elseif size <= 64 then   pick = "64"
+        elseif size <= 128 then  pick = "128"
+        elseif size <= 256 then  pick = "256"
+        else                     pick = "400"
+        end
+    elseif type(size) == "string" then
+        local s = string.lower(size)
+        if s == "tiny" then                  pick = "16"
+        elseif s == "minimap" or s == "sm" then pick = "32"
+        elseif s == "small" then             pick = "64"
+        elseif s == "medium" then            pick = "128"
+        elseif s == "large" then             pick = "256"
+        elseif s == "xlarge" or s == "xl" then pick = "400"
+        end
+    end
+    pick = pick or "128"
+    return base .. pick .. ".tga"
+end
+
+-- =========================
+-- == WINDOW PERSISTENCE ===
+-- =========================
+
+function GLOG.GetSavedWindow() 
+    GLOG.EnsureDB(); 
+    return GuildLogisticsUI 
+end
+
+function GLOG.SaveWindow(point, relTo, relPoint, x, y)
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    GuildLogisticsUI.point    = point
+    GuildLogisticsUI.relTo    = relTo
+    GuildLogisticsUI.relPoint = relPoint
+    GuildLogisticsUI.x        = x
+    GuildLogisticsUI.y        = y
+end
+
+-- Lecture d'une option de popup (défaut = true si non défini)
+function GLOG.IsPopupEnabled(key)
+    local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or GuildLogisticsUI or {}
+    saved.popups = saved.popups or {}
+    local v = saved.popups[key]
+    if v == nil then return true end
+    return v and true or false
+end
+
+-- ➕ Persistance : dernier onglet actif (par personnage)
+function GLOG.GetLastActiveTabLabel()
+    GLOG.EnsureDB()
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    return GuildLogisticsUI.lastTabLabel
+end
+
+function GLOG.SetLastActiveTabLabel(label)
+    if not label or label == "" then return end
+    GLOG.EnsureDB()
+    GuildLogisticsUI = GuildLogisticsUI or {}
+    GuildLogisticsUI.lastTabLabel = tostring(label)
+end

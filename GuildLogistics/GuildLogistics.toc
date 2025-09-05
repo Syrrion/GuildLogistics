@@ -5,7 +5,7 @@
 ## Version: 2.6.7
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
-## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char
+## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char, GuildLogisticsDB_Backup, GuildLogisticsDB_Previous
 
 ## IconTexture: Interface\AddOns\GuildLogistics\Ressources\Media\LogoAddonWoW256.tga
 ## Dependencies: LibDeflate
@@ -17,30 +17,64 @@ Data/BiS_Trinkets.lua
 Data/Tracker.lua
 Data/Upgrades.lua
 
-Core/Core.lua
-Core/Helper.lua
+Core/Core/DatabaseManager.lua
+Core/Core/Helper.lua
 Core/Core/Time.lua
 Core/Core/Timers.lua
 Core/Core/Addon.lua
 Core/Core/Debug.lua
 
-Core/Events.lua
+Core/Core/Events.lua
+Core/Player/Alias.lua
 Core/Core/Serialize.lua
 Core/Game/Spell.lua
 Core/Core/Tiers.lua
+Core/Player/Manager.lua
 Core/Player/Name.lua
+Core/Player/Status.lua
+Core/Core/HistoryManager.lua
+Core/Core/BackupManager.lua
+Core/Core/BackupTest.lua
+Core/Core/Core.lua
 Data/Players.lua
 Core/Player/Class.lua
 Core/Guild/Core.lua
 Core/Group/Party.lua
 Core/Group/Raid.lua
 Core/Core/Legacy.lua
-Core/Errors.lua
-Core/Comm.lua
-Core/Guild.lua
-Core/Expenses.lua
-Core/GroupTracker.lua
-Core/LootTracker.lua
+Core/Debug/ErrorHandler.lua
+Core/Debug/ErrorJournal.lua
+Core/Debug/ErrorComm.lua
+
+Core/Comm/Serialization.lua
+Core/Comm/DebugLogging.lua
+Core/Comm/Transport.lua
+Core/Comm/DataSync.lua
+Core/Comm/NetworkDiscovery.lua
+Core/Comm/Broadcasting.lua
+Core/Comm/MessageHandlers.lua
+Core/Comm/Requests.lua
+Core/Comm/ModuleLoader.lua
+Core/Comm/Comm.lua
+Core/Comm/RefactoringValidator.lua
+Core/Comm/CommunicationTest.lua
+Core/Tracker/GroupTrackerState.lua
+Core/Tracker/GroupTrackerSession.lua
+Core/Tracker/GroupTrackerConsumables.lua
+Core/Tracker/GroupTrackerUI.lua
+Core/Tracker/GroupTrackerAPI.lua
+Core/Tracker/GroupTrackerEvents.lua
+Core/Tracker/GroupTracker.lua
+Core/LootTracker/LootTrackerState.lua
+Core/LootTracker/LootTrackerInstance.lua
+Core/LootTracker/LootTrackerRolls.lua
+Core/LootTracker/LootTrackerParser.lua
+Core/LootTracker/LootTrackerAPI.lua
+Core/LootTracker/LootTracker.lua
+
+Core/Economy/Expenses.lua
+Core/Economy/Hooks.lua
+Core/Economy/Lots.lua
 
 UI/Layout.lua
 UI/Pixel.lua
@@ -85,4 +119,4 @@ Tabs/Debug_Database.lua
 Tabs/Debug_Events.lua
 Tabs/Debug_Errors.lua
 
-Core/Calendar.lua
+Core/Game/Calendar.lua
