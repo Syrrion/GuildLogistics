@@ -117,3 +117,99 @@ jobs:
           echo "- **Version**: ${{ needs.check-version-change.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Tag**: ${{ needs.check-version-change.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Déclencheur**: Changement de version dans GuildLogistics.toc" >> $GITHUB_STEP_SUMMARY
+
+  package-and-upload:
+    name: Package & Upload to CurseForge
+    needs: [check-version-change, create-release]
+    if: needs.check-version-change.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      # Install zip, required by BigWigs packager
+      - name: Install zip
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip
+
+      # Generate the "latest" changelog section (for this tag only)
+      - name: Generate changelog for latest tag (scoped)
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
+        with:
+          args: --latest
+          output: LATEST_CHANGELOG.md
+
+      # Copy LATEST_CHANGELOG.md into CHANGELOG.md so CurseForge displays only this release section
+      - name: Copy latest → CHANGELOG.md for packager
+        run: cp LATEST_CHANGELOG.md CHANGELOG.md
+
+      # Run BigWigs packager to build the .zip and upload to CurseForge
+      # Le .pkgmeta gère l'exclusion des fichiers de développement
+      - name: Run BigWigs Packager (Retail)
+        uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60 # v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+        with:
+          args: -g retail
+
+      # Update the GitHub release body with the latest changelog section
+      - name: Update GitHub release body with generated changelog
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
+        with:
+          tag_name: ${{ needs.check-version-change.outputs.tag_name }}
+          body_path: LATEST_CHANGELOG.md
+          append_body: false
+          make_latest: true
+
+      # Notification finale
+      - name: Final Summary
+        run: |
+          echo "## 🎉 Release complète automatique" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.check-version-change.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${{ needs.check-version-change.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **GitHub Release**: ✅ Créée" >> $GITHUB_STEP_SUMMARY
+          echo "- **CurseForge**: ✅ Package uploadé" >> $GITHUB_STEP_SUMMARY
+
+  persist-changelog:
+    name: Open PR with full CHANGELOG.md
+    needs: [check-version-change, package-and-upload]
+    if: needs.check-version-change.outputs.version_changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      # Checkout again (this job is separate)
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          fetch-depth: 0
+
+      # Generate the full changelog (all tags)
+      - name: Generate full changelog (all tags)
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
+        with:
+          output: CHANGELOG.md
+
+      # Open a PR with the updated CHANGELOG.md (persist full history into repo)
+      - name: Create Pull Request with CHANGELOG.md
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
+        with:
+          base: main
+          branch: "chore/update-changelog-${{ needs.check-version-change.outputs.tag_name }}"
+          title: "chore: update CHANGELOG for ${{ needs.check-version-change.outputs.tag_name }}"
+          commit-message: "chore: update CHANGELOG for ${{ needs.check-version-change.outputs.tag_name }}"
+          add-paths: |
+            CHANGELOG.md
+          labels: |
+            merge when passing
+          body: |
+            This PR persists the generated CHANGELOG for **${{ needs.check-version-change.outputs.tag_name }}**.
+            - Release body used: LATEST_CHANGELOG.md (single tag)
+            - Repo file updated to full history: CHANGELOG.md
