@@ -3,6 +3,7 @@ name: Auto Release on TOC Version Change
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 on:
   push:

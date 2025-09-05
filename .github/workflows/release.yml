@@ -3,6 +3,7 @@ name: Package & Upload (CurseForge) + Persist Changelog
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 on:
   release:
