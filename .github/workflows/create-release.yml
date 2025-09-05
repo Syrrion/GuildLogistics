@@ -33,7 +33,7 @@ jobs:
         id: extract-version
         run: |
           # Extraire la version du fichier .toc
-          TOC_VERSION=$(grep "^## Version:" GuildLogistics.toc | sed 's/## Version: //' | tr -d '\r\n' | xargs)
+          TOC_VERSION=$(grep "^## Version:" GuildLogistics/GuildLogistics.toc | sed 's/## Version: //' | tr -d '\r\n' | xargs)
           
           if [ -z "$TOC_VERSION" ]; then
             echo "❌ Version not found in TOC file"
