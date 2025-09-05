@@ -73,3 +73,42 @@ jobs:
           echo "🏷️ Création du tag: $TAG_NAME"
           git tag -a "$TAG_NAME" -m "Release version $VERSION"
           git push origin "$TAG_NAME"
+
+      # Générer le changelog pour cette version
+      - name: Generate changelog for this version
+        if: steps.extract-version.outputs.tag_exists == 'false' && inputs.create_release
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
+        with:
+          args: --latest
+          output: RELEASE_NOTES.md
+
+      # Créer la release GitHub
+      - name: Create GitHub Release
+        if: steps.extract-version.outputs.tag_exists == 'false' && inputs.create_release
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
+        with:
+          tag_name: ${{ steps.extract-version.outputs.tag_name }}
+          name: "GuildLogistics ${{ steps.extract-version.outputs.version }}"
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+          make_latest: true
+
+      # Afficher le résumé
+      - name: Summary
+        run: |
+          echo "## 📋 Résumé de l'action" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version extraite**: ${{ steps.extract-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag créé**: ${{ steps.extract-version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.create_release }}" = "true" ]; then
+            echo "- **Release créée**: ✅ Oui" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Release créée**: ❌ Non (désactivée)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.extract-version.outputs.tag_exists }}" = "false" ]; then
+            echo "🎉 **Le tag et la release ont été créés avec succès !**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Le tag existait déjà - aucune action effectuée**" >> $GITHUB_STEP_SUMMARY
+          fi
