@@ -131,6 +131,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.check-version-change.outputs.tag_name }}
 
+      # Attendre que le tag soit bien propagé
+      - name: Wait for tag propagation
+        run: |
+          echo "Waiting for tag propagation..."
+          sleep 10
+          git fetch --tags
+          git tag -l | grep ${{ needs.check-version-change.outputs.tag_name }} || echo "Tag not found yet"
+
       # Install zip, required by BigWigs packager
       - name: Install zip
         run: |
@@ -155,7 +163,7 @@ jobs:
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
-          args: -g retail -z
+          args: -g retail -o
           
       # Debug: List generated files
       - name: List generated files
