@@ -200,7 +200,7 @@ local function _ShowHistoryPopup(full)
                   (GLOG and GLOG.ExtractNameOnly and GLOG.ExtractNameOnly(full)) or full or ""),
         width  = 520,
         height = 360,
-        strata = "BACKGROUND",  -- ✅ Couche très basse : tout passe au-dessus
+        strata = "LOW",  -- ✅ Couche basse mais pas la plus basse
         enforceAction = false,
     }) or nil
     if not p then return end
@@ -464,7 +464,7 @@ local function _ensureWindow()
         title   = "group_tracker_title",
         height  = 160,
         headerHeight = 25,
-        strata  = "BACKGROUND",  -- ✅ Couche très basse : tout passe au-dessus
+        strata  = "LOW",  -- ✅ Couche basse mais pas la plus basse (pour éviter les problèmes d'événements)
         level   = 220,
         saveKey = "GroupTrackerWindow",
         defaultPoint    = "LEFT",
@@ -548,7 +548,7 @@ local function _ensureWindow()
                     if GLOG and GLOG.GroupTracker_ClearHistory then
                         GLOG.GroupTracker_ClearHistory()
                     end
-                end, nil, { strata = "BACKGROUND" })  -- ✅ Couche très basse
+                end, nil, { strata = "LOW" })  -- ✅ Couche basse mais pas la plus basse
             else
                 if GLOG and GLOG.GroupTracker_ClearHistory then
                     GLOG.GroupTracker_ClearHistory()

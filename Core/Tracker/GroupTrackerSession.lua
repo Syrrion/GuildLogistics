@@ -58,7 +58,7 @@ local function _BuildRosterSet()
         for i=1,4 do
             local u = "party"..i
             if UnitExists(u) then
-                local n, r = UnitName("u")
+                local n, r = UnitName(u)  -- ✅ Correction : UnitName(u) au lieu de UnitName("u")
                 set[_normalize((r and r~="" and (n.."-"..r)) or n)] = true
             end
         end
