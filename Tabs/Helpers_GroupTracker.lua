@@ -114,7 +114,7 @@ local function Build(container)
                 if GLOG and GLOG.GroupTracker_ClearHistory then
                     GLOG.GroupTracker_ClearHistory()
                 end
-            end, nil, { strata = "FULLSCREEN_DIALOG" })
+            end, nil, { strata = "BACKGROUND" })  -- ✅ Couche très basse
         else
             -- Fallback sans popup
             if GLOG and GLOG.GroupTracker_ClearHistory then
