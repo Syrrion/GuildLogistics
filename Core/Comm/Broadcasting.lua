@@ -445,13 +445,13 @@ function GLOG.BroadcastHistoryRefund(hid, ts, flag)
     end
 end
 
-function GLOG.BroadcastHistoryDelete(hid)
+function GLOG.BroadcastHistoryDelete(ts)
     if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
         GLOG.Comm_Broadcast("HIST_DEL", {
-            h = safenum(hid, 0),  -- ✅ Garde comme numérique
+            ts = safenum(ts, 0),  -- ✅ Utilise timestamp au lieu de hid
             rv = rv, lm = GuildLogisticsDB.meta.lastModified,
         })
     end

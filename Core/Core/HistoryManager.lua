@@ -164,7 +164,7 @@ function GLOG.DeleteHistory(idx)
 
     -- Diffusion de la suppression si GM via la fonction centralisée
     if GLOG.IsMaster and GLOG.IsMaster() and GLOG.BroadcastHistoryDelete then
-        GLOG.BroadcastHistoryDelete(s.ts)
+        GLOG.BroadcastHistoryDelete(s.ts)  -- ✅ Passe le timestamp (identifiant unique des entrées)
     end
     if ns.Emit then ns.Emit("history:changed") end
     return true
