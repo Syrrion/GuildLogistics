@@ -56,8 +56,15 @@ local function _NameInGroupFromMessage(msg)
     -- Dernier recours: si on trouve 'Nom-' juste avant le lien, on capture 'Nom-Realm'
     do
         local head = msg:sub(1, linkPos-1)
-        local cand = head:match("([%w\128-\255'%-]+%-%w+)$") or head:match("([%w\128-\255'%-]+)$")
-        if cand and cand ~= "" then return cand end
+        -- Essayer différents patterns pour extraire le nom
+        local cand = head:match("%[([%w\128-\255'%-]+%-%w+)%]") or       -- [Nom-Serveur]
+                     head:match("%[([%w\128-\255'%-]+)%]") or             -- [Nom simple]
+                     head:match("([%w\128-\255'%-]+%-%w+)$") or           -- Nom-Serveur à la fin
+                     head:match("([%w\128-\255'%-]+)$") or                -- Nom simple à la fin
+                     head:match("^([%w\128-\255'%-]+)")                   -- Nom au début du message
+        if cand and cand ~= "" and not cand:find("|") and not cand:match("^c?f?f?%x%x%x%x%x%x$") then 
+            return cand 
+        end
     end
 
     -- Si on n'a pas pu déterminer un nom et que ce n'est pas "moi",
@@ -219,11 +226,16 @@ local function _AddIfEligible(link, looter)
             diffID    = useDiffID,
             mplus     = useMPlus,
             group     = ns.LootTrackerInstance and ns.LootTrackerInstance.SnapshotGroup() or {},
+            won       = false,  -- Par défaut, on ne sait pas si l'objet a été réellement gagné
         }
 
         -- Enrichissement : type & valeur du jet si connus (cache récent)
         if ns.LootTrackerRolls and ns.LootTrackerRolls.GetRollFor then
-            local rType, rVal = ns.LootTrackerRolls.GetRollFor(looter or (ctx and ctx.player) or "", info.link)
+            local rType, rVal = ns.LootTrackerRolls.GetRollFor(looter, info.link)
+            if _G and _G.print then
+                local k = ns.LootTrackerRolls.NormalizeLink and ns.LootTrackerRolls.NormalizeLink(info.link) or "?"
+                print("[GLOG][RollLookup]", looter or "?", k, rType or "nil", rVal or "nil")
+            end
             if rType then entry.roll = rType end
             if rVal  then entry.rollV = tonumber(rVal) end
         end
@@ -291,5 +303,25 @@ ns.LootTrackerParser = {
         end
 
         _AddIfEligible(link, who)
+    end,
+    
+    -- Marquer un objet comme gagné (appelé depuis LootTrackerRolls)
+    MarkAsWon = function(itemLink, playerName)
+        if not itemLink or not playerName then return end
+        
+        local data = ns.LootTrackerState.GetData()
+        
+        -- Chercher les entrées correspondantes dans les 10 dernières minutes
+        local cutoffTime = GetServerTime() - 600 -- 10 minutes
+        
+        for i, entry in ipairs(data.equipLoots or {}) do
+            if entry.link == itemLink and 
+               entry.looter == playerName and 
+               entry.ts >= cutoffTime and
+               not entry.won then
+                entry.won = true
+                break
+            end
+        end
     end,
 }

@@ -76,6 +76,33 @@ function GLOG.LootTracker_HandleMPlusEvent()
     end
 end
 
+-- Fonction de test pour simuler des rolls (accessible via GLOG.TestLootRolls())
+function GLOG.TestLootRolls()
+    if ns.LootTrackerRolls and ns.LootTrackerRolls.TestRolls then
+        ns.LootTrackerRolls.TestRolls()
+    else
+        print("GLOG: Module LootTrackerRolls non disponible")
+    end
+end
+
+-- Test direct en ajoutant dans le cache
+function GLOG.TestDirectRolls()
+    if ns.LootTrackerRolls and ns.LootTrackerRolls.TestDirectRolls then
+        ns.LootTrackerRolls.TestDirectRolls()
+    else
+        print("GLOG: Module LootTrackerRolls non disponible")
+    end
+end
+
+-- Test avec vrais messages WoW
+function GLOG.TestRealMessages()
+    if ns.LootTrackerRolls and ns.LootTrackerRolls.TestRealMessages then
+        ns.LootTrackerRolls.TestRealMessages()
+    else
+        print("GLOG: Module LootTrackerRolls non disponible")
+    end
+end
+
 -- =========================
 -- ===   Initialisation  ===
 -- =========================

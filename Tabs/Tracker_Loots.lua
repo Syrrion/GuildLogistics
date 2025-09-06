@@ -10,7 +10,7 @@ local panel, lv, listArea
 -- Affichage des membres du groupe : on réutilise la popup roster de l'onglet "Historique des raids" si elle existe
 local function ShowGroupMembers(anchor, members)
     members = members or {}
-    local title = (Tr and Tr("popup_group_title")) or "Membres du groupe"
+    local title = Tr("group_members") or "Membres du groupe"
 
     -- 1) Tentatives d'APIs existantes (onglet Historique des raids / UI partagée)
     if UI then
@@ -32,8 +32,8 @@ local function ShowGroupMembers(anchor, members)
 
     -- 2) Fallback: mini popup locale avec ListView (même rendu global)
     local cols = UI.NormalizeColumns({
-        { key="idx",  title="#",    w=24,  align="CENTER" },
-        { key="name", title=Tr and Tr("col_name") or "Nom", vsep=true,  min=200, flex=1 },
+        { key="idx",  title=Tr("col_hash") or "#",    w=24,  align="CENTER" },
+        { key="name", title=Tr("col_name") or "Nom", vsep=true,  min=200, flex=1 },
     })
     local data = {}
     for i, name in ipairs(members) do
@@ -89,8 +89,8 @@ local function BuildRow(row)
     w.rollBtn = CreateFrame("Button", nil, w.who)
     w.rollBtn:SetSize(14, 14)
     w.rollBtn:SetPoint("RIGHT", w.who, "RIGHT", 0, 0)
-    w.roll = w.rollBtn:CreateTexture(nil, "ARTWORK")
-    w.roll:SetAllPoints(w.rollBtn)
+    w.rollTex = w.rollBtn:CreateTexture(nil, "ARTWORK")
+    w.rollTex:SetAllPoints(w.rollBtn)
     w.rollBtn:Hide()
 
     -- Le texte du name tag s’arrête avant l’icône
@@ -127,12 +127,14 @@ local function BuildRow(row)
 
     w.grpBtn = (UI.Button and UI.Button(w.grp, "0", {
         size="xs", variant="secondary", minWidth=28,
-        tooltip = (Tr and Tr("tip_show_group")) or "Voir le groupe"
+        tooltip = Tr("tip_show_group") or "Voir le groupe"
     })) or CreateFrame("Button", nil, w.grp, "UIPanelButtonTemplate")
 
     if w.grpBtn.SetText then w.grpBtn:SetText("0") end
     w.grpBtn:ClearAllPoints()
     w.grpBtn:SetPoint("CENTER", w.grp, "CENTER", 0, 0)
+
+    -- (Colonne roll supprimée : icône seulement à droite du pseudo)
 
     -- Colonne supprimer
     w.close = CreateFrame("Frame", nil, row)
@@ -143,7 +145,7 @@ local function BuildRow(row)
     })) or CreateFrame("Button", nil, w.close, "UIPanelButtonTemplate")
 
     -- Assure l'affichage et l'ancrage dans la cellule
-    if w.del.SetText then w.del:SetText("X") end
+    if w.del.SetText then w.del:SetText(Tr("btn_delete_short") or "X") end
     w.del:ClearAllPoints()
     w.del:SetPoint("CENTER", w.close, "CENTER", 0, 0)
 
@@ -161,7 +163,7 @@ local function UpdateRow(i, row, w, it)
     -- iLvl
     if w.ilvl then
         local iv = tonumber(it.ilvl or 0) or 0
-        w.ilvl:SetText(iv > 0 and tostring(iv) or "-")
+        w.ilvl:SetText(iv > 0 and tostring(iv) or Tr("value_dash") or "-")
     end
 
     -- Objet (icône, texte + tooltip) coloré selon la rareté (sans stocker la qualité)
@@ -225,9 +227,9 @@ local function UpdateRow(i, row, w, it)
 
     -- Qui + icône de roll si connue
     if w.who then UI.SetNameTagShort(w.who, it.looter or "") end
-    if w.roll and w.rollBtn then
+    if w.rollTex and w.rollBtn then
         if it.roll and UI.SetRollIcon then
-            UI.SetRollIcon(w.roll, it.roll)
+            UI.SetRollIcon(w.rollTex, it.roll)
             w.rollBtn._rollType = it.roll
             w.rollBtn._rollVal  = tonumber(it.rollV or 0) or nil
             w.rollBtn:Show()
@@ -255,7 +257,7 @@ local function UpdateRow(i, row, w, it)
         local diffID = tonumber(it.diffID or 0) or 0
         if diffID == 0 then
             -- hors instance : tiret demandé
-            w.diff:SetText("-")
+            w.diff:SetText(Tr("value_dash") or "-")
         else
             local parts = {}
             local diff = (GetDifficultyInfo and GetDifficultyInfo(diffID)) or ""
@@ -270,9 +272,11 @@ local function UpdateRow(i, row, w, it)
                 parts[#parts+1] = (mplus > 0) and ("|cffffa500+"..mplus.."|r") or "+|cffffa500?|r"
             end
 
-            w.diff:SetText(#parts > 0 and table.concat(parts, " ") or "-")
+            w.diff:SetText(#parts > 0 and table.concat(parts, " ") or Tr("value_dash") or "-")
         end
     end
+
+    -- (Affichage texte roll supprimé, l'icône reste sur le pseudo)
 
     -- Bouton Groupe -> affiche la liste des membres (et montre le nombre)
     if w.grpBtn and w.grpBtn.SetScript then
@@ -370,7 +374,7 @@ local function Build(container)
 
        -- 2) Checkbox "Seulement en instance/gouffre" (sur la 1ère ligne, après la rareté)
     local cbInst = CreateFrame("CheckButton", nil, bar, "ChatConfigCheckButtonTemplate")
-    cbInst.Text:SetText((Tr and Tr("lbl_instance_only")) or "Seulement en instance/gouffre")
+    cbInst.Text:SetText(Tr("lbl_instance_only") or "Seulement en instance/gouffre")
     cbInst:SetPoint("LEFT", dd, "RIGHT", 18, 2)
     cbInst:SetChecked((cfg.lootInstanceOnly ~= false) and true or false)
     cbInst:SetScript("OnClick", function(self)
@@ -402,7 +406,7 @@ local function Build(container)
 
     -- 3.1) Checkbox "Équippable uniquement" (début 2ème ligne)
     local cb = CreateFrame("CheckButton", nil, bar, "ChatConfigCheckButtonTemplate")
-    cb.Text:SetText((Tr and Tr("lbl_equippable_only")) or "Équippable uniquement")
+    cb.Text:SetText(Tr("lbl_equippable_only") or "Équippable uniquement")
     cb:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, -36)
     cb:SetChecked(cfg.lootEquippableOnly and true or false)
     cb:SetScript("OnClick", function(self)
@@ -458,8 +462,8 @@ local function Build(container)
         { key="date",   title=Tr("col_time")       or "Heure",       w=120 },
         { key="ilvl",   title=Tr("col_ilvl")       or "iLvl",        vsep=true,  w=40, justify="CENTER" },
         { key="item",   title=Tr("col_item")       or "Objet",       vsep=true,  min=300, flex=1 },
-        { key="who",    title=Tr("col_who")        or "Ramassé par", vsep=true,  w=150 },
-        { key="inst",   title=Tr("col_instance")   or "Instance",    vsep=true,  w=240},
+        { key="who",    title=Tr("col_who")        or "Ramassé par", vsep=true,  w=180 },
+        { key="inst",   title=Tr("col_instance")   or "Instance",    vsep=true,  w=220},
         { key="diff",   title=Tr("col_difficulty") or "Difficulté",  vsep=true,  min=125,  justify="CENTER" },
         { key="grp",    title=Tr("col_group")      or "Groupe",      vsep=true,  w=60,  justify="CENTER" },
         { key="close",  title="X", min=30,  vsep=true,justify="CENTER" },
@@ -484,7 +488,9 @@ local function Refresh()
     if not lv then return end
     local list = {}
     if GLOG and GLOG.LootTracker_List then
-        for _, it in ipairs(GLOG.LootTracker_List()) do list[#list+1] = it end
+        for _, it in ipairs(GLOG.LootTracker_List()) do 
+            list[#list+1] = it
+        end
     end
     lv:RefreshData(list)
 end

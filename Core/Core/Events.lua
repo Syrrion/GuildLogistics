@@ -333,6 +333,128 @@ f:SetScript("OnEvent", function(self, event, name)
                     ns.GLOG.Debug_BulkCleanup()
                 end
                 return
+            elseif txt == "testrolls" or txt == "test" then
+                if ns and ns.LootTrackerRolls and ns.LootTrackerRolls.TestRolls then
+                    ns.LootTrackerRolls.TestRolls()
+                else
+                    print("GLOG: Test de rolls indisponible")
+                end
+                return
+            elseif txt == "testdirect" then
+                if ns and ns.LootTrackerRolls and ns.LootTrackerRolls.TestDirectRolls then
+                    ns.LootTrackerRolls.TestDirectRolls()
+                else
+                    print("GLOG: Test direct de rolls indisponible")
+                end
+                return
+            elseif txt == "testreal" then
+                if ns and ns.LootTrackerRolls and ns.LootTrackerRolls.TestRealMessages then
+                    ns.LootTrackerRolls.TestRealMessages()
+                else
+                    print("GLOG: Test de messages réels indisponible")
+                end
+                return
+            elseif txt == "debugname" then
+                -- Message avec un vrai lien d'item
+                local message = "|cfa335eeRamassé par |r|Hplayer:TestPlayer-Realm:123:GUILD|h[TestPlayer-Realm]|h|cfa335ee: |r|cffa335ee|Hitem:123456::::::::80:257::3:4:6652:1472:6646:7756:1:28:456|h[Test Item]|h|r"
+                print("=== TEST EXTRACTION NOM ===")
+                print("Message:", message)
+                
+                local module = ns.LootTrackerParser
+                if module and module.NameInGroupFromMessage then
+                    print("Appel de NameInGroupFromMessage...")
+                    local nom = module.NameInGroupFromMessage(message)
+                    print("Nom extrait:", nom)
+                else
+                    print("GLOG: Fonction NameInGroupFromMessage indisponible")
+                end
+                return
+            elseif txt == "testlootroll" then
+                print("=== TEST LOOT RÉALISTE AVEC ROLLS ===")
+                
+                if ns.LootTrackerRolls then
+                    local link = "|cffa335ee|Hitem:193001::::::::70:577::13:4:8836:8840:8902:8806::::::|h[Plastron de Raid]|h|r"
+                    
+                    -- D'abord, affichons les patterns WoW réels
+                    print("0. Patterns WoW détectés :")
+                    if LOOT_ROLL_NEED then print("NEED pattern:", LOOT_ROLL_NEED) end
+                    if LOOT_ROLL_GREED then print("GREED pattern:", LOOT_ROLL_GREED) end
+                    if LOOT_ROLL_PASSED then print("PASS pattern:", LOOT_ROLL_PASSED) end
+                    if LOOT_ROLL_WON then print("WON pattern:", LOOT_ROLL_WON) end
+                    
+                    -- Testons manuellement avec des patterns simples
+                    print("0b. Test manuel de patterns...")
+                    local testMsg = "TestPlayer1 a choisi Besoin pour : " .. link
+                    print("Message test:", testMsg)
+                    
+                    -- Test simple avec pattern manuel
+                    local manualPattern = "(.+) a choisi Besoin pour : (.+)"
+                    local who, itemLink = testMsg:match(manualPattern)
+                    print("Match manuel - who:", who, "link:", itemLink and "TROUVÉ" or "nil")
+                    
+                    -- 1. Utilisons les patterns WoW réels pour générer les messages
+                    print("1. Messages de rolls générés depuis patterns WoW...")
+                    
+                    local rollMessages = {}
+                    
+                    -- Utiliser le vrai nom du joueur pour le test
+                    local playerName = UnitName("player") or "TestPlayer1"
+                    print("Nom du joueur utilisé pour le test:", playerName)
+                    
+                    -- Générer des messages basés sur les patterns WoW réels
+                    if LOOT_ROLL_NEED then
+                        local msg = LOOT_ROLL_NEED:gsub("%%s", playerName, 1):gsub("%%s", link, 1)
+                        table.insert(rollMessages, msg)
+                        print("Message NEED généré:", msg)
+                    end
+                    
+                    if LOOT_ROLL_GREED then
+                        local msg = LOOT_ROLL_GREED:gsub("%%s", "TestPlayer2", 1):gsub("%%s", link, 1)
+                        table.insert(rollMessages, msg)
+                        print("Message GREED généré:", msg)
+                    end
+                    
+                    if LOOT_ROLL_PASSED then
+                        local msg = LOOT_ROLL_PASSED:gsub("%%s", "TestPlayer3", 1):gsub("%%s", link, 1)
+                        table.insert(rollMessages, msg)
+                        print("Message PASS généré:", msg)
+                    end
+                    
+                    -- Traiter les messages comme le ferait le vrai système
+                    print("2. Traitement des messages...")
+                    for i, msg in ipairs(rollMessages) do
+                        print("Traitement message " .. i .. ":", msg)
+                        if ns.LootTrackerRolls.HandleChatMsgSystem then
+                            ns.LootTrackerRolls.HandleChatMsgSystem(msg)
+                        end
+                    end
+                    
+                    -- Vérifier le cache après traitement des messages réels
+                    print("3. Vérification du cache...")
+                    local playerLower = (playerName or ""):lower()
+                    local rType1, rVal1 = ns.LootTrackerRolls.GetRollFor(playerLower, link)
+                    local rType2, rVal2 = ns.LootTrackerRolls.GetRollFor("testplayer2", link)
+                    local rType3, rVal3 = ns.LootTrackerRolls.GetRollFor("testplayer3", link)
+                    print("Roll " .. playerName .. ":", rType1 and (rType1 .. " (" .. (rVal1 or "?") .. ")") or "nil")
+                    print("Roll TestPlayer2:", rType2 and (rType2 .. " (" .. (rVal2 or "?") .. ")") or "nil")
+                    print("Roll TestPlayer3:", rType3 and (rType3 .. " (" .. (rVal3 or "?") .. ")") or "nil")
+                    
+                    -- 4. Simuler le message de loot réel
+                    print("4. Message de loot réel...")
+                    local lootMessage = "Ramassé par " .. playerName .. " : " .. link
+                    print("Message loot:", lootMessage)
+                    
+                    if ns.LootTrackerParser and ns.LootTrackerParser.HandleChatMsgLoot then
+                        ns.LootTrackerParser.HandleChatMsgLoot(lootMessage)
+                        print("Message de loot traité!")
+                        print("5. Maintenant vérifiez l'interface /glog > Tracker > Loots")
+                        print("   -> La colonne 'Ramassé par' devrait afficher '" .. playerName .. "'")
+                        print("   -> La colonne 'Roll' devrait afficher 'B' (Besoin)")
+                    end
+                else
+                    print("Module LootTrackerRolls indisponible")
+                end
+                return
             end
 
             -- Comportement par défaut : ouvrir/afficher l’UI principale

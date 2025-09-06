@@ -62,7 +62,7 @@ end
 
 -- Fonction pour récupérer le nom d'un donjon via son ID Challenge Mode
 local function GetDungeonName(challengeModeID)
-    if not challengeModeID then return "Donjon inconnu" end
+    if not challengeModeID then return Tr("unknown_dungeon") or "Donjon inconnu" end
     
     -- Utiliser l'API Challenge Mode pour récupérer le nom
     local name = C_ChallengeMode.GetMapUIInfo(challengeModeID)
@@ -77,7 +77,7 @@ local function GetDungeonName(challengeModeID)
     end
     
     -- Fallback final : nom par défaut
-    return "Donjon #" .. tostring(challengeModeID)
+    return Tr("dungeon_id_format"):format(tostring(challengeModeID)) or ("Donjon #" .. tostring(challengeModeID))
 end
 
 -- Déclaration forward pour Refresh

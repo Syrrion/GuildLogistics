@@ -156,7 +156,7 @@ local function UpdateRow(i, r, f, it)
     if f.ver then
         local name = tostring(it.main or "")
         local ver  = (ns.GLOG.GetPlayerAddonVersion and ns.GLOG.GetPlayerAddonVersion(name)) or ""
-        f.ver:SetText((ver ~= "" and ver) or "—")
+        f.ver:SetText((ver ~= "" and ver) or Tr("value_empty") or "—")
     end
 
     -- Statut "hors guilde" (section dédiée)
@@ -164,7 +164,7 @@ local function UpdateRow(i, r, f, it)
 
     -- Colonne "Dernière connexion" / en ligne
     if isOut then
-        if f.last then f.last:SetText("|cff909090—|r") end
+        if f.last then f.last:SetText("|cff909090" .. (Tr("value_empty") or "—") .. "|r") end
     elseif it.onlineCount and it.onlineCount > 0 then
         local txt = (it.onlineCount > 1)
             and ("|cff40ff40"..Tr("status_online").." ("..it.onlineCount..")|r")

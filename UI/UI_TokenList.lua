@@ -57,19 +57,19 @@ function UI.TokenList(parent, opts)
     local cols
     if kind == "text" then
         cols = UI.NormalizeColumns({
-            { key="name", title="Chaîne", min=200, flex=1 },
+            { key="name", title=Tr("col_string") or "Chaîne", min=200, flex=1 },
             { key="act",  title="", vsep=true,  w=80 },
         })
     elseif kind == "spell" then
         cols = UI.NormalizeColumns({
             { key="ico",  title="", w=36 },
-            { key="name", title="Nom du sort", min=200, flex=1 },
+            { key="name", title=Tr("col_spell_name") or "Nom du sort", min=200, flex=1 },
             { key="act",  title="", vsep=true,  w=80 },
         })
     else
         cols = UI.NormalizeColumns({
             { key="ico",  title="", w=36 },
-            { key="name", title="Nom de l'objet", min=200, flex=1 },
+            { key="name", title=Tr("col_item_name") or "Nom de l'objet", min=200, flex=1 },
             { key="act",  title="", vsep=true,  w=80 },
         })
     end
@@ -83,7 +83,7 @@ function UI.TokenList(parent, opts)
             local info = C_Spell.GetSpellInfo(id)
             if info then name, icon = info.name, info.iconID end
         end
-        if not name then name = ("Spell #%d"):format(id) end
+        if not name then name = Tr("spell_id_format"):format(id) or ("Spell #%d"):format(id) end
         return name, icon or 136243
     end
 
@@ -94,7 +94,7 @@ function UI.TokenList(parent, opts)
         local icon = (C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(id))
                   or C_Item.GetItemInfo(id)
                   or 134400
-        if not name then name = ("Item #%d"):format(id) end
+        if not name then name = Tr("item_id_format"):format(id) or ("Item #%d"):format(id) end
         return name, icon or 134400
     end
 
@@ -122,7 +122,7 @@ function UI.TokenList(parent, opts)
         fld.name = UI.Label(r, { template="GameFontHighlightSmall", justify="LEFT" })
 
         fld.act = CreateFrame("Frame", nil, r); fld.act:SetHeight(ROW_H); fld.act:SetFrameLevel(r:GetFrameLevel()+1)
-        r.btnRemove = UI.Button(fld.act, "×", { size="xs", minWidth=24, variant="danger", tooltip=Tr("Supprimer") })
+        r.btnRemove = UI.Button(fld.act, "×", { size="xs", minWidth=24, variant="danger", tooltip=Tr("btn_remove") or "Supprimer" })
         UI.AttachRowRight(fld.act, { r.btnRemove }, 8, -4, { leftPad=8, align="center" })
         return fld
     end
@@ -139,7 +139,7 @@ function UI.TokenList(parent, opts)
         elseif kind == "spell" then
             local name, icon = SpellLabelIcon(it.value)
             if fld.ico then fld.ico:SetTexture(icon); fld.ico:Show() end
-            fld.name:SetText(name or ("Spell #%d"):format(tonumber(it.value) or 0))
+            fld.name:SetText(name or Tr("spell_id_format"):format(tonumber(it.value) or 0) or ("Spell #%d"):format(tonumber(it.value) or 0))
 
             if UI and UI.BindItemOrSpellTooltip then
                 UI.BindItemOrSpellTooltip(r, 0, tonumber(it.value) or 0)
@@ -147,7 +147,7 @@ function UI.TokenList(parent, opts)
         else -- item
             local name, icon = ItemLabelIcon(it.value)
             if fld.ico then fld.ico:SetTexture(icon); fld.ico:Show() end
-            fld.name:SetText(name or ("Item #%d"):format(tonumber(it.value) or 0))
+            fld.name:SetText(name or Tr("item_id_format"):format(tonumber(it.value) or 0) or ("Item #%d"):format(tonumber(it.value) or 0))
 
             if UI and UI.BindItemOrSpellTooltip then
                 UI.BindItemOrSpellTooltip(r, tonumber(it.value) or 0, 0)

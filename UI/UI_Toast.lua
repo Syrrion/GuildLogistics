@@ -103,7 +103,7 @@ local function _CreateToast(opts)
     f.title:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 8, -2)
     f.title:SetPoint("RIGHT", f, "RIGHT", -10, 0)
     f.title:SetJustifyH("LEFT")
-    f.title:SetText(opts.title or "Notification")
+    f.title:SetText(opts.title or Tr("lbl_notification") or "Notification")
     
     -- Applique la police au titre
     if UI and UI.ApplyFont and f.title then

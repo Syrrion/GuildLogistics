@@ -8,15 +8,39 @@ ns.LootTrackerRolls = ns.LootTrackerRolls or {}
 local function _Now() return (time and time()) or 0 end
 
 local function _EscapeForLuaPattern(s)
-    return (tostring(s or ""):gsub("([%%%^%$%(%)%.%[%]%*%+%-%?])", "%%%1"))
+    if not s then return "" end
+    local str = tostring(s)
+    if str == "" then return "" end
+    
+    -- Échapper tous les caractères spéciaux de motif Lua
+    return str:gsub("([%%%^%$%(%)%.%[%]%*%+%-%?])", "%%%1")
 end
 
 local function _GS2Pat(gs)
     if not gs or gs == "" then return nil end
-    local p = _EscapeForLuaPattern(gs)
-    p = p:gsub("%%s", "(.+)")    -- capture texte/lien
-    p = p:gsub("%%d", "(%%d+)")  -- capture entier - échappement correct
-    return p
+    
+    -- Protection contre les valeurs invalides
+    local success, result = pcall(function()
+        -- D'abord remplacer %s et %d AVANT d'échapper
+        local p = tostring(gs)
+        p = p:gsub("%%s", "PLACEHOLDER_S")    -- remplacer temporairement
+        p = p:gsub("%%d", "PLACEHOLDER_D")    -- remplacer temporairement
+        
+        -- Puis échapper les caractères spéciaux
+        p = _EscapeForLuaPattern(p)
+        
+        -- Puis remettre les captures
+        p = p:gsub("PLACEHOLDER_S", "(.+)")   -- capture texte/lien
+        p = p:gsub("PLACEHOLDER_D", "(%d+)")  -- capture entier
+        return p
+    end)
+    
+    if success then
+        return result
+    else
+        -- En cas d'erreur, retourner nil pour désactiver ce motif
+        return nil
+    end
 end
 
 local function _NormPlayer(name)
@@ -27,15 +51,38 @@ end
 -- Cache: [link][playerLower] = { type="need|greed|disenchant|pass", val=98, ts=... }
 local _rollByItem = {}
 
+-- Normalisation d'un lien d'objet pour la clé du cache.
+-- Objectif: faire correspondre les messages de rolls (souvent lien complet) et
+-- les messages de loot (lien complet aussi) mais prévoir le cas où un format tronqué
+-- serait rencontré. On se base sur itemID + nom extrait.
+local function _LinkKey(link)
+    if not link or link == "" then return nil end
+    -- Extraire itemID
+    local itemID = link:match("|Hitem:(%d+):") or "?"
+    -- Nom entre crochets
+    local name = link:match("%[(.-)%]") or "?"
+    name = name:lower()
+    return itemID .. "::" .. name
+end
+
 local function _RememberRoll(player, link, rollType, rollVal)
     if not player or not link or not rollType then return end
     local pn = _NormPlayer(player)
-    _rollByItem[link] = _rollByItem[link] or {}
-    local rec = _rollByItem[link][pn] or {}
+    local key = _LinkKey(link)
+    if not key then return end
+    _rollByItem[key] = _rollByItem[key] or {}
+    local rec = _rollByItem[key][pn] or {}
     rec.type = rollType or rec.type
     rec.val  = tonumber(rollVal or rec.val)
     rec.ts   = _Now()
-    _rollByItem[link][pn] = rec
+    _rollByItem[key][pn] = rec
+
+    -- Debug temporaire
+    if ns and ns.Debug and ns.Debug.Log then
+        ns.Debug.Log("Roll Remember", pn, key, rec.type, rec.val)
+    elseif _G and _G.print then
+        print("[GLOG][RollCache] Remember", pn, key, rec.type or "?", rec.val or "?")
+    end
 
     -- petit nettoyage des entrées > 5 min
     local now = rec.ts
@@ -50,8 +97,19 @@ end
 local function _GetRollFor(player, link)
     if not player or not link then return nil, nil end
     local pn = _NormPlayer(player)
-    local rec = _rollByItem[link] and _rollByItem[link][pn]
-    if not rec then return nil, nil end
+    local key = _LinkKey(link)
+    if not key then return nil, nil end
+    local rec = _rollByItem[key] and _rollByItem[key][pn]
+    if not rec then
+        -- Debug temporaire
+        if _G and _G.print then
+            print("[GLOG][RollCache] MISS", pn, key)
+        end
+        return nil, nil
+    end
+    if _G and _G.print then
+        print("[GLOG][RollCache] HIT", pn, key, rec.type or "?", rec.val or "?")
+    end
     return rec.type, rec.val
 end
 
@@ -70,46 +128,59 @@ local _PAT_ROLLED_GREED= _GS2Pat(LOOT_ROLL_ROLLED_GREED)
 local _PAT_ROLLED_DE   = _GS2Pat(LOOT_ROLL_ROLLED_DE)
 
 local function _ParseRollMessage(msg)
+    if not msg or msg == "" then return nil end
+    
+    -- Fonction helper pour match sécurisé
+    local function safeMatch(pattern, text)
+        if not pattern or not text then return nil end
+        local success, result1, result2, result3 = pcall(string.match, text, pattern)
+        if success then
+            return result1, result2, result3
+        else
+            return nil
+        end
+    end
+    
     -- Sélections (contiennent toujours le joueur + lien)
     if _PAT_NEED then
-        local who, link = msg:match(_PAT_NEED)
+        local who, link = safeMatch(_PAT_NEED, msg)
         if who and link then return who, link, "need", nil end
     end
     if _PAT_GREED then
-        local who, link = msg:match(_PAT_GREED)
+        local who, link = safeMatch(_PAT_GREED, msg)
         if who and link then return who, link, "greed", nil end
     end
     if _PAT_DE then
-        local who, link = msg:match(_PAT_DE)
+        local who, link = safeMatch(_PAT_DE, msg)
         if who and link then return who, link, "disenchant", nil end
     end
     if _PAT_PASS then
-        local who, link = msg:match(_PAT_PASS)
+        local who, link = safeMatch(_PAT_PASS, msg)
         if who and link then return who, link, "pass", nil end
     end
     if _PAT_PASS_AUTO then
-        local who, link = msg:match(_PAT_PASS_AUTO)
+        local who, link = safeMatch(_PAT_PASS_AUTO, msg)
         if who and link then return who, link, "pass", nil end
     end
 
     -- Gain (on récupère surtout la valeur de jet)
     if _PAT_WON then
-        local who, link, val = msg:match(_PAT_WON)
+        local who, link, val = safeMatch(_PAT_WON, msg)
         if who and link and val then return who, link, nil, tonumber(val) end
     end
 
     -- "You rolled %d ..." (on ne connaît pas le nom → self)
     local me = UnitName and UnitName("player")
     if me and _PAT_ROLLED_NEED then
-        local val, link = msg:match(_PAT_ROLLED_NEED)
+        local val, link = safeMatch(_PAT_ROLLED_NEED, msg)
         if val and link then return me, link, "need", tonumber(val) end
     end
     if me and _PAT_ROLLED_GREED then
-        local val, link = msg:match(_PAT_ROLLED_GREED)
+        local val, link = safeMatch(_PAT_ROLLED_GREED, msg)
         if val and link then return me, link, "greed", tonumber(val) end
     end
     if me and _PAT_ROLLED_DE then
-        local val, link = msg:match(_PAT_ROLLED_DE)
+        local val, link = safeMatch(_PAT_ROLLED_DE, msg)
         if val and link then return me, link, "disenchant", tonumber(val) end
     end
 
@@ -123,6 +194,7 @@ ns.LootTrackerRolls = {
     -- Cache des rolls
     RememberRoll = _RememberRoll,
     GetRollFor = _GetRollFor,
+    NormalizeLink = _LinkKey,
     
     -- Parsing des messages de roll
     ParseRollMessage = _ParseRollMessage,
@@ -145,5 +217,123 @@ ns.LootTrackerRolls = {
         if rType then
             _RememberRoll(who, link, rType, rVal) -- met en cache 5 min
         end
+        
+        -- Si c'est un message de gain (won), notifier le système de loot
+        -- pour qu'il marque cet objet comme réellement obtenu
+        if rVal and _PAT_WON then
+            local success, winner, winLink, winVal = pcall(string.match, msg, _PAT_WON)
+            if success and winner and winLink and winVal then
+                -- Notifier que cet objet a été réellement gagné
+                if ns.LootTrackerParser and ns.LootTrackerParser.MarkAsWon then
+                    ns.LootTrackerParser.MarkAsWon(winner, winLink, rType, winVal)
+                end
+            end
+        end
+    end,
+    
+    -- Fonction de test pour simuler des rolls
+    TestRolls = function()
+        if not ns.LootTrackerRolls then return end
+        
+        print("=== Test LootTracker Rolls ===")
+        
+        -- D'abord, affichons les patterns réels
+        print("Patterns WoW détectés:")
+        if LOOT_ROLL_NEED then print("NEED:", LOOT_ROLL_NEED) end
+        if LOOT_ROLL_GREED then print("GREED:", LOOT_ROLL_GREED) end
+        if LOOT_ROLL_DISENCHANT then print("DE:", LOOT_ROLL_DISENCHANT) end
+        if LOOT_ROLL_PASSED then print("PASS:", LOOT_ROLL_PASSED) end
+        if LOOT_ROLL_WON then print("WON:", LOOT_ROLL_WON) end
+        if LOOT_ROLL_ROLLED_NEED then print("ROLLED_NEED:", LOOT_ROLL_ROLLED_NEED) end
+        
+        -- Test avec les patterns réels (en utilisant les globales WoW)
+        local testLink = "|cffa335ee|Hitem:193001::::::::70:577::13:4:8836:8840:8902:8806::::::|h[Plastron de test]|h|r"
+        
+        -- Générer des messages basés sur les patterns réels
+        local testMessages = {}
+        
+        if LOOT_ROLL_NEED then
+            -- Format: "%s a choisi Besoin pour : %s"
+            local msg = LOOT_ROLL_NEED:gsub("%%s", "TestJoueur1", 1):gsub("%%s", testLink, 1)
+            table.insert(testMessages, msg)
+        end
+        
+        if LOOT_ROLL_GREED then
+            local msg = LOOT_ROLL_GREED:gsub("%%s", "TestJoueur2", 1):gsub("%%s", testLink, 1)
+            table.insert(testMessages, msg)
+        end
+        
+        if LOOT_ROLL_DISENCHANT then
+            local msg = LOOT_ROLL_DISENCHANT:gsub("%%s", "TestJoueur3", 1):gsub("%%s", testLink, 1)
+            table.insert(testMessages, msg)
+        end
+        
+        if LOOT_ROLL_WON then
+            -- Format: "%s a gagné : %s avec un jet de %d"
+            local msg = LOOT_ROLL_WON:gsub("%%s", "TestJoueur1", 1):gsub("%%s", testLink, 1):gsub("%%d", "95", 1)
+            table.insert(testMessages, msg)
+        end
+        
+        -- Tester chaque message
+        for i, msg in ipairs(testMessages) do
+            print("Test " .. i .. ": " .. msg)
+            ns.LootTrackerRolls.HandleChatMsgSystem(msg)
+        end
+        
+        print("=== Fin des tests ===")
+        print("Vérifiez l'onglet Loots pour voir les résultats")
+    end,
+    
+    -- Test avec vrais messages WoW
+    TestRealMessages = function()
+        print("=== Test Messages Réels WoW ===")
+        
+        -- Afficher d'abord les patterns réels de votre client
+        print("=== Patterns WoW détectés ===")
+        if LOOT_ROLL_NEED then print("NEED:", LOOT_ROLL_NEED) end
+        if LOOT_ROLL_GREED then print("GREED:", LOOT_ROLL_GREED) end
+        if LOOT_ROLL_DISENCHANT then print("DE:", LOOT_ROLL_DISENCHANT) end
+        if LOOT_ROLL_PASSED then print("PASS:", LOOT_ROLL_PASSED) end
+        if LOOT_ROLL_WON then print("WON:", LOOT_ROLL_WON) end
+        if LOOT_ITEM then print("LOOT_ITEM:", LOOT_ITEM) end
+        if LOOT_ITEM_SELF then print("LOOT_ITEM_SELF:", LOOT_ITEM_SELF) end
+        
+        local testLink = "|cffa335ee|Hitem:193001::::::::70:577::13:4:8836:8840:8902:8806::::::|h[Plastron de test]|h|r"
+        
+        -- Ajouter directement au cache pour contourner les patterns
+        print("=== Ajout direct au cache ===")
+        _RememberRoll("TestJoueur1", testLink, "NEED", 95)
+        _RememberRoll("TestJoueur2", testLink, "GREED", 45)
+        _RememberRoll("TestJoueur3", testLink, "DE", 23)
+        _RememberRoll("TestJoueur4", testLink, "PASS", 0)
+        
+        -- Vérifier le cache
+        if ns.LootTrackerRolls and ns.LootTrackerRolls.GetRollFor then
+            local rType, rVal = ns.LootTrackerRolls.GetRollFor("TestJoueur1", testLink)
+            print("Cache après ajout direct pour TestJoueur1: " .. (rType or "nil") .. " (" .. (rVal or "nil") .. ")")
+        end
+        
+        -- Messages de loot pour déclencher l'enregistrement
+        if ns.LootTrackerParser and ns.LootTrackerParser.HandleChatMsgLoot then
+            -- Essayons différents formats de message de loot
+            local lootMessages = {
+                "TestJoueur1 reçoit le butin : " .. testLink,
+                "TestJoueur1 obtient l'objet : " .. testLink,
+            }
+            
+            -- Si LOOT_ITEM existe, utilisons le format exact
+            if LOOT_ITEM then
+                local exactMsg = LOOT_ITEM:gsub("%%s", "TestJoueur1", 1):gsub("%%s", testLink, 1)
+                table.insert(lootMessages, exactMsg)
+                print("Message LOOT_ITEM exact: " .. exactMsg)
+            end
+            
+            for i, lootMsg in ipairs(lootMessages) do
+                print("Test loot " .. i .. ": " .. lootMsg)
+                ns.LootTrackerParser.HandleChatMsgLoot(lootMsg)
+            end
+        end
+        
+        print("=== Test terminé ===")
     end,
 }

@@ -1299,7 +1299,7 @@ end
 
 -- Icône de type de jet (Need/Greed/DE/Pass) + libellé
 function UI.SetRollIcon(tex, rollType)
-    if not tex then return end
+    if not tex or (tex.GetObjectType and tex:GetObjectType() ~= "Texture") then return end
     if not rollType or rollType == "" then
         if tex.SetAtlas then tex:SetAtlas(nil) end
         tex:SetTexture(nil)

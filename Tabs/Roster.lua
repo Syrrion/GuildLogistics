@@ -270,7 +270,7 @@ end
 local function UpdateReserveCollapseUI()
     -- Bouton + / -
     if reserveToggleBtn then
-        reserveToggleBtn:SetText(reserveCollapsed and "+" or "-")
+        reserveToggleBtn:SetText(reserveCollapsed and Tr("btn_expand") or Tr("btn_collapse") or (reserveCollapsed and "+" or "-"))
 
         -- Ajustement d’alignement : décale légèrement le bouton vers la gauche et vers le haut (appliqué une seule fois)
         if not reserveToggleBtn._nudgeApplied then
