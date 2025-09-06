@@ -20,6 +20,7 @@ L["tab_requests"]         = "Transactions en attente"
 L["tab_debug"]            = "Diffusion des données"
 L["tab_settings"]         = "Options"
 L["tab_guild_members"]    = "Membres de la guilde"
+L["tab_mythic_plus"]      = "Rotation Mythique+"
 
 
 -- ============================================== --
@@ -29,6 +30,16 @@ L["msg_no_guild"]         = "Vous n'appartenez à aucune guilde sur ce personnag
 L["app_title"]            = "Guild Logistics"
 L["main_title_guild"]     = "Guilde"
 L["sync_data"]            = "Synchronisation en cours"
+
+-- ============================================== --
+-- ===            ROTATION MYTHIQUE+           === --
+-- ============================================== --
+L["mythicplus_title"]     = "Rotation des Affixes Mythique+"
+L["mythicplus_current"]   = "Actuelle"
+L["mythicplus_next"]      = "Suivante"
+L["mythicplus_previous"]  = "Précédente"
+L["mythicplus_week"]      = "Semaine %d (%s%d)"
+L["mythicplus_affix"]     = "Affixe %d"
 L["btn_reload"]           = "Reload"
 
 -- ➕ Obsolescence version

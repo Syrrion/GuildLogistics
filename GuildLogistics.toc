@@ -2,7 +2,7 @@
 ## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 3.0.3
+## Version: 3.1.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char, GuildLogisticsDB_Backup, GuildLogisticsDB_Previous
@@ -34,6 +34,7 @@ Core/Core/Events.lua
 Core/Player/Alias.lua
 Core/Core/Serialize.lua
 Core/Game/Spell.lua
+Core/Game/Affixes.lua
 Core/Core/Tiers.lua
 Core/Player/Manager.lua
 Core/Player/Name.lua
@@ -108,6 +109,7 @@ Tabs/RaidStart.lua
 Tabs/Resources.lua
 Tabs/Requests.lua
 Tabs/BiS.lua
+Tabs/Helpers_MythicPlus.lua
 Tabs/Helpers_Upgrades.lua
 Tabs/Helpers_Delves.lua
 Tabs/Helpers_Dungeons.lua

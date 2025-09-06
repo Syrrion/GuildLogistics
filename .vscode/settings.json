@@ -57,6 +57,11 @@
         "ToggleCalendar",
         "Calendar_Toggle",
         "UISpecialFrames",
-        "DEFAULT_CHAT_FRAME"
+        "DEFAULT_CHAT_FRAME",
+        "GameTooltip"
+    ],
+    "Lua.type.weakUnionCheck": true,
+    "Lua.diagnostics.disable": [
+        "assign-type-mismatch"
     ]
 }

@@ -20,6 +20,7 @@ L["tab_requests"]         = "Pending transactions"
 L["tab_debug"]            = "Data broadcast"
 L["tab_settings"]         = "Options"
 L["tab_guild_members"]    = "Guild members"
+L["tab_mythic_plus"]      = "Mythic+ Rotation"
 
 
 -- ============================================== --
@@ -29,6 +30,16 @@ L["msg_no_guild"]         = "You don't belong to any guild on this character"
 L["app_title"]            = "Guild Logistics"
 L["main_title_guild"]     = "Guild"
 L["sync_data"]            = "Synchronizing..."
+
+-- ============================================== --
+-- ===            MYTHIC+ ROTATION             === --
+-- ============================================== --
+L["mythicplus_title"]     = "Mythic+ Affix Rotation"
+L["mythicplus_current"]   = "Current"
+L["mythicplus_next"]      = "Next"
+L["mythicplus_previous"]  = "Previous"
+L["mythicplus_week"]      = "Week %d (%s%d)"
+L["mythicplus_affix"]     = "Affix %d"
 L["btn_reload"]           = "Reload"
 
 -- ➕ Outdated version
