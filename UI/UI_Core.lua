@@ -2029,6 +2029,7 @@ end
 
 -- === Suspension globale de l'UI & exceptions "always-on" ===
 UI._alwaysOnFrames = UI._alwaysOnFrames or setmetatable({}, { __mode = "k" })
+UI._popupFrames = UI._popupFrames or setmetatable({}, { __mode = "k" })
 
 local function _isOpen()
     if UI and UI.IsOpen then return UI.IsOpen() end
@@ -2045,6 +2046,16 @@ local function _isDescendantOf(child, parent)
     return false
 end
 
+-- Vérifie si une popup est visible
+local function _hasVisiblePopup()
+    for f in pairs(UI._popupFrames) do
+        if f and f.IsShown and f:IsShown() then
+            return true
+        end
+    end
+    return false
+end
+
 -- Marque/démarque une frame comme autorisée même UI fermée (ex: tracker flottant)
 function UI.MarkAlwaysOn(frame, on)
     if not frame then return end
@@ -2052,6 +2063,16 @@ function UI.MarkAlwaysOn(frame, on)
         UI._alwaysOnFrames[frame] = nil
     else
         UI._alwaysOnFrames[frame] = true
+    end
+end
+
+-- Marque/démarque une frame comme popup (toujours autorisée)
+function UI.MarkAsPopup(frame, on)
+    if not frame then return end
+    if on == false then
+        UI._popupFrames[frame] = nil
+    else
+        UI._popupFrames[frame] = true
     end
 end
 
@@ -2066,9 +2087,26 @@ function UI.IsWithinAlwaysOn(frame)
     return false
 end
 
--- Doit-on exécuter un traitement UI ? (true si UI ouverte OU frame dans une zone always-on)
+-- La frame (ou l'un de ses parents) appartient-elle à une popup visible ?
+function UI.IsWithinPopup(frame)
+    if not (frame and frame.GetParent) then return false end
+    for f in pairs(UI._popupFrames) do
+        if f and f.IsShown and f:IsShown() and _isDescendantOf(frame, f) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Doit-on exécuter un traitement UI ? (true si UI ouverte OU frame dans une zone always-on OU popup visible)
 function UI.ShouldProcess(ownerFrame)
     if _isOpen() then return true end
     if ownerFrame and UI.IsWithinAlwaysOn(ownerFrame) then return true end
+    if ownerFrame and UI.IsWithinPopup(ownerFrame) then return true end
     return false
+end
+
+-- Doit-on exécuter un rafraîchissement UI ? (même chose que ShouldProcess mais nom plus explicite)
+function UI.ShouldRefreshUI(ownerFrame)
+    return UI.ShouldProcess(ownerFrame)
 end

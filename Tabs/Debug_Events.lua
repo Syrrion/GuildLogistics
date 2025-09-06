@@ -154,13 +154,15 @@ local function Build(container)
         UI.AttachButtonsFooterRight(footer, { btnPause, btnClear }, 8, nil)
     end
 
-    -- Ticker throttle : 1.0s + refresh seulement si révision change
+    -- Ticker throttle : 1.0s + refresh seulement si révision change + pause UI respectée
     local lastRev = -1
     if C_Timer and C_Timer.NewTicker then
         if ticker and ticker.Cancel then ticker:Cancel() end
         ticker = C_Timer.NewTicker(1.5, function()
             if not panel or not panel:IsShown() then return end
             if isPaused then return end
+            -- ⏸️ Pause globale : ne pas rafraîchir si l'UI principale est fermée
+            if UI and UI.ShouldRefreshUI and not UI.ShouldRefreshUI(panel) then return end
             if not (ns.Events and ns.Events.GetDebugLogRev and ns.Events.GetDebugLog) then return end
             local rev = ns.Events.GetDebugLogRev()
             if rev == lastRev then return end
@@ -174,6 +176,8 @@ end
 
 local function Refresh()
     if not panel or not panel:IsShown() then return end
+    -- ⏸️ Pause globale : ne pas rafraîchir si l'UI principale est fermée
+    if UI and UI.ShouldRefreshUI and not UI.ShouldRefreshUI(panel) then return end
     if not (ns.Events and ns.Events.GetDebugLogRev and ns.Events.GetDebugLog) then return end
     local rev = ns.Events.GetDebugLogRev()
     if lv and lv.SetData then

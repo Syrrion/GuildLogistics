@@ -669,7 +669,8 @@ function UI.ScheduleRefreshAll(delay)
 
     local function doRefresh()
         UI._refreshPending = false
-        if ns and ns.UI and ns.UI.Main and ns.UI.Main.IsShown and ns.UI.Main:IsShown() then
+        -- ⏸️ Pause globale : ne rafraîchit que si l'UI est ouverte ou si on a des popups/zones always-on
+        if UI.ShouldRefreshUI and UI.ShouldRefreshUI() then
             if UI.RefreshAll then UI.RefreshAll() end
         end
     end

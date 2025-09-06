@@ -26,6 +26,8 @@ end
 local function _StartLiveZoneTicker()
     if _LiveZoneTicker or not C_Timer then return end
     _LiveZoneTicker = C_Timer.NewTicker(10, function()
+        -- ⏸️ Pause globale : ne pas rafraîchir le roster si l'UI principale est fermée
+        if UI and UI.ShouldRefreshUI and not UI.ShouldRefreshUI() then return end
         -- Throttle pour éviter spam serveur
         local now = time()
         if now - (_lastRosterRefresh or 0) >= 5 then

@@ -49,6 +49,9 @@ function UI.CreatePopup(opts)
     -- Hook la frame principale et applique récursivement
     hookCreateFontStringRecursive(f)
 
+    -- ⚠️ Marque cette popup comme exemptée de la pause UI globale
+    if UI.MarkAsPopup then UI.MarkAsPopup(f, true) end
+
     f:SetSize(opts.width or 460, opts.height or 240)
 
     -- Strate ajustable (par défaut DIALOG). Ne crée l’overlay que si enforceAction=true.
@@ -123,6 +126,11 @@ function UI.CreatePopup(opts)
     if f.SetResizeBounds then f:SetResizeBounds(360, 220) end
     f:SetScript("OnSizeChanged", function(self)
         if self._lv and self._lv.Layout then self._lv:Layout() end
+    end)
+
+    -- Démaquage automatique quand la popup se ferme
+    f:HookScript("OnHide", function(self)
+        if UI.MarkAsPopup then UI.MarkAsPopup(self, false) end
     end)
 
     -- Raccourcis clavier

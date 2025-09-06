@@ -6,8 +6,20 @@ local GLOG = ns.GLOG
 -- Structure : { [eventName] = { callback1, callback2, ... } }
 GLOG.__evt = GLOG.__evt or {}
 
--- S'abonner à un événement interne
--- @param event: string - nom de l'événement (ex: "roster:updated", "expenses:changed")
+-- S'abonner à un événem-- ➕ Throttle + garde-fou : on ne refresh que si l'UI doit être rafraîchie
+local _pendingUIRefresh = false
+local function _ScheduleActiveTabRefresh()
+    if _pendingUIRefresh then return end
+    _pendingUIRefresh = true
+    local function doRefresh()
+        _pendingUIRefresh = false
+        -- ⏸️ Pause globale : utilise le nouveau système centralisé de pause UI
+        if ns and ns.UI and ns.UI.ShouldRefreshUI and ns.UI.ShouldRefreshUI() then
+            if ns.RefreshAll then ns.RefreshAll() end
+        end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0.15, doRefresh) else doRefresh() end
+end-- @param event: string - nom de l'événement (ex: "roster:updated", "expenses:changed")
 -- @param callback: function - fonction appelée quand l'événement est émis
 function GLOG.On(event, callback)
     if type(event) ~= "string" or type(callback) ~= "function" then 
@@ -331,27 +343,6 @@ f:SetScript("OnEvent", function(self, event, name)
             elseif txt == "bc" or txt == "bulk" then
                 if ns and ns.GLOG and ns.GLOG.Debug_BulkCleanup then
                     ns.GLOG.Debug_BulkCleanup()
-                end
-                return
-            elseif txt == "testrolls" or txt == "test" then
-                if ns and ns.LootTrackerRolls and ns.LootTrackerRolls.TestRolls then
-                    ns.LootTrackerRolls.TestRolls()
-                else
-                    print("GLOG: Test de rolls indisponible")
-                end
-                return
-            elseif txt == "testdirect" then
-                if ns and ns.LootTrackerRolls and ns.LootTrackerRolls.TestDirectRolls then
-                    ns.LootTrackerRolls.TestDirectRolls()
-                else
-                    print("GLOG: Test direct de rolls indisponible")
-                end
-                return
-            elseif txt == "testreal" then
-                if ns and ns.LootTrackerRolls and ns.LootTrackerRolls.TestRealMessages then
-                    ns.LootTrackerRolls.TestRealMessages()
-                else
-                    print("GLOG: Test de messages réels indisponible")
                 end
                 return
             elseif txt == "debugname" then

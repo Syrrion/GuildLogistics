@@ -827,6 +827,8 @@ local function _ensureWindow()
         local lastRefreshTime = 0
         local tick = C_Timer.NewTicker(3, function()  -- Réduit de 1s à 3s
             if f:IsShown() then 
+                -- ⏸️ Pause globale : ne rafraîchir que si autorisé (tracker est une zone always-on)
+                if UI and UI.ShouldRefreshUI and not UI.ShouldRefreshUI(f) then return end
                 local now = GetTime()
                 -- Ne rafraîchit que si assez de temps s'est écoulé depuis la dernière mise à jour manuelle
                 if (now - lastRefreshTime) >= 2.5 then
