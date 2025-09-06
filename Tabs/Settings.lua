@@ -40,10 +40,10 @@ function Build(container)
                 saved.theme = key
                 if UI.SetTheme then UI.SetTheme(key) end
             elseif group == autoRadios then
-                GuildLogisticsUI.autoOpen = (key == "YES")
+                saved.autoOpen = (key == "YES")
             elseif group == debugRadios then
-                GuildLogisticsUI.debugEnabled = (key == "YES")
-                if UI.SetDebugEnabled then UI.SetDebugEnabled(GuildLogisticsUI.debugEnabled) end
+                saved.debugEnabled = (key == "YES")
+                if UI.SetDebugEnabled then UI.SetDebugEnabled(saved.debugEnabled) end
             elseif group == scriptErrRadios then
                 local on = (key == "YES")
                 if GLOG.SetScriptErrorsEnabled then
@@ -154,8 +154,14 @@ function Build(container)
     local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH2 + 8
     makeYesNoInline(autoRadios,
-        function() GuildLogisticsUI.autoOpen = true end,
-        function() GuildLogisticsUI.autoOpen = false end
+        function() 
+            local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
+            saved.autoOpen = true 
+        end,
+        function() 
+            local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
+            saved.autoOpen = false 
+        end
     )
     -- === Section 3 : Affichage des popups ===
     local headerH3 = UI.SectionHeader(optionsPane, Tr("options_notifications_title"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
@@ -229,8 +235,19 @@ end
 function RefreshOptions()
     local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
     _SetRadioGroupChecked(themeRadios, (saved.theme) or "AUTO")
-    _SetRadioGroupChecked(autoRadios,  (saved.autoOpen) and "YES" or "NO")
-    _SetRadioGroupChecked(debugRadios, (saved.debugEnabled) and "YES" or "NO")
+    
+    -- Compatibilité : lire depuis saved.autoOpen ou GuildLogisticsUI.autoOpen (migration douce)
+    local autoOpen = saved.autoOpen
+    if autoOpen == nil then autoOpen = (GuildLogisticsUI and GuildLogisticsUI.autoOpen) end
+    if autoOpen == nil then autoOpen = true end -- défaut: true
+    _SetRadioGroupChecked(autoRadios, autoOpen and "YES" or "NO")
+    
+    -- Compatibilité : lire depuis saved.debugEnabled ou GuildLogisticsUI.debugEnabled  
+    local debugEnabled = saved.debugEnabled
+    if debugEnabled == nil then debugEnabled = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) end
+    if debugEnabled == nil then debugEnabled = false end -- défaut: false
+    _SetRadioGroupChecked(debugRadios, debugEnabled and "YES" or "NO")
+    
     _SetRadioGroupChecked(scriptErrRadios, GLOG.IsScriptErrorsEnabled() and "YES" or "NO")
 end
 

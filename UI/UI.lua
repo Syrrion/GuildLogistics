@@ -1172,7 +1172,10 @@ do
 
         -- Laisse l'UI finir de s'initialiser (onglets/catégories) avant d'afficher
         C_Timer.After(0, function()
-            if not Main:IsShown() then
+            -- ⚠️ Vérification de l'option "Ouvrir automatiquement à l'ouverture du jeu"
+            local shouldAutoOpen = (saved and saved.autoOpen) ~= false -- par défaut true si non défini
+            
+            if shouldAutoOpen and not Main:IsShown() then
                 if ns and ns.ToggleUI then
                     -- Utilise la logique standard (restaure l'onglet précédent si possible)
                     ns.ToggleUI()
