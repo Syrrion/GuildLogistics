@@ -25,8 +25,8 @@ local SEASONAL_DUNGEONS = {
 
 -- Table de ranking des donjons basée sur les combinaisons d'affixes
 local DUNGEON_RANKINGS = {
-    [9] = {
-        [158] = {
+    [10] = {
+        [160] = {
             [391] = "S", [392] = "A", [542] = "S", [378] = "B", [503] = "C", [525] = "A", [499] = "A", [505] = "A"
         }
      },

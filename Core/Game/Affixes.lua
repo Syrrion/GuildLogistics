@@ -8,19 +8,19 @@ local GLOG = ns.GLOG
 
 -- Affix data with their starting week and rotation pattern
 local AFFIXES_DATA = {
-    [158] = { 
+    [158] = { -- Lié par le vide
         startWeek = 1, 
         pattern = {3, 5, 3, 5} 
     },
-    [148] = { 
+    [148] = { -- Sublimation
         startWeek = 2, 
         pattern = {5, 3, 5, 3} 
     },
-    [162] = { 
+    [162] = { -- Pulsar
         startWeek = 3, 
         pattern = {3, 5, 3, 5} 
     },
-    [160] = { 
+    [160] = { -- Dévorer
         startWeek = 5, 
         pattern = {3, 5, 3, 5} 
     }
@@ -28,8 +28,8 @@ local AFFIXES_DATA = {
 
 -- Weekly alternating affixes (10 starts week 1, then alternates with 9)
 local WEEKLY_AFFIXES = {
-    [10] = { startWeek = 1 }, -- Odd weeks (1, 3, 5, 7, ...)
-    [9] = { startWeek = 2 }   -- Even weeks (2, 4, 6, 8, ...)
+    [10] = { startWeek = 1 }, -- Fortifié
+    [9] = { startWeek = 2 }   -- Tyrannique
 }
 
 -- Check if an affix is active for a given week (affixId, weekNumber -> boolean)
