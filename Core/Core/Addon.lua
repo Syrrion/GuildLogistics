@@ -3,6 +3,10 @@ ns.GLOG = ns.GLOG or {}
 ns.Util = ns.Util or {}
 local GLOG, U = ns.GLOG, ns.Util
 
+-- Tables pour le suivi des versions d'addon
+GLOG._playerVersions = GLOG._playerVersions or {}
+GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
+
 -- Renvoie le titre officiel de l'addon (métadonnée TOC), codes couleur retirés.
 -- Fallback possible via système de traduction 'ns.Tr'.
 function GLOG.GetAddonTitle()
@@ -83,6 +87,67 @@ function GLOG.SetPlayerAddonVersion(name, version, timestamp, reportedBy)
     local existing = GLOG._playerVersions[key]
     if existing and tonumber(existing.timestamp or 0) > ts then
         return -- Version existante plus récente
+    end
+    
+    -- Vérifier si cette version est plus récente que la nôtre
+    local myVersion = GLOG.GetAddonVersion() or ""
+    local theirVersion = tostring(version)
+    
+    if myVersion ~= "" and theirVersion ~= "" and U.CompareVersions then
+        local comparison = U.CompareVersions(myVersion, theirVersion)
+        if comparison < 0 then -- Notre version est plus ancienne
+            -- Vérifier si on a déjà affiché cette notification récemment
+            local notifKey = "version_notif_" .. theirVersion
+            local lastNotif = GLOG._lastVersionNotifications and GLOG._lastVersionNotifications[notifKey] or 0
+            local now = time()
+            
+            -- Afficher maximum une fois par heure pour une version donnée
+            if (now - lastNotif) > 3600 then
+                GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
+                GLOG._lastVersionNotifications[notifKey] = now
+                
+                -- Vérifier que le joueur n'est pas en combat ou en instance
+                local inCombat = InCombatLockdown and InCombatLockdown() or false
+                local inInstance = IsInInstance and IsInInstance() or false
+                
+                if not inCombat and not inInstance then
+                    -- Afficher la popup de version obsolète immédiatement
+                    if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                        ns.UI.ShowOutdatedAddonPopup(myVersion, theirVersion, name)
+                    end
+                else
+                    -- Reporter l'affichage de la popup quand le joueur sortira de combat/instance
+                    GLOG._pendingVersionNotification = {
+                        myVersion = myVersion,
+                        theirVersion = theirVersion,
+                        fromPlayer = name
+                    }
+                    
+                    -- Créer un timer pour vérifier périodiquement si on peut afficher la popup
+                    if not GLOG._versionNotificationTimer then
+                        GLOG._versionNotificationTimer = C_Timer.NewTicker(60, function()
+                            local stillInCombat = InCombatLockdown and InCombatLockdown() or false
+                            local stillInInstance = IsInInstance and IsInInstance() or false
+                            
+                            if not stillInCombat and not stillInInstance and GLOG._pendingVersionNotification then
+                                local pending = GLOG._pendingVersionNotification
+                                GLOG._pendingVersionNotification = nil
+                                
+                                if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                                    ns.UI.ShowOutdatedAddonPopup(pending.myVersion, pending.theirVersion, pending.fromPlayer)
+                                end
+                                
+                                -- Arrêter le timer
+                                if GLOG._versionNotificationTimer then
+                                    GLOG._versionNotificationTimer:Cancel()
+                                    GLOG._versionNotificationTimer = nil
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        end
     end
     
     GLOG._playerVersions[key] = {
