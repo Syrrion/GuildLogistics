@@ -140,16 +140,28 @@ end
 function GLOG.OnAddonMessage(prefix, message, channel, sender)
     if prefix ~= PREFIX then return end
     
-    -- Ignorer toute réception tant que notre HELLO n'a pas été émis (sauf HELLO lui-même)
+    -- Extraire le type de message pour la logique de filtrage
     local peekType = message:match("v=1|t=([^|]+)|")
-    if not (GLOG and GLOG._helloSent) and peekType ~= "HELLO" then return end
+    
+    -- ✅ Vérification simple : le transport doit être initialisé
+    if not GLOG._transportReady then 
+        return -- Transport pas prêt du tout
+    end
 
-    -- ➕ Mode bootstrap : si la DB locale est en version 0, ne traiter QUE les messages "SYNC_*"
+    -- ➕ Mode bootstrap : si la DB locale est en version 0, ne traiter QUE les messages "SYNC_*" et quelques autres critiques
     do
         local rev0 = safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0)
         if rev0 == 0 then
             local pt = tostring(peekType or "")
-            if not pt:match("^SYNC_") then return end
+            local bootstrapAcceptedTypes = {
+                ["HELLO"] = true,
+                ["SYNC_OFFER"] = true,
+                ["SYNC_GRANT"] = true,
+                ["SYNC_FULL"] = true,
+                ["SYNC_ACK"] = true,
+                ["STATUS_UPDATE"] = true -- Accepté même en bootstrap pour les réponses HELLO
+            }
+            if not bootstrapAcceptedTypes[pt] then return end
         end
     end
 

@@ -175,13 +175,13 @@ local function delayedInit()
     local success = ensureModulesLoaded()
     
     if success then
-        -- Initialiser le transport et la découverte
+        -- ✅ Initialiser le transport IMMÉDIATEMENT pour pouvoir recevoir tous les messages
         if GLOG.InitTransport then GLOG.InitTransport() end
         if GLOG.InitNetworkDiscovery then GLOG.InitNetworkDiscovery() end
         
-        -- Démarrer la découverte réseau (HELLO)
+        -- ✅ Retarder seulement l'ÉMISSION du HELLO, pas l'initialisation
         if GLOG.StartDiscovery then 
-            C_Timer.After(1, function() -- Petit délai supplémentaire pour s'assurer que tout est prêt
+            C_Timer.After(0.5, function() -- Délai réduit pour l'émission
                 GLOG.StartDiscovery()
             end)
         end
@@ -199,14 +199,14 @@ end
 
 -- Initialiser selon le statut de connexion
 if IsLoggedIn and IsLoggedIn() then
-    C_Timer.After(0.5, delayedInit) -- Délai plus long si déjà connecté
+    C_Timer.After(0.1, delayedInit) -- Délai très court si déjà connecté
 else
     -- Attendre la connexion
     local frame = CreateFrame("Frame")
     frame:RegisterEvent("PLAYER_LOGIN")
     frame:SetScript("OnEvent", function(self, event)
         if event == "PLAYER_LOGIN" then
-            C_Timer.After(1, delayedInit) -- Délai après connexion
+            C_Timer.After(0.2, delayedInit) -- Délai très court après connexion
             self:UnregisterEvent("PLAYER_LOGIN")
         end
     end)

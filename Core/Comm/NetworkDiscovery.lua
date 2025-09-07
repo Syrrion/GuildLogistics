@@ -14,11 +14,11 @@ local playerFullName = U.playerFullName
 local getRev = (U and U.getRev) or function() local db=GuildLogisticsDB; return (db and db.meta and db.meta.rev) or 0 end
 
 -- ===== Constantes de découverte =====
-local HELLO_WAIT_SEC          = 4.0        -- fenêtre collecte OFFERS (+1s)
-local OFFER_BACKOFF_MS_MAX    = 600        -- étalement OFFERS (0..600ms)
-local FULL_INHIBIT_SEC        = 15         -- n'offre pas si FULL récent vu
-local OFFER_RATE_LIMIT_SEC    = 10         -- anti-spam OFFERS par initiateur
-local GM_EXTRA_WAIT_SEC       = 1.5        -- prolongation si GM en ligne mais pas encore d'OFFERS du GM
+local HELLO_WAIT_SEC          = 1.0        -- fenêtre collecte OFFERS (+1s)
+local OFFER_BACKOFF_MS_MAX    = 50         -- étalement OFFERS (0..50ms)
+local FULL_INHIBIT_SEC        = 1          -- n'offre pas si FULL récent vu
+local OFFER_RATE_LIMIT_SEC    = 1          -- anti-spam OFFERS par initiateur
+local GM_EXTRA_WAIT_SEC       = 0.5        -- prolongation si GM en ligne mais pas encore d'OFFERS du GM
 
 -- ===== État de la découverte =====
 local LastFullSeenAt  = 0
@@ -489,7 +489,7 @@ function GLOG.Sync_RequestHello()
 
     C_Timer.After(HELLO_WAIT_SEC, function() _decideAndGrant(hid) end)
 
-    -- ✅ Marqueur d'amorçage : on autorise la réception de réponses dès maintenant
+    -- ✅ Marqueur d'amorçage : on autorise la réception de réponses dès AVANT l'émission
     GLOG._helloSent  = true
     GLOG._lastHelloHid = hid
 

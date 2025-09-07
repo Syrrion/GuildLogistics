@@ -668,7 +668,21 @@ function UI.RefreshAll()
 end
 -- ⏳ Regroupe les refresh pour éviter les rafales pendant les évènements réseau
 function UI.ScheduleRefreshAll(delay)
-    delay = tonumber(delay) or 0.10
+    -- ⚡ Système de délais dynamiques selon la visibilité de l'UI
+    if not delay then
+        -- Pas de délai spécifique fourni, utiliser le délai dynamique
+        if UI.ShouldRefreshUI and UI.ShouldRefreshUI() then
+            -- UI visible = rafraîchissement quasi-instantané
+            delay = 0.01  -- 10ms seulement
+        else
+            -- UI fermée = délai plus long pour économiser les ressources
+            delay = 0.50  -- 500ms
+        end
+    else
+        -- Délai spécifique fourni, le respecter
+        delay = tonumber(delay) or 0.10
+    end
+    
     if UI._refreshPending then return end
     UI._refreshPending = true
 
