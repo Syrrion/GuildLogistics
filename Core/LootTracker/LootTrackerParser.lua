@@ -234,7 +234,6 @@ local function _AddIfEligible(link, looter)
             local rType, rVal = ns.LootTrackerRolls.GetRollFor(looter, info.link)
             if _G and _G.print then
                 local k = ns.LootTrackerRolls.NormalizeLink and ns.LootTrackerRolls.NormalizeLink(info.link) or "?"
-                print("[GLOG][RollLookup]", looter or "?", k, rType or "nil", rVal or "nil")
             end
             if rType then entry.roll = rType end
             if rVal  then entry.rollV = tonumber(rVal) end

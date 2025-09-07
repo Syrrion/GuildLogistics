@@ -77,13 +77,6 @@ local function _RememberRoll(player, link, rollType, rollVal)
     rec.ts   = _Now()
     _rollByItem[key][pn] = rec
 
-    -- Debug temporaire
-    if ns and ns.Debug and ns.Debug.Log then
-        ns.Debug.Log("Roll Remember", pn, key, rec.type, rec.val)
-    elseif _G and _G.print then
-        print("[GLOG][RollCache] Remember", pn, key, rec.type or "?", rec.val or "?")
-    end
-
     -- petit nettoyage des entrées > 5 min
     local now = rec.ts
     for lnk, map in pairs(_rollByItem) do
@@ -101,14 +94,7 @@ local function _GetRollFor(player, link)
     if not key then return nil, nil end
     local rec = _rollByItem[key] and _rollByItem[key][pn]
     if not rec then
-        -- Debug temporaire
-        if _G and _G.print then
-            print("[GLOG][RollCache] MISS", pn, key)
-        end
         return nil, nil
-    end
-    if _G and _G.print then
-        print("[GLOG][RollCache] HIT", pn, key, rec.type or "?", rec.val or "?")
     end
     return rec.type, rec.val
 end
