@@ -653,6 +653,11 @@ function UI.Finalize()
     if UI._activeCategory and UI.SetActiveCategory then
         UI.SetActiveCategory(UI._activeCategory)
     end
+
+    -- ✅ Check initial des erreurs après que tous les onglets soient créés
+    if UI.CheckErrorsOnOpen then
+        UI.CheckErrorsOnOpen()
+    end
 end
 
 function UI.RefreshAll()
@@ -906,9 +911,10 @@ function UI.ApplyTabsForGuildMembership(inGuild)
     local keepInfo        = Tr("tab_roster")     -- renommé « Info » via locales
     local keepSettings    = Tr("tab_settings")
     local keepDebug       = Tr("tab_debug")
-    -- Les deux sous-onglets Debug peuvent ne pas être localisés : prévoir un libellé de secours
+    -- Les trois sous-onglets Debug peuvent ne pas être localisés : prévoir un libellé de secours
     local keepDebugDB     = Tr("tab_debug_db")      or "Base de donnée"
     local keepDebugEvents = Tr("tab_debug_events")  or "Historique des évènements"
+    local keepDebugErrors = Tr("tab_debug_errors")  or "Debug/Erreurs LUA"
     local reqLabel        = Tr("tab_requests")
 
     -- État GM + nombre de demandes en attente
@@ -923,7 +929,7 @@ function UI.ApplyTabsForGuildMembership(inGuild)
         local lab = def.label
         local shown
 
-        if (lab == keepDebug) or (lab == keepDebugDB) or (lab == keepDebugEvents) then
+        if (lab == keepDebug) or (lab == keepDebugDB) or (lab == keepDebugEvents) or (lab == keepDebugErrors) then
             -- Tous les onglets liés au Debug suivent l’option UI
             shown = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
 
@@ -956,6 +962,11 @@ function UI.SetDebugEnabled(enabled)
         UI.SetTabVisible(Tr("tab_debug_db"),      GuildLogisticsUI.debugEnabled)
         UI.SetTabVisible(Tr("tab_debug_events"),  GuildLogisticsUI.debugEnabled)
         UI.SetTabVisible(Tr("tab_debug_errors"),  GuildLogisticsUI.debugEnabled)
+    end
+
+    -- ✅ Efface les pastilles d'erreur si le debug est désactivé
+    if not GuildLogisticsUI.debugEnabled and UI.SetTabBadge then
+        UI.SetTabBadge(Tr("tab_debug_errors") or "Debug/Erreurs LUA", 0)
     end
 
     -- ➕ Affiche/masque les boutons d’en-tête
@@ -1075,10 +1086,41 @@ function UI.UpdateResourcesRecordingIcon()
     end
 end
 
+-- ➕ Check unique pour les erreurs au moment de l'ouverture de la fenêtre
+function UI.CheckErrorsOnOpen()
+    -- Ne fait le check que si l'onglet Debug/Erreurs existe et que le debug est activé
+    local debugEnabled = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) == true
+    if not debugEnabled then return end
+    
+    local errorTabLabel = Tr and Tr("tab_debug_errors") or "Debug/Erreurs LUA"
+    local errorCatLabel = Tr and Tr("cat_debug") or "Debug"
+    
+    -- Compte les erreurs non traitées
+    local errorCount = 0
+    if GLOG and GLOG.Errors_CountOpen then
+        errorCount = GLOG.Errors_CountOpen()
+    elseif GuildLogisticsDB and GuildLogisticsDB.errors and GuildLogisticsDB.errors.list then
+        -- Fallback direct sur la DB si la fonction n'est pas disponible
+        local list = GuildLogisticsDB.errors.list
+        for i = 1, #list do
+            if not (list[i].done == true) then
+                errorCount = errorCount + 1
+            end
+        end
+    end
+    
+    -- Met à jour la pastille sur l'onglet Debug/Erreurs
+    if errorCount > 0 then
+        UI.SetTabBadge(errorTabLabel, errorCount)
+    end
+end
+
 -- ➕ Regroupe les indicateurs globaux à rafraîchir
 function UI.RefreshTopIndicators()
     if UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
     if UI.UpdateResourcesRecordingIcon then UI.UpdateResourcesRecordingIcon() end
+    -- ✅ Ajouter le check des erreurs aux indicateurs globaux
+    if UI.CheckErrorsOnOpen then UI.CheckErrorsOnOpen() end
 end
 
 -- ➕ Hook « RefreshActive » utilisé par Comm.lua
@@ -1111,6 +1153,11 @@ function ns.ToggleUI()
         Main:Hide()
     else
         Main:Show()
+
+        -- ✅ Check unique des erreurs au moment de l'ouverture
+        if UI.CheckErrorsOnOpen then
+            UI.CheckErrorsOnOpen()
+        end
 
         -- refresh guilde si nécessaire (cache vide ou > 60s)
         if GLOG and GLOG.RefreshGuildCache then

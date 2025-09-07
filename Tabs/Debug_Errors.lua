@@ -201,6 +201,10 @@ local function Build(container)
                 lv:SetData(_GetErrors())
             end
             UpdateBadges()
+            -- ✅ Mettre à jour aussi les pastilles globales de l'UI
+            if ns.UI and ns.UI.CheckErrorsOnOpen then
+                ns.UI.CheckErrorsOnOpen()
+            end
         end)
     end
 
