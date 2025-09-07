@@ -366,6 +366,9 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
 
    -- Header décoratif (frame séparé draggable, limité à la taille de la texture)
     if T.header and atlasExists(T.header) then
+        -- Flag pour marquer si le header est détruit (évite les références nil)
+        local headerDestroyed = false
+        
         -- Créer un frame dédié pour le header avec sa propre zone de drag
         local headerFrame = CreateFrame("Frame", nil, UIParent)
         headerFrame:SetFrameStrata(frame:GetFrameStrata() or "HIGH")
@@ -409,8 +412,11 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
         
         -- Synchroniser la visibilité avec la frame principale
         local function syncVisibility()
+            if not headerFrame or headerDestroyed then return end
             if frame:IsShown() then
-                headerFrame:Show()
+                if headerFrame:GetParent() and not headerDestroyed then
+                    headerFrame:Show()
+                end
             else
                 headerFrame:Hide()
             end
@@ -420,24 +426,127 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
         frame:HookScript("OnHide", syncVisibility)
         syncVisibility()
         
-            -- Stocker les références
-            skin.header = hdr
-            skin.headerFrame = headerFrame
-            frame._cdzHeaderFrame = headerFrame -- pour nettoyage ultérieur
+        -- Stocker les références
+        skin.header = hdr
+        skin.headerFrame = headerFrame
+        frame._cdzHeaderFrame = headerFrame -- pour nettoyage ultérieur
 
-            -- Synchroniser la scale avec la frame principale (pour supporter frame:SetScale(x))
-            local function syncHeaderScale()
-                if not (headerFrame and frame) then return end
-                local sc = frame:GetScale() or 1
-                headerFrame:SetScale(sc)
+        -- Synchroniser la scale avec la frame principale (pour supporter frame:SetScale(x))
+        local function syncHeaderScale()
+            if not (headerFrame and frame) or headerDestroyed then return end
+            local sc = frame:GetScale() or 1
+            headerFrame:SetScale(sc)
+        end
+        syncHeaderScale() -- initial
+        if hooksecurefunc then
+            -- Si plusieurs hooks posés (reskin), impact négligeable
+            hooksecurefunc(frame, "SetScale", syncHeaderScale)
+        end
+        -- Aussi re-sync à chaque show (utile après certaines animations / Reset)
+        frame:HookScript("OnShow", syncHeaderScale)
+        
+        -- Gestion de la fermeture/destruction pour nettoyer le header séparé
+        local function cleanupHeader()
+            if headerFrame and not headerDestroyed then
+                pcall(function() headerFrame:Hide() end)
+                pcall(function() headerFrame:SetParent(nil) end)
+                headerDestroyed = true
+                frame._cdzHeaderFrame = nil
+                -- Stocker la référence pour recréation éventuelle
+                skin.headerFrame = nil
             end
-            syncHeaderScale() -- initial
-            if hooksecurefunc then
-                -- Si plusieurs hooks posés (reskin), impact négligeable
-                hooksecurefunc(frame, "SetScale", syncHeaderScale)
+        end
+        
+        -- Fonction pour recréer le header si nécessaire
+        local function ensureHeader()
+            if headerDestroyed and frame:IsShown() then
+                -- Recréer le header
+                headerFrame = CreateFrame("Frame", nil, UIParent)
+                headerFrame:SetFrameStrata(frame:GetFrameStrata() or "HIGH")
+                headerFrame:SetFrameLevel((frame:GetFrameLevel() or 1) + 10)
+                headerFrame:EnableMouse(true)
+                headerFrame:SetMovable(true)
+                headerFrame:RegisterForDrag("LeftButton")
+                
+                -- Recréer la texture
+                local newHdr = headerFrame:CreateTexture(nil, "ARTWORK")
+                newHdr:SetAtlas(T.header, true)
+                newHdr:SetAllPoints(headerFrame)
+                
+                -- Redimensionner
+                local headerW, headerH = 48, 48
+                local ai = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(T.header)
+                if ai and ai.width and ai.height then 
+                    headerW, headerH = ai.width, ai.height 
+                end
+                headerFrame:SetSize(headerW, headerH)
+                
+                -- Repositionner
+                local HEADER_YOFF = { ALLIANCE = -30, HORDE = -35, NEUTRAL = 6 }
+                local themeTag = normalizeTag(UI.FRAME_THEME or "NEUTRAL")
+                local yOff = HEADER_YOFF[themeTag] or 6
+                headerFrame:SetPoint("BOTTOM", frame, "TOP", 0, yOff)
+                
+                -- Remettre les scripts de drag
+                headerFrame:SetScript("OnDragStart", function(self)
+                    if frame.StartMoving then frame:StartMoving() end
+                end)
+                headerFrame:SetScript("OnDragStop", function(self)
+                    if frame.StopMovingOrSizing then frame:StopMovingOrSizing() end
+                end)
+                
+                headerDestroyed = false
+                skin.header = newHdr
+                skin.headerFrame = headerFrame
+                frame._cdzHeaderFrame = headerFrame
+                
+                -- Appliquer la scale courante
+                syncHeaderScale()
+                headerFrame:Show()
             end
-            -- Aussi re-sync à chaque show (utile après certaines animations / Reset)
-            frame:HookScript("OnShow", syncHeaderScale)
+        end
+        
+        -- Mettre à jour syncVisibility pour utiliser le flag et la recréation
+        local function syncVisibilityUpdated()
+            if frame:IsShown() then
+                ensureHeader() -- Recréer si nécessaire
+                -- Après ensureHeader(), headerFrame peut avoir été recréé
+                if skin.headerFrame and not headerDestroyed and skin.headerFrame:GetParent() then
+                    skin.headerFrame:Show()
+                end
+            else
+                if skin.headerFrame and not headerDestroyed then
+                    skin.headerFrame:Hide()
+                end
+                -- Délai court pour nettoyer si la frame reste cachée (fermeture définitive)
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(0.2, function()
+                        if not (frame and frame:IsShown()) then
+                            cleanupHeader()
+                        end
+                    end)
+                end
+            end
+        end
+        
+        -- Remplacer les hooks avec la version sécurisée
+        frame:HookScript("OnShow", syncVisibilityUpdated)
+        frame:HookScript("OnHide", syncVisibilityUpdated)
+        
+        -- Hook sur la destruction de la frame parent
+        if frame.HookScript then
+            frame:HookScript("OnUpdate", function(self)
+                -- Vérifier que le parent existe encore
+                if not (self and self:GetParent()) then
+                    cleanupHeader()
+                    return
+                end
+                -- Vérifier si la frame est encore valide
+                if not pcall(function() return self:IsShown() end) then
+                    cleanupHeader()
+                end
+            end)
+        end
     end
 
     -- Ruban optionnel
@@ -543,18 +652,157 @@ function UI.DestroyNeutralSkin(frame)
     hideTex(s.header)
     hideTex(s.ribbon)
     
-    -- Nettoyer le headerFrame séparé s'il existe
-    if s.headerFrame then
-        pcall(function() s.headerFrame:Hide() end)
-        pcall(function() s.headerFrame:SetParent(nil) end)
+    -- Nettoyer le headerFrame séparé s'il existe (version améliorée)
+    local function cleanupHeaderFrame(hFrame)
+        if not hFrame then return end
+        -- Arrêter tous les timers/tickers liés
+        if hFrame._cleanupTimer then
+            if hFrame._cleanupTimer.Cancel then
+                hFrame._cleanupTimer:Cancel()
+            end
+            hFrame._cleanupTimer = nil
+        end
+        if hFrame._surveillanceTicker then
+            if hFrame._surveillanceTicker.Cancel then
+                hFrame._surveillanceTicker:Cancel()
+            end
+            hFrame._surveillanceTicker = nil
+        end
+        -- Nettoyer le frame
+        pcall(function() hFrame:Hide() end)
+        pcall(function() hFrame:SetParent(nil) end)
+        pcall(function() hFrame:ClearAllPoints() end)
     end
-    if frame._cdzHeaderFrame then
-        pcall(function() frame._cdzHeaderFrame:Hide() end)
-        pcall(function() frame._cdzHeaderFrame:SetParent(nil) end)
-        frame._cdzHeaderFrame = nil
-    end
+    
+    cleanupHeaderFrame(s.headerFrame)
+    cleanupHeaderFrame(frame._cdzHeaderFrame)
+    frame._cdzHeaderFrame = nil
 
     frame._cdzNeutral = nil
+end
+
+-- ➕ Fonction spécialisée pour les popups avec header séparé (ex: tracker CD/Potions)
+function UI.ApplyNeutralPopupSkin(frame, opts)
+    if not frame then return end
+    
+    -- Appliquer le skin normal
+    local skin = UI.ApplyNeutralFrameSkin(frame, opts)
+    if not skin then return end
+    
+    -- Ajouter une gestion spéciale pour les popups
+    if skin.headerFrame then
+        local headerFrame = skin.headerFrame
+        local popupDestroyed = false
+        
+        -- Fonction de nettoyage immédiat pour popups
+        local function cleanupPopupHeader()
+            if headerFrame and not popupDestroyed then
+                pcall(function() headerFrame:Hide() end)
+                pcall(function() headerFrame:SetParent(nil) end)
+                pcall(function() headerFrame:ClearAllPoints() end)
+                popupDestroyed = true
+                if headerFrame._surveillanceTicker then
+                    headerFrame._surveillanceTicker:Cancel()
+                    headerFrame._surveillanceTicker = nil
+                end
+            end
+        end
+        
+        -- Hook spécial pour détecter la fermeture de popup (méthode multiple)
+        if frame.Hide then
+            local originalHide = frame.Hide
+            frame.Hide = function(self, ...)
+                cleanupPopupHeader()
+                return originalHide(self, ...)
+            end
+        end
+        
+        -- Hook sur SetParent(nil) - souvent utilisé pour détruire les popups
+        if frame.SetParent then
+            local originalSetParent = frame.SetParent
+            frame.SetParent = function(self, parent, ...)
+                if not parent then -- parent devient nil = destruction
+                    cleanupPopupHeader()
+                end
+                return originalSetParent(self, parent, ...)
+            end
+        end
+        
+        -- Surveillance renforcée pour les popups (plus fréquente)
+        if C_Timer and C_Timer.NewTicker then
+            local ticker = C_Timer.NewTicker(0.2, function()
+                if popupDestroyed then return end
+                
+                -- Vérifications multiples pour détecter la fermeture
+                local frameValid = frame and pcall(function() return frame:GetObjectType() end)
+                local frameShown = frameValid and pcall(function() return frame:IsShown() end)
+                local hasParent = frameValid and pcall(function() return frame:GetParent() ~= nil end)
+                
+                if not (frameValid and hasParent) then
+                    cleanupPopupHeader()
+                    return
+                end
+                
+                -- Si pas visible depuis plus d'une seconde (approximation)
+                if not frameShown then
+                    -- Délai avant nettoyage pour éviter les faux positifs
+                    C_Timer.After(1.0, function()
+                        if not (frame and frame:IsShown()) then
+                            cleanupPopupHeader()
+                        end
+                    end)
+                end
+            end)
+            headerFrame._surveillanceTicker = ticker
+        end
+    end
+    
+    return skin
+end
+
+-- ➕ Fonction intelligente qui détecte automatiquement le type de frame et applique le bon skin
+function UI.ApplySmartFrameSkin(frame, opts)
+    if not frame then return end
+    
+    -- Détecter si c'est une popup/fenêtre temporaire
+    local isPopup = false
+    
+    -- Critères de détection d'une popup :
+    local frameName = frame:GetName() or ""
+    local frameType = frame:GetObjectType() or ""
+    
+    -- Par nom (patterns courants pour les popups)
+    if frameName:match("[Pp]opup") or frameName:match("[Dd]ialog") or 
+       frameName:match("[Ww]indow") or frameName:match("[Tt]racker.*[Ww]indow") then
+        isPopup = true
+    end
+    
+    -- Par niveau de frame (popups souvent plus élevées)
+    if frame:GetFrameLevel() > 100 then
+        isPopup = true
+    end
+    
+    -- Par strata (popups souvent dans DIALOG ou plus haut)
+    local strata = frame:GetFrameStrata()
+    if strata == "DIALOG" or strata == "FULLSCREEN" or strata == "FULLSCREEN_DIALOG" or strata == "TOOLTIP" then
+        isPopup = true
+    end
+    
+    -- Par parent (si parent temporaire ou nil)
+    local parent = frame:GetParent()
+    if not parent or parent == UIParent then
+        -- Vérifier si la frame a des caractéristiques de popup
+        if frame:IsMovable() and frame:GetWidth() < 800 then -- Taille relativement petite
+            isPopup = true
+        end
+    end
+    
+    -- Appliquer le skin approprié
+    if isPopup then
+        return UI.ApplyNeutralPopupSkin(frame, opts)
+    else
+        return UI.ApplyNeutralFrameSkin(frame, opts)
+    end
 end
 
 -- ➕ Re-skin propre d'une frame (détruit puis ré-applique)

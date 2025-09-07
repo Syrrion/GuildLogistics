@@ -319,6 +319,11 @@ local function _ShowHistoryPopup(full)
             end
         end)
     end
+    
+    -- Applique le skin spécialisé pour popup (sans header draggable séparé)
+    if UI and UI.ApplyNeutralPopupSkin then
+        UI.ApplyNeutralPopupSkin(p)
+    end
 end
 
 -- =========================
