@@ -29,9 +29,9 @@ end
 -- Initialize GLOG.Time namespace for date/time utilities
 GLOG.Time = GLOG.Time or {}
 
--- Constants for M+ season calculations  
-GLOG.Time.SEASON_START_TIMESTAMP = 1754956800 -- August 12, 2025 00:00:00 GMT (corrigé)
+-- Constants for M+ season calculations
 GLOG.Time.SECONDS_PER_WEEK = 604800
+GLOG.Time.SEASON_START_TIMESTAMP = 1754956800 - GLOG.Time.SECONDS_PER_WEEK -- August 12, 2025 00:00:00 GMT (corrigé)
 
 -- Calculate the week number for a given timestamp (timestamp -> week number since season start)
 function GLOG.Time.GetWeekNumberFromTimestamp(timestamp)
