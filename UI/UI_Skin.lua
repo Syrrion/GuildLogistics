@@ -9,6 +9,7 @@ UI.NEUTRAL_INSETS = UI.NEUTRAL_INSETS or { left=24, right=24, top=72, bottom=24 
 local _THEME_CACHE = {}
 
 local function ucfirst(s) return s:sub(1,1):upper()..s:sub(2):lower() end
+
 local function atlasExists(name)
     if not name then return false end
     return C_Texture and C_Texture.GetAtlasInfo and (C_Texture.GetAtlasInfo(name) ~= nil)
@@ -363,31 +364,80 @@ function UI.ApplyNeutralFrameSkin(frame, opts)
 
     skin.title = {left=tLeft, mid=tMid, right=tRight}
 
-   -- Header décoratif (dans l’overlay, toujours au-dessus, inclus dans la zone de drag)
+   -- Header décoratif (frame séparé draggable, limité à la taille de la texture)
     if T.header and atlasExists(T.header) then
-        local overlay = EnsureOverlay(frame)
-
-        local hdr = overlay:CreateTexture(nil, "OVERLAY")
-        hdr:SetDrawLayer("OVERLAY", 1) -- sous les coins (coins = OVERLAY,2)
+        -- Créer un frame dédié pour le header avec sa propre zone de drag
+        local headerFrame = CreateFrame("Frame", nil, UIParent)
+        headerFrame:SetFrameStrata(frame:GetFrameStrata() or "HIGH")
+        headerFrame:SetFrameLevel((frame:GetFrameLevel() or 1) + 10) -- bien au-dessus
+        headerFrame:EnableMouse(true)
+        headerFrame:SetMovable(true)
+        headerFrame:RegisterForDrag("LeftButton")
+        
+        -- Texture du header
+        local hdr = headerFrame:CreateTexture(nil, "ARTWORK")
         hdr:SetAtlas(T.header, true)
-        hdr:ClearAllPoints()
-
+        hdr:SetAllPoints(headerFrame) -- la texture remplit exactement le frame
+        
+        -- Dimensionner le frame exactement à la taille de la texture
+        local headerW, headerH = 48, 48 -- valeurs par défaut
+        local ai = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(T.header)
+        if ai and ai.width and ai.height then 
+            headerW, headerH = ai.width, ai.height 
+        end
+        headerFrame:SetSize(headerW, headerH)
+        
         -- Offset selon le thème
         local HEADER_YOFF = { ALLIANCE = -30, HORDE = -35, NEUTRAL = 6 }
         local themeTag = normalizeTag(UI.FRAME_THEME or "NEUTRAL")
         local yOff = HEADER_YOFF[themeTag] or 6
-
-        hdr:SetPoint("BOTTOM", overlay, "TOP", 0, yOff)
-        skin.header = hdr
-
-        -- Étendre la zone cliquable/drag pour inclure le header
-        local headerH = 48
-        local ai = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(T.header)
-        if ai and ai.height then headerH = ai.height end
-        if frame.SetHitRectInsets then
-            local l, r, _, b = 0, 0, 0, 0
-            frame:SetHitRectInsets(l, r, -(headerH + math.abs(yOff)), b)
+        
+        -- Positionner le frame header par rapport à la frame principale
+        headerFrame:SetPoint("BOTTOM", frame, "TOP", 0, yOff)
+        
+        -- Scripts de drag pour le header uniquement
+        headerFrame:SetScript("OnDragStart", function(self)
+            if frame.StartMoving then
+                frame:StartMoving()
+            end
+        end)
+        headerFrame:SetScript("OnDragStop", function(self)
+            if frame.StopMovingOrSizing then
+                frame:StopMovingOrSizing()
+            end
+        end)
+        
+        -- Synchroniser la visibilité avec la frame principale
+        local function syncVisibility()
+            if frame:IsShown() then
+                headerFrame:Show()
+            else
+                headerFrame:Hide()
+            end
         end
+        
+        frame:HookScript("OnShow", syncVisibility)
+        frame:HookScript("OnHide", syncVisibility)
+        syncVisibility()
+        
+            -- Stocker les références
+            skin.header = hdr
+            skin.headerFrame = headerFrame
+            frame._cdzHeaderFrame = headerFrame -- pour nettoyage ultérieur
+
+            -- Synchroniser la scale avec la frame principale (pour supporter frame:SetScale(x))
+            local function syncHeaderScale()
+                if not (headerFrame and frame) then return end
+                local sc = frame:GetScale() or 1
+                headerFrame:SetScale(sc)
+            end
+            syncHeaderScale() -- initial
+            if hooksecurefunc then
+                -- Si plusieurs hooks posés (reskin), impact négligeable
+                hooksecurefunc(frame, "SetScale", syncHeaderScale)
+            end
+            -- Aussi re-sync à chaque show (utile après certaines animations / Reset)
+            frame:HookScript("OnShow", syncHeaderScale)
     end
 
     -- Ruban optionnel
@@ -430,7 +480,7 @@ function UI.ApplyTiledBackground(frame, texturePath, tileW, tileH, alpha)
     if bg.SetHorizTile then bg:SetHorizTile(true) end
     if bg.SetVertTile  then bg:SetVertTile(true)  end
 
-    -- Taille de tuile (plus “serré” pour éviter l'impression d'étirement)
+    -- Taille de tuile (plus "serré" pour éviter l'impression d'étirement)
     local TW = math.max(8, tonumber(tileW) or 256)
     local TH = math.max(8, tonumber(tileH) or 256)
 
@@ -492,11 +542,22 @@ function UI.DestroyNeutralSkin(frame)
     -- Header décoratif + ruban
     hideTex(s.header)
     hideTex(s.ribbon)
+    
+    -- Nettoyer le headerFrame séparé s'il existe
+    if s.headerFrame then
+        pcall(function() s.headerFrame:Hide() end)
+        pcall(function() s.headerFrame:SetParent(nil) end)
+    end
+    if frame._cdzHeaderFrame then
+        pcall(function() frame._cdzHeaderFrame:Hide() end)
+        pcall(function() frame._cdzHeaderFrame:SetParent(nil) end)
+        frame._cdzHeaderFrame = nil
+    end
 
     frame._cdzNeutral = nil
 end
 
--- ➕ Re-skin propre d’une frame (détruit puis ré-applique)
+-- ➕ Re-skin propre d'une frame (détruit puis ré-applique)
 function UI.ReskinNeutral(frame, opts)
     if not frame then return end
     UI.DestroyNeutralSkin(frame)
