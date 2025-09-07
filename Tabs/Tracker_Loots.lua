@@ -268,7 +268,8 @@ local function UpdateRow(i, row, w, it)
                 local live = tonumber(GLOG.GetActiveKeystoneLevel()) or 0
                 if live > 0 then mplus = live end
             end
-            if (mplus > 0) or (diffID == 8) then
+            -- Ne pas afficher "+X" pour les gouffres (diffID == 208)
+            if ((mplus > 0) or (diffID == 8)) and (diffID ~= 208) then
                 parts[#parts+1] = (mplus > 0) and ("|cffffa500+"..mplus.."|r") or "+|cffffa500?|r"
             end
 

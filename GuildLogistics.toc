@@ -2,7 +2,7 @@
 ## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 3.1.6
+## Version: 3.1.7
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char, GuildLogisticsDB_Backup, GuildLogisticsDB_Previous
@@ -41,7 +41,6 @@ Core/Player/Name.lua
 Core/Player/Status.lua
 Core/Core/HistoryManager.lua
 Core/Core/BackupManager.lua
-Core/Core/BackupTest.lua
 Core/Core/Core.lua
 Data/Players.lua
 Core/Player/Class.lua
@@ -61,7 +60,6 @@ Core/Comm/Requests.lua
 Core/Comm/ModuleLoader.lua
 Core/Comm/Comm.lua
 Core/Comm/RefactoringValidator.lua
-Core/Comm/CommunicationTest.lua
 Core/Tracker/GroupTrackerState.lua
 Core/Tracker/GroupTrackerSession.lua
 Core/Tracker/GroupTrackerConsumables.lua
