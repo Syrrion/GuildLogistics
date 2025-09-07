@@ -142,6 +142,24 @@ local function _SetMPlusScoreLocal(name, score, ts, by)
     end
 end
 
+-- ✨ Application locale de la version de l'addon (protégée)
+local function _SetAddonVersionLocal(name, version, ts, by)
+    if not name or name == "" then return end
+    GLOG.EnsureDB()
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
+    if not p then return end
+
+    local nowts = tonumber(ts) or time()
+    local prev_ts = tonumber(p.statusTimestamp or 0) or 0
+    if nowts >= prev_ts then
+        p.addonVersion = tostring(version or "")
+        p.statusTimestamp = nowts
+        -- Pas d'événement spécifique pour la version, cela sera inclus dans le refresh global
+    end
+end
+
 -- ✨ Lecture immédiate de ma Côte M+ (Retail)
 if not GLOG.ReadOwnMythicPlusScore then
     function GLOG.ReadOwnMythicPlusScore()
@@ -324,6 +342,12 @@ function GLOG.UpdateOwnStatusIfMain()
     if (mid or 0) > 0 or (lvl or 0) > 0 or (tostring(map or "") ~= "") then
         _SetMKeyLocal(me, mid or 0, lvl or 0, tostring(map or ""), ts, me)
     end
+    
+    -- ✨ Mise à jour de la version de l'addon
+    local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+    if currentVersion ~= "" then
+        _SetAddonVersionLocal(me, currentVersion, ts, me)
+    end
 
     if (changedIlvl or changedM or changedScore) and GLOG.BroadcastStatusUpdate then
         GLOG.BroadcastStatusUpdate({
@@ -380,6 +404,13 @@ function GLOG.UpdateOwnKeystoneIfMain()
 
     local ts = time()
     _SetMKeyLocal(me, mid or 0, lvl or 0, mapName or "", ts, me)
+    
+    -- ✨ Mise à jour de la version de l'addon
+    local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+    if currentVersion ~= "" then
+        _SetAddonVersionLocal(me, currentVersion, ts, me)
+    end
+    
     if changed and GLOG.BroadcastStatusUpdate then
         local equipped = GLOG.ReadOwnEquippedIlvl and GLOG.ReadOwnEquippedIlvl() or nil
         local overall  = GLOG.ReadOwnMaxIlvl     and GLOG.ReadOwnMaxIlvl()     or nil

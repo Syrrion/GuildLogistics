@@ -420,14 +420,14 @@ local function Build(container)
         topOffset = UI.SECTION_HEADER_H or 26,
         rowHeight = 28, -- ⇦ hauteur de ligne fixée
     })
-
+    UI.SectionHeader(sendArea,    Tr("lbl_outgoing_packets"))
     lvSend    = UI.ListView(sendArea, cols, {
         buildRow  = BuildRow,
         updateRow = UpdateRow,
         topOffset = UI.SECTION_HEADER_H or 26,
         rowHeight = 28, -- ⇦ hauteur de ligne fixée
     })
-
+    UI.SectionHeader(pendingArea,    Tr("lbl_pending_queue"))
     lvPending = UI.ListView(pendingArea, {
         { key="time", title=Tr("col_time"), w=110 },
         { key="type", title=Tr("col_type"), w=100 },

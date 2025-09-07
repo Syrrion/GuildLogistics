@@ -268,6 +268,12 @@ function GLOG.HandleHello(sender, kv)
         local meta = GuildLogisticsDB and GuildLogisticsDB.meta
         local myRv = safenum(meta and meta.rev, 0)
         
+        -- 🚫 Ne pas s'envoyer de STATUS_UPDATE à soi-même
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        if nf(sender) == nf(me) then
+            return -- Éviter l'auto-envoi
+        end
+        
         -- Ne pas répondre si le sender a une DB obsolète
         local senderRv = safenum(kv.rv, 0)
         if myRv > 0 and senderRv >= myRv then

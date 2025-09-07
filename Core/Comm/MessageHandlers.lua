@@ -1149,6 +1149,23 @@ local MESSAGE_HANDLERS = {
 function GLOG.HandleMessage(sender, msgType, kv)
     msgType = tostring(msgType or ""):upper()
     
+    -- 🚫 Ignorer les messages de soi-même (sauf pour les types SYNC qui peuvent être nécessaires)
+    if sender and sender ~= "" then
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) 
+                or (UnitName and UnitName("player")) or ""
+        me = nf(me)
+        local normalizedSender = nf(sender)
+        
+        -- Ne pas traiter ses propres messages, sauf les messages SYNC qui peuvent être légitimes
+        if normalizedSender == me and not msgType:match("^SYNC_") then
+            if GLOG.Debug then 
+                GLOG.Debug("RECV", "IGNORED_SELF_MESSAGE", msgType, sender) 
+            end
+            return
+        end
+    end
+    
     -- ➕ Double sécurité : en mode bootstrap (rev=0), ignorer tout sauf "SYNC_*"
     if safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) == 0 
        and not tostring(msgType or ""):match("^SYNC_") then
