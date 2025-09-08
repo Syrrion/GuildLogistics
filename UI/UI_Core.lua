@@ -1389,7 +1389,6 @@ function UI.RaiseCloseButton(btn, owner)
     btn:SetFrameLevel((f and f:GetFrameLevel() or 1) + 10)
 end
 
--- ========== UTIL: Format (ex-Format.lua) ==========
 ns.Format = ns.Format or {}
 do
     local F = ns.Format
@@ -1437,9 +1436,7 @@ do
         end
     end
 end
--- (Fin ex-Format.lua)  :contentReference[oaicite:4]{index=4}
 
--- ========== MINIMAP (ex-Minimap.lua) ==========
 function GLOG.Minimap_Init()
     if GLOG.EnsureDB then GLOG.EnsureDB() end
     GuildLogisticsUI = GuildLogisticsUI or {}
@@ -1540,7 +1537,6 @@ function GLOG.Minimap_Init()
     local rad = math.rad(GuildLogisticsUI.minimap.angle or 215)
     b:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
 end
--- (Fin ex-Minimap.lua)  :contentReference[oaicite:5]{index=5}
 
 -- Positionne un titre au centre d’une zone (par ex. bandeau drag)
 -- frame  = FontString du titre

@@ -2,14 +2,19 @@
 ## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 3.1.9
+## Version: 3.1.10
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariablesPerCharacter: GuildLogisticsDB_Char, GuildLogisticsUI_Char, GuildLogisticsDatas_Char, GuildLogisticsDB_Backup, GuildLogisticsDB_Previous
 
 ## IconTexture: Interface\AddOns\GuildLogistics\Ressources\Media\LogoAddonWoW256.tga
-## Dependencies: LibDeflate
+## OptionalDeps: LibDeflate, LibStub
 
+# Embedded libraries
+Ressources/Libs/LibStub/LibStub.lua
+Ressources/Libs/LibDeflate/LibDeflate.lua
+
+# Ressources
 Locales/locales-enUS.lua
 Locales/locales-frFR.lua
 

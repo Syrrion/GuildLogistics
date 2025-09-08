@@ -58,7 +58,8 @@
         "Calendar_Toggle",
         "UISpecialFrames",
         "DEFAULT_CHAT_FRAME",
-        "GameTooltip"
+        "GameTooltip",
+        "AddonCompartmentFrame"
     ],
     "Lua.type.weakUnionCheck": true,
     "Lua.diagnostics.disable": [
