@@ -122,6 +122,27 @@ function GLOG.SnapshotExport()
         end
     end
 
+    -- ===== Main/Alt (compact) =====
+    local MAv = 1
+    local MA, AM = {}, {}
+    do
+        local t = GuildLogisticsDB.mainAlt
+        if type(t) == "table" then
+            MAv = safenum(t.version, 1)
+            -- mains set
+            for uid, flag in pairs(t.mains or {}) do
+                if flag then MA[#MA+1] = tostring(safenum(uid, 0)) end
+            end
+            -- alt→main mapping
+            for a, m in pairs(t.altToMain or {}) do
+                local au, mu = safenum(a, 0), safenum(m, 0)
+                if au > 0 and mu > 0 then AM[#AM+1] = tostring(au)..":"..tostring(mu) end
+            end
+            table.sort(MA)
+            table.sort(AM)
+        end
+    end
+
     -- ===== Historique =====
     local H = {}
     for _, h in ipairs(GuildLogisticsDB.history or {}) do
@@ -165,6 +186,10 @@ function GLOG.SnapshotExport()
         L  = L,
         E  = E,
         LE = LE,
+        -- Main/Alt
+        MAv = MAv,
+        MA  = MA,
+        AM  = AM,
         H  = H,
     }
 end
@@ -176,6 +201,8 @@ function GLOG.SnapshotApply(kv)
     GuildLogisticsDB.players  = {}
     GuildLogisticsDB.expenses = { list = {}, nextId = 1 }
     GuildLogisticsDB.lots     = { list = {}, nextId = 1 }
+    -- Initialise/flush mainAlt; sera rempli si présent dans le snapshot
+    GuildLogisticsDB.mainAlt  = { version = 1, mains = {}, altToMain = {} }
 
     local meta = GuildLogisticsDB.meta
     meta.rev         = safenum(kv.rv, 0)
@@ -372,11 +399,34 @@ function GLOG.SnapshotApply(kv)
         end
     end
 
+    -- 8) Main/Alt (si présent)
+    do
+        local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+        t.version = safenum(kv.MAv, safenum(t.version, 1))
+        t.mains = {}
+        t.altToMain = {}
+        if type(kv.MA) == "table" then
+            for _, s in ipairs(kv.MA) do
+                local u = tonumber(s)
+                if u and u > 0 then t.mains[u] = true end
+            end
+        end
+        if type(kv.AM) == "table" then
+            for _, s in ipairs(kv.AM) do
+                local a, m = tostring(s):match("^(%-?%d+):(%-?%d+)$")
+                local au, mu = safenum(a,0), safenum(m,0)
+                if au > 0 and mu > 0 then t.altToMain[au] = mu end
+            end
+        end
+        GuildLogisticsDB.mainAlt = t
+    end
+
     if ns and ns.Emit then
         ns.Emit("players:changed")
         ns.Emit("expenses:changed")
         ns.Emit("lots:changed")
         ns.Emit("history:changed")
+        ns.Emit("mainalt:changed", "sync")
     end
 end
 

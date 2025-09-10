@@ -6,6 +6,12 @@ local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 -- ===== Rafraîchissement live des zones (hors cache) =====
 local _LiveZoneTicker, _LiveEvt, _lastRosterRefresh = nil, nil, 0
 
+-- Forward declare to allow early use
+local FindGuildInfo
+
+-- Forward declaration for ListView instance used by handlers
+local lv
+
 -- Retourne la "vraie" zone depuis le roster si dispo, sinon fallback cache
 local function _GetLiveZoneForMember(playerName, gi)
     gi = gi or FindGuildInfo(playerName or "")
@@ -48,8 +54,19 @@ local function _EnsureLiveZoneEvents()
     _LiveEvt = {} -- marqueur de création (plus de frame)
 
     local function _onGuildEvt()
-        if membersPane and membersPane:IsShown() then
-            if UI and UI.RefreshAll then UI.RefreshAll() else Refresh() end
+        if not (membersPane and membersPane.IsShown and membersPane:IsShown()) then return end
+        -- Mise à jour légère des lignes visibles si possible (zones/online changent souvent)
+    -- lv est un upvalue défini plus bas (ListView instance)
+    if _G and lv and lv.UpdateVisibleRows then
+            if ns and ns.Util and ns.Util.Debounce then
+                ns.Util.Debounce("tab:guild:updateVisible", 0.10, function()
+                    if _G and lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
+                end)
+            else
+                if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
+            end
+        else
+            if UI and UI.RefreshAll then UI.RefreshAll() else if Refresh then Refresh() end end
         end
     end
 
@@ -158,7 +175,7 @@ local function _red(t) return "|cffff4040"..tostring(t).."|r" end
 
 
 -- === Onglet "Membres de la guilde" : liste unique plein écran ===
-local panel, lv, membersArea, noGuildMsg
+local panel, membersArea, noGuildMsg
 
 -- Détecte si le personnage appartient à une guilde
 local function _HasGuild()
@@ -414,11 +431,10 @@ function UpdateRow(i, r, f, it)
     -- Clé M+
     if f.mkey then
         local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
-        if mkeyTxt == "" then mkeyTxt = nil end
         if gi.online then
-            f.mkey:SetText(mkeyTxt or gray(Tr("status_empty")))
+            f.mkey:SetText((mkeyTxt ~= "" and mkeyTxt) or gray(Tr("status_empty")))
         else
-            f.mkey:SetText(mkeyTxt and gray(mkeyTxt) or gray(Tr("status_empty")))
+            f.mkey:SetText((mkeyTxt ~= "" and gray(mkeyTxt)) or gray(Tr("status_empty")))
         end
     end
 
@@ -573,7 +589,7 @@ local function Layout()
 end
 
 -- Refresh
-function Refresh()
+local function _DoRefresh()
     _UpdateNoGuildUI()
     if not _HasGuild() then
         if lv then lv:SetData({}) end
@@ -628,6 +644,14 @@ function Refresh()
 
     if lv then lv:SetData(out) end
     if lv and lv.Layout then lv:Layout() end
+end
+
+function Refresh()
+    if ns and ns.Util and ns.Util.Debounce then
+        ns.Util.Debounce("tab:guild:refresh", 0.10, _DoRefresh)
+    else
+        _DoRefresh()
+    end
 end
 
 UI.RegisterTab(Tr("tab_guild_members"), Build, Refresh, Layout, {

@@ -11,6 +11,8 @@ GuildLogistics is a sophisticated World of Warcraft addon for guild raid managem
 ### Module Loading System
 Files load sequentially via `GuildLogistics.toc` - dependencies must come before dependents. Core modules in `Core/` are loaded first, followed by `UI/`, then `Tabs/`. Always add new files to `.toc` in dependency order.
 
+IMPORTANT maintenance: Whenever you create, move, or rename modules/files, update BOTH the `GuildLogistics.toc` (in dependency order) and this `copilot-instructions.md` to keep the architecture map accurate.
+
 ### Namespace Pattern
 All code uses shared namespace pattern:
 ```lua
@@ -266,11 +268,12 @@ Le projet suit un pattern d'architecture modulaire avec séparation des responsa
 - **`Serialize.lua`** : Sérialisation/désérialisation des données
 - **`Debug.lua`** : Système de debug et logging
 - **`HistoryManager.lua`** : Gestion de l'historique des sessions
-- **`BackupManager.lua`** / **`BackupTest.lua`** : Sauvegardes et restauration
+- **`BackupManager.lua`** : Sauvegardes et restauration
 - **`LotsManager.lua`** : Gestion des lots de ressources
 - **`PlayersManager.lua`** : Gestion des joueurs et soldes
 - **`Tiers.lua`** : Système de tiers/difficultés
 - **`Legacy.lua`** : Compatibilité rétro
+- **`Diagnostic.lua`** : Diagnostics et instrumentation internes
 
 #### **Core/Comm/** - Système de communication
 - **`Comm.lua`** : Orchestrateur principal de communication
@@ -284,7 +287,6 @@ Le projet suit un pattern d'architecture modulaire avec séparation des responsa
 - **`Requests.lua`** : Système de requêtes/réponses
 - **`ModuleLoader.lua`** : Chargement dynamique de modules
 - **`RefactoringValidator.lua`** : Validation post-refactoring
-- **`CommunicationTest.lua`** : Tests de communication
 
 #### **Core/Debug/** - Système de debug
 - **`EarlyErrorHandler.lua`** : Gestion d'erreurs précoces
@@ -298,6 +300,7 @@ Le projet suit un pattern d'architecture modulaire avec séparation des responsa
 - **`Class.lua`** : Gestion des classes de personnages
 - **`Name.lua`** : Normalisation et gestion des noms
 - **`Status.lua`** : États des joueurs
+- **`MainAlt.lua`** : Lien main/alt et regroupement des personnages
 
 #### **Core/Game/** - Intégration WoW
 - **`Affixes.lua`** : Gestion des affixes Mythique+
@@ -394,6 +397,7 @@ Les onglets sont organisés en catégories avec sidebar :
 **Info (`cat_info`)**
 - **`Roster.lua`** : Roster principal (renommé "Info")
 - **`RosterManage.lua`** : Ajout/gestion membres
+- **`Roster_MainAlt.lua`** : Vue et gestion des liens main/alt
 - **`BiS.lua`** : Best in Slot
 - **`Requests.lua`** : Transactions en attente (GM uniquement si demandes)
 
@@ -429,6 +433,7 @@ Les onglets sont organisés en catégories avec sidebar :
 
 - **`Fonts/`** : Polices personnalisées
 - **`Media/`** : Icônes, logos, textures
+- **`Libs/`** : Bibliothèques tierces intégrées (ex. LibDeflate)
 
 ---
 

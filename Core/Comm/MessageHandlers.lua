@@ -38,6 +38,104 @@ local function refreshActive()
 end
 
 -- ===== Handlers spécialisés par type de message =====
+-- ===== Main/Alt Handlers =====
+local function _maShouldApply(kv)
+    local meta = GuildLogisticsDB and GuildLogisticsDB.meta
+    local rv = safenum(kv.rv, -1)
+    local myrv = safenum(meta and meta.rev, 0)
+    local lm = safenum(kv.lm, -1)
+    local mylm = safenum(meta and meta.lastModified, 0)
+    if rv >= 0 then return rv >= myrv end
+    if lm >= 0 then return lm >= mylm end
+    return false
+end
+
+local function handleMAFull(sender, kv)
+    if not _maShouldApply(kv) then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.mainAlt = { version = 1, mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.mainAlt
+    t.version = safenum(kv.MAv, 1)
+    for _, s in ipairs(kv.MA or {}) do
+        local u = tonumber(s); if u and u > 0 then t.mains[u] = true end
+    end
+    for _, s in ipairs(kv.AM or {}) do
+        local a, m = tostring(s):match("^(%-?%d+):(%-?%d+)$")
+        local au, mu = safenum(a,0), safenum(m,0)
+        if au > 0 and mu > 0 then t.altToMain[au] = mu end
+    end
+    local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    if ns.Emit then ns.Emit("mainalt:changed", "net-full") end
+    refreshActive()
+end
+
+local function handleMASetMain(sender, kv)
+    if not _maShouldApply(kv) then return end
+    local u = safenum(kv.u, 0); if u <= 0 then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    t.mains[u] = true; t.altToMain[u] = nil
+    GuildLogisticsDB.mainAlt = t
+    local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    if ns.Emit then ns.Emit("mainalt:changed", "net-set-main") end
+    refreshActive()
+end
+
+local function handleMAAssign(sender, kv)
+    if not _maShouldApply(kv) then return end
+    local au, mu = safenum(kv.a,0), safenum(kv.m,0); if au <= 0 or mu <= 0 then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    t.mains[mu] = true; t.mains[au] = nil; t.altToMain[au] = mu
+    GuildLogisticsDB.mainAlt = t
+    local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    if ns.Emit then ns.Emit("mainalt:changed", "net-assign") end
+    refreshActive()
+end
+
+local function handleMAUnassign(sender, kv)
+    if not _maShouldApply(kv) then return end
+    local au = safenum(kv.a,0); if au <= 0 then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    t.altToMain[au] = nil
+    GuildLogisticsDB.mainAlt = t
+    local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    if ns.Emit then ns.Emit("mainalt:changed", "net-unassign") end
+    refreshActive()
+end
+
+local function handleMARemoveMain(sender, kv)
+    if not _maShouldApply(kv) then return end
+    local u = safenum(kv.u,0); if u <= 0 then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    t.mains[u] = nil
+    -- ne force pas les alts → pool
+    for a, m in pairs(t.altToMain) do if safenum(m,0) == u then t.altToMain[a] = nil end end
+    GuildLogisticsDB.mainAlt = t
+    local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    if ns.Emit then ns.Emit("mainalt:changed", "net-remove-main") end
+    refreshActive()
+end
+
+local function handleMAPromote(sender, kv)
+    if not _maShouldApply(kv) then return end
+    local au, mu = safenum(kv.a,0), safenum(kv.m,0); if au <= 0 or mu <= 0 then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    -- Repointage des alts de mu vers au, et mu devient alt
+    for a, m in pairs(t.altToMain) do if safenum(m,0) == mu then t.altToMain[a] = au end end
+    t.altToMain[mu] = au
+    t.altToMain[au] = nil
+    t.mains[mu] = nil
+    t.mains[au] = true
+    GuildLogisticsDB.mainAlt = t
+    local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    if ns.Emit then ns.Emit("mainalt:changed", "net-promote") end
+    refreshActive()
+end
+
 
 -- ===== Roster Handlers =====
 local function handleRosterUpsert(sender, kv)
@@ -1143,6 +1241,14 @@ local MESSAGE_HANDLERS = {
     ["HIST_ADD"]    = handleHistAdd,
     ["HIST_REFUND"] = handleHistRefund,
     ["HIST_DEL"]    = handleHistDel,
+
+    -- Main/Alt
+    ["MA_FULL"]        = handleMAFull,
+    ["MA_SET_MAIN"]    = handleMASetMain,
+    ["MA_ASSIGN"]      = handleMAAssign,
+    ["MA_UNASSIGN"]    = handleMAUnassign,
+    ["MA_REMOVE_MAIN"] = handleMARemoveMain,
+    ["MA_PROMOTE"]     = handleMAPromote,
 }
 
 -- ===== Handler principal =====

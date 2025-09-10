@@ -28,10 +28,16 @@ local function SelectedCount()
     return n
 end
 
+local _cachedPer, _cachedTotalStr, _cachedSelected
 local function ComputePerHead()
     local total = tonumber(totalInput:GetText() or "0") or 0
     local selected = SelectedCount()
-    return (selected > 0) and math.floor(total / selected) or 0
+    if _cachedPer and _cachedTotalStr == tostring(total) and _cachedSelected == selected then
+        return _cachedPer
+    end
+    local per = (selected > 0) and math.floor(total / selected) or 0
+    _cachedPer, _cachedTotalStr, _cachedSelected = per, tostring(total), selected
+    return per
 end
 
 -- Gestion des événements : mise à jour des lots
@@ -60,7 +66,11 @@ end
 local function UpdateRow(i, r, f, d)
     if includes[d.name] == nil then includes[d.name] = true end
     f.check:SetChecked(includes[d.name])
-    f.check:SetScript("OnClick", function(self) includes[d.name] = self:GetChecked() and true or false; ns.RefreshAll() end)
+    f.check:SetScript("OnClick", function(self)
+        includes[d.name] = self:GetChecked() and true or false
+        _cachedPer, _cachedTotalStr, _cachedSelected = nil, nil, nil
+        if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
+    end)
 
     -- ➕ alias avant Nom
     if f.alias then
@@ -193,7 +203,10 @@ local function Build(container)
 
     totalInput = CreateFrame("EditBox", nil, footer, "InputBoxTemplate")
     totalInput:SetAutoFocus(false); totalInput:SetNumeric(true); totalInput:SetSize(120, 28)
-    totalInput:SetScript("OnTextChanged", function() ns.RefreshAll() end)
+    totalInput:SetScript("OnTextChanged", function()
+        _cachedPer, _cachedTotalStr, _cachedSelected = nil, nil, nil
+        if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
+    end)
 
     closeBtn = UI.Button(footer, Tr("btn_confirm_participants"), { size="sm", minWidth=220 })
     closeBtn:SetOnClick(function()

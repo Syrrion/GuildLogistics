@@ -457,6 +457,89 @@ function GLOG.BroadcastHistoryDelete(ts)
     end
 end
 
+-- ===== Main/Alt Broadcasts =====
+local function _maIncRv()
+    return incRev()
+end
+
+-- Diffuse l'état complet Main/Alt (compact) — utile après opérations complexes
+function GLOG.BroadcastMainAltFull()
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    local rv = _maIncRv()
+    local MAv = 1
+    local MA, AM = {}, {}
+    do
+        local t = GuildLogisticsDB.mainAlt or {}
+        MAv = safenum(t.version, 1)
+        for uid, flag in pairs(t.mains or {}) do if flag then MA[#MA+1] = tostring(uid) end end
+        for a, m in pairs(t.altToMain or {}) do AM[#AM+1] = tostring(a)..":"..tostring(m) end
+        table.sort(MA); table.sort(AM)
+    end
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("MA_FULL", { MAv = MAv, MA = MA, AM = AM, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+function GLOG.BroadcastSetAsMain(name)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or name
+    if not full or full == "" then return end
+    local uid = GLOG.GetOrAssignUID(full); if not uid then return end
+    local rv = _maIncRv()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("MA_SET_MAIN", { u = uid, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+function GLOG.BroadcastAssignAlt(altName, mainName)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    local a = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(altName)) or altName
+    local m = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(mainName)) or mainName
+    if not a or a == "" or not m or m == "" then return end
+    local au = GLOG.GetOrAssignUID(a); local mu = GLOG.GetOrAssignUID(m)
+    if not au or not mu then return end
+    local rv = _maIncRv()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("MA_ASSIGN", { a = au, m = mu, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+function GLOG.BroadcastUnassignAlt(name)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or name
+    if not full or full == "" then return end
+    local uid = GLOG.GetOrAssignUID(full); if not uid then return end
+    local rv = _maIncRv()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("MA_UNASSIGN", { a = uid, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+function GLOG.BroadcastRemoveMain(name)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or name
+    if not full or full == "" then return end
+    local uid = GLOG.GetOrAssignUID(full); if not uid then return end
+    local rv = _maIncRv()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("MA_REMOVE_MAIN", { u = uid, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+function GLOG.BroadcastPromoteAlt(altName, mainName)
+    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    local a = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(altName)) or altName
+    local m = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(mainName)) or mainName
+    if not a or a == "" or not m or m == "" then return end
+    local au = GLOG.GetOrAssignUID(a); local mu = GLOG.GetOrAssignUID(m)
+    if not au or not mu then return end
+    local rv = _maIncRv()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("MA_PROMOTE", { a = au, m = mu, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
 -- ===== Status Update Broadcasts =====
 -- Cache pour éviter de recalculer le tableau S à chaque appel
 local _statusCacheTime = 0

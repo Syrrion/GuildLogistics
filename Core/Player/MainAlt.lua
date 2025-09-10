@@ -61,6 +61,7 @@ function GLOG.SetAsMain(name)
     MA.mains[uid] = true
     MA.altToMain[uid] = nil -- un main ne peut pas être alt
     if ns.Emit then ns.Emit("mainalt:changed", "set-main", key, uid) end
+    if GLOG.BroadcastSetAsMain then GLOG.BroadcastSetAsMain(key) end
     return true
 end
 
@@ -76,6 +77,7 @@ function GLOG.AssignAltToMain(altName, mainName)
     MA.altToMain[altUID] = mainUID
     MA.mains[altUID] = nil -- un alt ne doit pas être dans le set des mains
     if ns.Emit then ns.Emit("mainalt:changed", "assign-alt", aKey, mainUID) end
+    if GLOG.BroadcastAssignAlt then GLOG.BroadcastAssignAlt(aKey, mKey or mainName) end
     return true
 end
 
@@ -87,6 +89,7 @@ function GLOG.UnassignAlt(name)
     local MA = _MA()
     MA.altToMain[uid] = nil
     if ns.Emit then ns.Emit("mainalt:changed", "unassign-alt", key) end
+    if GLOG.BroadcastUnassignAlt then GLOG.BroadcastUnassignAlt(key) end
     return true
 end
 
@@ -100,6 +103,7 @@ function GLOG.RemoveMain(name)
     for a, m in pairs(MA.altToMain) do if tonumber(m) == uid then MA.altToMain[a] = nil end end
     MA.mains[uid] = nil
     if ns.Emit then ns.Emit("mainalt:changed", "remove-main", key, uid) end
+    if GLOG.BroadcastRemoveMain then GLOG.BroadcastRemoveMain(key) end
     return true
 end
 
@@ -274,5 +278,6 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     MA.altToMain[mainUID] = altUID
 
     if ns.Emit then ns.Emit("mainalt:changed", "promote-alt", altFull, mainName) end
+    if GLOG.BroadcastPromoteAlt then GLOG.BroadcastPromoteAlt(altFull, mainName) end
     return true
 end

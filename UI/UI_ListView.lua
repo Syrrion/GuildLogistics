@@ -6,6 +6,7 @@ local UI = ns.UI
 -- ListView générique
 -- cols: { {key,title,w|min,flex,justify,pad}, ... }
 -- opts: { topOffset=number, bottomAnchor=Frame, buildRow(row)->fields, updateRow(i,row,fields,item) }
+---@diagnostic disable-next-line: duplicate-set-field
 function UI.ListView(parent, cols, opts)
     opts = opts or {}
 
@@ -315,6 +316,7 @@ function UI.ListView(parent, cols, opts)
     -- Wrapper propre qui ne recolorie PLUS le fond : il se contente de décorer les lignes
     do
         local _OrigListView = UI.ListView
+        ---@diagnostic disable-next-line: duplicate-set-field
         function UI.ListView(...)
             local lv = _OrigListView(...)
             -- Décore les lignes déjà existantes
@@ -502,6 +504,8 @@ end
     -- SetData ne touche qu'au gradient & séparateurs, JAMAIS au SetColorTexture du fond
     function lv:SetData(data)
         data = data or {}
+        -- Conserve une référence aux données courantes pour MAJ ciblées
+        self._data = data
 
         -- Hauteur paramétrable (fallback = UI.ROW_H)
         local baseRowH = tonumber(self.opts and self.opts.rowHeight) or (UI.ROW_H or 30)
@@ -681,6 +685,20 @@ end
 
         self:Layout()
         self:_SetEmptyShown(shown == 0)
+    end
+
+    -- Mise à jour légère: ré-appelle updateRow uniquement pour les lignes visibles avec les données courantes
+    function lv:UpdateVisibleRows()
+        if not (self and self.rows and self.opts and self.opts.updateRow and self._data) then return end
+        local n = math.min(#self.rows, #self._data)
+        for i = 1, n do
+            local r = self.rows[i]
+            local it = self._data[i]
+            if r and r.IsShown and r:IsShown() and it then
+                self.opts.updateRow(i, r, r._fields, it)
+                if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(r) end
+            end
+        end
     end
 
     -- Relayout public
@@ -1006,6 +1024,7 @@ UI.__allListViews = UI.__allListViews or setmetatable({}, { __mode = "k" })
 -- Inscription automatique à la création (hook de l’enveloppe existante)
 do
     local _Old = UI.ListView
+    ---@diagnostic disable-next-line: duplicate-set-field
     UI.ListView = function(...)
         local lv = _Old(...)
         if lv then

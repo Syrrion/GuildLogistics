@@ -564,7 +564,17 @@ end
 -- ➕ Surveille les changements de groupe pour mettre à jour le surlignage
 do
     local function _onGroupChanged()
-        if Refresh then Refresh() end
+        -- MàJ légère si possible (affecte surtout l'accent des lignes)
+        if lvActive and lvActive.UpdateVisibleRows then lvActive:UpdateVisibleRows() end
+        if lvReserve and lvReserve.UpdateVisibleRows then lvReserve:UpdateVisibleRows() end
+        -- Et debounce un Refresh complet pour re-trier si nécessaire
+        if ns and ns.Util and ns.Util.Debounce then
+            ns.Util.Debounce("tab:roster:refresh", 0.15, function()
+                if Refresh then Refresh() end
+            end)
+        else
+            if Refresh then Refresh() end
+        end
     end
     ns.Events.Register("GROUP_ROSTER_UPDATE", _onGroupChanged)
 end
