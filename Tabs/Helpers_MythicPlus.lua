@@ -26,13 +26,13 @@ local SEASONAL_DUNGEONS = {
 -- Table de ranking des donjons basée sur les combinaisons d'affixes
 local DUNGEON_RANKINGS = {
     [10] = {
-        [160] = {
+        [160] = { -- dévorer
             [391] = "S", [392] = "A", [542] = "S", [378] = "B", [503] = "C", [525] = "A", [499] = "A", [505] = "A"
         }
      },
      [9] = {
-        [160] = {
-            [391] = "S", [392] = "A", [542] = "S", [378] = "B", [503] = "C", [525] = "A", [499] = "A", [505] = "A"
+        [162] = { --- pulsar
+            [391] = "A", [392] = "A", [542] = "S", [378] = "C", [503] = "C", [525] = "B", [499] = "B", [505] = "B"
         }
      },
     -- Pour l'instant, valeurs par défaut "S" pour tous
