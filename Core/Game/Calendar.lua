@@ -108,9 +108,15 @@ function GLOG.IsCalendarEventFromGuildMember(monthOffset, day, index)
     if not info then return nil end
 
     -- 🛑 Exclure immédiatement les évènements système Blizzard
-    local calType = (info and info.calendarType)
-    if type(calType) == "string" and calType ~= "PLAYER" then
-        return false
+    -- Certains évènements créés par des joueurs apparaissent avec
+    -- calendarType = "GUILD_EVENT" (ou "COMMUNITY_EVENT"). Ne pas les filtrer.
+    local calType = (info and info.calendarType) or ""
+    if type(calType) == "string" then
+        local t = calType -- chaîne déjà en majuscules par l'API
+        local isAllowed = (t == "PLAYER" or t == "GUILD_EVENT" or t == "COMMUNITY_EVENT" or t == "GUILD_ANNOUNCEMENT")
+        if not isAllowed then
+            return false
+        end
     end
 
     local evType = (info and info.eventType)
@@ -155,8 +161,14 @@ local function _isEventFromGuildMember(monthOffset, day, index)
     if not info then return nil end
 
     -- 🛑 Exclure immédiatement les évènements système Blizzard
-    if _isSystemCalendarEvent(nil, info) then
-        return false
+    -- (même logique que ci-dessus; on conserve cette fonction par compat)
+    local calType = (info and info.calendarType) or ""
+    if type(calType) == "string" then
+        local t = calType
+        local isAllowed = (t == "PLAYER" or t == "GUILD_EVENT" or t == "COMMUNITY_EVENT" or t == "GUILD_ANNOUNCEMENT")
+        if not isAllowed then
+            return false
+        end
     end
 
     -- Tant que le cache de guilde n’est pas prêt, on reporte la décision
@@ -199,13 +211,20 @@ function CollectPending(rangeDays)
                 for i = 1, num do
                     local ev = C_Calendar.GetDayEvent and C_Calendar.GetDayEvent(monthOffset, day, i)
 
-                    -- On ne traite que les INVITED (le filtrage système sera fait par IsCalendarEventFromGuildMember)
+                    -- On ne traite que les INVITED et uniquement les types joueur/guilde/communauté
                     if ev and ev.inviteStatus == Enum.CalendarStatus.Invited then
+                        local ct = ev and ev.calendarType
+                        if type(ct) == "string" then
+                            local allowed = (ct == "PLAYER" or ct == "GUILD_EVENT" or ct == "COMMUNITY_EVENT" or ct == "GUILD_ANNOUNCEMENT")
+                            if not allowed then
+                                -- skip system/holiday/lockout
+                                -- move to next event
+                            else
                         local h  = ev.hour   or (ev.startTime and ev.startTime.hour)   or 0
                         local m  = ev.minute or (ev.startTime and ev.startTime.minute) or 0
                         local ts = time({ year = year, month = month, day = day, hour = h, min = m, sec = 0 })
 
-                        if ts and ts >= nowTS and ts <= limitTS then
+                        if ts and ts >= nowTS and ts <= limitTS and (not ct or ct == "PLAYER" or ct == "GUILD_EVENT" or ct == "COMMUNITY_EVENT" or ct == "GUILD_ANNOUNCEMENT") then
                             -- Filtre "créé par un membre de la guilde" (avec retry si info pas prête)
                             local ok, fromGuild = pcall(GLOG.IsCalendarEventFromGuildMember, monthOffset, day, i)
                             if not ok then
@@ -222,6 +241,8 @@ function CollectPending(rangeDays)
                                     })
                                 end
                                 -- fromGuild == false → ignoré
+                            end
+                        end
                             end
                         end
                     end
