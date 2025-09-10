@@ -13,11 +13,11 @@ local playerFullName = U.playerFullName
 
 -- ===== Constantes =====
 local PREFIX   = "GLOG2DEV"
-local MAX_PAY  = 200   -- fragmentation des messages
+local MAX_PAY  = 215   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
-local OUT_MAX_PER_SEC = 1
+local OUT_MAX_PER_SEC = 3
 
 -- ===== État du transport =====
 -- File d'envoi temporisée
@@ -40,7 +40,10 @@ local function _ensureTicker()
     local idle = 0   -- compte les ticks "sans travail"
 
     OutTicker = C_Timer.NewTicker(0.1, function()
-        local t = now()
+        -- Utilise un temps relatif haute résolution pour le throttling
+        local t = (type(GetTimePreciseSec) == "function" and GetTimePreciseSec())
+               or (type(GetTime) == "function" and GetTime())
+               or 0
         if OUT_MAX_PER_SEC > 0 and (t - last) < (1.0 / OUT_MAX_PER_SEC) then return end
         last = t
 
