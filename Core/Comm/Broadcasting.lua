@@ -100,6 +100,12 @@ function GLOG.GM_ApplyAndBroadcast(name, delta)
     local rv = incRev()
     local nm = GLOG.GetNameByUID(uid) or full
     
+    -- ✅ Application LOCALE côté GM (on n'attend pas notre propre message réseau)
+    if delta and delta ~= 0 and GLOG.ApplyDeltaByName then
+        GLOG.ApplyDeltaByName(nm, safenum(delta, 0), playerFullName())
+        if ns.RefreshAll then ns.RefreshAll() end
+    end
+    
     if GLOG.Comm_Broadcast then
         GLOG.Comm_Broadcast("TX_APPLIED", { 
             uid=uid, name=nm, delta=delta, rv=rv, 
@@ -126,6 +132,12 @@ function GLOG.GM_ApplyAndBroadcastEx(name, delta, extra)
         end 
     end
     
+    -- ✅ Application LOCALE côté GM
+    if delta and delta ~= 0 and GLOG.ApplyDeltaByName then
+        GLOG.ApplyDeltaByName(nm, safenum(delta, 0), playerFullName())
+        if ns.RefreshAll then ns.RefreshAll() end
+    end
+    
     if GLOG.Comm_Broadcast then
         GLOG.Comm_Broadcast("TX_APPLIED", p)
     end
@@ -146,6 +158,12 @@ function GLOG.GM_ApplyAndBroadcastByUID(uid, delta, extra)
         for k, v in pairs(extra) do 
             if p[k] == nil then p[k] = v end 
         end
+    end
+    
+    -- ✅ Application LOCALE côté GM
+    if p.name and delta and delta ~= 0 and GLOG.ApplyDeltaByName then
+        GLOG.ApplyDeltaByName(p.name, safenum(delta, 0), playerFullName())
+        if ns.RefreshAll then ns.RefreshAll() end
     end
     
     if GLOG.Comm_Broadcast then

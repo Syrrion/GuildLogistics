@@ -467,7 +467,7 @@ function UpdateRow(i, r, f, it)
     if f.ilvl then
         local ilvl    = (GLOG.GetIlvl    and GLOG.GetIlvl(data.name))    or nil
         local ilvlMax = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(data.name)) or nil
-        local icon    = (_ilvlRanks and _RankIcon and _RankIcon(_ilvlRanks[data.name], 20)) or ""
+    local icon    = (_ilvlRanks and _RankIcon and _RankIcon(_ilvlRanks[data.name], 28)) or ""
 
         local function fmtOnline()
             if ilvl and ilvl > 0 then
@@ -647,7 +647,7 @@ local function _DoRefresh()
         table.insert(base, { name = full })
     end
 
-    -- Calcule le top 3 M+ (or/argent/bronze)
+    -- Calcule le top 3 M+ (or/argent/bronze) avec ex aequo
     do
         local ranks = {}
         for _, it in ipairs(base) do
@@ -657,13 +657,31 @@ local function _DoRefresh()
             end
         end
         table.sort(ranks, function(a,b) return (a.s or 0) > (b.s or 0) end)
+
+        -- Détermine les 3 meilleures VALEURS uniques (ex aequo partagent le même rang)
+        local topVals, seen = {}, {}
+        for i = 1, #ranks do
+            local v = ranks[i].s or 0
+            if not seen[v] then
+                topVals[#topVals+1] = v
+                seen[v] = true
+                if #topVals >= 3 then break end
+            end
+        end
+        local valToPlace = {}
+        for idx, v in ipairs(topVals) do valToPlace[v] = idx end
+
         _mplusRanks = {}
-        for i = 1, math.min(3, #ranks) do
-            _mplusRanks[ranks[i].name] = i
+        if #topVals > 0 then
+            for i = 1, #ranks do
+                local v = ranks[i].s or 0
+                local place = valToPlace[v]
+                if place then _mplusRanks[ranks[i].name] = place end
+            end
         end
     end
 
-    -- Calcule le top 3 iLvl (priorise équipé, fallback max)
+    -- Calcule le top 3 iLvl (priorise équipé, fallback max) avec ex aequo
     do
         local ranks = {}
         for _, it in ipairs(base) do
@@ -676,9 +694,27 @@ local function _DoRefresh()
             end
         end
         table.sort(ranks, function(a,b) return (a.v or 0) > (b.v or 0) end)
+
+        -- Détermine les 3 meilleures VALEURS uniques
+        local topVals, seen = {}, {}
+        for i = 1, #ranks do
+            local v = ranks[i].v or 0
+            if not seen[v] then
+                topVals[#topVals+1] = v
+                seen[v] = true
+                if #topVals >= 3 then break end
+            end
+        end
+        local valToPlace = {}
+        for idx, v in ipairs(topVals) do valToPlace[v] = idx end
+
         _ilvlRanks = {}
-        for i = 1, math.min(3, #ranks) do
-            _ilvlRanks[ranks[i].name] = i
+        if #topVals > 0 then
+            for i = 1, #ranks do
+                local v = ranks[i].v or 0
+                local place = valToPlace[v]
+                if place then _ilvlRanks[ranks[i].name] = place end
+            end
         end
     end
 

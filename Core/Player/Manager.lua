@@ -311,41 +311,14 @@ function GLOG.AdjustSolde(name, delta)
 end
 
 function GLOG.GM_AdjustAndBroadcast(name, delta)
-    if GLOG.BroadcastTxApplied then
-        local U = ns.Util or {}
-        local now = U.now or function() return time() end
-        local playerFullName = U.playerFullName or function()
-            local n = (UnitName and UnitName("player")) or "?"
-            local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
-            rn = tostring(rn):gsub("%s+",""):gsub("'","")
-            return (rn ~= "" and (n.."-"..rn)) or n
-        end
-        
-        local meta = GuildLogisticsDB.meta or {}
-        local uid = GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name) or nil
-        
-        GLOG.BroadcastTxApplied(uid, name, delta, meta.rev or 0, now(), playerFullName())
-    elseif GLOG.Comm_Broadcast then
-        -- Fallback direct si BroadcastTxApplied n'existe pas
-        local U = ns.Util or {}
-        local now = U.now or function() return time() end
-        local playerFullName = U.playerFullName or function()
-            local n = (UnitName and UnitName("player")) or "?"
-            local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
-            rn = tostring(rn):gsub("%s+",""):gsub("'","")
-            return (rn ~= "" and (n.."-"..rn)) or n
-        end
-        
-        local meta = GuildLogisticsDB.meta or {}
-        local payload = {
-            name = name,
-            delta = delta,
-            by = playerFullName(),
-            ts = now(),
-            rv = meta.rev or 0,
-            lm = now()
-        }
-        GLOG.Comm_Broadcast("TX_APPLIED", payload)
+    -- Délègue au pipeline TX_APPLIED moderne pour garantir l'application locale + diffusion
+    if GLOG.GM_ApplyAndBroadcast then
+        return GLOG.GM_ApplyAndBroadcast(name, delta)
+    elseif GLOG.GM_ApplyAndBroadcastEx then
+        return GLOG.GM_ApplyAndBroadcastEx(name, delta, {})
+    elseif GLOG.GM_ApplyAndBroadcastByUID and GLOG.GetOrAssignUID then
+        local uid = GLOG.GetOrAssignUID(name)
+        if uid then return GLOG.GM_ApplyAndBroadcastByUID(uid, delta, {}) end
     end
 end
 
