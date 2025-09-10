@@ -554,7 +554,8 @@ function UI.SectionHeader(parent, title, opts)
     -- Enregistrer pour pouvoir rafraîchir la couleur quand on change de thème
     if UI and UI._RegisterSectionHeader then UI._RegisterSectionHeader(fs, sep) end
 
-    return UI.SECTION_HEADER_H
+    -- Return height first for backward compatibility, plus the FontString and separator
+    return UI.SECTION_HEADER_H, fs, sep
 end
 
 -- ➕ Cadre à bordure qui englobe un contenu avec padding
@@ -1281,6 +1282,54 @@ function UI.SetNameTagShort(tag, name)
 
     local class, r, g, b, coords = nil, 1, 1, 1, nil
     if GLOG and GLOG.GetNameStyle then class, r, g, b, coords = GLOG.GetNameStyle(raw) end
+
+    if tag.text then
+        tag.text:SetText(display or "")
+        tag.text:SetTextColor(r or 1, g or 1, b or 1)
+    end
+
+    if tag.icon and coords then
+        tag.icon:SetTexture("Interface\\GLUES\\CHARACTERCREATE\\UI-CharacterCreate-Classes")
+        tag.icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+        tag.icon:Show()
+    elseif tag.icon then
+        tag.icon:SetTexture(nil)
+        tag.icon:Hide()
+    end
+end
+
+-- 🆕 Variante avancée: identique à SetNameTagShort mais permet de forcer la classe (icône + couleur)
+-- Utilisée pour afficher la classe propre du personnage (et non celle de son main) dans certains écrans
+function UI.SetNameTagShortEx(tag, name, overrideClassTag)
+    if not tag then return end
+    local raw = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name or "")
+    local display = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(raw)) or raw
+
+    local r, g, b = 1, 1, 1
+    local coords = nil
+
+    if overrideClassTag and overrideClassTag ~= "" then
+        local classTag = tostring(overrideClassTag):upper()
+        -- Couleur de classe
+        if C_ClassColor and C_ClassColor.GetClassColor then
+            local col = C_ClassColor.GetClassColor(classTag)
+            if col and col.GetRGB then r, g, b = col:GetRGB() end
+        end
+        if RAID_CLASS_COLORS and (r == 1 and g == 1 and b == 1) then
+            local col = RAID_CLASS_COLORS[classTag]
+            if col then r, g, b = col.r or 1, col.g or 1, col.b or 1 end
+        end
+        -- Icône de classe
+        if CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classTag] then
+            coords = CLASS_ICON_TCOORDS[classTag]
+        end
+    else
+        -- Fallback: style global (peut privilégier la classe du main)
+        if GLOG and GLOG.GetNameStyle then
+            local _, rr, gg, bb, cc = GLOG.GetNameStyle(raw)
+            r, g, b, coords = rr or 1, gg or 1, bb or 1, cc
+        end
+    end
 
     if tag.text then
         tag.text:SetText(display or "")

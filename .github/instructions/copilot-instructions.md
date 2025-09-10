@@ -30,8 +30,6 @@ Multi-layered network communication system:
 - `Core/Comm/MessageHandlers.lua` - Message routing and processing
 - `Core/Comm/DataSync.lua` - Automatic data synchronization between guild members
 
-Messages are versioned, compressed, and use pattern: `GLOG2:MSG_TYPE:data`
-
 ### Database System
 Character-based persistence with migration support:
 - Primary DB: `GuildLogisticsDB_Char` (per-character data)

@@ -192,9 +192,9 @@ do
                 end
             end
 
-            -- 2) Filtre AddonMsg : on ne log que nos messages (PREFIX == "GLOG2")
+            -- 2) Filtre AddonMsg
             if event == "CHAT_MSG_ADDON" then
-                local expected = (ns and ns.GLOG and ns.GLOG.PREFIX) or "GLOG2"
+                local expected = (ns and ns.GLOG and ns.GLOG.PREFIX)
                 local prefix, msg = ...
                 -- Si le param 'prefix' ne matche pas et que le 'msg' ne commence pas par expected → ignorer
                 if (prefix ~= expected) and (not _startsWith(msg, expected)) then

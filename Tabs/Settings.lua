@@ -150,7 +150,9 @@ function Build(container)
 
     y = y + (slScale:GetHeight() or 26) + RADIO_V_SPACING
 
-    -- === Section 2 : Ouverture auto ===
+    -- (Section Détection main/alt par notes supprimée – le système repose sur les liens manuels, la note ne sert qu'aux suggestions)
+
+    -- === Section 3 : Ouverture auto ===
     local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_open_on_login"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH2 + 8
     makeYesNoInline(autoRadios,
@@ -163,7 +165,7 @@ function Build(container)
             saved.autoOpen = false 
         end
     )
-    -- === Section 3 : Affichage des popups ===
+    -- === Section 4 : Affichage des popups ===
     local headerH3 = UI.SectionHeader(optionsPane, Tr("options_notifications_title"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH3 + 8
 
@@ -194,7 +196,7 @@ function Build(container)
     makeCheck("calendarInvite",    "opt_popup_calendar_invite")
     makeCheck("raidParticipation", "opt_popup_raid_participation")
 
-    -- === Section 4 : Activer le débug ===
+    -- === Section 5 : Activer le débug ===
     local headerH4 = UI.SectionHeader(optionsPane, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH4 + 8
     makeYesNoInline(debugRadios,
@@ -208,7 +210,7 @@ function Build(container)
         end
     )
 
-    -- === Section 5 : Afficher les erreurs Lua ===
+    -- === Section 6 : Afficher les erreurs Lua ===
     local headerH5 = UI.SectionHeader(optionsPane, Tr("opt_script_errors"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
     y = y + headerH5 + 8
     makeYesNoInline(scriptErrRadios,
@@ -230,6 +232,7 @@ function Build(container)
     _SetRadioGroupChecked(autoRadios,  (saved.autoOpen) and "YES" or "NO")
     _SetRadioGroupChecked(debugRadios, (saved.debugEnabled) and "YES" or "NO")
     _SetRadioGroupChecked(scriptErrRadios, GLOG.IsScriptErrorsEnabled() and "YES" or "NO")
+    -- plus de radio pour auto-détection main/alt
 end
 
 function RefreshOptions()

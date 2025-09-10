@@ -44,6 +44,7 @@ Core/Core/Tiers.lua
 Core/Player/Manager.lua
 Core/Player/Name.lua
 Core/Player/Status.lua
+Core/Player/MainAlt.lua
 Core/Core/HistoryManager.lua
 Core/Core/BackupManager.lua
 Core/Core/Core.lua
@@ -121,6 +122,7 @@ Tabs/Helpers_Crests.lua
 Tabs/Helpers_GroupTracker.lua
 Tabs/Tracker_Custom.lua
 Tabs/Tracker_Loots.lua
+Tabs/Roster_MainAlt.lua
 Tabs/Settings.lua
 Tabs/Debug_Packets.lua
 Tabs/Debug_Database.lua

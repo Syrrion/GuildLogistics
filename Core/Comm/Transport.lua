@@ -12,7 +12,7 @@ local now = U.now
 local playerFullName = U.playerFullName
 
 -- ===== Constantes =====
-local PREFIX   = "GLOG2"
+local PREFIX   = "GLOG2DEV"
 local MAX_PAY  = 200   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 

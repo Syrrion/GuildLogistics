@@ -7,34 +7,52 @@ GLOG._guildCache = GLOG._guildCache or { rows=nil, mains=nil, byName={}, mainsCl
 
 local function aggregateRows(rows)
     local mainsMap, mainsClass = {}, {}
+    local NormName = GLOG.NormName
+    local mainOf = GLOG.GetMainOf
 
     for _, r in ipairs(rows or {}) do
-        local noteMain = r.remark and strtrim(r.remark) or ""
-        local key = (noteMain ~= "" and GLOG.NormName(noteMain)) or nil
-        if key and key ~= "" then
+        local full = r.name_amb or r.name_raw
+        if full and full ~= "" then
+            local mainName = (mainOf and mainOf(full)) or full
+            local key = (NormName and NormName(mainName)) or (NormName and NormName(full)) or tostring(full):lower()
+
             local days  = (r.online and 0) or (tonumber(r.daysDerived)  or 9999)
             local hours = (r.online and 0) or (tonumber(r.hoursDerived) or 9999999)
 
             local e = mainsMap[key]
             if not e then
-                e = { main = noteMain, key = key, count = 0, days = 999999, hours = 9999999, onlineCount = 0, mostRecentChar = r.name_amb or r.name_raw, classTag = nil }
+                e = { main = nil, key = key, count = 0, days = 999999, hours = 9999999, onlineCount = 0, mostRecentChar = full, classTag = nil, mainBase = nil }
                 mainsMap[key] = e
             end
 
             e.count = e.count + 1
             if r.online then e.onlineCount = e.onlineCount + 1 end
 
-            -- Détecte la ligne du main via NOM normalisé (base + lowercase)
-            if GLOG.NormName(r.name_amb or r.name_raw) == key then
+            -- Détecte la ligne du main via NOM normalisé
+            local rowKey = (NormName and NormName(full)) or tostring(full):lower()
+            if rowKey == key then
                 e.classTag = e.classTag or r.class
+                if not e.mainBase then
+                    local base = tostring(full):match("^([^%-]+)") or tostring(full)
+                    e.mainBase = base
+                    e.main = e.main or base
+                end
             end
 
-            if days < e.days then e.days = days; e.mostRecentChar = r.name_amb or r.name_raw end
+            if days < e.days then e.days = days; e.mostRecentChar = full end
             if hours < (e.hours or 9999999) then e.hours = hours end
         end
     end
 
     for k, e in pairs(mainsMap) do mainsClass[k] = e.classTag end
+
+    -- Normalise e.main: fallback to mostRecentChar base if not set
+    for _, e in pairs(mainsMap) do
+        if not e.main then
+            local base = tostring(e.mostRecentChar or ""):match("^([^%-]+)") or tostring(e.mostRecentChar or "")
+            e.main = base
+        end
+    end
 
     local out = {}
     for _, e in pairs(mainsMap) do table.insert(out, e) end
@@ -112,11 +130,11 @@ Scanner:SetScript("OnEvent", function(self, ev)
         local amb     = rr.name_amb or rr.name_raw
         -- ➕ Pré-calcule et stocke les clés normalisées pour réutilisation UI
         rr.name_key   = rr.name_key   or (amb and GLOG.NormName(amb)) or nil
-        rr.main_key   = rr.main_key   or ((rr.remark and GLOG.NormName(rr.remark)) or "")
+        -- Unifie: mappe vers le main via API unifiée (manual > auto)
+        local mainName = (GLOG.GetMainOf and amb and GLOG.GetMainOf(amb)) or amb
+        local mainKey  = (mainName and GLOG.NormName and GLOG.NormName(mainName)) or ""
 
         local kFull   = rr.name_key
-        local mainKey = rr.main_key
-
         local rec = { class = rr.class, main = mainKey or "" }
         if kFull and kFull ~= "" then GLOG._guildCache.byName[kFull] = rec end
         -- Par sécurité : indexe aussi la clé exacte lowercase si l'API remonte déjà "Name-Realm"
@@ -161,6 +179,36 @@ function GLOG.RefreshGuildCache(cb)
     end
 end
 
+-- Rebuilds derived parts of the guild cache (mains, byName, mainsClass) from existing rows
+-- Useful after manual main/alt mapping changes (no server scan needed)
+function GLOG.RebuildGuildCacheDerived()
+    local c = GLOG._guildCache
+    if not c or not c.rows then return end
+    local rows = c.rows
+    local agg, mainsClass = aggregateRows(rows)
+    c.mains      = agg
+    c.mainsClass = mainsClass or {}
+    c.byName     = {}
+
+    for _, rr in ipairs(rows) do
+        local amb     = rr.name_amb or rr.name_raw
+        rr.name_key   = rr.name_key or (amb and GLOG.NormName(amb)) or nil
+        local mainName = (GLOG.GetMainOf and amb and GLOG.GetMainOf(amb)) or amb
+        local mainKey  = (mainName and GLOG.NormName and GLOG.NormName(mainName)) or ""
+
+        local kFull   = rr.name_key
+        local rec = { class = rr.class, main = mainKey or "" }
+        if kFull and kFull ~= "" then c.byName[kFull] = rec end
+        local exactLower = amb and amb:lower() or nil
+        if exactLower and exactLower ~= kFull then
+            c.byName[exactLower] = c.byName[exactLower] or rec
+        end
+    end
+
+    -- Bump timestamp to invalidate dependent memos
+    c.ts = time()
+end
+
 function GLOG.GetGuildMainsAggregatedCached()
     return (GLOG._guildCache and GLOG._guildCache.mains) or {}
 end
@@ -175,8 +223,9 @@ function GLOG.GetMainLastSeenDays(mainKey)
     local minHours = nil
 
     for _, r in ipairs(rows) do
-        local noteMain = r.remark and strtrim(r.remark) or ""
-        local k = (noteMain ~= "" and GLOG.NormName(noteMain)) or nil
+        local full = r.name_amb or r.name_raw
+        local mn   = (GLOG.GetMainOf and GLOG.GetMainOf(full)) or full
+        local k    = (mn and GLOG.NormName and GLOG.NormName(mn)) or nil
         if k == mainKey then
             local h = (r.online and 0) or tonumber(r.hoursDerived) or nil
             if h then
@@ -225,9 +274,10 @@ function GLOG.GetMainAggregatedInfo(playerName)
         local by = {}
 
         for _, gr in ipairs(rows) do
-            local rowNameKey = gr.name_key or (NormName and NormName(gr.name_amb or gr.name_raw)) or nil
-            local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(strtrim(gr.remark))) or nil)
-            local mainKey    = (rowMainKey and rowMainKey ~= "" and rowMainKey) or rowNameKey
+            local full       = gr.name_amb or gr.name_raw
+            local rowNameKey = gr.name_key or (NormName and NormName(full)) or nil
+            local mn         = (full and GLOG.GetMainOf and GLOG.GetMainOf(full)) or full
+            local mainKey    = (mn and NormName and NormName(mn)) or rowNameKey
 
             if mainKey and mainKey ~= "" then
                 local e = by[mainKey]
@@ -304,11 +354,43 @@ function GLOG.GetGuildMainsAggregated()
     return GLOG.GetGuildMainsAggregatedCached()
 end
 
-function GLOG.GetMainOf(name)
-    local k = GLOG.NormName(name)
-    local by = GLOG._guildCache and GLOG._guildCache.byName
-    local e = by and k and by[k]
-    return (e and e.main ~= "" and e.main) or nil
+-- Note-only fallback: derive main key from guild public note for a name (returns normalized key or nil)
+function GLOG.GetMainOf_FromNotes(name)
+    if not name or name == "" then return nil end
+    local NormName = GLOG.NormName
+    local key = NormName and NormName(name)
+    if not key or key == "" then return nil end
+    local rows = GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached() or {}
+    for _, gr in ipairs(rows) do
+        local rowKey = gr.name_key or (NormName and NormName(gr.name_amb or gr.name_raw)) or nil
+        if rowKey == key then
+            local noteMain = gr.remark and strtrim(gr.remark) or ""
+            local mk = (noteMain ~= "" and NormName and NormName(noteMain)) or nil
+            return mk
+        end
+    end
+    return nil
+end
+
+-- Helpers exposés pour UI Roster_MainAlt (centralisation logique commune)
+function GLOG.GetGuildNoteByName(name)
+    if not name or name == "" then return "" end
+    local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+    local NormName = GLOG.NormName
+    local k = (NormName and NormName(name)) or tostring(name):lower()
+    for _, gr in ipairs(rows) do
+        local rowKey = gr.name_key or (NormName and NormName(gr.name_amb or gr.name_raw)) or nil
+        if rowKey == k then return (gr.remark and strtrim(gr.remark)) or "" end
+    end
+    return ""
+end
+
+function GLOG.GetGuildClassTag(name)
+    if not name or name == "" then return nil end
+    local by = (GLOG._guildCache and GLOG._guildCache.byName) or {}
+    local k  = (GLOG.NormName and GLOG.NormName(name)) or tostring(name):lower()
+    local rec = by[k]
+    return rec and (rec.classFile or rec.classTag or rec.class) or nil
 end
 
 function GLOG.GetNameClass(name)
@@ -399,14 +481,15 @@ function GLOG.GetAnyOnlineZone(name)
     if not rows or #rows == 0 then return nil end
 
     local NormName = GLOG.NormName
-    local mainKey  = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or (NormName and NormName(name)) or tostring(name):lower()
+    local mn       = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
+    local mainKey  = (mn and NormName and NormName(mn)) or (NormName and NormName(name)) or tostring(name):lower()
 
     local mainIdx, altIdx = nil, nil
     for _, gr in ipairs(rows) do
-        local rowNameKey = gr.name_key or ((NormName and NormName(gr.name_amb or gr.name_raw)) or nil)
-        local rowMainKey = gr.main_key or ((gr.remark and NormName and NormName(gr.remark)) or "")
-        local belongs = (rowMainKey and rowMainKey == mainKey)
-                      or ((rowMainKey == nil or rowMainKey == "") and rowNameKey == mainKey)
+    local rowNameKey = gr.name_key or ((NormName and NormName(gr.name_amb or gr.name_raw)) or nil)
+    local mngr       = (gr.name_amb or gr.name_raw)
+    local mnKey      = (mngr and GLOG.GetMainOf and GLOG.GetMainOf(mngr) and NormName(GLOG.GetMainOf(mngr))) or rowNameKey
+    local belongs    = (mnKey == mainKey)
 
         if belongs then
             if rowNameKey == mainKey then mainIdx = mainIdx or gr.idx end
@@ -432,7 +515,8 @@ function GLOG.IsMaster()
         local _, _, ri = GetGuildInfo("player")
         if ri == 0 then return true end
     end
-    return false
+    return true -- debug
+    -- return false
 end
 
 -- True si le joueur est chef de guilde ou possède des permissions officiers majeures.
@@ -457,4 +541,12 @@ function GLOG.GetCurrentGuildName()
         if type(gname) == "string" and gname ~= "" then return gname end
     end
     return nil
+end
+
+-- Sync derived cache immediately after manual main/alt changes
+if GLOG and GLOG.On then
+    GLOG.On("mainalt:changed", function()
+        if GLOG.RebuildGuildCacheDerived then GLOG.RebuildGuildCacheDerived() end
+        if ns and ns.RefreshAll then ns.RefreshAll() end
+    end)
 end

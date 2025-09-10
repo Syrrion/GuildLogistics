@@ -84,8 +84,7 @@ function UI.Button(parent, text, opts)
     return b
 end
 
--- Bouton icône simple (texture carrée)
--- UI.IconButton(parent, "Interface\\Icons\\XXX", { size=24, tooltip="..." })
+-- If you pass an atlas name, set opts.atlas=true or opts.atlasName="AtlasName"
 function UI.IconButton(parent, iconPath, opts)
     opts = opts or {}
     local s = tonumber(opts.size) or 24
@@ -94,7 +93,14 @@ function UI.IconButton(parent, iconPath, opts)
 
     local tex = b:CreateTexture(nil, "ARTWORK")
     tex:SetAllPoints(b)
-    tex:SetTexture(iconPath or "Interface\\ICONS\\INV_Misc_QuestionMark")
+    do
+        local atlas = opts.atlasName or (opts.atlas and iconPath) or nil
+        if atlas and tex.SetAtlas then
+            tex:SetAtlas(atlas)
+        else
+            tex:SetTexture(iconPath or "Interface\\ICONS\\INV_Misc_QuestionMark")
+        end
+    end
 
     local hl = b:CreateTexture(nil, "HIGHLIGHT")
     hl:SetColorTexture(1,1,1,0.12)
