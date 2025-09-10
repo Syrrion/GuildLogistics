@@ -515,8 +515,8 @@ function GLOG.IsMaster()
         local _, _, ri = GetGuildInfo("player")
         if ri == 0 then return true end
     end
-    return true -- debug
-    -- return false
+    -- return true
+    return false
 end
 
 -- True si le joueur est chef de guilde ou possède des permissions officiers majeures.

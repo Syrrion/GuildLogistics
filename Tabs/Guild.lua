@@ -176,6 +176,21 @@ local function _red(t) return "|cffff4040"..tostring(t).."|r" end
 
 -- === Onglet "Membres de la guilde" : liste unique plein écran ===
 local panel, membersArea, noGuildMsg
+-- Classement M+ top-3: [fullName] = 1|2|3
+local _mplusRanks = nil
+-- Classement iLvl top-3: [fullName] = 1|2|3
+local _ilvlRanks = nil
+
+-- Icône médaille (atlas challenges-medal-*) or/silver/bronze
+local function _RankIcon(rank, size)
+    size = size or 28
+    local atlas
+    if rank == 1 then atlas = "challenges-medal-gold"
+    elseif rank == 2 then atlas = "challenges-medal-silver"
+    elseif rank == 3 then atlas = "challenges-medal-bronze" end
+    if not atlas then return "" end
+    return ("|A:%s:%d:%d|a"):format(atlas, size, size)
+end
 
 -- Détecte si le personnage appartient à une guilde
 local function _HasGuild()
@@ -421,10 +436,20 @@ function UpdateRow(i, r, f, it)
     -- Score M+
     if f.mplus then
         local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
+        local icon = (_mplusRanks and _RankIcon(_mplusRanks[data.name])) or ""
         if gi.online then
-            f.mplus:SetText(score and score > 0 and tostring(score) or gray(Tr("status_empty")))
+            if score and score > 0 then
+                f.mplus:SetText((icon ~= "" and (icon.." ") or "") .. tostring(score))
+            else
+                f.mplus:SetText(gray(Tr("status_empty")))
+            end
         else
-            f.mplus:SetText(score and score > 0 and gray(score) or gray(Tr("status_empty")))
+            if score and score > 0 then
+                -- icône conservée, texte grisé
+                f.mplus:SetText((icon ~= "" and (icon.." ") or "") .. gray(score))
+            else
+                f.mplus:SetText(gray(Tr("status_empty")))
+            end
         end
     end
 
@@ -438,18 +463,19 @@ function UpdateRow(i, r, f, it)
         end
     end
 
-    -- iLvl (équipé + max)
+    -- iLvl (équipé + max) + médaille top-3
     if f.ilvl then
         local ilvl    = (GLOG.GetIlvl    and GLOG.GetIlvl(data.name))    or nil
         local ilvlMax = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(data.name)) or nil
+        local icon    = (_ilvlRanks and _RankIcon and _RankIcon(_ilvlRanks[data.name], 20)) or ""
 
         local function fmtOnline()
             if ilvl and ilvl > 0 then
+                local base = tostring(ilvl)
                 if ilvlMax and ilvlMax > 0 then
-                    return tostring(ilvl)..gray(" ("..tostring(ilvlMax)..")")
-                else
-                    return tostring(ilvl)
+                    base = base .. gray(" ("..tostring(ilvlMax)..")")
                 end
+                return ((icon ~= "" and (icon.." ") or "") .. base)
             else
                 return gray(Tr("status_empty"))
             end
@@ -457,11 +483,11 @@ function UpdateRow(i, r, f, it)
 
         local function fmtOffline()
             if ilvl and ilvl > 0 then
+                local base = gray(tostring(ilvl))
                 if ilvlMax and ilvlMax > 0 then
-                    return gray(tostring(ilvl).." ("..tostring(ilvlMax)..")")
-                else
-                    return gray(tostring(ilvl))
+                    base = gray(tostring(ilvl).." ("..tostring(ilvlMax)..")")
                 end
+                return ((icon ~= "" and (icon.." ") or "") .. base)
             else
                 return gray(Tr("status_empty"))
             end
@@ -619,6 +645,41 @@ local function _DoRefresh()
     for _, e in ipairs(agg or {}) do
         local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(e.main)) or e.mostRecentChar or e.main
         table.insert(base, { name = full })
+    end
+
+    -- Calcule le top 3 M+ (or/argent/bronze)
+    do
+        local ranks = {}
+        for _, it in ipairs(base) do
+            local s = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(it.name)) or 0
+            if s and s > 0 then
+                ranks[#ranks+1] = { name = it.name, s = s }
+            end
+        end
+        table.sort(ranks, function(a,b) return (a.s or 0) > (b.s or 0) end)
+        _mplusRanks = {}
+        for i = 1, math.min(3, #ranks) do
+            _mplusRanks[ranks[i].name] = i
+        end
+    end
+
+    -- Calcule le top 3 iLvl (priorise équipé, fallback max)
+    do
+        local ranks = {}
+        for _, it in ipairs(base) do
+            local equipped = (GLOG.GetIlvl and GLOG.GetIlvl(it.name)) or 0
+            local maximum  = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(it.name)) or 0
+            local v = tonumber(equipped or 0) or 0
+            if (not v or v <= 0) and maximum and maximum > 0 then v = maximum end
+            if v and v > 0 then
+                ranks[#ranks+1] = { name = it.name, v = v }
+            end
+        end
+        table.sort(ranks, function(a,b) return (a.v or 0) > (b.v or 0) end)
+        _ilvlRanks = {}
+        for i = 1, math.min(3, #ranks) do
+            _ilvlRanks[ranks[i].name] = i
+        end
     end
 
     -- Tri demandé (online par alias A→Z, puis offline par "plus récent" → alias)

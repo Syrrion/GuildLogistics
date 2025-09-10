@@ -10,6 +10,11 @@ local selectedMainRow -- row frame for immediate selection highlight
 local Layout -- forward decl for local function used in callbacks
 local buildPoolData, buildMainsData, buildAltsData -- forward decl for data builders
 local poolDataCache -- incremental cache for left list
+-- Helper to check guild master permissions
+local function _IsGM()
+    -- Use project-level master flag (can be customized in Core.Guild)
+    return (GLOG and GLOG.IsMaster and GLOG.IsMaster()) or false
+end
 local function _schedulePoolRebuild()
     local fn = function()
         poolDataCache = buildPoolData()
@@ -62,14 +67,20 @@ local poolCols = {
 local function BuildRowPool(r)
     local f = {}
     f.name = UI.CreateNameTag(r)
-    f.note = r:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-    if f.note.SetJustifyH then f.note:SetJustifyH("LEFT") end
+    -- Note column (guild note / remark)
+    f.note = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.note:SetJustifyH("LEFT")
+
+    -- Actions container
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    -- Crown (set main)
-    r.btnCrown = UI.IconButton(f.act, ICON_MAIN_ATLAS, { size = 20, tooltip = Tr("tip_set_main") or "Confirmer en main", atlas = true })
-    -- Assign alt
-    r.btnAlt   = UI.IconButton(f.act, ICON_ALT_ATLAS,  { size = 20, tooltip = Tr("tip_assign_alt") or "Associer en alt", atlas = true })
-    UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 6, -4, { leftPad=8, align="center" })
+    if _IsGM() then
+        -- Crown = set as Main (classic button with larger embedded atlas)
+        local crown = (CreateAtlasMarkup and CreateAtlasMarkup(ICON_MAIN_ATLAS, 18, 18)) or ("|A:"..ICON_MAIN_ATLAS..":18:18|a")
+        r.btnCrown = UI.Button(f.act, crown, { size="xs", variant="ghost", minWidth=30, padX=6, tooltip = Tr("tip_set_main") or "Confirmer en main" })
+        -- Plus = assign as Alt to selected Main (localized tooltip)
+        r.btnAlt   = UI.Button(f.act, "+", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_assign_alt") or "Associer en alt au main sélectionné" })
+    end
+    UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 6, -4, { leftPad=4, align="center" })
     return f
 end
 
@@ -111,9 +122,12 @@ local function UpdateRowPool(i, r, f, it)
     end
     -- Only show icon prefix in note; suggestion marker is now on player name
     note = prefix .. note
-    f.note:SetText(note)
+    if f.note and f.note.SetText then f.note:SetText(note) end
 
     -- Buttons
+    local gm = _IsGM()
+        if r.btnCrown then r.btnCrown:SetShown(gm) end
+        if r.btnAlt then r.btnAlt:SetShown(gm) end
     if r.btnCrown then
         r.btnCrown:SetOnClick(function()
             GLOG.SetAsMain(data.name)
@@ -181,8 +195,35 @@ local function BuildRowMains(r)
     f.name = UI.CreateNameTag(r)
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    r.btnDel = UI.Button(f.act, "X", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_remove_main") or "Supprimer" })
+    if _IsGM() then
+        r.btnDel = UI.Button(f.act, "X", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_remove_main") or "Supprimer" })
+    end
     UI.AttachRowRight(f.act, { r.btnDel }, 6, -4, { leftPad=4, align="center" })
+    -- Hover highlight setup (subtle) for mains list
+    if r.EnableMouse then r:EnableMouse(true) end
+    if not r._hover then
+        local h = r:CreateTexture(nil, "ARTWORK", nil, 1)
+        h:SetAllPoints(r)
+        h:SetTexture("Interface\\Buttons\\WHITE8x8")
+        if UI and UI.SnapTexture then UI.SnapTexture(h) end
+        h:SetVertexColor(1, 1, 1, 0.06) -- subtle light overlay
+        h:Hide()
+        r._hover = h
+    end
+    local function showHover() if r._hover then r._hover:Show() end end
+    local function hideHover() if r._hover then r._hover:Hide() end end
+    r:HookScript("OnEnter", showHover)
+    r:HookScript("OnLeave", hideHover)
+    if f.act and f.act.HookScript then
+        f.act:HookScript("OnEnter", showHover)
+        f.act:HookScript("OnLeave", hideHover)
+    end
+    if r.btnDel and r.btnDel.HookScript then
+        r.btnDel:HookScript("OnEnter", showHover)
+        r.btnDel:HookScript("OnLeave", hideHover)
+    end
+    -- GM-only delete button (no-op if not created)
+    if r.btnDel then r.btnDel:SetShown(_IsGM()) end
     return f
 end
 
@@ -211,12 +252,12 @@ local function UpdateRowMains(i, r, f, it)
     local sel = selectedMainName and GLOG.SamePlayer and GLOG.SamePlayer(selectedMainName, data.name)
     -- Ensure selection overlay exists (independent from gradient)
     if not r._sel then
-    local t = r:CreateTexture(nil, "ARTWORK", nil, 2)
+        local t = r:CreateTexture(nil, "ARTWORK", nil, 2)
         t:SetAllPoints(r)
         t:SetTexture("Interface\\Buttons\\WHITE8x8")
         if UI and UI.SnapTexture then UI.SnapTexture(t) end
-    t:Hide()
-    r._sel = t
+        t:Hide()
+        r._sel = t
     end
     -- Base gradient always applied
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
@@ -230,6 +271,9 @@ local function UpdateRowMains(i, r, f, it)
             r._sel:Hide()
         end
     end
+
+    -- Ensure GM-only visibility reflects current status
+    if r.btnDel then r.btnDel:SetShown(_IsGM()) end
 
     local function handleSelect()
         selectedMainName = data.name
@@ -276,9 +320,40 @@ local function BuildRowAlts(r)
     local f = {}
     f.name = UI.CreateNameTag(r)
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    r.btnPromote = UI.IconButton(f.act, ICON_MAIN_ATLAS, { size = 18, tooltip = Tr("tip_promote_to_main") or "Passer en Main", atlas = true })
-    r.btnDel = UI.Button(f.act, "X", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
+    if _IsGM() then
+        local crown = (CreateAtlasMarkup and CreateAtlasMarkup(ICON_MAIN_ATLAS, 18, 18)) or ("|A:"..ICON_MAIN_ATLAS..":18:18|a")
+        r.btnPromote = UI.Button(f.act, crown, { size="xs", variant="ghost", minWidth=30, padX=6, tooltip = Tr("tip_set_main") or "Confirmer en main" })
+        r.btnDel = UI.Button(f.act, "X", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
+    end
     UI.AttachRowRight(f.act, { r.btnPromote, r.btnDel }, 6, -4, { leftPad=4, align="center" })
+
+    -- Hover highlight (same as mains list)
+    if r.EnableMouse then r:EnableMouse(true) end
+    if not r._hover then
+        local h = r:CreateTexture(nil, "ARTWORK", nil, 1)
+        h:SetAllPoints(r)
+        h:SetTexture("Interface\\Buttons\\WHITE8x8")
+        if UI and UI.SnapTexture then UI.SnapTexture(h) end
+        h:SetVertexColor(1, 1, 1, 0.06)
+        h:Hide()
+        r._hover = h
+    end
+    local function showHover() if r._hover then r._hover:Show() end end
+    local function hideHover() if r._hover then r._hover:Hide() end end
+    r:HookScript("OnEnter", showHover)
+    r:HookScript("OnLeave", hideHover)
+    if f.act and f.act.HookScript then
+        f.act:HookScript("OnEnter", showHover)
+        f.act:HookScript("OnLeave", hideHover)
+    end
+    if r.btnPromote and r.btnPromote.HookScript then
+        r.btnPromote:HookScript("OnEnter", showHover)
+        r.btnPromote:HookScript("OnLeave", hideHover)
+    end
+    if r.btnDel and r.btnDel.HookScript then
+        r.btnDel:HookScript("OnEnter", showHover)
+        r.btnDel:HookScript("OnLeave", hideHover)
+    end
     return f
 end
 
@@ -292,6 +367,11 @@ local function UpdateRowAlts(i, r, f, it)
             UI.SetNameTagShort(f.name, data.name or "")
         end
     end
+    -- Base gradient for zebra effect
+    if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
+    -- Ensure GM-only visibility reflects current status (no-op if buttons weren't created)
+    if r.btnPromote then r.btnPromote:SetShown(_IsGM()) end
+    if r.btnDel then r.btnDel:SetShown(_IsGM()) end
     if r.btnPromote then
         r.btnPromote:SetOnClick(function()
             if not selectedMainName or selectedMainName == "" then return end
