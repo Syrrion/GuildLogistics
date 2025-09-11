@@ -86,15 +86,6 @@ local function _guessPlaceFromTitle(title)
     return nil
 end
 
--- Filtre "évènement système Blizzard" (non joueur)
--- Renvoie true si l'évènement n’est pas un évènement joueur ("PLAYER"),
--- ou s’il s’agit d’un "Holiday", d’un reset/lockout, etc.
--- ⚠️ DÉPLACÉ vers Guild.lua : _isSystemCalendarEvent()
-local function _isSystemCalendarEvent(ev, info)
-    -- Déléguer vers Guild.lua (fonction intégrée dans IsCalendarEventFromGuildMember)
-    return false -- Désactivé : filtrage fait maintenant dans Guild.lua
-end
-
 -- ➕ Helper : vérifie que l'évènement (mo,day,idx) provient d'un membre de la guilde
 -- Déplacé depuis Guild.lua pour meilleure séparation des responsabilités
 function GLOG.IsCalendarEventFromGuildMember(monthOffset, day, index)

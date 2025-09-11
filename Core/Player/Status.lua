@@ -245,19 +245,6 @@ local function _ReadOwnedKeystone()
     local lvl, mid = 0, 0
     local src = "NONE"
 
-    -- utilitaire pour extraire le nom lisible du donjon depuis le texte du lien
-    local function _nameFromLinkText(link)
-        if not link or link == "" then return nil end
-        local inside = link:match("%[(.-)%]") or ""   -- texte entre crochets
-        if inside == "" then return nil end
-        -- enlève le préfixe éventuel "Clé mythique :" ou "Keystone:"
-        local after = inside:match(":%s*(.+)") or inside
-        -- supprime la partie "(+15)" ou "(15)" en fin de texte
-        after = after:gsub("%s*%(%+?%d+%)%s*$", "")
-        after = after:gsub("^%s+", ""):gsub("%s+$", "")
-        return (after ~= "" and after) or nil
-    end
-
     -- 1) API Blizzard (Retail 11.x)
     if C_MythicPlus then
         local okMid, vMid = pcall(C_MythicPlus.GetOwnedKeystoneChallengeMapID)

@@ -1272,10 +1272,14 @@ function GLOG.HandleMessage(sender, msgType, kv)
         end
     end
     
-    -- ➕ Double sécurité : en mode bootstrap (rev=0), ignorer tout sauf "SYNC_*"
-    if safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) == 0 
-       and not tostring(msgType or ""):match("^SYNC_") then
-        return
+    -- ➕ Double sécurité : en mode bootstrap (rev=0), n'accepter que SYNC_*, HELLO et STATUS_UPDATE
+    if safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) == 0 then
+        local allowed = tostring(msgType or ""):match("^SYNC_") or msgType == "HELLO" or msgType == "STATUS_UPDATE"
+        if not allowed then
+            print("REJET")
+            if GLOG.Debug then GLOG.Debug("RECV","BOOTSTRAP_SKIP", msgType) end
+            return
+        end
     end
 
     local handler = MESSAGE_HANDLERS[msgType]
