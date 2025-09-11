@@ -219,34 +219,7 @@ function GLOG.HandleHello(sender, kv)
     local ver_me   = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
     local ver_them = tostring(kv.ver or "")
 
-    -- 🟢 Amorçage: si je suis à rev=0 et que l'émetteur a rev>0, je lance un HELLO en guilde
-    do
-        if rv_me == 0 and rv_them > 0 then
-            local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
-            local me = playerFullName()
-            if nf(sender) ~= nf(me) then
-                local cd = 1.0
-                local last = safenum(GLOG._lastZeroHelloGuildTs, 0)
-                if (now() - last) > cd then
-                    GLOG._lastZeroHelloGuildTs = now()
-                    if GLOG.Sync_RequestHello then
-                        C_Timer.After(0, function()
-                            GLOG.Sync_RequestHello()
-                        end)
-                    elseif GLOG.Comm_Broadcast then
-                        local hid2 = string.format("%d.%03d", time(), math.random(0, 999))
-                        local rv0  = safenum(getRev(), 0)
-                        C_Timer.After(0, function()
-                            GLOG.Comm_Broadcast("HELLO", {
-                                hid = hid2, rv = rv0, player = me, caps = {"OFFER","GRANT","TOKEN1"},
-                                ver = ver_me,
-                            })
-                        end)
-                    end
-                end
-            end
-        end
-    end
+    -- (revert) Pas de HELLO de guilde auto ici
 
     if rv_me > rv_them and GLOG._suppressTo then
         GLOG._suppressTo(sender, (HELLO_WAIT_SEC or 5) + 2)
@@ -333,29 +306,13 @@ function GLOG.HandleSyncOffer(sender, kv)
     local hid = kv.hid or ""
     local sess = Discovery[hid]
 
-    -- 🔰 Robustesse: si aucune session n'existe (race/retard), créer une session à la volée pour ce hid
-    if hid ~= "" and not sess then
-        local myrv = safenum(getRev(), 0)
-        Discovery[hid] = {
-            initiator = playerFullName(),
-            rv_me     = myrv,
-            decided   = false,
-            endsAt    = now() + HELLO_WAIT_SEC,
-            offers    = {},
-            reason    = "rv_gap",
-        }
-        HelloElect[hid] = HelloElect[hid] or { startedAt = now(), endsAt = now() + HELLO_WAIT_SEC, decided = false, offers = 0 }
-        if GLOG.Debug then GLOG.Debug("SYNC_OFFER","synth_session", hid, "rv_me=", myrv) end
-        if ns.Emit then ns.Emit("debug:changed") end
-        sess = Discovery[hid]
-    end
+    -- (revert) Ne pas créer de session à la volée ici
     if hid ~= "" and sess and _norm(sess.initiator) == _norm(playerFullName()) then
         _registerOffer(hid, kv.from or sender, kv.rv, kv.est, kv.h)
 
         -- Si une offre STRICTEMENT meilleure que ma version arrive, décider tout de suite
         local offerRv = safenum(kv.rv, 0)
         if not sess.grantedTo and (offerRv > safenum(sess.rv_me, 0) or sess.decided) then
-            if GLOG.Debug then GLOG.Debug("SYNC_OFFER","decide_and_grant", hid, "offerRv=", offerRv, "rv_me=", safenum(sess.rv_me,0)) end
             C_Timer.After(0, function() _decideAndGrant(hid) end)
         end
     end

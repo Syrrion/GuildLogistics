@@ -28,7 +28,22 @@ local function GetOrCreatePlayer(name)
     local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
     local p = GuildLogisticsDB.players[key]
     if not p then
-        -- ⛑️ Création implicite = en "Réserve" par défaut
+        -- Guild-only gate: allow only for guild members or the local player
+        local function allow(fullName)
+            if not fullName or fullName == "" then return false end
+            local me = (ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or nil
+            if ns.Util and ns.Util.NormalizeFull then
+                if me then me = ns.Util.NormalizeFull(me) end
+                fullName = ns.Util.NormalizeFull(fullName)
+            end
+            if me and fullName == me then return true end
+            if GLOG and GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(fullName) then return true end
+            return false
+        end
+        if not allow(key) then
+            -- Do not create records for non-guild players
+            return { solde = 0, reserved = true }
+        end
         p = { solde = 0, reserved = true }
         GuildLogisticsDB.players[key] = p
     else
@@ -289,7 +304,10 @@ function GLOG.RemoveGold(name, amount)
 end
 
 function GLOG.ApplyDeltaByName(name, delta, by)
-    local p = GetOrCreatePlayer(name)
+    EnsureDB()
+    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local p = GuildLogisticsDB.players[key]
+    if not p then return end -- Don't create for non-guild players
     p.solde = (tonumber(p.solde) or 0) + (tonumber(delta) or 0)
 end
 
@@ -321,7 +339,22 @@ end
 function GLOG.EnsureRosterLocal(name)
     EnsureDB()
     local full = tostring(name or "")
-    GuildLogisticsDB.players[full] = GuildLogisticsDB.players[full] or { solde=0, reserved=true }
+    -- Guild-only gate
+    local function allow(fullName)
+        if not fullName or fullName == "" then return false end
+        local me = (ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or nil
+        if ns.Util and ns.Util.NormalizeFull then
+            if me then me = ns.Util.NormalizeFull(me) end
+            fullName = ns.Util.NormalizeFull(fullName)
+        end
+        if me and fullName == me then return true end
+        if GLOG and GLOG.IsGuildCharacter and GLOG.IsGuildCharacter(fullName) then return true end
+        return false
+    end
+    if not GuildLogisticsDB.players[full] then
+        if not allow(full) then return nil end
+        GuildLogisticsDB.players[full] = { solde=0, reserved=true }
+    end
     if GuildLogisticsDB.players[full].reserved == nil then 
         GuildLogisticsDB.players[full].reserved = true 
     end

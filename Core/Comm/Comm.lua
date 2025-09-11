@@ -183,6 +183,12 @@ local function delayedInit()
         if GLOG.StartDiscovery then 
             C_Timer.After(0.5, function() -- Délai réduit pour l'émission
                 GLOG.StartDiscovery()
+                -- ➕ Émettre un STATUS_UPDATE juste après le HELLO initial
+                if GLOG.BroadcastStatusUpdate then
+                    C_Timer.After(0.1, function()
+                        GLOG.BroadcastStatusUpdate()
+                    end)
+                end
             end)
         end
         

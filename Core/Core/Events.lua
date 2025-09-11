@@ -491,6 +491,7 @@ f:SetScript("OnEvent", function(self, event, name)
             if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
         end)
 
+
     elseif event == "CHALLENGE_MODE_KEYSTONE_SLOTTED"
         or event == "CHALLENGE_MODE_START"
         or event == "CHALLENGE_MODE_COMPLETED"
