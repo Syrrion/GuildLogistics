@@ -28,20 +28,58 @@ end
 -- ======  PLAYERS    ======
 -- =========================
 
-local function GetOrCreatePlayer(name)
+local function _MA()
+    EnsureDB()
+    GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {}, shared = {} }
+    local t = GuildLogisticsDB.mainAlt
+    t.mains  = t.mains  or {}
+    t.altToMain = t.altToMain or {}
+    t.shared = t.shared or {}
+    return t
+end
+
+local function _uidFor(name)
+    if not name or name == "" then return nil end
+    local full = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    return (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+end
+
+local function _ensureRosterEntry(name)
     local db = GetDB()
-    if not name or name == "" then return { solde=0, reserved=true } end
     local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
-    if not db.players then db.players = {} end
-    local p = db.players[key]
-    if not p then
-        -- Création implicite = en "Réserve" par défaut
-        p = { solde = 0, reserved = true }
-        db.players[key] = p
-    else
-        if p.reserved == nil then p.reserved = true end
+    db.players = db.players or {}
+    db.players[key] = db.players[key] or { reserved = true }
+    if db.players[key].reserved == nil then db.players[key].reserved = true end
+    if not db.players[key].uid then db.players[key].uid = _uidFor(key) end
+    return db.players[key]
+end
+
+-- New unified balance accessors (UID-based)
+local function _getBalanceByName(name)
+    if not name or name == "" then return 0 end
+    local uid = _uidFor(name)
+    local MA = _MA()
+    if uid and MA.shared and MA.shared[uid] and MA.shared[uid].solde ~= nil then
+        return tonumber(MA.shared[uid].solde) or 0
     end
-    return p
+    -- Legacy fallback (should be zero after migration)
+    local db = GetDB()
+    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local p = db.players and db.players[key]
+    return (p and tonumber(p.solde)) or 0
+end
+
+local function _adjustBalanceByName(name, delta)
+    if not name or name == "" then return end
+    local uid = _uidFor(name)
+    local MA = _MA()
+    if uid then
+        MA.shared[uid] = MA.shared[uid] or { solde = 0 }
+        MA.shared[uid].solde = (tonumber(MA.shared[uid].solde) or 0) + (tonumber(delta) or 0)
+    end
+    -- Keep roster presence and legacy field in sync for UI/compat
+    local p = _ensureRosterEntry(name)
+    if p.solde ~= nil then p.solde = nil end -- authoritative value now lives in MA.shared
 end
 
 function GLOG.GetPlayersArray()
@@ -52,7 +90,7 @@ function GLOG.GetPlayersArray()
         local reserved = (p.reserved == true)
         table.insert(out, {
             name     = name,
-            solde    = tonumber(p.solde) or 0,
+            solde    = _getBalanceByName(name),
             reserved = reserved,
         })
     end
@@ -91,7 +129,7 @@ function GLOG.GetPlayersArrayActive()
                 b = { name = display, solde = 0, reserved = false }
                 agg[mk] = b
             end
-            b.solde = (b.solde or 0) + (tonumber(p.solde) or 0)
+            b.solde = (b.solde or 0) + _getBalanceByName(name)
         end
     end
 
@@ -136,7 +174,7 @@ function GLOG.GetPlayersArrayReserve(opts)
                 b = { name = display, solde = 0, reserved = true, canPurge = true }
                 agg[mk] = b
             end
-            b.solde = (b.solde or 0) + (tonumber(p.solde) or 0)
+            b.solde = (b.solde or 0) + _getBalanceByName(name)
         end
     end
 
@@ -187,7 +225,7 @@ function GLOG.AddPlayer(name)
     local p = GetDB().players[key]
     if p then return true end  -- déjà présent
     
-    GetDB().players[key] = { solde = 0, reserved = true }
+    GetDB().players[key] = { reserved = true }
     
     -- Diffusion
     if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
@@ -244,20 +282,33 @@ function GLOG.IsReserve(name)
 end
 
 function GLOG.Credit(name, amount)
-    local p = GetOrCreatePlayer(name)
-    p.solde = (tonumber(p.solde) or 0) + (tonumber(amount) or 0)
+    _adjustBalanceByName(name, tonumber(amount) or 0)
     if ns.RefreshAll then ns.RefreshAll() end
 end
 
 function GLOG.Debit(name, amount)
-    local p = GetOrCreatePlayer(name)
-    p.solde = (tonumber(p.solde) or 0) - (tonumber(amount) or 0)
+    _adjustBalanceByName(name, - (tonumber(amount) or 0))
     if ns.RefreshAll then ns.RefreshAll() end
 end
 
 function GLOG.GetSolde(name)
-    local p = GetOrCreatePlayer(name)
-    return tonumber(p.solde) or 0
+    return _getBalanceByName(name)
+end
+
+-- Helpers by UID (public)
+function GLOG.GetSoldeByUID(uid)
+    uid = tonumber(uid)
+    if not uid or uid <= 0 then return 0 end
+    local MA = _MA()
+    return (MA.shared and MA.shared[uid] and tonumber(MA.shared[uid].solde)) or 0
+end
+
+function GLOG.SetSoldeByUID(uid, value)
+    uid = tonumber(uid)
+    if not uid or uid <= 0 then return end
+    local MA = _MA()
+    MA.shared[uid] = MA.shared[uid] or { solde = 0 }
+    MA.shared[uid].solde = tonumber(value) or 0
 end
 
 function GLOG.SamePlayer(a, b)
@@ -279,12 +330,18 @@ function GLOG.NormalizePlayerKeys()
             -- Fusion si clé existante
             local existing = db.players[newKey]
             if existing then
-                existing.solde = (tonumber(existing.solde) or 0) + (tonumber(v.solde) or 0)
+                -- Merge legacy balances into shared by target key's UID
+                local inc = tonumber(v.solde) or 0
+                if inc ~= 0 then _adjustBalanceByName(newKey, inc) end
                 if v.reserved == false then existing.reserved = false end
                 -- alias is no longer stored on per-player records
                 if v.uid then existing.uid = v.uid end
             else
+                -- Drop legacy balance into shared under this key's UID
+                local inc = tonumber(v.solde) or 0
+                v.solde = nil
                 db.players[newKey] = v
+                if inc ~= 0 then _adjustBalanceByName(newKey, inc) end
             end
         end
     end
@@ -293,8 +350,7 @@ function GLOG.NormalizePlayerKeys()
 end
 
 function GLOG.AdjustSolde(name, delta)
-    local p = GetOrCreatePlayer(name)
-    p.solde = (tonumber(p.solde) or 0) + (tonumber(delta) or 0)
+    _adjustBalanceByName(name, tonumber(delta) or 0)
     
     -- Mise à jour des métadonnées pour le GM
     if GLOG.IsMaster and GLOG.IsMaster() then
@@ -331,8 +387,7 @@ function GLOG.RemoveGold(name, amount)
 end
 
 function GLOG.ApplyDeltaByName(name, delta, by)
-    local p = GetOrCreatePlayer(name)
-    p.solde = (tonumber(p.solde) or 0) + (tonumber(delta) or 0)
+    _adjustBalanceByName(name, tonumber(delta) or 0)
 end
 
 function GLOG.ApplyBatch(kv)
@@ -341,9 +396,16 @@ function GLOG.ApplyBatch(kv)
         if type(info) == "table" then
             local normName = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
             if normName ~= "" then
-                local p = GetOrCreatePlayer(normName)
-                
-                if info.solde ~= nil then p.solde = tonumber(info.solde) or 0 end
+                local p = _ensureRosterEntry(normName)
+                if info.solde ~= nil then
+                    -- Explicit set of balance: set shared UID solde directly
+                    local uid = _uidFor(normName)
+                    local MA = _MA()
+                    if uid then
+                        MA.shared[uid] = MA.shared[uid] or { solde = 0 }
+                        MA.shared[uid].solde = tonumber(info.solde) or 0
+                    end
+                end
                 if info.reserved ~= nil then p.reserved = (info.reserved == true) end
                 -- ignore legacy info.alias to keep players clean
                 if info.uid ~= nil then p.uid = tonumber(info.uid) end
@@ -352,8 +414,13 @@ function GLOG.ApplyBatch(kv)
             -- Ancien format : juste le solde
             local normName = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
             if normName ~= "" then
-                local p = GetOrCreatePlayer(normName)
-                p.solde = tonumber(info) or 0
+                local uid = _uidFor(normName)
+                local MA = _MA()
+                if uid then
+                    MA.shared[uid] = MA.shared[uid] or { solde = 0 }
+                    MA.shared[uid].solde = tonumber(info) or 0
+                end
+                _ensureRosterEntry(normName)
             end
         end
     end
@@ -364,7 +431,7 @@ function GLOG.EnsureRosterLocal(name)
     local db = GetDB()
     if not db.players then db.players = {} end
     local full = tostring(name or "")
-    db.players[full] = db.players[full] or { solde=0, reserved=true }
+    db.players[full] = db.players[full] or { reserved=true }
     if db.players[full].reserved == nil then 
         db.players[full].reserved = true 
     end

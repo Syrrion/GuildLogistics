@@ -56,7 +56,7 @@ if not GLOG.GetOrAssignUID then
     function GLOG.GetOrAssignUID(name)
         local db   = GLOG.EnsureDB()
         local full = tostring(name or "")
-        db.players[full] = db.players[full] or { solde = 0, reserved = true }
+    db.players[full] = db.players[full] or { reserved = true }
         if db.players[full].uid then return db.players[full].uid end
         local nextId = tonumber(db.meta.uidSeq or 1) or 1
         db.players[full].uid = nextId
@@ -82,7 +82,7 @@ if not GLOG.GetOrAssignUID then
             or tostring(name or "")
         local nuid = tonumber(uid)
         if not nuid then return nil end
-        db.players[full] = db.players[full] or { solde=0, reserved=true }
+    db.players[full] = db.players[full] or { reserved=true }
         db.players[full].uid = nuid
         return nuid
     end
@@ -99,7 +99,7 @@ if not GLOG.GetOrAssignUID then
     function GLOG.EnsureRosterLocal(name)
         local db   = GLOG.EnsureDB()
         local full = tostring(name or "")
-        db.players[full] = db.players[full] or { solde=0, reserved=true }
+    db.players[full] = db.players[full] or { reserved=true }
         if db.players[full].reserved == nil then db.players[full].reserved = true end
         return db.players[full]
     end

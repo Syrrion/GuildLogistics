@@ -24,6 +24,7 @@ local function _MA()
     local t = _G.GuildLogisticsDB.mainAlt
     t.mains     = t.mains     or {}
     t.altToMain = t.altToMain or {}
+    t.shared    = t.shared    or {}   -- balances by UID live here now
     return t
 end
 
@@ -47,7 +48,7 @@ local function _ensurePlayerRec(name)
     local key = tostring(full or "")
     local db = _G.GuildLogisticsDB
     db.players = db.players or {}
-    db.players[key] = db.players[key] or { solde = 0, reserved = true }
+    db.players[key] = db.players[key] or { reserved = true }
     if not db.players[key].uid then
         db.players[key].uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(key)) or nil
     end
@@ -247,8 +248,14 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     local mainName = _nameFor(mainUID)
     local altFull  = _nameFor(altUID) or altName
 
-    -- Transfert du solde (ajoute au solde existant de l'alt ; met le main à 0)
-    if GLOG.GetSolde and GLOG.AdjustSolde then
+    -- Échanger les soldes entre l'ancien main et l'alt promu (préserve la "banque" du groupe)
+    if GLOG.GetSoldeByUID and GLOG.SetSoldeByUID then
+        local balMain = tonumber(GLOG.GetSoldeByUID(mainUID)) or 0
+        local balAlt  = tonumber(GLOG.GetSoldeByUID(altUID))  or 0
+        GLOG.SetSoldeByUID(mainUID, balAlt)
+        GLOG.SetSoldeByUID(altUID,  balMain)
+    elseif GLOG.GetSolde and GLOG.AdjustSolde then
+        -- Fallback (moins propre) : transférer tout le solde du main vers l'alt
         local balMain = tonumber(GLOG.GetSolde(mainName)) or 0
         if balMain ~= 0 then
             GLOG.AdjustSolde(altFull,  balMain)
@@ -268,6 +275,10 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
         if recMain then recMain.reserved = true end
     end
 
+    -- Capturer les métadonnées du main AVANT de modifier les tables
+    local oldMainEntry = MA.mains[mainUID]
+    local newMainEntry = MA.mains[altUID]
+
     -- Repointage des liens ALT -> nouveau main (inclut l'ancien main qui devient alt)
     for a, m in pairs(MA.altToMain) do
         if tonumber(m) == mainUID then
@@ -282,15 +293,15 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     -- S'assurer que l'ancien main est bien marqué comme alt du nouveau (déjà fait via boucle mais au cas où)
     MA.altToMain[mainUID] = altUID
 
-    -- Transférer l'alias stocké dans mains si présent
+    -- Transférer/Préserver les métadonnées du main (alias, etc.)
     do
-        local oldMainEntry = MA.mains[mainUID]
-        local newMainEntry = MA.mains[altUID]
-        if type(newMainEntry) ~= "table" then newMainEntry = {} end
-        if type(oldMainEntry) == "table" and newMainEntry.alias == nil then
-            newMainEntry.alias = oldMainEntry.alias
+        local tgt = MA.mains[altUID]
+        if type(tgt) ~= "table" then tgt = {} end
+        if type(oldMainEntry) == "table" then
+            -- Copier tout le contenu de l'ancien main dans le nouveau (écrase alias si défini)
+            for k,v in pairs(oldMainEntry) do tgt[k] = v end
         end
-        MA.mains[altUID] = newMainEntry
+        MA.mains[altUID] = tgt
     end
 
     if ns.Emit then ns.Emit("mainalt:changed", "promote-alt", altFull, mainName) end

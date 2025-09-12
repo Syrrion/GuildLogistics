@@ -258,7 +258,7 @@ local function handleRosterReserve(sender, kv)
                 or (name:find("%-") and name)
                 or (uid and GLOG.GetNameByUID and GLOG.GetNameByUID(uid))
         if full and full ~= "" then
-            local p = GuildLogisticsDB.players[full] or { solde=0, reserved=false }
+        local p = GuildLogisticsDB.players[full] or { reserved=false }
             p.reserved = (tonumber(kv.res) or 0) ~= 0
             GuildLogisticsDB.players[full] = p
             
@@ -344,10 +344,15 @@ local function handleTxApplied(sender, kv)
         GuildLogisticsDB.players = GuildLogisticsDB.players or {}
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         local full = nf(kv.name or "")
-        local existed = not not GuildLogisticsDB.players[full]
-        local rec = GuildLogisticsDB.players[full] or { solde = 0, reserved = true }
-        rec.solde = safenum(rec.solde, 0) + safenum(kv.delta, 0)
-        -- 1er mouvement reçu par le réseau => flag réserve par défaut
+    local existed = not not GuildLogisticsDB.players[full]
+    local rec = GuildLogisticsDB.players[full] or { reserved = true }
+        -- Route vers stockage partagé si possible
+        if GLOG.ApplyDeltaByName then
+            GLOG.ApplyDeltaByName(full, safenum(kv.delta,0), kv.by or sender)
+            -- no legacy field anymore
+        else
+            -- legacy path: avoid writing to rec.solde; apply nothing here as shared path is unavailable
+        end
         if not existed and rec.reserved == nil then rec.reserved = true end
         GuildLogisticsDB.players[full] = rec
         applied = true
@@ -390,9 +395,13 @@ local function handleTxBatch(sender, kv)
             local full = nf(name)
             local d = safenum(D[i], 0)
             local existed = not not GuildLogisticsDB.players[full]
-            local rec = GuildLogisticsDB.players[full] or { solde = 0 }
-            rec.solde = safenum(rec.solde, 0) + safenum(d, 0)
-            -- 1er mouvement reçu par le réseau => flag réserve par défaut
+            local rec = GuildLogisticsDB.players[full] or {}
+            if GLOG.ApplyDeltaByName then
+                GLOG.ApplyDeltaByName(full, d, sender)
+                -- no legacy field anymore
+            else
+                -- legacy path: avoid writing to rec.solde; apply nothing here as shared path is unavailable
+            end
             if not existed and rec.reserved == nil then rec.reserved = true end
             GuildLogisticsDB.players[full] = rec
         end

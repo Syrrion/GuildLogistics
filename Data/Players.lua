@@ -59,7 +59,7 @@ function U.MapUID(uid, name)
 
     -- If record exists already, allow updating UID; otherwise, gate creation
     if db.players[full] or allow(full) then
-        db.players[full] = db.players[full] or { solde = 0, reserved = true }
+        db.players[full] = db.players[full] or { reserved = true }
         db.players[full].uid = nuid
         return nuid
     end
@@ -101,7 +101,7 @@ function U.GetOrAssignUID(name)
     local rec = db.players[full]
     if not rec then
         if not allow(full) then return nil end
-        rec = { solde = 0, reserved = true }
+        rec = { reserved = true }
         db.players[full] = rec
     end
     if rec.uid then return rec.uid end
@@ -132,7 +132,7 @@ function U.EnsureRosterLocal(name)
 
     if not db.players[full] then
         if not allow(full) then return nil end
-        db.players[full] = { solde = 0, reserved = true }
+        db.players[full] = { reserved = true }
     end
     if db.players[full].reserved == nil then db.players[full].reserved = true end
     return db.players[full]

@@ -75,6 +75,7 @@ function GLOG.SnapshotExport()
 
     -- 3) Construire P sans fusion (une entrée par personnage complet)
     local P = {}
+    local shared = (GuildLogisticsDB.mainAlt and GuildLogisticsDB.mainAlt.shared) or {}
     for full, rec in pairs(GuildLogisticsDB.players) do
         local base, realm = splitName(full)
         local nrealm = normRealm(realm)
@@ -82,7 +83,7 @@ function GLOG.SnapshotExport()
         local aliasText = (aliasFor(full, base) or base)
         if aliasText == base then aliasText = "@" end
         local uidN = uidNumFor(full)
-        local balance = safenum(rec.solde, 0)
+        local balance = safenum((shared and shared[uidN] and shared[uidN].solde) or rec.solde, 0)
         local res = rec.reserved and 1 or 0
 
         P[#P+1] = table.concat({
@@ -255,12 +256,20 @@ function GLOG.SnapshotApply(kv)
                         or (realm ~= "" and (base.."-"..realm) or base)
             local balance= safenum(bal,0)
 
-            GuildLogisticsDB.players[full] = {
-                uid      = safenum(uidNum,0),
-                solde    = safenum(balance,0),
-                reserved = (safenum(res,0) == 1),
-                alias    = aliasS,
-            }
+            GuildLogisticsDB.players[full] = GuildLogisticsDB.players[full] or {}
+            local prec = GuildLogisticsDB.players[full]
+            prec.uid      = safenum(uidNum,0)
+            prec.reserved = (safenum(res,0) == 1)
+            prec.alias    = aliasS
+            prec.solde    = nil -- legacy field removed
+            -- Write into shared balances as source of truth
+            GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {}, shared = {} }
+            local t = GuildLogisticsDB.mainAlt
+            t.shared = t.shared or {}
+            if uidNum > 0 then
+                t.shared[uidNum] = t.shared[uidNum] or { solde = 0 }
+                t.shared[uidNum].solde = safenum(balance,0)
+            end
         end
     end
 
