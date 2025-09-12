@@ -188,10 +188,10 @@ function GLOG.GetPlayerAddonVersion(name)
         end
     end
 
-    -- Fallback 1: lire depuis mainAlt.shared[uid].addonVersion
+    -- Lire depuis account.shared[uid].addonVersion
     if GLOG.EnsureDB then GLOG.EnsureDB() end
     local db = _G.GuildLogisticsDB or {}
-    db.mainAlt = db.mainAlt or { shared = {} }
+    db.account = db.account or { shared = {} }
     local uid = nil
     do
         -- Utiliser l'UID connu si présent en roster, sinon un lookup non-créateur
@@ -206,8 +206,8 @@ function GLOG.GetPlayerAddonVersion(name)
             end
         end
     end
-    if uid and db.mainAlt and db.mainAlt.shared then
-        local srec = db.mainAlt.shared[uid]
+    if uid and db.account and db.account.shared then
+        local srec = db.account.shared[uid]
         local ver = srec and srec.addonVersion
         if ver and ver ~= "" then
             return tostring(ver)
@@ -215,7 +215,7 @@ function GLOG.GetPlayerAddonVersion(name)
     end
 
     -- Fallback 2 (lecture seule): ancienne position players[*].addonVersion
-        -- Aucune lecture legacy: la version doit être en mainAlt.shared ou cache
+        -- Aucune lecture legacy: la version doit être en account.shared ou cache
     
     return nil
 end

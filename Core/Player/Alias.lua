@@ -10,8 +10,8 @@ local GLOG = ns.GLOG
 -- Small helpers to access compact Main/Alt mapping
 local function _MA()
     if GLOG.EnsureDB then GLOG.EnsureDB() end
-    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
-    local t = _G.GuildLogisticsDB.mainAlt
+    _G.GuildLogisticsDB.account = _G.GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+    local t = _G.GuildLogisticsDB.account
     t.mains       = t.mains       or {}
     t.altToMain   = t.altToMain   or {}
     return t
@@ -117,7 +117,7 @@ function GLOG.SetAliasLocal(name, alias)
     entry.alias = stored
     MA.mains[tonumber(mainUID)] = entry
 
-    -- Source d'autorité unique: mainAlt.aliasByMain
+    -- Autorité: account.mains[mainUID].alias
 
     if ns and ns.Emit then ns.Emit("alias:changed", tostring(mainUID), stored) end
     if ns and ns.RefreshAll then ns.RefreshAll() end

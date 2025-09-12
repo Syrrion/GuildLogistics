@@ -33,12 +33,21 @@ local function EnsureDB()
         db.meta     = db.meta     or { lastModified = 0, fullStamp = 0, rev = 0, master = nil }
         db.requests = db.requests or {}
 
+        -- Stockage des liens main/alt et des données partagées par compte
+        -- Assure la présence de db.account et de ses sous-structures
+        if not db.account then
+            db.account = { mains = {}, altToMain = {}, shared = {} }
+        end
+        db.account.mains     = db.account.mains     or {}
+        db.account.altToMain = db.account.altToMain or {}
+        db.account.shared    = db.account.shared    or {}
+
         -- Journal d'erreurs (côté GM)
         db.errors   = db.errors   or { list = {}, nextId = 1 }
         -- pas de errOutbox ici : on réutilise GuildLogisticsDB.pending (Comm)
     end
 
-    -- La version d'addon est stockée dans mainAlt.shared[uid].addonVersion
+    -- La version d'addon est stockée dans account.shared[uid].addonVersion
 
     -- Initialisation UI avec sauvegarde des valeurs existantes (base par personnage)
     do

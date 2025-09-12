@@ -75,7 +75,7 @@ function GLOG.SnapshotExport()
 
     -- 3) Construire P sans fusion (une entrée par personnage complet)
     local P = {}
-    local shared = (GuildLogisticsDB.mainAlt and GuildLogisticsDB.mainAlt.shared) or {}
+    local shared = (GuildLogisticsDB.account and GuildLogisticsDB.account.shared) or {}
     for full, rec in pairs(GuildLogisticsDB.players) do
         local base, realm = splitName(full)
         local nrealm = normRealm(realm)
@@ -127,9 +127,8 @@ function GLOG.SnapshotExport()
     local MAv = 2
     local MA, AM = {}, {}
     do
-        local t = GuildLogisticsDB.mainAlt
+    local t = GuildLogisticsDB.account
         if type(t) == "table" then
-            MAv = safenum(t.version, 2)
             -- mains set
             for uid, flag in pairs(t.mains or {}) do
                 if flag then MA[#MA+1] = tostring(safenum(uid, 0)) end
@@ -202,8 +201,8 @@ function GLOG.SnapshotApply(kv)
     GuildLogisticsDB.players  = {}
     GuildLogisticsDB.expenses = { list = {}, nextId = 1 }
     GuildLogisticsDB.lots     = { list = {}, nextId = 1 }
-    -- Initialise/flush mainAlt; sera rempli si présent dans le snapshot
-    GuildLogisticsDB.mainAlt  = { version = 2, mains = {}, altToMain = {} }
+    -- Initialise/flush account; sera rempli si présent dans le snapshot
+    GuildLogisticsDB.account  = { mains = {}, altToMain = {} }
 
     local meta = GuildLogisticsDB.meta
     meta.rev         = safenum(kv.rv, 0)
@@ -263,8 +262,8 @@ function GLOG.SnapshotApply(kv)
             prec.alias    = aliasS
             prec.solde    = nil -- legacy field removed
             -- Write into shared balances as source of truth
-            GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {}, shared = {} }
-            local t = GuildLogisticsDB.mainAlt
+            GuildLogisticsDB.account = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {}, shared = {} }
+            local t = GuildLogisticsDB.account
             t.shared = t.shared or {}
             if uidNum > 0 then
                 t.shared[uidNum] = t.shared[uidNum] or { solde = 0 }
@@ -410,8 +409,8 @@ function GLOG.SnapshotApply(kv)
 
     -- 8) Main/Alt (si présent)
     do
-        local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
-        t.version = safenum(kv.MAv, safenum(t.version, 2))
+    local t = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+    -- account.version removed; accept kv.MAv for wire compatibility only
         t.mains = {}
         t.altToMain = {}
         if type(kv.MA) == "table" then
@@ -427,7 +426,7 @@ function GLOG.SnapshotApply(kv)
                 if au > 0 and mu > 0 then t.altToMain[au] = mu end
             end
         end
-        GuildLogisticsDB.mainAlt = t
+    GuildLogisticsDB.account = t
     end
 
     if ns and ns.Emit then

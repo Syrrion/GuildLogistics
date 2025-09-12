@@ -1,7 +1,7 @@
 -- ===================================================
 -- Core/Player/MainAlt.lua - Gestion Main/Alt (manuel + auto)
 -- Stockage compact:
---   GuildLogisticsDB.mainAlt {
+--   GuildLogisticsDB.account {
 --     version = 2,
 --     mains = { [uid] = {} or { alias = "..." } }, -- la présence d'une table marque un MAIN
 --     altToMain = { [altUid] = mainUid }
@@ -17,14 +17,14 @@ local GLOG = ns.GLOG
 local function EnsureDB() if GLOG.EnsureDB then GLOG.EnsureDB() end end
 local function Norm(x) return (GLOG.NormName and GLOG.NormName(x)) or (tostring(x or "")):lower() end
 
--- Accès à la table compacte mainAlt
+-- Accès à la table compacte account
 local function _MA()
     EnsureDB()
-    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
-    local t = _G.GuildLogisticsDB.mainAlt
+    _G.GuildLogisticsDB.account = _G.GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+    local t = _G.GuildLogisticsDB.account
     t.mains     = t.mains     or {}
     t.altToMain = t.altToMain or {}
-    t.shared    = t.shared    or {}   -- balances by UID live here now
+    t.shared    = t.shared    or {}   -- données partagées par UID (solde, version, ...)
     return t
 end
 

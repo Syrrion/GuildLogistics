@@ -30,8 +30,8 @@ end
 
 local function _MA()
     EnsureDB()
-    GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {}, shared = {} }
-    local t = GuildLogisticsDB.mainAlt
+    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {}, shared = {} }
+    local t = GuildLogisticsDB.account
     t.mains  = t.mains  or {}
     t.altToMain = t.altToMain or {}
     t.shared = t.shared or {}

@@ -488,8 +488,7 @@ function GLOG.BroadcastMainAltFull()
     local MAv = 2
     local MA, AM = {}, {}
     do
-    local t = GuildLogisticsDB.mainAlt or {}
-    MAv = safenum(t.version, 2)
+    local t = GuildLogisticsDB.account or {}
     for uid, flag in pairs(t.mains or {}) do if flag then MA[#MA+1] = tostring(uid) end end
         for a, m in pairs(t.altToMain or {}) do AM[#AM+1] = tostring(a)..":"..tostring(m) end
         table.sort(MA); table.sort(AM)
@@ -608,11 +607,11 @@ function GLOG.CreateStatusUpdatePayload(overrides)
                     local mid2 = (rec.mkeyMapId  ~= nil) and safenum(rec.mkeyMapId,  -1)          or -1
                     local lvl2 = (rec.mkeyLevel  ~= nil) and safenum(rec.mkeyLevel,  -1)          or -1
                     local sc   = (rec.mplusScore ~= nil) and safenum(rec.mplusScore, -1)          or -1
-                    -- Lire la version depuis mainAlt.shared[uid].addonVersion
+                    -- Lire la version depuis account.shared[uid].addonVersion
                     local ver = ""
                     do
-                        GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { shared = {} }
-                        local sh = GuildLogisticsDB.mainAlt.shared or {}
+                        GuildLogisticsDB.account = GuildLogisticsDB.account or { shared = {} }
+                        local sh = GuildLogisticsDB.account.shared or {}
                         local srec = sh[uid]
                         if srec and srec.addonVersion then ver = tostring(srec.addonVersion) end
                         -- Utiliser la version cache runtime si connue
@@ -720,13 +719,13 @@ function GLOG.BroadcastStatusUpdate(overrides)
                 if ns.Emit then ns.Emit("mplus:changed", me) end
             end
 
-            -- Version de l'addon: écrire dans mainAlt.shared[uid]
+            -- Version de l'addon: écrire dans account.shared[uid]
             local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
             if currentVersion ~= "" then
                 local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or nil
                 if uid then
-                    GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { shared = {} }
-                    local sh = GuildLogisticsDB.mainAlt.shared; if not sh then GuildLogisticsDB.mainAlt.shared = {}; sh = GuildLogisticsDB.mainAlt.shared end
+                    GuildLogisticsDB.account = GuildLogisticsDB.account or { shared = {} }
+                    local sh = GuildLogisticsDB.account.shared; if not sh then GuildLogisticsDB.account.shared = {}; sh = GuildLogisticsDB.account.shared end
                     sh[uid] = sh[uid] or {}
                     sh[uid].addonVersion = currentVersion
                     changed = true
