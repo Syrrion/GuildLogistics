@@ -274,7 +274,7 @@ function GLOG.NormalizePlayerKeys()
             if existing then
                 existing.solde = (tonumber(existing.solde) or 0) + (tonumber(v.solde) or 0)
                 if v.reserved == false then existing.reserved = false end
-                if v.alias and v.alias ~= "" then existing.alias = v.alias end
+                -- alias: deprecated on per-player records
                 if v.uid then existing.uid = v.uid end
             else
                 GuildLogisticsDB.players[newKey] = v
@@ -321,7 +321,7 @@ function GLOG.ApplyBatch(kv)
                 
                 if info.solde ~= nil then p.solde = tonumber(info.solde) or 0 end
                 if info.reserved ~= nil then p.reserved = (info.reserved == true) end
-                if info.alias ~= nil then p.alias = tostring(info.alias) end
+                -- ignore legacy info.alias
                 if info.uid ~= nil then p.uid = tonumber(info.uid) end
             end
         elseif type(info) == "number" then
@@ -412,7 +412,10 @@ function GLOG.GM_SetReserved(name, flag)
     if not p then return false end
     
     p.reserved = (flag == true)
-    local alias = tostring(p.alias or "")
+    local alias = ""
+    if GLOG.GetAliasFor then
+        alias = tostring(GLOG.GetAliasFor(full) or "")
+    end
     
     -- Diffusion GM
     if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then

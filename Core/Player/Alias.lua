@@ -7,6 +7,23 @@ local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
+-- Small helpers to access compact Main/Alt mapping
+local function _MA()
+    if GLOG.EnsureDB then GLOG.EnsureDB() end
+    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {}, aliasByMain = {} }
+    local t = _G.GuildLogisticsDB.mainAlt
+    t.mains       = t.mains       or {}
+    t.altToMain   = t.altToMain   or {}
+    t.aliasByMain = t.aliasByMain or {}
+    return t
+end
+
+local function _uidFor(name)
+    if not name or name == "" then return nil end
+    local full = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or name
+    return (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+end
+
 -- ===== Système d'alias de joueurs =====
 
 -- Recherche d'un nom complet unique par nom de base (sans realm)
@@ -59,12 +76,20 @@ end
 -- @return string|nil: alias du joueur ou nil
 function GLOG.GetAliasFor(name)
     if GLOG.EnsureDB then GLOG.EnsureDB() end
-    local key = _AliasPlayerKey_NoGuess(name) 
-    if not key then return nil end
-    
-    local rec = (GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[key])
-            or (GuildLogisticsDB_Char and GuildLogisticsDB_Char.players and GuildLogisticsDB_Char.players[key])
-    return rec and rec.alias or nil
+    if not name or name == "" then return nil end
+    local MA = _MA()
+    -- Resolve to main UID first
+    local uid = _uidFor(name)
+    if not uid then return nil end
+    local mainUID = uid
+    if not MA.mains[uid] then
+        local m = MA.altToMain[uid]
+        if m then mainUID = tonumber(m) end
+    end
+    if not mainUID then return nil end
+    local alias = MA.aliasByMain[tonumber(mainUID)]
+    if alias and alias ~= "" then return alias end
+    return nil
 end
 
 -- Définir l'alias d'un joueur localement
@@ -72,23 +97,26 @@ end
 -- @param alias: string - alias à définir
 function GLOG.SetAliasLocal(name, alias)
     if GLOG.EnsureDB then GLOG.EnsureDB() end
-    local key = _AliasPlayerKey_NoGuess(name)
-    if not key then
-        -- pas de clé fiable → ne rien créer (évite les entrées fantômes sur ton royaume)
-        if ns and ns.Debug then ns.Debug("alias:set", "ambiguous_or_not_found", tostring(name)) end
+    local uid = _uidFor(name)
+    if not uid then
+        if ns and ns.Debug then ns.Debug("alias:set", "uid_not_found", tostring(name)) end
         return
     end
-
-    -- Écrit côté DB compte (si dispo), sinon côté perso
-    local db = _G.GuildLogisticsDB or _G.GuildLogisticsDB_Char
-    db.players = db.players or {}
-    local rec = db.players[key] or { solde=0, reserved=true }
-
+    local MA = _MA()
+    -- Determine main UID holder for alias
+    local mainUID = uid
+    if not MA.mains[uid] then
+        local m = MA.altToMain[uid]
+        if m then mainUID = tonumber(m) end
+    end
+    if not mainUID then return end
     local val = tostring(alias or ""):gsub("^%s+",""):gsub("%s+$","")
-    rec.alias = (val ~= "") and val or nil
-    db.players[key] = rec
+    local stored = (val ~= "") and val or nil
+    MA.aliasByMain[tonumber(mainUID)] = stored
 
-    if ns and ns.Emit then ns.Emit("alias:changed", key, val) end
+    -- Source d'autorité unique: mainAlt.aliasByMain
+
+    if ns and ns.Emit then ns.Emit("alias:changed", tostring(mainUID), stored) end
     if ns and ns.RefreshAll then ns.RefreshAll() end
 end
 
@@ -108,11 +136,18 @@ function GLOG.GM_SetAlias(name, alias)
     GuildLogisticsDB.meta.rev = rv
     GuildLogisticsDB.meta.lastModified = time()
 
+    -- Broadcast a roster upsert on the MAIN holder to refresh displays on all clients
     if GLOG.BroadcastRosterUpsert then
-        GLOG.BroadcastRosterUpsert(name)  -- inclura l'alias (voir Comm.lua)
+        local MA = _MA(); local uid = _uidFor(name)
+        local mainUID = uid
+        if uid and not MA.mains[uid] then mainUID = tonumber(MA.altToMain[uid] or uid) end
+        local mainName = (mainUID and GLOG.GetNameByUID and GLOG.GetNameByUID(mainUID)) or name
+        GLOG.BroadcastRosterUpsert(mainName)
     end
     return true
 end
+
+-- No migration code: alias only lives in mainAlt.aliasByMain
 
 -- ===== Export des fonctions utilitaires =====
 

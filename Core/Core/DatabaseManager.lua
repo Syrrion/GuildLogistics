@@ -1,7 +1,7 @@
 -- ===================================================
 -- Core/Core/DatabaseManager.lua - Gestionnaire de base de données
 -- ===================================================
--- Responsable de l'initialisation, migration et gestion des structures de données
+-- Responsable de l'initialisation et gestion des structures de données
 
 local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
@@ -15,61 +15,8 @@ local U = ns.Util or {}
 -- =========================
 
 local function EnsureDB()
-    -- 1) Migration forcée (par personnage) si besoin
-    local TARGET = "1.0.3"  -- dernière version nécessitant une migration
-    do
-        GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
-        GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
-        
-        local cmp = (ns.Util and ns.Util.CompareVersions) or function(a, b)
-            local function parse(s)
-                local out = {}
-                for n in tostring(s or ""):gmatch("(%d+)") do out[#out+1] = tonumber(n) or 0 end
-                return out
-            end
-            local A, B = parse(a), parse(b)
-            local n = math.max(#A, #B)
-            for i = 1, n do
-                local x, y = A[i] or 0, B[i] or 0
-                if x < y then return -1 elseif x > y then return 1 end
-            end
-            return 0
-        end
-
-        local lm = GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.lastMigration
-        local needFlush = (not lm) or (cmp(lm, TARGET) < 0)
-        if needFlush then
-            -- Migration: préserver les données existantes si possible
-            local existingPlayers = GuildLogisticsDB_Char.players
-            local existingHistory = GuildLogisticsDB_Char.history
-            local existingLots = GuildLogisticsDB_Char.lots
-            local existingExpenses = GuildLogisticsDB_Char.expenses
-            
-            -- Marquer comme migré
-            if not GuildLogisticsDB_Char.meta then
-                GuildLogisticsDB_Char.meta = {}
-            end
-            GuildLogisticsDB_Char.meta.lastMigration = TARGET
-            
-            -- Préserver les données existantes
-            if existingPlayers then
-                GuildLogisticsDB_Char.players = existingPlayers
-            end
-            if existingHistory then
-                GuildLogisticsDB_Char.history = existingHistory
-            end
-            if existingLots then
-                GuildLogisticsDB_Char.lots = existingLots
-            end
-            if existingExpenses then
-                GuildLogisticsDB_Char.expenses = existingExpenses
-            end
-            
-            -- Réaligner les alias runtime
-            GuildLogisticsDB = GuildLogisticsDB_Char
-            GuildLogisticsUI = GuildLogisticsUI_Char
-        end
-    end
+    GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
+    GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
 
     -- Initialisation habituelle (base par personnage)
     -- Assigner GuildLogisticsDB à la base par personnage

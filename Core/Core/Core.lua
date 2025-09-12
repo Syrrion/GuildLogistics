@@ -25,7 +25,7 @@ end
 -- ===== Notes de modularisation =====
 -- Ce fichier Core.lua a été refactorisé et les fonctions ont été déplacées vers :
 --
--- DatabaseManager.lua  - Gestion base de données, migration, initialisation
+-- DatabaseManager.lua  - Gestion base de données et initialisation
 -- Player/Manager.lua   - Gestion des joueurs, soldes, réserves, ajustements  
 -- History.lua         - Gestion historique des sessions, remboursements
 -- Economy/Lots.lua    - Gestion des lots, ressources et purges (consolidé avec existant)

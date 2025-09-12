@@ -30,6 +30,8 @@ end
 -- Use requested atlases for icons
 local ICON_MAIN_ATLAS = "GO-icon-Header-Assist-Applied"
 local ICON_ALT_ATLAS  = "GO-icon-Assist-Available"
+local ICON_ALIAS_ATLAS = "Professions_Icon_FirstTimeCraft"
+local ICON_CLOSE_ATLAS = "uitools-icon-close"
 
 -- Helper: get the character's own class tag from guild cache (ignores main's class)
 local function _SelfClassTag(name)
@@ -59,9 +61,9 @@ end
 
 -- ===== Pool (50%) =====
 local poolCols = {
-    { key = "name",  title = Tr("lbl_player") or "Joueur", flex = 1, min = 150 },
-    { key = "note",  title = Tr("lbl_guild_note") or "Guild note",   flex = 1, min = 120, justify = "LEFT" },
-    { key = "act",   title = Tr("lbl_actions") or "Actions", min = 120 },
+    { key = "name",  title = Tr("lbl_player") or "Joueur", flex = 1, min = 120 },
+    { key = "note",  title = Tr("lbl_guild_note") or "Guild note",   vsep=true,flex = 1, min = 120, justify = "LEFT" },
+    { key = "act",   title = Tr("lbl_actions") or "Actions", vsep=true, min = 72 },
 }
 
 local function BuildRowPool(r)
@@ -74,13 +76,12 @@ local function BuildRowPool(r)
     -- Actions container
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     if _IsGM() then
-        -- Crown = set as Main (classic button with larger embedded atlas)
-        local crown = (CreateAtlasMarkup and CreateAtlasMarkup(ICON_MAIN_ATLAS, 18, 18)) or ("|A:"..ICON_MAIN_ATLAS..":18:18|a")
-        r.btnCrown = UI.Button(f.act, crown, { size="xs", variant="ghost", minWidth=30, padX=6, tooltip = Tr("tip_set_main") or "Confirmer en main" })
-        -- Plus = assign as Alt to selected Main (localized tooltip)
-        r.btnAlt   = UI.Button(f.act, "+", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_assign_alt") or "Associer en alt au main sélectionné" })
+        -- Crown = set as Main (square icon with classic panel background)
+        r.btnCrown = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
+    -- Chevron = assign as Alt to selected Main (square with classic panel background)
+    r.btnAlt   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName="uitools-icon-chevron-right", size=24, fit=true, pad=3, tooltip=Tr("tip_assign_alt") or "Associer en alt au main sélectionné" })
     end
-    UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 6, -4, { leftPad=4, align="center" })
+    UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 4, -4, { leftPad=4, align="center" })
     return f
 end
 
@@ -183,9 +184,10 @@ end
 
 -- ===== Mains (25%) =====
 local mainsCols = {
-    { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 140 },
-    { key = "solde", title = Tr("col_balance") or "Solde", w = 90, justify = "RIGHT" },
-    { key = "act",   title = "", min = 26 },
+    { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 120 },
+    { key = "alias", title = Tr("lbl_alias") or "Alias", vsep=true,w = 120, justify = "LEFT" },
+    { key = "solde", title = Tr("col_balance") or "Solde", vsep=true,w = 90, justify = "RIGHT" },
+    { key = "act",   title = "", vsep=true,min = 72 },
 }
 
 local function BuildRowMains(r)
@@ -193,12 +195,14 @@ local function BuildRowMains(r)
     -- Enable mouse to catch clicks for selection
     if r.EnableMouse then r:EnableMouse(true) end
     f.name = UI.CreateNameTag(r)
+    f.alias = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     if _IsGM() then
-        r.btnDel = UI.Button(f.act, "X", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_remove_main") or "Supprimer" })
+    r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
+    r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") or "Supprimer" })
     end
-    UI.AttachRowRight(f.act, { r.btnDel }, 6, -4, { leftPad=4, align="center" })
+    UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias }, 4, -4, { leftPad=4, align="center" })
     -- Hover highlight setup (subtle) for mains list
     if r.EnableMouse then r:EnableMouse(true) end
     if not r._hover then
@@ -224,6 +228,7 @@ local function BuildRowMains(r)
     end
     -- GM-only delete button (no-op if not created)
     if r.btnDel then r.btnDel:SetShown(_IsGM()) end
+    if r.btnAlias then r.btnAlias:SetShown(_IsGM()) end
     return f
 end
 
@@ -236,6 +241,12 @@ local function UpdateRowMains(i, r, f, it)
         else
             UI.SetNameTagShort(f.name, data.name or "")
         end
+    end
+    -- Alias text (group-level)
+    if f.alias then
+        local a = (GLOG and GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
+        f.alias:SetText(a or "")
+        f.alias:SetJustifyH("LEFT")
     end
     -- Solde en or
     if f.solde then
@@ -308,12 +319,23 @@ local function UpdateRowMains(i, r, f, it)
             _refreshAll()
         end)
     end
+    if r.btnAlias then
+        r.btnAlias:SetOnClick(function()
+            local target = data.name
+            if not target or target == "" then return end
+            -- Préremplir avec le nom du joueur (sans royaume)
+            local base = tostring(target):match("^([^%-]+)") or tostring(target)
+            UI.PopupPromptText(Tr("popup_set_alias_title") or "Définir alias", Tr("lbl_alias") or "Alias", function(val)
+                if GLOG.GM_SetAlias then GLOG.GM_SetAlias(target, val) end
+            end, { default = base, strata = "FULLSCREEN_DIALOG" })
+        end)
+    end
 end
 
 -- ===== Alts (25%) =====
 local altsCols = {
-    { key = "name",  title = Tr("lbl_associated_alts"), flex = 1, min = 140 },
-    { key = "act",   title = "", min = 26 },
+    { key = "name",  title = Tr("lbl_associated_alts"), flex = 1, min = 120 },
+    { key = "act",   title = "", vsep=true,min = 90 },
 }
 
 local function BuildRowAlts(r)
@@ -321,11 +343,11 @@ local function BuildRowAlts(r)
     f.name = UI.CreateNameTag(r)
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     if _IsGM() then
-        local crown = (CreateAtlasMarkup and CreateAtlasMarkup(ICON_MAIN_ATLAS, 18, 18)) or ("|A:"..ICON_MAIN_ATLAS..":18:18|a")
-        r.btnPromote = UI.Button(f.act, crown, { size="xs", variant="ghost", minWidth=30, padX=6, tooltip = Tr("tip_set_main") or "Confirmer en main" })
-        r.btnDel = UI.Button(f.act, "X", { size="xs", variant="ghost", minWidth=22, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
+    r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
+    r.btnAlias   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
+    r.btnDel     = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
     end
-    UI.AttachRowRight(f.act, { r.btnPromote, r.btnDel }, 6, -4, { leftPad=4, align="center" })
+    UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias, r.btnPromote }, 4, -4, { leftPad=4, align="center" })
 
     -- Hover highlight (same as mains list)
     if r.EnableMouse then r:EnableMouse(true) end
@@ -371,6 +393,7 @@ local function UpdateRowAlts(i, r, f, it)
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
     -- Ensure GM-only visibility reflects current status (no-op if buttons weren't created)
     if r.btnPromote then r.btnPromote:SetShown(_IsGM()) end
+    if r.btnAlias then r.btnAlias:SetShown(_IsGM()) end
     if r.btnDel then r.btnDel:SetShown(_IsGM()) end
     if r.btnPromote then
         r.btnPromote:SetOnClick(function()
@@ -390,15 +413,30 @@ local function UpdateRowAlts(i, r, f, it)
             _refreshAll()
         end)
     end
+    if r.btnAlias then
+        r.btnAlias:SetOnClick(function()
+            local target = data.name
+            if not target or target == "" then return end
+            -- Alias is stored on the group (main). Editing from an alt edits the main group's alias.
+            local base = tostring(target):match("^([^%-]+)") or tostring(target)
+            UI.PopupPromptText(Tr("popup_set_alias_title") or "Définir alias", Tr("lbl_alias") or "Alias", function(val)
+                if GLOG.GM_SetAlias then GLOG.GM_SetAlias(target, val) end
+            end, { default = base, strata = "FULLSCREEN_DIALOG" })
+        end)
+    end
 end
 
 -- ===== Refresh data builders =====
 function buildPoolData()
     local rows = {}
     local pool = (GLOG.GetUnassignedPool and GLOG.GetUnassignedPool()) or {}
+    -- Build robust suggestions lookup by normalized name
     local suggestions = {}
     if selectedMainName and GLOG.SuggestAltsForMain then
-        for _, r in ipairs(GLOG.SuggestAltsForMain(selectedMainName) or {}) do suggestions[r.name] = true end
+        for _, r in ipairs(GLOG.SuggestAltsForMain(selectedMainName) or {}) do
+            local nk = (GLOG and GLOG.NormName and GLOG.NormName(r.name)) or string.lower(r.name or "")
+            if nk and nk ~= "" then suggestions[nk] = true end
+        end
     end
 
     -- Build a fast lookup: normalized player name -> original guild note (remark)
@@ -420,7 +458,8 @@ function buildPoolData()
             -- Use original note text, not normalized key
             local note = (GLOG.GetGuildNoteByName and GLOG.GetGuildNoteByName(p.name)) or (k and noteByNameKey[k]) or ""
             local classTag = (GLOG.GetGuildClassTag and GLOG.GetGuildClassTag(p.name)) or (gr and (gr.classFile or gr.classTag or gr.class) or nil)
-            rows[#rows+1] = { name = p.name, note = note, classTag = classTag, suggested = (suggestions[p.name] and true or false) }
+            local pnk = (GLOG and GLOG.NormName and GLOG.NormName(p.name)) or string.lower(p.name or "")
+            rows[#rows+1] = { name = p.name, note = note, classTag = classTag, suggested = (pnk ~= "" and suggestions[pnk] or false) and true or false }
         end
     else
         -- Fallback: populate from guild roster cache when DB has no unassigned entries
@@ -447,7 +486,8 @@ function buildPoolData()
                             isSug = (nkNote == targetNk)
                         end
                         local classTag = rec and (rec.classFile or rec.classTag or rec.class) or nil
-                        rows[#rows+1] = { name = full, note = note, classTag = classTag, suggested = isSug or (suggestions[full] and true or false) }
+                        local fnk = (GLOG and GLOG.NormName and GLOG.NormName(full)) or string.lower(full or "")
+                        rows[#rows+1] = { name = full, note = note, classTag = classTag, suggested = isSug or ((fnk ~= "" and suggestions[fnk]) and true or false) }
                     end
                 end
             end
@@ -540,9 +580,10 @@ function Layout()
     local availW = math.max(0, W - (pad*2))
     local availH = math.max(0, H - footerH - (pad*2))
 
-    local wLeft = math.floor(availW * 0.40)
-    local wMid  = math.floor(availW * 0.35)
-    local wRight= availW - wLeft - wMid -- ~25%
+    -- Widths: Pool 38%, Mains 38%, Alts ~24% (remainder)
+    local wLeft = math.floor(availW * 0.38)
+    local wMid  = math.floor(availW * 0.38)
+    local wRight= availW - wLeft - wMid -- ~24%
 
     leftPane:ClearAllPoints();
     leftPane:SetPoint("TOPLEFT",  panel, "TOPLEFT",  pad, -pad)

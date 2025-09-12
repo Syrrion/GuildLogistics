@@ -88,23 +88,72 @@ end
 function UI.IconButton(parent, iconPath, opts)
     opts = opts or {}
     local s = tonumber(opts.size) or 24
-    local b = CreateFrame("Button", nil, parent)
+    local wantPanel = (opts.skin == "panel") or (opts.template == "UIPanelButtonTemplate")
+    local template = wantPanel and "UIPanelButtonTemplate" or nil
+    local b = CreateFrame("Button", nil, parent, template)
     b:SetSize(s, s)
 
     local tex = b:CreateTexture(nil, "ARTWORK")
-    tex:SetAllPoints(b)
+    local useNative = opts.native and true or false
+    local useFit = opts.fit and true or false -- conserve le ratio et rentre dans le bouton avec un padding
+    local pad = tonumber(opts.pad) or 3
+    local atlasW, atlasH
     do
         local atlas = opts.atlasName or (opts.atlas and iconPath) or nil
         if atlas and tex.SetAtlas then
             tex:SetAtlas(atlas)
+            -- Si rendu natif demandé et atlas connu, utiliser la taille de l'atlas
+            if useNative and C_Texture and C_Texture.GetAtlasInfo then
+                local info = C_Texture.GetAtlasInfo(atlas)
+                if info then atlasW, atlasH = tonumber(info.width), tonumber(info.height) end
+            end
         else
             tex:SetTexture(iconPath or "Interface\\ICONS\\INV_Misc_QuestionMark")
         end
     end
+    if useFit then
+        -- Ajuster l'icône pour qu'elle rentre dans le bouton avec un léger padding, en conservant son ratio
+        local ratio
+        if atlasW and atlasH and atlasW > 0 and atlasH > 0 then
+            ratio = atlasW / atlasH
+        else
+            -- fallback: ratio fourni ou carré
+            ratio = tonumber(opts.aspect) or 1
+        end
+        local availW = math.max(1, (b:GetWidth() or s) - 2*pad)
+        local availH = math.max(1, (b:GetHeight() or s) - 2*pad)
+        local tgtW = availW
+        local tgtH = tgtW / ratio
+        if tgtH > availH then
+            tgtH = availH
+            tgtW = tgtH * ratio
+        end
+        tex:SetSize(tgtW, tgtH)
+        tex:ClearAllPoints()
+        tex:SetPoint("CENTER", b, "CENTER", 0, 0)
+    elseif useNative then
+        -- Taille native: priorise la taille d'atlas, sinon fallback sur opts.texSize/size
+        local tsX = atlasW or tonumber(opts.texSize) or tonumber(opts.size) or 24
+        local tsY = atlasH or tonumber(opts.texSize) or tonumber(opts.size) or 24
+        tex:SetSize(tsX, tsY)
+        tex:ClearAllPoints()
+        tex:SetPoint("CENTER", b, "CENTER", 0, 0)
+    else
+        -- Sur un bouton panel, on laisse un léger inset pour éviter que l'icône touche le bord
+        if wantPanel then
+            tex:SetPoint("TOPLEFT", b, "TOPLEFT", 3, -3)
+            tex:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", -3, 3)
+        else
+            tex:SetAllPoints(b)
+        end
+    end
 
-    local hl = b:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetColorTexture(1,1,1,0.12)
-    hl:SetAllPoints(b)
+    -- Le template UIPanelButtonTemplate gère déjà l'état survolé
+    if not wantPanel then
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetColorTexture(1,1,1,0.12)
+        hl:SetAllPoints(b)
+    end
 
     if opts.tooltip then UI.SetTooltip(b, opts.tooltip) end
 

@@ -111,44 +111,4 @@ end
 
 _G["GLTest"] = GLOG.TestDB
 
--- Fonction pour diagnostiquer la migration
-function GLOG.TestMigration()
-    print("=== TEST MIGRATION ===")
-    
-    local TARGET = "1.0.3"
-    print("Version cible:", TARGET)
-    
-    if GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta then
-        local lm = GuildLogisticsDB_Char.meta.lastMigration
-        print("Dernière migration:", lm or "AUCUNE")
-        
-        -- Test de comparaison de version
-        local function cmp(a, b)
-            local function parse(s)
-                local out = {}
-                for n in tostring(s or ""):gmatch("(%d+)") do out[#out+1] = tonumber(n) or 0 end
-                return out
-            end
-            local A, B = parse(a), parse(b)
-            local n = math.max(#A, #B)
-            for i = 1, n do
-                local x, y = A[i] or 0, B[i] or 0
-                if x < y then return -1 elseif x > y then return 1 end
-            end
-            return 0
-        end
-        
-        local needFlush = (not lm) or (cmp(lm, TARGET) < 0)
-        print("Migration nécessaire:", needFlush and "OUI" or "NON")
-        
-        if lm then
-            print("Comparaison", lm, "vs", TARGET, ":", cmp(lm, TARGET))
-        end
-    else
-        print("❌ Pas de métadonnées de migration")
-    end
-    
-    print("=== FIN TEST MIGRATION ===")
-end
-
-_G["GLMig"] = GLOG.TestMigration
+-- Migration diagnostic removed; no runtime migrations remain

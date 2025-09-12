@@ -19,6 +19,8 @@ local function _MA()
     local t = _G.GuildLogisticsDB.mainAlt
     t.mains     = t.mains     or {}
     t.altToMain = t.altToMain or {}
+    -- Group-level alias table: aliasByMain[mainUID] = alias
+    t.aliasByMain = t.aliasByMain or {}
     return t
 end
 
@@ -276,6 +278,17 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     MA.mains[mainUID] = nil
     -- S'assurer que l'ancien main est bien marqué comme alt du nouveau (déjà fait via boucle mais au cas où)
     MA.altToMain[mainUID] = altUID
+
+    -- Transférer l'alias de groupe de l'ancien main vers le nouveau main si présent
+    do
+        MA.aliasByMain = MA.aliasByMain or {}
+        local oldAlias = MA.aliasByMain[tonumber(mainUID)]
+        if oldAlias ~= nil and MA.aliasByMain[tonumber(altUID)] == nil then
+            MA.aliasByMain[tonumber(altUID)] = oldAlias
+        end
+        -- Optionnel: effacer l'ancien pour éviter les doublons
+        MA.aliasByMain[tonumber(mainUID)] = nil
+    end
 
     if ns.Emit then ns.Emit("mainalt:changed", "promote-alt", altFull, mainName) end
     if GLOG.BroadcastPromoteAlt then GLOG.BroadcastPromoteAlt(altFull, mainName) end

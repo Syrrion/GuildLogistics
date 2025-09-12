@@ -731,6 +731,16 @@ function UI.PopupPromptText(title, label, onAccept, opts)
         UI.ApplyFontRecursively(eb)
     end
 
+    -- Valeur par défaut (pré-remplissage)
+    do
+        local def = opts and opts.default
+        if def and type(def) == "string" then
+            eb:SetText(def)
+            -- Place le curseur à la fin pour édition immédiate
+            if eb.SetCursorPosition then eb:SetCursorPosition(strlen(def) or 0) end
+        end
+    end
+
     eb:SetScript("OnEnterPressed", function(self)
         local v = tostring(self:GetText() or "")
         if onAccept then onAccept(v) end

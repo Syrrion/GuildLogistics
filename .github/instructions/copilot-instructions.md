@@ -220,6 +220,9 @@ Use translation function: `ns.Tr("key")` or `Tr("key")` in files with local refe
 - Cross-version message compatibility via version headers
 - Graceful degradation for missing features between versions
 
+### Comment hygiene
+- Do not leave comments about systems that no longer exist (e.g., removed migrations, deprecated fallbacks). When deprecating or removing a feature, also remove or update any related comments and docs to avoid confusion.
+
 
 Always preserve existing APIs when modifying core systems. Use the comprehensive debug system for troubleshooting. The addon has extensive built-in diagnostics accessible via debug tabs and slash commands.
 
