@@ -9,7 +9,14 @@ local function _Now() return (time and time()) or 0 end
 
 local function _ExtractLink(msg)
     if not msg then return nil end
-    -- capture le 1er lien objet
+    -- Capture le 1er lien objet en conservant la couleur si présente
+    -- Forme colorée typique: |cffa335ee|Hitem:...|h[Nom]|h|r
+    local colored = msg:match("(|c%x%x%x%x%x%x%x%x|Hitem:%d+:[^|]+|h%[[^%]]+%]|h|r)")
+    if colored then return colored end
+    -- Fallback sans section [name] stricte
+    colored = msg:match("(|c%x%x%x%x%x%x%x%x|Hitem:[^|]+|h[^|]+|h|r)")
+    if colored then return colored end
+    -- Liens sans couleur
     return msg:match("(|Hitem:%d+:[^|]+|h%[[^%]]+%]|h)") or msg:match("(|Hitem:[^|]+|h[^|]+|h)")
 end
 

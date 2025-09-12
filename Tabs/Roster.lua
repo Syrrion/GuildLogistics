@@ -11,7 +11,6 @@ local reserveToggleBtn
 
 -- ➕ État d’affichage des joueurs masqués (réserve)
 local _showHiddenReserve = false
-local _btnShowHiddenReserve -- référence bouton footer
 
 
 -- Détecte si le personnage appartient à une guilde
@@ -286,18 +285,7 @@ local function UpdateReserveCollapseUI()
         end
     end
 
-    -- ➕ Affichage conditionnel du bouton "Afficher joueurs masqués" (GM uniquement)
-    if _btnShowHiddenReserve then
-        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) and true or false
-        local showBtn = (not reserveCollapsed) and isGM
-        _btnShowHiddenReserve:SetShown(showBtn)
-
-        -- Quand on replie la réserve, on réactive le masquage
-        if reserveCollapsed and _showHiddenReserve then
-            _showHiddenReserve = false
-            if ns.RefreshAll then ns.RefreshAll() end
-        end
-    end
+    -- Bouton "Afficher joueurs masqués" supprimé définitivement
     
     -- Masque/affiche le contenu de la ListView "réserve" (et force l’état de l’entête)
     if lvReserve and lvReserve.scroll then
@@ -313,6 +301,19 @@ local function UpdateReserveCollapseUI()
 
     -- Recalcule la mise en page liée à l’état
     if Layout then Layout() end
+
+    -- Rafraîchit les lignes visibles immédiatement si possible
+    if lvActive and lvActive.UpdateVisibleRows then lvActive:UpdateVisibleRows() end
+    if lvReserve and lvReserve.UpdateVisibleRows then lvReserve:UpdateVisibleRows() end
+
+    -- Et planifie un Refresh léger pour recharger les données après le relayout
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, function()
+            if Refresh then Refresh() end
+        end)
+    else
+        if Refresh then Refresh() end
+    end
 end
 
 
@@ -437,26 +438,7 @@ local function Refresh()
 end
 
 -- Footer
-local function BuildFooterButtons(footer, isGM)
-    -- ➕ Bouton "Afficher joueurs masqués" (GM uniquement, rendu visible selon l'état de la réserve)
-    if isGM then
-        _btnShowHiddenReserve = UI.Button(footer, Tr("btn_show_hidden_reserve"), { size="sm", minWidth=200 })
-        _btnShowHiddenReserve:SetOnClick(function()
-            _showHiddenReserve = true
-            if ns.RefreshAll then ns.RefreshAll() end
-        end)
-        _btnShowHiddenReserve:Hide() -- rendu visible par UpdateReserveCollapseUI
-
-        -- Aligne à droite uniquement ce bouton (suppression de "Gestion des membres")
-        if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer, { _btnShowHiddenReserve })
-        end
-    else
-        if UI.AttachButtonsFooterRight then
-            UI.AttachButtonsFooterRight(footer)
-        end
-    end
-end
+-- Boutons footer supprimés: aucun bouton spécifique dans le footer du Roster
 
 
 -- Build panel
@@ -562,48 +544,47 @@ local function Build(container)
         end
     end
 
-    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
 
     -- Compteur "Total ressources" (si vous l'avez déjà créé, ce bloc est idempotent)
     if not resourceFS then
-        resourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        resourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         resourceFS:SetPoint("LEFT", totalFS, "RIGHT", 24, 0)
     end
 
     -- Séparateur visuel (léger, gris)
     if not sepFS then
-        sepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+        sepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisable")
         sepFS:SetPoint("LEFT", resourceFS, "RIGHT", 16, 0)
         sepFS:SetText("|")
     end
 
     -- Compteur "Total cumulé" (soldes + ressources)
     if not bothFS then
-        bothFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        bothFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         bothFS:SetPoint("LEFT", sepFS, "RIGHT", 16, 0)
     end
 
     -- Bloc aligné à droite: "Solde Banque : X | Équilibre : Y" avec séparateur gris et espacement identique
     if not bankRightFS then
-        bankRightFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        bankRightFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         bankRightFS:SetPoint("RIGHT", footer, "RIGHT", - (UI.FOOTER_RIGHT_PAD or 8), 0)
         bankRightFS:SetJustifyH("RIGHT")
     end
     if not bankSepFS then
-        bankSepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+        bankSepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisable")
         bankSepFS:SetPoint("RIGHT", bankRightFS, "LEFT", -16, 0)
         bankSepFS:SetText("|")
     end
     if not bankLeftFS then
-        bankLeftFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        bankLeftFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         bankLeftFS:SetPoint("RIGHT", bankSepFS, "LEFT", -16, 0)
         bankLeftFS:SetJustifyH("RIGHT")
     end
 
 
-    local isGM = GLOG.IsMaster and GLOG.IsMaster()
-    BuildFooterButtons(footer, isGM)
+    -- Aucun bouton footer à créer dans l'onglet Roster
 
     if not noGuildMsg then
         noGuildMsg = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")

@@ -166,62 +166,76 @@ local function UpdateRow(i, row, w, it)
         w.ilvl:SetText(iv > 0 and tostring(iv) or Tr("value_dash") or "-")
     end
 
-    -- Objet (icône, texte + tooltip) coloré selon la rareté (sans stocker la qualité)
+    -- Objet (icône, texte + tooltip) coloré selon la rareté
     if w.item then
         local link = it.link or ""
-        local name, _, quality, _, _, _, _, _, _, iconTex = GetItemInfo(link)
-        local q = tonumber(quality)  -- peut être nil si l'item n'est pas en cache
-
-        -- Fallback qualité via itemID si GetItemInfo n'est pas prêt
-        if not q and C_Item and C_Item.GetItemQualityByID then
-            local itemID = link:match("|Hitem:(%d+):")
-            if itemID then
+        local itemID = link:match("|Hitem:(%d+):")
+        local q, iconTex
+        if itemID and type(C_Item) == "table" then
+            if C_Item.GetItemQualityByID then
                 q = tonumber(C_Item.GetItemQualityByID(tonumber(itemID)))
+            end
+            if C_Item.GetItemIconByID then
+                iconTex = C_Item.GetItemIconByID(tonumber(itemID))
             end
         end
 
-        -- Déterminer la couleur
-        local function qualityHex(qq)
-            if C_QualityColors and C_QualityColors.GetQualityColor and qq then
-                local c = C_QualityColors.GetQualityColor(qq)
-                if c and c.GenerateHexColor then return c:GenerateHexColor() end
-            end
+        -- Nom/couleur du lien
+        local nameFromLink = link:match("%[(.-)%]") or link
+        local colorFromLink = link:match("|c(%x%x%x%x%x%x%x%x)")
+
+        -- Si le lien n'a pas de couleur (ex: lien brut sans |c...|r),
+        -- on tente de récupérer la qualité de l'INSTANCE via GetItemInfo(link)
+        -- (la qualité par itemID peut être différente/verte pour des objets upgradés)
+        local qi = nil
+        if not colorFromLink and GetItemInfo then
+            local _, _, q2 = GetItemInfo(link)
+            qi = tonumber(q2)
+        end
+
+        -- Déterminer un préfixe couleur WoW valide ("|cffRRGGBB") pour la rareté
+        local function qualityPrefix(qq)
+            -- Tableau standard (contient déjà un hex complet avec "|c")
             if ITEM_QUALITY_COLORS and qq and ITEM_QUALITY_COLORS[qq] and ITEM_QUALITY_COLORS[qq].hex then
-                return ITEM_QUALITY_COLORS[qq].hex
+                return ITEM_QUALITY_COLORS[qq].hex -- ex: "|cffa335ee"
             end
             return nil
         end
 
-        local hex = qualityHex(q)
-
-        -- Si on n'a toujours pas de couleur/qualité, on utilise la couleur directement contenue dans le lien
-        -- (ex: |cffa335ee|Hitem:...|h[Nom]|h|r) → a335ee = épique (violet)
-        local nameFromLink = link:match("%[(.-)%]") or link
-        local colorFromLink = link:match("|c(%x%x%x%x%x%x%x%x)")
-        if not hex and colorFromLink then
+        -- Priorité: couleur provenant du lien (plus fiable pour la rareté effective)
+        local hex = nil
+        if colorFromLink then
             hex = "|c" .. colorFromLink
+        else
+            -- Essaye d'abord la qualité spécifique à ce lien (qi), sinon fallback ID
+            hex = qualityPrefix(qi) or qualityPrefix(q)
         end
 
-        -- Icône: fallback via itemID si besoin (synchrone)
-        if (not iconTex or iconTex == 0) and GetItemIcon then
-            local itemID = link:match("|Hitem:(%d+):")
-            if itemID then
-                iconTex = GetItemIcon(tonumber(itemID))
-            end
-        end
+        -- Icône: déjà tenté via C_Item.GetItemIconByID; rien à faire si manquante
         if iconTex and w.item.icon then
             w.item.icon:SetTexture(iconTex)
         end
 
         -- Texte final: nom si connu, sinon nom extrait du lien; couleur = hex (ou blanc si vraiment rien)
-        local nameTxt = name or nameFromLink or ""
-        local prefix = hex or "|cffffffff"
+        local nameTxt = nameFromLink or ""
+        local prefix = (type(hex) == "string" and hex:match("^|c")) and hex or "|cffffffff"
         local suffix = "|r"
         if w.item.text then
             w.item.text:SetText(prefix .. nameTxt .. suffix)
         end
         if w.item.btn then
             w.item.btn._link = link
+        end
+
+        -- Si ni couleur ni qualité n'étaient disponibles, programme un recolor léger
+        if not colorFromLink and (not qi and not q) and C_Timer and C_Timer.After then
+            if lv and not lv._lootRecolorScheduled then
+                lv._lootRecolorScheduled = true
+                C_Timer.After(0.25, function()
+                    if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
+                    lv._lootRecolorScheduled = false
+                end)
+            end
         end
     end
 
