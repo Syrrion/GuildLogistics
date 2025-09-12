@@ -12,11 +12,11 @@ local chosenLots = {} -- [lotId]=true
 local lotsDirty = true -- flag d’invalidation des lots
 
 local cols = {
-    { key="check", title="",      w=34,  justify="LEFT"  },
-    { key="alias", title=Tr("col_alias"),   w=140, justify="LEFT" }, -- ➕ avant Nom
-    { key="name",  title=Tr("col_name"),    min=300, flex=1, justify="LEFT" },
-    { key="solde", title=Tr("col_balance"), w=160, justify="LEFT"  },
-    { key="after", title=Tr("col_after"),   w=160, justify="LEFT"  },
+    { key="check", title="",      w=38,  justify="LEFT"  },
+    { key="alias", title=Tr("col_alias"),   vsep=true,  w=140, justify="LEFT" }, -- ➕ avant Nom
+    { key="name",  title=Tr("col_name"),    vsep=true,  min=300, flex=1, justify="LEFT" },
+    { key="solde", title=Tr("col_balance"), vsep=true,  w=160, justify="LEFT"  },
+    { key="after", title=Tr("col_after"),   vsep=true,  w=160, justify="LEFT"  },
 }
 
 -- ===== Utilitaires =====
@@ -352,7 +352,7 @@ local function Build(container)
 
     -- Titre + trait : lots utilisables
     local colsLots = UI.NormalizeColumns({
-        { key="check", title="",    w=34 },
+        { key="check", title="",    w=38 },
         { key="name",  title=Tr("col_bundle"), vsep=true,  min=260, flex=1 },
         { key="frac",  title=Tr("col_remaining"), vsep=true,  w=90 },
         { key="gold",  title=Tr("col_amount"),  vsep=true,  w=120 },
