@@ -7,6 +7,10 @@ ns.LootTrackerParser = ns.LootTrackerParser or {}
 -- Fonctions utilitaires
 local function _Now() return (time and time()) or 0 end
 
+local function _NormName(name)
+    return tostring(name or ""):gsub("%-.*$", ""):lower()
+end
+
 local function _ExtractLink(msg)
     if not msg then return nil end
     -- Capture le 1er lien objet en conservant la couleur si présente
@@ -149,13 +153,28 @@ local function _QueryItemInfo(link, cb, tries)
 end
 
 local function _AddIfEligible(link, looter)
-    -- Anti-doublon court : si (looter|link) vient d'être vu, on ignore
+    if not link then return end
     local who = tostring(looter or (UnitName and UnitName("player")) or "")
+
+    -- If a roll session is active for this link, only accept the final winner; otherwise skip for now
+    if ns.LootTrackerRolls and ns.LootTrackerRolls.HasActiveRollSession and ns.LootTrackerRolls.HasActiveRollSession(link) then
+        local winName = nil
+        if ns.LootTrackerRolls.GetWinner then
+            winName = select(1, ns.LootTrackerRolls.GetWinner(link))
+        end
+        if not winName then
+            -- winner not known yet; wait for MarkAsWon() to create the entry
+            return
+        end
+        if _NormName(winName) ~= _NormName(who) then
+            -- not the winner; ignore
+            return
+        end
+    end
+    -- Anti-doublon court : si (looter|link) vient d'être vu, on ignore
     if _IsRecentLoot(who, link) then
         return
     end
-
-    if not link then return end
 
     -- Instance/Gouffre uniquement (paramétrable)
     local okInst, instID, diffID, mplusFromInst = false, 0, 0, 0
@@ -239,11 +258,17 @@ local function _AddIfEligible(link, looter)
         -- Enrichissement : type & valeur du jet si connus (cache récent)
         if ns.LootTrackerRolls and ns.LootTrackerRolls.GetRollFor then
             local rType, rVal = ns.LootTrackerRolls.GetRollFor(looter, info.link)
-            if _G and _G.print then
-                local k = ns.LootTrackerRolls.NormalizeLink and ns.LootTrackerRolls.NormalizeLink(info.link) or "?"
-            end
             if rType then entry.roll = rType end
             if rVal  then entry.rollV = tonumber(rVal) end
+        end
+
+        -- If not found in the per-player roll cache, try the winner cache
+        if (not entry.roll) and ns.LootTrackerRolls and ns.LootTrackerRolls.GetWinner then
+            local winName, wType, wVal = ns.LootTrackerRolls.GetWinner(info.link)
+            if winName and _NormName(winName) == _NormName(entry.looter) then
+                if wType then entry.roll = wType end
+                if wVal  then entry.rollV = tonumber(wVal) end
+            end
         end
 
         -- Sauvegarde
@@ -314,20 +339,39 @@ ns.LootTrackerParser = {
     -- Marquer un objet comme gagné (appelé depuis LootTrackerRolls)
     MarkAsWon = function(itemLink, playerName)
         if not itemLink or not playerName then return end
-        
-        local data = ns.LootTrackerState.GetData()
-        
-        -- Chercher les entrées correspondantes dans les 10 dernières minutes
-        local cutoffTime = GetServerTime() - 600 -- 10 minutes
-        
-        for i, entry in ipairs(data.equipLoots or {}) do
-            if entry.link == itemLink and 
-               entry.looter == playerName and 
-               entry.ts >= cutoffTime and
-               not entry.won then
-                entry.won = true
+        local store = ns.LootTrackerState and ns.LootTrackerState.GetStore and ns.LootTrackerState.GetStore() or {}
+
+        local cutoffTime = (GetServerTime and GetServerTime() or _Now()) - 600
+        local idxFound = nil
+        for i, entry in ipairs(store) do
+            if entry.link == itemLink and _NormName(entry.looter) == _NormName(playerName) and entry.ts >= cutoffTime then
+                idxFound = i
                 break
             end
+        end
+
+        -- If no entry yet (likely skipped due to gating), add it now
+        if not idxFound then
+            _AddIfEligible(itemLink, playerName)
+            for i, entry in ipairs(store) do
+                if entry.link == itemLink and _NormName(entry.looter) == _NormName(playerName) and entry.ts >= cutoffTime then
+                    idxFound = i; break
+                end
+            end
+        end
+
+        if idxFound then
+            local entry = store[idxFound]
+            entry.won = true
+            -- backfill roll info from winner cache when possible
+            if ns.LootTrackerRolls and ns.LootTrackerRolls.GetWinner then
+                local winName, wType, wVal = ns.LootTrackerRolls.GetWinner(itemLink)
+                if winName and _NormName(winName) == _NormName(playerName) then
+                    if wType then entry.roll = wType end
+                    if wVal then entry.rollV = tonumber(wVal) end
+                end
+            end
+            if ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
         end
     end,
 }

@@ -1361,12 +1361,14 @@ function UI.SetRollIcon(tex, rollType)
         greed      = "loottoast-roll-greed",
         disenchant = "loottoast-roll-disenchant",
         pass       = "loottoast-roll-pass",
+        transmog   = "loottoast-roll-transmog",
     }
     local FILES = {
         need       = "Interface\\Buttons\\UI-GroupLoot-Dice-Up",
         greed      = "Interface\\Buttons\\UI-GroupLoot-Coin-Up",
         disenchant = "Interface\\Buttons\\UI-GroupLoot-DE-Up",
         pass       = "Interface\\Buttons\\UI-GroupLoot-Pass-Up",
+        transmog   = "Interface\\Buttons\\UI-GroupLoot-Coin-Up",
     }
 
     local ok = false
@@ -1391,6 +1393,7 @@ function UI.RollLabel(rollType)
         greed      = Tr("roll_greed")      or "Cupidité",
         disenchant = Tr("roll_disenchant") or "Désenchant.",
         pass       = Tr("roll_pass")       or "Passer",
+        transmog   = Tr("roll_transmog")   or "Transmo",
     }
     return map[rollType] or ""
 end

@@ -50,6 +50,8 @@ end
 
 -- Cache: [link][playerLower] = { type="need|greed|disenchant|pass", val=98, ts=... }
 local _rollByItem = {}
+-- Winner cache: [linkKey] = { player = "name", type = "need|greed|disenchant|transmog|pass", val = number, ts = now }
+local _winnerByItem = {}
 
 -- Normalisation d'un lien d'objet pour la clé du cache.
 -- Objectif: faire correspondre les messages de rolls (souvent lien complet) et
@@ -99,12 +101,52 @@ local function _GetRollFor(player, link)
     return rec.type, rec.val
 end
 
+-- Returns true if we have any recorded rolls for this link (recent window)
+local function _HasActiveRollSession(link)
+    local key = _LinkKey(link)
+    if not key then return false end
+    local m = _rollByItem[key]
+    if not m then return false end
+    -- ensure at least one recent entry (< 5 min)
+    local now = _Now()
+    for _, r in pairs(m) do
+        if (now - (r.ts or 0)) <= 300 then return true end
+    end
+    return false
+end
+
+-- Winner helpers
+local function _SetWinner(link, player, rType, rVal)
+    local key = _LinkKey(link)
+    if not key or not player then return end
+    _winnerByItem[key] = {
+        player = player,
+        type   = rType,
+        val    = rVal and tonumber(rVal) or nil,
+        ts     = _Now(),
+    }
+end
+
+local function _GetWinner(link)
+    local key = _LinkKey(link)
+    if not key then return nil end
+    local w = _winnerByItem[key]
+    if not w then return nil end
+    if (_Now() - (w.ts or 0)) > 600 then -- expire after 10 minutes
+        _winnerByItem[key] = nil
+        return nil
+    end
+    return w.player, w.type, w.val
+end
+
 -- Motifs localisés des messages de roll
 local _PAT_NEED        = _GS2Pat(LOOT_ROLL_NEED)
 local _PAT_GREED       = _GS2Pat(LOOT_ROLL_GREED)
 local _PAT_DE          = _GS2Pat(LOOT_ROLL_DISENCHANT)
 local _PAT_PASS        = _GS2Pat(LOOT_ROLL_PASSED)
 local _PAT_PASS_AUTO   = _GS2Pat(LOOT_ROLL_PASSED_AUTO)
+-- Dragonflight+ roll type: Transmog
+local _PAT_TRANSMOG    = _GS2Pat((pcall(getglobal, "LOOT_ROLL_TRANSMOG") and getglobal("LOOT_ROLL_TRANSMOG")) or nil)
 
 -- "X won: %s with a roll of %d for %s"
 local _PAT_WON         = _GS2Pat(LOOT_ROLL_WON)
@@ -112,6 +154,7 @@ local _PAT_WON         = _GS2Pat(LOOT_ROLL_WON)
 local _PAT_ROLLED_NEED = _GS2Pat(LOOT_ROLL_ROLLED_NEED)
 local _PAT_ROLLED_GREED= _GS2Pat(LOOT_ROLL_ROLLED_GREED)
 local _PAT_ROLLED_DE   = _GS2Pat(LOOT_ROLL_ROLLED_DE)
+local _PAT_ROLLED_TRANSMOG = _GS2Pat((pcall(getglobal, "LOOT_ROLL_ROLLED_TRANSMOG") and getglobal("LOOT_ROLL_ROLLED_TRANSMOG")) or nil)
 
 local function _ParseRollMessage(msg)
     if not msg or msg == "" then return nil end
@@ -139,6 +182,10 @@ local function _ParseRollMessage(msg)
     if _PAT_DE then
         local who, link = safeMatch(_PAT_DE, msg)
         if who and link then return who, link, "disenchant", nil end
+    end
+    if _PAT_TRANSMOG then
+        local who, link = safeMatch(_PAT_TRANSMOG, msg)
+        if who and link then return who, link, "transmog", nil end
     end
     if _PAT_PASS then
         local who, link = safeMatch(_PAT_PASS, msg)
@@ -169,6 +216,10 @@ local function _ParseRollMessage(msg)
         local val, link = safeMatch(_PAT_ROLLED_DE, msg)
         if val and link then return me, link, "disenchant", tonumber(val) end
     end
+    if me and _PAT_ROLLED_TRANSMOG then
+        local val, link = safeMatch(_PAT_ROLLED_TRANSMOG, msg)
+        if val and link then return me, link, "transmog", tonumber(val) end
+    end
 
     return nil
 end
@@ -181,6 +232,8 @@ ns.LootTrackerRolls = {
     RememberRoll = _RememberRoll,
     GetRollFor = _GetRollFor,
     NormalizeLink = _LinkKey,
+    HasActiveRollSession = _HasActiveRollSession,
+    GetWinner = _GetWinner,
     
     -- Parsing des messages de roll
     ParseRollMessage = _ParseRollMessage,
@@ -209,9 +262,15 @@ ns.LootTrackerRolls = {
         if rVal and _PAT_WON then
             local success, winner, winLink, winVal = pcall(string.match, msg, _PAT_WON)
             if success and winner and winLink and winVal then
-                -- Notifier que cet objet a été réellement gagné
+                -- Enregistre le gagnant + type de jet si connu
+                local prevType = rType
+                if not prevType then
+                    prevType = select(1, _GetRollFor(winner, winLink))
+                end
+                _SetWinner(winLink, winner, prevType, tonumber(winVal))
+                -- Notifier que cet objet a été réellement gagné (signature: itemLink, playerName)
                 if ns.LootTrackerParser and ns.LootTrackerParser.MarkAsWon then
-                    ns.LootTrackerParser.MarkAsWon(winner, winLink, rType, winVal)
+                    ns.LootTrackerParser.MarkAsWon(winLink, winner)
                 end
             end
         end
