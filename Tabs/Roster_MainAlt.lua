@@ -10,11 +10,7 @@ local selectedMainRow -- row frame for immediate selection highlight
 local Layout -- forward decl for local function used in callbacks
 local buildPoolData, buildMainsData, buildAltsData -- forward decl for data builders
 local poolDataCache -- incremental cache for left list
--- Helper to check guild master permissions
-local function _IsGM()
-    -- Use project-level master flag (can be customized in Core.Guild)
-    return (GLOG and GLOG.IsMaster and GLOG.IsMaster()) or false
-end
+
 local function _schedulePoolRebuild()
     local fn = function()
         poolDataCache = buildPoolData()
@@ -75,7 +71,7 @@ local function BuildRowPool(r)
 
     -- Actions container
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    if _IsGM() then
+    if GLOG.IsMaster() then
         -- Crown = set as Main (square icon with classic panel background)
         r.btnCrown = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
     -- Chevron = assign as Alt to selected Main (square with classic panel background)
@@ -126,7 +122,7 @@ local function UpdateRowPool(i, r, f, it)
     if f.note and f.note.SetText then f.note:SetText(note) end
 
     -- Buttons
-    local gm = _IsGM()
+    local gm = GLOG.IsMaster()
         if r.btnCrown then r.btnCrown:SetShown(gm) end
         if r.btnAlt then r.btnAlt:SetShown(gm) end
     if r.btnCrown then
@@ -198,7 +194,7 @@ local function BuildRowMains(r)
     f.alias = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    if _IsGM() then
+    if GLOG.IsMaster() then
     r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
     r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") or "Supprimer" })
     end
@@ -227,8 +223,8 @@ local function BuildRowMains(r)
         r.btnDel:HookScript("OnLeave", hideHover)
     end
     -- GM-only delete button (no-op if not created)
-    if r.btnDel then r.btnDel:SetShown(_IsGM()) end
-    if r.btnAlias then r.btnAlias:SetShown(_IsGM()) end
+    if r.btnDel then r.btnDel:SetShown(GLOG.IsMaster()) end
+    if r.btnAlias then r.btnAlias:SetShown(GLOG.IsMaster()) end
     return f
 end
 
@@ -284,7 +280,7 @@ local function UpdateRowMains(i, r, f, it)
     end
 
     -- Ensure GM-only visibility reflects current status
-    if r.btnDel then r.btnDel:SetShown(_IsGM()) end
+    if r.btnDel then r.btnDel:SetShown(GLOG.IsMaster()) end
 
     local function handleSelect()
         selectedMainName = data.name
@@ -342,7 +338,7 @@ local function BuildRowAlts(r)
     local f = {}
     f.name = UI.CreateNameTag(r)
     f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    if _IsGM() then
+    if GLOG.IsMaster() then
     r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
     r.btnAlias   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
     r.btnDel     = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
@@ -392,9 +388,9 @@ local function UpdateRowAlts(i, r, f, it)
     -- Base gradient for zebra effect
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
     -- Ensure GM-only visibility reflects current status (no-op if buttons weren't created)
-    if r.btnPromote then r.btnPromote:SetShown(_IsGM()) end
-    if r.btnAlias then r.btnAlias:SetShown(_IsGM()) end
-    if r.btnDel then r.btnDel:SetShown(_IsGM()) end
+    if r.btnPromote then r.btnPromote:SetShown(GLOG.IsMaster()) end
+    if r.btnAlias then r.btnAlias:SetShown(GLOG.IsMaster()) end
+    if r.btnDel then r.btnDel:SetShown(GLOG.IsMaster()) end
     if r.btnPromote then
         r.btnPromote:SetOnClick(function()
             if not selectedMainName or selectedMainName == "" then return end

@@ -3,7 +3,7 @@ ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
 -- --------- Cache guilde ---------
-GLOG._guildCache = GLOG._guildCache or { rows=nil, mains=nil, byName={}, mainsClass={}, ts=0, fullByKey={} }
+GLOG._guildCache = GLOG._guildCache or { rows=nil, mains=nil, byName={}, mainsClass={}, ts=0 }
 
 local function aggregateRows(rows)
     local mainsMap, mainsClass = {}, {}
@@ -125,7 +125,6 @@ Scanner:SetScript("OnEvent", function(self, ev)
     GLOG._guildCache.mains      = agg
     GLOG._guildCache.mainsClass = mainsClass or {}
     GLOG._guildCache.byName     = {}
-    GLOG._guildCache.fullByKey  = {}
 
     for _, rr in ipairs(rows) do
         local amb     = rr.name_amb or rr.name_raw
@@ -142,18 +141,6 @@ Scanner:SetScript("OnEvent", function(self, ev)
         local exactLower = amb and amb:lower() or nil
         if exactLower and exactLower ~= kFull then
             GLOG._guildCache.byName[exactLower] = GLOG._guildCache.byName[exactLower] or rec
-        end
-
-        -- Index rapide: base-name normalisé -> Nom-Royaume nettoyé (première occurrence)
-        if amb and amb ~= "" then
-            local base = tostring(amb):match("^([^%-]+)")
-            if base and base ~= "" then
-                local baseKey = GLOG.NormName and GLOG.NormName(base) or base:lower()
-                if baseKey and baseKey ~= "" and not GLOG._guildCache.fullByKey[baseKey] then
-                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
-                    GLOG._guildCache.fullByKey[baseKey] = (cleaner and cleaner(amb)) or amb
-                end
-            end
         end
     end
 
@@ -202,7 +189,6 @@ function GLOG.RebuildGuildCacheDerived()
     c.mains      = agg
     c.mainsClass = mainsClass or {}
     c.byName     = {}
-    c.fullByKey  = {}
 
     for _, rr in ipairs(rows) do
         local amb     = rr.name_amb or rr.name_raw
@@ -216,18 +202,6 @@ function GLOG.RebuildGuildCacheDerived()
         local exactLower = amb and amb:lower() or nil
         if exactLower and exactLower ~= kFull then
             c.byName[exactLower] = c.byName[exactLower] or rec
-        end
-
-        -- Reconstruit aussi l'index base-name -> Nom-Royaume
-        if amb and amb ~= "" then
-            local base = tostring(amb):match("^([^%-]+)")
-            if base and base ~= "" then
-                local baseKey = GLOG.NormName and GLOG.NormName(base) or base:lower()
-                if baseKey and baseKey ~= "" and not c.fullByKey[baseKey] then
-                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
-                    c.fullByKey[baseKey] = (cleaner and cleaner(amb)) or amb
-                end
-            end
         end
     end
 
