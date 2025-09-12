@@ -1,6 +1,11 @@
 -- ===================================================
 -- Core/Player/MainAlt.lua - Gestion Main/Alt (manuel + auto)
--- Stockage compact: GuildLogisticsDB.mainAlt { mains:set[uid]=true, altToMain:[altUid]=mainUid }
+-- Stockage compact:
+--   GuildLogisticsDB.mainAlt {
+--     version = 2,
+--     mains = { [uid] = {} or { alias = "..." } }, -- la présence d'une table marque un MAIN
+--     altToMain = { [altUid] = mainUid }
+--   }
 -- Pas de main_uid par joueur dans DB.players (épargne mémoire et sync plus légère)
 -- ===================================================
 
@@ -15,12 +20,10 @@ local function Norm(x) return (GLOG.NormName and GLOG.NormName(x)) or (tostring(
 -- Accès à la table compacte mainAlt
 local function _MA()
     EnsureDB()
-    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
     local t = _G.GuildLogisticsDB.mainAlt
     t.mains     = t.mains     or {}
     t.altToMain = t.altToMain or {}
-    -- Group-level alias table: aliasByMain[mainUID] = alias
-    t.aliasByMain = t.aliasByMain or {}
     return t
 end
 
@@ -60,7 +63,7 @@ function GLOG.SetAsMain(name)
     uid = tonumber(uid)
     if not uid then return false end
     local MA = _MA()
-    MA.mains[uid] = true
+    MA.mains[uid] = (type(MA.mains[uid]) == "table") and MA.mains[uid] or {}
     MA.altToMain[uid] = nil -- un main ne peut pas être alt
     if ns.Emit then ns.Emit("mainalt:changed", "set-main", key, uid) end
     if GLOG.BroadcastSetAsMain then GLOG.BroadcastSetAsMain(key) end
@@ -75,7 +78,7 @@ function GLOG.AssignAltToMain(altName, mainName)
     mainUID = tonumber(mainUID); altUID = tonumber(altUID)
     if not mainUID or not altUID then return false end
     local MA = _MA()
-    MA.mains[mainUID] = true
+    MA.mains[mainUID] = (type(MA.mains[mainUID]) == "table") and MA.mains[mainUID] or {}
     MA.altToMain[altUID] = mainUID
     MA.mains[altUID] = nil -- un alt ne doit pas être dans le set des mains
     if ns.Emit then ns.Emit("mainalt:changed", "assign-alt", aKey, mainUID) end
@@ -273,21 +276,21 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     end
     -- L'alt promu devient main
     MA.altToMain[altUID] = nil
-    MA.mains[altUID] = true
+    MA.mains[altUID] = (type(MA.mains[altUID]) == "table") and MA.mains[altUID] or {}
     -- L'ancien main cesse d'être main
     MA.mains[mainUID] = nil
     -- S'assurer que l'ancien main est bien marqué comme alt du nouveau (déjà fait via boucle mais au cas où)
     MA.altToMain[mainUID] = altUID
 
-    -- Transférer l'alias de groupe de l'ancien main vers le nouveau main si présent
+    -- Transférer l'alias stocké dans mains si présent
     do
-        MA.aliasByMain = MA.aliasByMain or {}
-        local oldAlias = MA.aliasByMain[tonumber(mainUID)]
-        if oldAlias ~= nil and MA.aliasByMain[tonumber(altUID)] == nil then
-            MA.aliasByMain[tonumber(altUID)] = oldAlias
+        local oldMainEntry = MA.mains[mainUID]
+        local newMainEntry = MA.mains[altUID]
+        if type(newMainEntry) ~= "table" then newMainEntry = {} end
+        if type(oldMainEntry) == "table" and newMainEntry.alias == nil then
+            newMainEntry.alias = oldMainEntry.alias
         end
-        -- Optionnel: effacer l'ancien pour éviter les doublons
-        MA.aliasByMain[tonumber(mainUID)] = nil
+        MA.mains[altUID] = newMainEntry
     end
 
     if ns.Emit then ns.Emit("mainalt:changed", "promote-alt", altFull, mainName) end

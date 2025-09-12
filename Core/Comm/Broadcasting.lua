@@ -485,12 +485,12 @@ function GLOG.BroadcastMainAltFull()
     if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local rv = _maIncRv()
-    local MAv = 1
+    local MAv = 2
     local MA, AM = {}, {}
     do
-        local t = GuildLogisticsDB.mainAlt or {}
-        MAv = safenum(t.version, 1)
-        for uid, flag in pairs(t.mains or {}) do if flag then MA[#MA+1] = tostring(uid) end end
+    local t = GuildLogisticsDB.mainAlt or {}
+    MAv = safenum(t.version, 2)
+    for uid, flag in pairs(t.mains or {}) do if flag then MA[#MA+1] = tostring(uid) end end
         for a, m in pairs(t.altToMain or {}) do AM[#AM+1] = tostring(a)..":"..tostring(m) end
         table.sort(MA); table.sort(AM)
     end

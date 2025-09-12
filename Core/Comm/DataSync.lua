@@ -123,12 +123,12 @@ function GLOG.SnapshotExport()
     end
 
     -- ===== Main/Alt (compact) =====
-    local MAv = 1
+    local MAv = 2
     local MA, AM = {}, {}
     do
         local t = GuildLogisticsDB.mainAlt
         if type(t) == "table" then
-            MAv = safenum(t.version, 1)
+            MAv = safenum(t.version, 2)
             -- mains set
             for uid, flag in pairs(t.mains or {}) do
                 if flag then MA[#MA+1] = tostring(safenum(uid, 0)) end
@@ -202,7 +202,7 @@ function GLOG.SnapshotApply(kv)
     GuildLogisticsDB.expenses = { list = {}, nextId = 1 }
     GuildLogisticsDB.lots     = { list = {}, nextId = 1 }
     -- Initialise/flush mainAlt; sera rempli si présent dans le snapshot
-    GuildLogisticsDB.mainAlt  = { version = 1, mains = {}, altToMain = {} }
+    GuildLogisticsDB.mainAlt  = { version = 2, mains = {}, altToMain = {} }
 
     local meta = GuildLogisticsDB.meta
     meta.rev         = safenum(kv.rv, 0)
@@ -401,14 +401,14 @@ function GLOG.SnapshotApply(kv)
 
     -- 8) Main/Alt (si présent)
     do
-        local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
-        t.version = safenum(kv.MAv, safenum(t.version, 1))
+        local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
+        t.version = safenum(kv.MAv, safenum(t.version, 2))
         t.mains = {}
         t.altToMain = {}
         if type(kv.MA) == "table" then
             for _, s in ipairs(kv.MA) do
                 local u = tonumber(s)
-                if u and u > 0 then t.mains[u] = true end
+                if u and u > 0 then t.mains[u] = {} end
             end
         end
         if type(kv.AM) == "table" then

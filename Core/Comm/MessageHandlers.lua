@@ -53,11 +53,11 @@ end
 local function handleMAFull(sender, kv)
     if not _maShouldApply(kv) then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
-    GuildLogisticsDB.mainAlt = { version = 1, mains = {}, altToMain = {} }
+    GuildLogisticsDB.mainAlt = { version = 2, mains = {}, altToMain = {} }
     local t = GuildLogisticsDB.mainAlt
-    t.version = safenum(kv.MAv, 1)
+    t.version = safenum(kv.MAv, 2)
     for _, s in ipairs(kv.MA or {}) do
-        local u = tonumber(s); if u and u > 0 then t.mains[u] = true end
+    local u = tonumber(s); if u and u > 0 then t.mains[u] = {} end
     end
     for _, s in ipairs(kv.AM or {}) do
         local a, m = tostring(s):match("^(%-?%d+):(%-?%d+)$")
@@ -73,8 +73,8 @@ local function handleMASetMain(sender, kv)
     if not _maShouldApply(kv) then return end
     local u = safenum(kv.u, 0); if u <= 0 then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
-    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
-    t.mains[u] = true; t.altToMain[u] = nil
+    local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
+    t.mains[u] = (type(t.mains[u]) == "table") and t.mains[u] or {}; t.altToMain[u] = nil
     GuildLogisticsDB.mainAlt = t
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
     if ns.Emit then ns.Emit("mainalt:changed", "net-set-main") end
@@ -85,8 +85,8 @@ local function handleMAAssign(sender, kv)
     if not _maShouldApply(kv) then return end
     local au, mu = safenum(kv.a,0), safenum(kv.m,0); if au <= 0 or mu <= 0 then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
-    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
-    t.mains[mu] = true; t.mains[au] = nil; t.altToMain[au] = mu
+    local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
+    t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}; t.mains[au] = nil; t.altToMain[au] = mu
     GuildLogisticsDB.mainAlt = t
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
     if ns.Emit then ns.Emit("mainalt:changed", "net-assign") end
@@ -97,7 +97,7 @@ local function handleMAUnassign(sender, kv)
     if not _maShouldApply(kv) then return end
     local au = safenum(kv.a,0); if au <= 0 then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
-    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
     t.altToMain[au] = nil
     GuildLogisticsDB.mainAlt = t
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
@@ -109,7 +109,7 @@ local function handleMARemoveMain(sender, kv)
     if not _maShouldApply(kv) then return end
     local u = safenum(kv.u,0); if u <= 0 then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
-    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
     t.mains[u] = nil
     -- ne force pas les alts → pool
     for a, m in pairs(t.altToMain) do if safenum(m,0) == u then t.altToMain[a] = nil end end
@@ -123,13 +123,13 @@ local function handleMAPromote(sender, kv)
     if not _maShouldApply(kv) then return end
     local au, mu = safenum(kv.a,0), safenum(kv.m,0); if au <= 0 or mu <= 0 then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
-    local t = GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
     -- Repointage des alts de mu vers au, et mu devient alt
     for a, m in pairs(t.altToMain) do if safenum(m,0) == mu then t.altToMain[a] = au end end
     t.altToMain[mu] = au
     t.altToMain[au] = nil
     t.mains[mu] = nil
-    t.mains[au] = true
+    t.mains[au] = (type(t.mains[au]) == "table") and t.mains[au] or {}
     GuildLogisticsDB.mainAlt = t
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
     if ns.Emit then ns.Emit("mainalt:changed", "net-promote") end

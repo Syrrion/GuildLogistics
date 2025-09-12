@@ -10,11 +10,10 @@ local GLOG = ns.GLOG
 -- Small helpers to access compact Main/Alt mapping
 local function _MA()
     if GLOG.EnsureDB then GLOG.EnsureDB() end
-    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 1, mains = {}, altToMain = {}, aliasByMain = {} }
+    _G.GuildLogisticsDB.mainAlt = _G.GuildLogisticsDB.mainAlt or { version = 2, mains = {}, altToMain = {} }
     local t = _G.GuildLogisticsDB.mainAlt
     t.mains       = t.mains       or {}
     t.altToMain   = t.altToMain   or {}
-    t.aliasByMain = t.aliasByMain or {}
     return t
 end
 
@@ -87,7 +86,8 @@ function GLOG.GetAliasFor(name)
         if m then mainUID = tonumber(m) end
     end
     if not mainUID then return nil end
-    local alias = MA.aliasByMain[tonumber(mainUID)]
+    local entry = MA.mains[tonumber(mainUID)]
+    local alias = (type(entry) == "table") and entry.alias or nil
     if alias and alias ~= "" then return alias end
     return nil
 end
@@ -112,7 +112,10 @@ function GLOG.SetAliasLocal(name, alias)
     if not mainUID then return end
     local val = tostring(alias or ""):gsub("^%s+",""):gsub("%s+$","")
     local stored = (val ~= "") and val or nil
-    MA.aliasByMain[tonumber(mainUID)] = stored
+    local entry = MA.mains[tonumber(mainUID)]
+    if type(entry) ~= "table" then entry = {} end
+    entry.alias = stored
+    MA.mains[tonumber(mainUID)] = entry
 
     -- Source d'autorité unique: mainAlt.aliasByMain
 
@@ -147,7 +150,7 @@ function GLOG.GM_SetAlias(name, alias)
     return true
 end
 
--- No migration code: alias only lives in mainAlt.aliasByMain
+-- alias stockés dans mains[uid].alias (schéma v2)
 
 -- ===== Export des fonctions utilitaires =====
 
