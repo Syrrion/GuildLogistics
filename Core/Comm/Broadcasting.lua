@@ -608,7 +608,20 @@ function GLOG.CreateStatusUpdatePayload(overrides)
                     local mid2 = (rec.mkeyMapId  ~= nil) and safenum(rec.mkeyMapId,  -1)          or -1
                     local lvl2 = (rec.mkeyLevel  ~= nil) and safenum(rec.mkeyLevel,  -1)          or -1
                     local sc   = (rec.mplusScore ~= nil) and safenum(rec.mplusScore, -1)          or -1
-                    local ver  = tostring(rec.addonVersion or "")  -- Version de l'addon
+                    -- Lire la version depuis mainAlt.shared[uid].addonVersion
+                    local ver = ""
+                    do
+                        GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { shared = {} }
+                        local sh = GuildLogisticsDB.mainAlt.shared or {}
+                        local srec = sh[uid]
+                        if srec and srec.addonVersion then ver = tostring(srec.addonVersion) end
+                        -- Utiliser la version cache runtime si connue
+                        if (not ver or ver == "") and GLOG.GetPlayerAddonVersion then
+                            local cached = GLOG.GetPlayerAddonVersion(full)
+                            if cached and cached ~= "" then ver = tostring(cached) end
+                        end
+                        -- La version doit venir de shared ou du cache runtime
+                    end
                     if (il >= 0) or (ilMx >= 0) or (mid2 >= 0) or (lvl2 >= 0) or (sc >= 0) or (ver ~= "") then
                         S[#S+1] = string.format("%d;%d;%d;%d;%d;%d;%d;%s", uid, ts2, il, ilMx, mid2, lvl2, sc, ver)
                         processedCount = processedCount + 1
@@ -707,11 +720,17 @@ function GLOG.BroadcastStatusUpdate(overrides)
                 if ns.Emit then ns.Emit("mplus:changed", me) end
             end
 
-            -- Version de l'addon (toujours mettre à jour pour s'assurer qu'elle est présente)
+            -- Version de l'addon: écrire dans mainAlt.shared[uid]
             local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
             if currentVersion ~= "" then
-                p.addonVersion = currentVersion
-                changed = true
+                local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or nil
+                if uid then
+                    GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { shared = {} }
+                    local sh = GuildLogisticsDB.mainAlt.shared; if not sh then GuildLogisticsDB.mainAlt.shared = {}; sh = GuildLogisticsDB.mainAlt.shared end
+                    sh[uid] = sh[uid] or {}
+                    sh[uid].addonVersion = currentVersion
+                    changed = true
+                end
             end
 
             if changed and ts > prev then

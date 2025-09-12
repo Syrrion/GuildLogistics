@@ -154,7 +154,14 @@ local function _SetAddonVersionLocal(name, version, ts, by)
     local nowts = tonumber(ts) or time()
     local prev_ts = tonumber(p.statusTimestamp or 0) or 0
     if nowts >= prev_ts then
-        p.addonVersion = tostring(version or "")
+        -- Écrire la version dans mainAlt.shared[uid]
+        local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name)) or nil
+        if uid then
+            GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { shared = {} }
+            local sh = GuildLogisticsDB.mainAlt.shared; if not sh then GuildLogisticsDB.mainAlt.shared = {}; sh = GuildLogisticsDB.mainAlt.shared end
+            sh[uid] = sh[uid] or {}
+            sh[uid].addonVersion = tostring(version or "")
+        end
         p.statusTimestamp = nowts
         -- Pas d'événement spécifique pour la version, cela sera inclus dans le refresh global
     end

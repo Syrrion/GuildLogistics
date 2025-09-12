@@ -38,10 +38,10 @@ local function _nameFor(uid)
     return (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
 end
 
--- Détection automatique par note SUPPRIMÉE (conservée seulement pour suggestions via GLOG.SuggestAltsForMain)
+-- Détection automatique par note non utilisée; uniquement des liens manuels, la note sert aux suggestions via GLOG.SuggestAltsForMain
 
 -- ====== Helpers DB ======
--- Legacy helpers kept minimal for sparse players table
+-- Helpers internes pour limiter l'empreinte mémoire de la table players
 local function _ensurePlayerRec(name)
     EnsureDB()
     local full = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or name
@@ -207,7 +207,7 @@ function GLOG.GetMainOf(name)
             end
         end
     end
-    -- 2) Fallback: self (pas de détection automatique par note)
+    -- 2) Retour par défaut: self (pas de détection automatique par note)
     return name
 end
 
@@ -248,24 +248,29 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     local mainName = _nameFor(mainUID)
     local altFull  = _nameFor(altUID) or altName
 
-    -- Échanger les soldes entre l'ancien main et l'alt promu (préserve la "banque" du groupe)
-    if GLOG.GetSoldeByUID and GLOG.SetSoldeByUID then
-        local balMain = tonumber(GLOG.GetSoldeByUID(mainUID)) or 0
-        local balAlt  = tonumber(GLOG.GetSoldeByUID(altUID))  or 0
-        GLOG.SetSoldeByUID(mainUID, balAlt)
-        GLOG.SetSoldeByUID(altUID,  balMain)
-    elseif GLOG.GetSolde and GLOG.AdjustSolde then
-        -- Fallback (moins propre) : transférer tout le solde du main vers l'alt
-        local balMain = tonumber(GLOG.GetSolde(mainName)) or 0
-        if balMain ~= 0 then
-            GLOG.AdjustSolde(altFull,  balMain)
-            GLOG.AdjustSolde(mainName, -balMain)
+    -- Échanger l'intégralité des données partagées (solde, addonVersion, etc.)
+    if GLOG.SwapSharedBetweenUIDs then
+        GLOG.SwapSharedBetweenUIDs(mainUID, altUID)
+    else
+    -- Alternative minimale: ne gérer que le solde
+        if GLOG.GetSoldeByUID and GLOG.SetSoldeByUID then
+            local balMain = tonumber(GLOG.GetSoldeByUID(mainUID)) or 0
+            local balAlt  = tonumber(GLOG.GetSoldeByUID(altUID))  or 0
+            GLOG.SetSoldeByUID(mainUID, balAlt)
+            GLOG.SetSoldeByUID(altUID,  balMain)
+        elseif GLOG.GetSolde and GLOG.AdjustSolde then
+            -- Alternative : transférer tout le solde du main vers l'alt
+            local balMain = tonumber(GLOG.GetSolde(mainName)) or 0
+            if balMain ~= 0 then
+                GLOG.AdjustSolde(altFull,  balMain)
+                GLOG.AdjustSolde(mainName, -balMain)
+            end
         end
     end
 
     -- Transfert de l'attribut 'reserved':
     --  - le NOUVEAU main (alt promu) récupère la valeur actuelle du main
-    --  - l'ANCIEN main (qui devient alt) est remis à reserved=true
+    --  - l'ancien main (qui devient alt) est remis à reserved=true
     do
         local recMain = select(1, _ensurePlayerRec(mainName))
         local recAlt  = select(1, _ensurePlayerRec(altFull))
@@ -290,7 +295,7 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     MA.mains[altUID] = (type(MA.mains[altUID]) == "table") and MA.mains[altUID] or {}
     -- L'ancien main cesse d'être main
     MA.mains[mainUID] = nil
-    -- S'assurer que l'ancien main est bien marqué comme alt du nouveau (déjà fait via boucle mais au cas où)
+    -- S'assurer que l'ancien main est bien marqué comme alt du nouveau
     MA.altToMain[mainUID] = altUID
 
     -- Transférer/Préserver les métadonnées du main (alias, etc.)
@@ -298,7 +303,7 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
         local tgt = MA.mains[altUID]
         if type(tgt) ~= "table" then tgt = {} end
         if type(oldMainEntry) == "table" then
-            -- Copier tout le contenu de l'ancien main dans le nouveau (écrase alias si défini)
+            -- Copier le contenu de l'ancien main dans le nouveau (écrase alias si défini)
             for k,v in pairs(oldMainEntry) do tgt[k] = v end
         end
         MA.mains[altUID] = tgt

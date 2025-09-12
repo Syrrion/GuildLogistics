@@ -38,6 +38,8 @@ local function EnsureDB()
         -- pas de errOutbox ici : on réutilise GuildLogisticsDB.pending (Comm)
     end
 
+    -- La version d'addon est stockée dans mainAlt.shared[uid].addonVersion
+
     -- Initialisation UI avec sauvegarde des valeurs existantes (base par personnage)
     do
         local ui = GuildLogisticsUI_Char

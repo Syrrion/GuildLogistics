@@ -3,6 +3,20 @@ ns.GLOG = ns.GLOG or {}
 ns.Util = ns.Util or {}
 local GLOG, U = ns.GLOG, ns.Util
 
+-- Helper sûr pour lire les métadonnées du TOC sans référencer de globales non définies
+local function _GetMeta(key)
+    if C_AddOns and C_AddOns.GetAddOnMetadata then
+        return C_AddOns.GetAddOnMetadata(ADDON, key)
+    end
+    do
+        local m = _G and rawget(_G, "GetAddOnMetadata")
+        if type(m) == "function" then
+            return m(ADDON, key)
+        end
+    end
+    return nil
+end
+
 -- Tables pour le suivi des versions d'addon
 GLOG._playerVersions = GLOG._playerVersions or {}
 GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
@@ -10,8 +24,7 @@ GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
 -- Renvoie le titre officiel de l'addon (métadonnée TOC), codes couleur retirés.
 -- Fallback possible via système de traduction 'ns.Tr'.
 function GLOG.GetAddonTitle()
-    local title = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Title"))
-               or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Title"))
+    local title = _GetMeta("Title")
     if type(title) == "string" and title ~= "" then
         return title:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     end
@@ -21,8 +34,7 @@ end
 
 -- Renvoie le chemin/ID d'icône déclaré dans le TOC ; fallback vers une icône générique.
 function GLOG.GetAddonIconTexture()
-    local icon = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "IconTexture"))
-              or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "IconTexture"))
+    local icon = _GetMeta("IconTexture")
     if type(icon) == "string" and icon ~= "" then
         return icon
     end
@@ -31,8 +43,7 @@ end
 
 -- Renvoie la version déclarée (string). Utile pour affichage/compat.
 function GLOG.GetAddonVersion()
-    local v = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-           or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version"))
+    local v = _GetMeta("Version")
            or (ns and ns.Version)
     return tostring(v or "")
 end
@@ -162,20 +173,51 @@ end
 -- @return string|nil: version de l'addon ou nil si inconnue
 function GLOG.GetPlayerAddonVersion(name)
     if not name or name == "" then return nil end
-    
-    local key = tostring(name)
+    -- normaliser le nom pour une clé stable
+    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name)
     local data = GLOG._playerVersions[key]
     
-    if not data then return nil end
-    
-    -- Expirer les données anciennes (plus de 7 jours)
-    local cutoff = time() - (7 * 24 * 60 * 60)
-    if tonumber(data.timestamp or 0) < cutoff then
-        GLOG._playerVersions[key] = nil
-        return nil
+    -- Si présent en cache et non périmé, utiliser cette valeur
+    if data then
+        local cutoff = time() - (7 * 24 * 60 * 60)
+        if tonumber(data.timestamp or 0) >= cutoff then
+            return data.version
+        else
+            -- purge cache périmé
+            GLOG._playerVersions[key] = nil
+        end
     end
+
+    -- Fallback 1: lire depuis mainAlt.shared[uid].addonVersion
+    if GLOG.EnsureDB then GLOG.EnsureDB() end
+    local db = _G.GuildLogisticsDB or {}
+    db.mainAlt = db.mainAlt or { shared = {} }
+    local uid = nil
+    do
+        -- Utiliser l'UID connu si présent en roster, sinon un lookup non-créateur
+        db.players = db.players or {}
+        local p = db.players[key]
+        uid = tonumber(p and p.uid)
+        if not uid then
+            if GLOG.FindUIDByName then
+                uid = tonumber(GLOG.FindUIDByName(key))
+            elseif GLOG.GetUID then
+                uid = tonumber(GLOG.GetUID(key))
+            end
+        end
+    end
+    if uid and db.mainAlt and db.mainAlt.shared then
+        local srec = db.mainAlt.shared[uid]
+        local ver = srec and srec.addonVersion
+        if ver and ver ~= "" then
+            return tostring(ver)
+        end
+    end
+
+    -- Fallback 2 (lecture seule): ancienne position players[*].addonVersion
+        -- Aucune lecture legacy: la version doit être en mainAlt.shared ou cache
     
-    return data.version
+    return nil
 end
 
 -- Nettoyer les versions anciennes

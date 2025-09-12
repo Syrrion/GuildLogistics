@@ -62,11 +62,8 @@ local function _getBalanceByName(name)
     if uid and MA.shared and MA.shared[uid] and MA.shared[uid].solde ~= nil then
         return tonumber(MA.shared[uid].solde) or 0
     end
-    -- Legacy fallback (should be zero after migration)
-    local db = GetDB()
-    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
-    local p = db.players and db.players[key]
-    return (p and tonumber(p.solde)) or 0
+    -- No legacy fallback: authoritative value lives in MA.shared
+    return 0
 end
 
 local function _adjustBalanceByName(name, delta)
@@ -309,6 +306,19 @@ function GLOG.SetSoldeByUID(uid, value)
     local MA = _MA()
     MA.shared[uid] = MA.shared[uid] or { solde = 0 }
     MA.shared[uid].solde = tonumber(value) or 0
+end
+
+-- Swap the entire shared payload between two UIDs (solde, addonVersion, etc.)
+-- This is used when promoting an alt to main so that all aggregated data
+-- follows the "bank" identity. O(1) swap of table references.
+function GLOG.SwapSharedBetweenUIDs(uidA, uidB)
+    uidA = tonumber(uidA); uidB = tonumber(uidB)
+    if not uidA or not uidB or uidA == uidB then return false end
+    local MA = _MA()
+    local a = MA.shared[uidA]
+    local b = MA.shared[uidB]
+    MA.shared[uidA], MA.shared[uidB] = b, a
+    return true
 end
 
 function GLOG.SamePlayer(a, b)

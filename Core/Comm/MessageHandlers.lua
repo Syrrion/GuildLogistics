@@ -517,8 +517,15 @@ local function handleStatusUpdate(sender, kv)
         -- ✨ ===== Version de l'addon =====
         local version = tostring(info.version or "")
         if version ~= "" and n_ts >= prev then
-            p.addonVersion = version
-            changed = true
+            -- Stocker dans mainAlt.shared[uid]
+            local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or nil
+            if uid then
+                GuildLogisticsDB.mainAlt = GuildLogisticsDB.mainAlt or { shared = {} }
+                local sh = GuildLogisticsDB.mainAlt.shared; if not sh then GuildLogisticsDB.mainAlt.shared = {}; sh = GuildLogisticsDB.mainAlt.shared end
+                sh[uid] = sh[uid] or {}
+                sh[uid].addonVersion = version
+                changed = true
+            end
             -- Utiliser aussi la fonction de traçage de version si disponible
             if GLOG.SetPlayerAddonVersion then
                 GLOG.SetPlayerAddonVersion(pname, version, n_ts, sender)
