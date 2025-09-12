@@ -312,7 +312,7 @@ end
 
 -- ===== Alts (25%) =====
 local altsCols = {
-    { key = "name",  title = Tr("lbl_associated_alts") or "Alts associés", flex = 1, min = 140 },
+    { key = "name",  title = Tr("lbl_associated_alts"), flex = 1, min = 140 },
     { key = "act",   title = "", min = 26 },
 }
 
@@ -479,14 +479,14 @@ local function Build(container)
     midPane  = CreateFrame("Frame", nil, panel)
     rightPane= CreateFrame("Frame", nil, panel)
 
-    UI.SectionHeader(leftPane, Tr("lbl_available_pool") or "Pool disponible")
+    UI.SectionHeader(leftPane, Tr("lbl_available_pool"))
     lvPool  = UI.ListView(leftPane,  poolCols,  { buildRow = BuildRowPool,  updateRow = UpdateRowPool,  topOffset = UI.SECTION_HEADER_H or 26 })
 
-    UI.SectionHeader(midPane,  Tr("lbl_mains") or "Mains confirmés")
+    UI.SectionHeader(midPane,  Tr("lbl_mains"))
     lvMains = UI.ListView(midPane,  mainsCols, { buildRow = BuildRowMains, updateRow = UpdateRowMains, topOffset = UI.SECTION_HEADER_H or 26 })
 
     do
-        local _, fs = UI.SectionHeader(rightPane, Tr("lbl_associated_alts") or "Alts associés")
+        local _, fs = UI.SectionHeader(rightPane, Tr("lbl_associated_alts2"))
         rightPane._sectionHeaderFS = fs
     end
     lvAlts  = UI.ListView(rightPane, altsCols, { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts,  topOffset = UI.SECTION_HEADER_H or 26 })
@@ -566,7 +566,7 @@ function Layout()
         if selectedMainName and selectedMainName ~= "" then
             rightPane._sectionHeaderFS:SetText((Tr("lbl_main_prefix") or "Main: ") .. (selectedMainName or ""))
         else
-            rightPane._sectionHeaderFS:SetText(Tr("lbl_associated_alts") or "Alts associés")
+            rightPane._sectionHeaderFS:SetText(Tr("lbl_associated_alts2"))
         end
     end
 end

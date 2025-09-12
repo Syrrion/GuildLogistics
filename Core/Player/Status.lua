@@ -282,7 +282,7 @@ end
 
 -- ✨ Fusion : calcule iLvl (équipé + max) + Clé M+ et envoie un UNIQUE STATUS_UPDATE si changement
 function GLOG.UpdateOwnStatusIfMain()
-    if not (GLOG.IsConnectedMain and GLOG.IsConnectedMain()) then return end
+    -- Autorise aussi les personnages présents dans le roster/réserve (pas uniquement le main connecté)
 
     -- Throttle anti-spam (fusionné)
     local nowp = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
@@ -295,6 +295,17 @@ function GLOG.UpdateOwnStatusIfMain()
     local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
             or ((ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull((UnitName and UnitName("player"))))
             or (UnitName and UnitName("player")) or "?"
+    -- Assure qu'une entrée existe pour le main connecté afin d'autoriser l'application locale et la diffusion
+    do
+        if GLOG.IsConnectedMain and GLOG.IsConnectedMain() then
+            if GLOG.EnsureDB then GLOG.EnsureDB() end
+            GuildLogisticsDB = GuildLogisticsDB or {}
+            GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+            if not GuildLogisticsDB.players[me] then
+                GuildLogisticsDB.players[me] = { createdAt = time and time() or 0 }
+            end
+        end
+    end
     if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then return end
 
     -- ===== iLvl =====
@@ -336,6 +347,9 @@ function GLOG.UpdateOwnStatusIfMain()
         _SetAddonVersionLocal(me, currentVersion, ts, me)
     end
 
+    -- Invalide immédiatement le cache de statut, pour que le prochain payload reflète les nouvelles valeurs
+    if GLOG.InvalidateStatusCache then GLOG.InvalidateStatusCache() end
+
     if (changedIlvl or changedM or changedScore) and GLOG.BroadcastStatusUpdate then
         GLOG.BroadcastStatusUpdate({
             ilvl = ilvl, ilvlMax = ilvlMax,
@@ -375,9 +389,18 @@ function GLOG.UpdateOwnKeystoneIfMain()
     if ns and ns.Util and ns.Util.NormalizeFull then me = ns.Util.NormalizeFull(me) end
 
     -- 🚫 Stop si pas dans roster/réserve (et ne crée **pas** d'entrée)
-    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then
-        return
+    do
+        -- Assure qu'une entrée existe pour le main connecté afin d'autoriser l'application locale et la diffusion
+        if GLOG.IsConnectedMain and GLOG.IsConnectedMain() then
+            if GLOG.EnsureDB then GLOG.EnsureDB() end
+            GuildLogisticsDB = GuildLogisticsDB or {}
+            GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+            if not GuildLogisticsDB.players[me] then
+                GuildLogisticsDB.players[me] = { createdAt = time and time() or 0 }
+            end
+        end
     end
+    if not (GLOG.IsPlayerInRosterOrReserve and GLOG.IsPlayerInRosterOrReserve(me)) then return end
 
     -- Complète le nom du donjon si absent (via résolveur dédié)
     if (not mapName or mapName == "" or mapName == "Clé") and mid and mid > 0 then

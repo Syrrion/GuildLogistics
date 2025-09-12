@@ -12,6 +12,12 @@ local FindGuildInfo
 -- Forward declaration for ListView instance used by handlers
 local lv
 
+-- DB key normalizer: always use full "Name-Realm" for DB-backed lookups
+local function _DBKey(name)
+    if GLOG and GLOG.NormalizeDBKey then return GLOG.NormalizeDBKey(name) end
+    return tostring(name or "")
+end
+
 -- Retourne la "vraie" zone depuis le roster si dispo, sinon fallback cache
 local function _GetLiveZoneForMember(playerName, gi)
     gi = gi or FindGuildInfo(playerName or "")
@@ -431,7 +437,8 @@ function UpdateRow(i, r, f, it)
 
     -- ➕ Version d'addon (uniquement si la colonne existe dans la LV)
     if f.ver then
-        local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(data.name)) or ""
+        local key = _DBKey(data.name)
+        local v = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(key)) or ""
         f.ver:SetText((v ~= "" and "v"..v) or "—")
     end
 
@@ -450,8 +457,9 @@ function UpdateRow(i, r, f, it)
 
     -- Score M+
     if f.mplus then
-        local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
-        local rank = _mplusRanks and _mplusRanks[data.name]
+        local key = _DBKey(data.name)
+        local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(key)) or nil
+        local rank = _mplusRanks and _mplusRanks[key]
         -- Positionne l'icône de médaille à gauche (sans perturber le centrage du texte)
         if f.mplusMedal then
             if rank == 1 then f.mplusMedal:SetAtlas("challenges-medal-gold")
@@ -478,7 +486,8 @@ function UpdateRow(i, r, f, it)
 
     -- Clé M+
     if f.mkey then
-        local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(data.name)) or ""
+        local key = _DBKey(data.name)
+        local mkeyTxt = (GLOG.GetMKeyText and GLOG.GetMKeyText(key)) or ""
         if gi.online then
             f.mkey:SetText((mkeyTxt ~= "" and mkeyTxt) or gray(Tr("status_empty")))
         else
@@ -488,9 +497,10 @@ function UpdateRow(i, r, f, it)
 
     -- iLvl (équipé + max) + médaille top-3 (basée sur iLvl MAX)
     if f.ilvl then
-        local ilvl    = (GLOG.GetIlvl    and GLOG.GetIlvl(data.name))    or nil
-        local ilvlMax = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(data.name)) or nil
-        local rank    = _ilvlRanks and _ilvlRanks[data.name]
+        local key     = _DBKey(data.name)
+        local ilvl    = (GLOG.GetIlvl    and GLOG.GetIlvl(key))    or nil
+        local ilvlMax = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(key)) or nil
+        local rank    = _ilvlRanks and _ilvlRanks[key]
         -- Positionne l'icône de médaille à gauche (sans perturber le centrage du texte)
         if f.ilvlMedal then
             if rank == 1 then f.ilvlMedal:SetAtlas("challenges-medal-gold")
@@ -524,7 +534,7 @@ function UpdateRow(i, r, f, it)
             end
         end
 
-        f.ilvl:SetText( (FindGuildInfo(data.name or "").online) and fmtOnline() or fmtOffline() )
+        f.ilvl:SetText( gi.online and fmtOnline() or fmtOffline() )
     end
 end
 
@@ -682,9 +692,10 @@ local function _DoRefresh()
     do
         local ranks = {}
         for _, it in ipairs(base) do
-            local s = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(it.name)) or 0
+            local key = _DBKey(it.name)
+            local s = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(key)) or 0
             if s and s > 0 then
-                ranks[#ranks+1] = { name = it.name, s = s }
+                ranks[#ranks+1] = { name = key, s = s }
             end
         end
         table.sort(ranks, function(a,b) return (a.s or 0) > (b.s or 0) end)
@@ -716,10 +727,11 @@ local function _DoRefresh()
     do
         local ranks = {}
         for _, it in ipairs(base) do
-            local maximum  = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(it.name)) or 0
+            local key = _DBKey(it.name)
+            local maximum  = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(key)) or 0
             local v = tonumber(maximum or 0) or 0
             if v and v > 0 then
-                ranks[#ranks+1] = { name = it.name, v = v }
+                ranks[#ranks+1] = { name = key, v = v }
             end
         end
         table.sort(ranks, function(a,b) return (a.v or 0) > (b.v or 0) end)

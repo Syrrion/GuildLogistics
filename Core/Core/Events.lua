@@ -398,11 +398,17 @@ f:SetScript("OnEvent", function(self, event, name)
             ns.Util.After(5.0, function() GLOG.UpdateOwnStatusIfMain() end)
         end
 
-    elseif event == "PLAYER_AVG_ITEM_LEVEL_UPDATE" then
-        C_Timer.After(1, function()
-            if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
-        end)
-
+    elseif event == "PLAYER_AVG_ITEM_LEVEL_UPDATE"
+        or event == "PLAYER_EQUIPMENT_CHANGED" then
+        -- Coalescer: un seul UpdateOwnStatusIfMain au bout de 3s si plusieurs événements surviennent
+        GLOG._pendingStatusTimer = GLOG._pendingStatusTimer or nil
+        if not GLOG._pendingStatusTimer then
+            GLOG._pendingStatusTimer = true
+            C_Timer.After(3, function()
+                GLOG._pendingStatusTimer = nil
+                if GLOG.UpdateOwnStatusIfMain then GLOG.UpdateOwnStatusIfMain() end
+            end)
+        end
 
     elseif event == "CHALLENGE_MODE_KEYSTONE_SLOTTED"
         or event == "CHALLENGE_MODE_START"

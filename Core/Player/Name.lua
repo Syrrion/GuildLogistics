@@ -31,8 +31,7 @@ function GLOG.NormName(name)
     return out
 end
 
--- Expose aussi CleanFullName pour compat ascendante (certains appels peuvent l'utiliser)
-U.CleanFullName = U.CleanFullName or CleanFullName
+-- (exposé plus bas après définition)
 
 -- Corrige les doublons de royaume dans "Nom-Royaume-Royaume-..." -> "Nom-Royaume".
 local function CleanFullName(full)
@@ -89,7 +88,8 @@ end
 
 -- Renvoie le nom complet du joueur local "Nom-Royaume" en nettoyant le royaume.
 local function playerFullName()
-    local n, r = UnitFullName and UnitFullName("player")
+    local n, r = nil, nil
+    if UnitFullName then n, r = UnitFullName("player") end
     if n and r and r ~= "" then
         return n .. "-" .. r:gsub("%s+", ""):gsub("'", "")
     end
@@ -113,19 +113,48 @@ function GLOG.ResolveFullName(name)
         return (cleaner and cleaner(n)) or n
     end
 
-    -- Sinon, essaie de résoudre via le cache de guilde (sans inventer le royaume local)
-    local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
-    local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
-    for _, r in ipairs(rows) do
-        local full = r.name_raw or r.name_amb or r.name or ""
-        if full ~= "" then
-            local base = (full:match("^([^%-]+)%-") or full)
-            if base and (base:lower() == key) then
-                local cleaner = ns and ns.Util and ns.Util.CleanFullName
-                return (cleaner and cleaner(full)) or full
+    -- Sinon, résolution via index rapide du cache de guilde (sans inventer le royaume local)
+    GLOG._resolveMemo = GLOG._resolveMemo or { ts = -1, byKey = {} }
+    local ts = (GLOG.GetGuildCacheTimestamp and GLOG.GetGuildCacheTimestamp()) or 0
+    if GLOG._resolveMemo.ts ~= ts then
+        GLOG._resolveMemo.ts  = ts
+        GLOG._resolveMemo.byKey = {}
+    end
+
+    local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+    local memo = GLOG._resolveMemo.byKey[key]
+    if memo ~= nil then return memo end
+
+    local byKey = GLOG._guildCache and GLOG._guildCache.fullByKey or nil
+    if byKey then
+        local full = byKey[key]
+        if full and full ~= "" then
+            local cleaner = ns and ns.Util and ns.Util.CleanFullName
+            full = (cleaner and cleaner(full)) or full
+            GLOG._resolveMemo.byKey[key] = full
+            return full
+        end
+    end
+
+    -- Fallback: un scan léger des rows (une seule fois par clé/ts), puis mémo.
+    do
+        local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        for _, r in ipairs(rows) do
+            local full = r.name_raw or r.name_amb or r.name or ""
+            if full ~= "" then
+                local base = (full:match("^([^%-]+)%-") or full)
+                if base and ((base:lower()) == key) then
+                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                    full = (cleaner and cleaner(full)) or full
+                    GLOG._resolveMemo.byKey[key] = full
+                    return full
+                end
             end
         end
     end
+
+    -- Aucune info fiable
+    GLOG._resolveMemo.byKey[key] = n
     return n
 end
 
@@ -140,45 +169,7 @@ function GLOG.ResolveFullNameStrict(name)
         return (cleaner and cleaner(n)) or n
     end
 
-    -- 1) Cache guilde (identique à ResolveFullName, mais nil si non trouvé)
-    do
-        local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
-        local key  = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
-        for _, r in ipairs(rows) do
-            local full = r.name_raw or r.name_amb or r.name or ""
-            if full ~= "" then
-                local base = (full:match("^([^%-]+)%-") or full)
-                if base and (base:lower() == key) then
-                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
-                    return (cleaner and cleaner(full)) or full
-                end
-            end
-        end
-    end
-
-    -- 2) Déduire depuis la DB locale si UNE seule correspondance existe
-    do
-        if GuildLogisticsDB and GuildLogisticsDB.players then
-            local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
-            local found
-            for full,_ in pairs(GuildLogisticsDB.players) do
-                local base = full:match("^([^%-]+)%-")
-                if base then
-                    local bk = (GLOG.NormName and GLOG.NormName(base)) or base:lower()
-                    if bk == key then
-                        if found and found ~= full then found = "__AMB__"; break end
-                        found = full
-                    end
-                end
-            end
-            if found and found ~= "__AMB__" then
-                local cleaner = ns and ns.Util and ns.Util.CleanFullName
-                return (cleaner and cleaner(found)) or found
-            end
-        end
-    end
-
-    -- 3) Unités (raid/party/target/mouseover)
+    -- 1) Units (rapide, si la personne est dans la portée)
     local function tryUnit(u)
         if not UnitExists or not UnitExists(u) then return nil end
         local nn, rr = UnitName(u)
@@ -200,7 +191,56 @@ function GLOG.ResolveFullNameStrict(name)
         return (cleaner and cleaner(full)) or full
     end
 
-    -- 4) Strict: inconnu
+    -- 2) Index rapide du cache guilde (strict)
+    do
+        local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+        local byKey = GLOG._guildCache and GLOG._guildCache.fullByKey or nil
+        local full2 = byKey and byKey[key] or nil
+        if full2 and full2 ~= "" then
+            local cleaner = ns and ns.Util and ns.Util.CleanFullName
+            return (cleaner and cleaner(full2)) or full2
+        end
+    end
+
+    -- 3) Fallback: scan léger des rows en cache (strict)
+    do
+        local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+        for _, r in ipairs(rows) do
+            local full = r.name_raw or r.name_amb or r.name or ""
+            if full ~= "" then
+                local base = (full:match("^([^%-]+)%-") or full)
+                if base and ((base:lower()) == key) then
+                    local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                    return (cleaner and cleaner(full)) or full
+                end
+            end
+        end
+    end
+
+    -- 4) Déduire depuis la DB locale si UNE seule correspondance existe
+    do
+        if GuildLogisticsDB and GuildLogisticsDB.players then
+            local key = (GLOG.NormName and GLOG.NormName(n)) or n:lower()
+            local found
+            for full,_ in pairs(GuildLogisticsDB.players) do
+                local base = full:match("^([^%-]+)%-")
+                if base then
+                    local bk = (GLOG.NormName and GLOG.NormName(base)) or base:lower()
+                    if bk == key then
+                        if found and found ~= full then found = "__AMB__"; break end
+                        found = full
+                    end
+                end
+            end
+            if found and found ~= "__AMB__" then
+                local cleaner = ns and ns.Util and ns.Util.CleanFullName
+                return (cleaner and cleaner(found)) or found
+            end
+        end
+    end
+
+    -- 5) Strict: inconnu
     return nil
 end
 
@@ -212,5 +252,7 @@ end
 -- Exposition Util + globales utiles
 U.NormalizeFull  = NormalizeFull
 U.playerFullName = playerFullName
+-- Expose aussi CleanFullName pour compat ascendante (certains appels peuvent l'utiliser)
+U.CleanFullName = U.CleanFullName or CleanFullName
 
 _G.playerFullName = _G.playerFullName or playerFullName

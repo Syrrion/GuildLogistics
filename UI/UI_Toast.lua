@@ -103,12 +103,10 @@ local function _CreateToast(opts)
     f.title:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 8, -2)
     f.title:SetPoint("RIGHT", f, "RIGHT", -10, 0)
     f.title:SetJustifyH("LEFT")
+    if f.title.SetWordWrap then f.title:SetWordWrap(true) end
+    -- Applique d'abord la police, puis le texte pour garantir des métriques correctes
+    if UI and UI.ApplyFont and f.title then UI.ApplyFont(f.title) end
     f.title:SetText(opts.title or Tr("lbl_notification") or "Notification")
-    
-    -- Applique la police au titre
-    if UI and UI.ApplyFont and f.title then
-        UI.ApplyFont(f.title)
-    end
 
     -- Texte
     f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -116,12 +114,10 @@ local function _CreateToast(opts)
     f.text:SetPoint("RIGHT", f, "RIGHT", -10, 0)
     f.text:SetJustifyH("LEFT")
     f.text:SetSpacing(2)
+    -- Applique d'abord la police, puis le texte (évite un calcul de hauteur sur mauvaise fonte)
+    if UI and UI.ApplyFont and f.text then UI.ApplyFont(f.text) end
+    if f.text.SetWordWrap then f.text:SetWordWrap(true) end
     f.text:SetText(opts.text or "")
-    
-    -- Applique la police au texte
-    if UI and UI.ApplyFont and f.text then
-        UI.ApplyFont(f.text)
-    end
 
     -- Bouton action (optionnel)
     if opts.actionText and opts.onAction then
@@ -135,8 +131,23 @@ local function _CreateToast(opts)
         end)
     end
 
-    -- Taille verticale selon contenu
-    f:SetHeight( math.max(64, 18 + f.title:GetStringHeight() + 6 + f.text:GetStringHeight() + (f.action and 24 or 0)) )
+    -- Mesure et ajustement de hauteur (immédiat + re-mesure différée pour le 1er toast)
+    local function _resizeToContent()
+        local th = (f.title and f.title.GetStringHeight and f.title:GetStringHeight()) or 0
+        local sh = (f.text  and f.text.GetStringHeight  and f.text:GetStringHeight())  or 0
+        local want = math.max(64, 18 + th + 6 + sh + (f.action and 24 or 0))
+        if math.abs((f:GetHeight() or 0) - want) > 0.5 then
+            f:SetHeight(want)
+            _Reflow()
+        end
+    end
+    _resizeToContent()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, _resizeToContent)
+    end
+    f:HookScript("OnShow", function()
+        if C_Timer and C_Timer.After then C_Timer.After(0, _resizeToContent) end
+    end)
 
     -- Interactions
     f:SetScript("OnEnter", function(self)

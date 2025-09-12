@@ -57,22 +57,38 @@ function UI.FormatThousands(v, sep)
     return out
 end
 
-function UI.MoneyText(v)
+function UI.MoneyText(v, opts)
     v = tonumber(v) or 0
+    opts = opts or {}
     local n = math.floor(math.abs(v) + 0.5)
-    local iconG = "|TInterface\\MoneyFrame\\UI-GoldIcon:12:12:2:0|t"
+    local h   = tonumber(opts.h)   or 12
+    local yOf = tonumber(opts.y)
+    if yOf == nil then
+        -- Ajuste légèrement selon l'échelle effective pour stabiliser la ligne de base
+        local eff = (UI.Scale and UI.Scale.TARGET_EFF_SCALE) or 1
+        -- offset -2 à 1.0, -1 à >=0.85 (valeurs empiriques)
+        yOf = (eff and eff >= 0.85) and -1 or -2
+    end
+    local iconG = string.format("|TInterface\\MoneyFrame\\UI-GoldIcon:%d:%d:0:%d|t", h, h, yOf)
     local txt = UI.FormatThousands(n) .. " " .. iconG
     if v < 0 then return "|cffff4040-" .. txt .. "|r" else return txt end
 end
 
-function UI.MoneyFromCopper(copper)
+function UI.MoneyFromCopper(copper, opts)
     local n = tonumber(copper) or 0
+    opts = opts or {}
     local abs = math.abs(n)
     local g = math.floor(abs / 10000); local rem = abs % 10000
     local s = math.floor(rem / 100);   local c   = rem % 100
-    local iconG = "|TInterface\\MoneyFrame\\UI-GoldIcon:12:12:2:0|t"
-    local iconS = "|TInterface\\MoneyFrame\\UI-SilverIcon:12:12:2:0|t"
-    local iconC = "|TInterface\\MoneyFrame\\UI-CopperIcon:12:12:2:0|t"
+    local h   = tonumber(opts.h) or 12
+    local yOf = tonumber(opts.y)
+    if yOf == nil then
+        local eff = (UI.Scale and UI.Scale.TARGET_EFF_SCALE) or 1
+        yOf = (eff and eff >= 0.85) and -1 or -2
+    end
+    local iconG = string.format("|TInterface\\MoneyFrame\\UI-GoldIcon:%d:%d:0:%d|t",   h, h, yOf)
+    local iconS = string.format("|TInterface\\MoneyFrame\\UI-SilverIcon:%d:%d:0:%d|t", h, h, yOf)
+    local iconC = string.format("|TInterface\\MoneyFrame\\UI-CopperIcon:%d:%d:0:%d|t", h, h, yOf)
     local parts = {}
     if g > 0 then table.insert(parts, UI.FormatThousands(g) .. " " .. iconG) end
     if s > 0 then table.insert(parts, s .. " " .. iconS) end
