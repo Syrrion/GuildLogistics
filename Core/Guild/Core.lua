@@ -534,6 +534,79 @@ function GLOG.IsGM()
     return false
 end
 
+-- ===== Guild Bank balance (local snapshot) =====
+do
+    local function _ensure()
+        if GLOG.EnsureDB then GLOG.EnsureDB() end
+        GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
+        GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
+    end
+
+    function GLOG.SetGuildBankBalanceCopper(copper)
+        _ensure()
+        local v = tonumber(copper) or 0
+        GuildLogisticsDB_Char.meta.guildBankCopper = v
+        GuildLogisticsDB_Char.meta.lastModified = time and time() or (GuildLogisticsDB_Char.meta.lastModified or 0)
+        if ns.Emit then ns.Emit("guildbank:updated", v) end
+    end
+
+    function GLOG.GetGuildBankBalanceCopper()
+        _ensure()
+        local v = GuildLogisticsDB_Char.meta.guildBankCopper
+        if v == nil then return nil end
+        return tonumber(v) or 0
+    end
+
+    -- Capture la valeur dès ouverture/maj de la BdG
+    local function _capture()
+        if not GetGuildBankMoney then return end
+        local c = GetGuildBankMoney()
+        if type(c) == "number" and c >= 0 then
+            GLOG.SetGuildBankBalanceCopper(c)
+        end
+    end
+
+    local function _captureWithRetry(tries, delay)
+        tries = tries or 8
+        delay = delay or 0.1
+        local function step(rem)
+            if rem <= 0 then return end
+            _capture()
+            -- Stop early if we captured a non-nil value
+            local v = GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
+            if v ~= nil then return end
+            if C_Timer and C_Timer.After then C_Timer.After(delay, function() step(rem - 1) end) end
+        end
+        step(tries)
+    end
+
+    if ns and ns.Events and ns.Events.Register then
+        ns.Events.Register("GUILDBANKFRAME_OPENED", GLOG, function()
+            -- Petite latence + retries pour laisser les données arriver
+            if C_Timer and C_Timer.After then C_Timer.After(0.05, function() _captureWithRetry(10, 0.1) end) else _capture() end
+        end)
+        ns.Events.Register("GUILDBANK_UPDATE_MONEY", GLOG, function()
+            _capture()
+        end)
+        -- Sécurité: à la fermeture, on tente une dernière capture
+        ns.Events.Register("GUILDBANKFRAME_CLOSED", GLOG, function()
+            _capture()
+        end)
+
+        -- Retail: ouverture via le manager d'interactions (certains UIs)
+        ns.Events.Register("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", GLOG, function(_, _, interactionType)
+            local ok = false
+            if type(Enum) == "table" and Enum.PlayerInteractionType and Enum.PlayerInteractionType.GuildBank then
+                ok = (interactionType == Enum.PlayerInteractionType.GuildBank)
+            else
+                -- Fallback: certains clients passent un nombre magique; on tente une capture légère sans supposer la valeur
+                ok = true
+            end
+            if ok then _captureWithRetry(10, 0.1) end
+        end)
+    end
+end
+
 -- Renvoie le nom de la guilde du joueur s'il est en guilde, sinon nil.
 function GLOG.GetCurrentGuildName()
     if IsInGuild and IsInGuild() then

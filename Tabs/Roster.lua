@@ -3,7 +3,7 @@ local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, resourceFS, sepFS, bothFS, noGuildMsg
+local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, resourceFS, sepFS, bothFS, noGuildMsg, bankLeftFS, bankSepFS, bankRightFS
 
 -- État d’affichage ...
 local reserveCollapsed = true
@@ -394,6 +394,46 @@ local function Refresh()
         local ctxt = (UI and UI.MoneyText) and UI.MoneyText(combinedGold) or (tostring(math.floor(combinedGold + 0.5)).." po")
         bothFS:SetText("|cffffd200"..Tr("lbl_total_both").." :|r " .. ctxt)
     end
+
+    -- Banque et Équilibre (alignés à droite, labels orange, séparateur gris comme à gauche)
+    if bankRightFS and bankLeftFS then
+        local bankCopper = GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
+        local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
+        local xTxt, yTxt
+        if bankCopper == nil then
+            -- Bank unknown: show grey 'No data' and tooltip for both X and Y
+            local nd = "|cffaaaaaa"..(Tr("no_data") or "Aucune données").."|r"
+            xTxt = nd
+            yTxt = nd
+        else
+            local bankGold   = bankCopper / 10000
+            local equilibrium = (bankGold or 0) - (combinedGold or 0)
+            xTxt = (UI and UI.MoneyText and UI.MoneyText(bankGold))
+                or tostring(math.floor(bankGold + 0.5)).." po"
+            do
+                local base = (UI and UI.MoneyText) and UI.MoneyText(equilibrium) or (tostring(math.floor(equilibrium + 0.5)).." po")
+                if equilibrium and equilibrium > 0 then
+                    -- Positive equilibrium in green; negative already red via MoneyText
+                    yTxt = "|cff40ff40"..base.."|r"
+                else
+                    yTxt = base
+                end
+            end
+        end
+        local orange = "|cffffd200"; local reset = "|r"
+        bankLeftFS:SetText(orange..(Tr("lbl_bank_balance") or "Solde Banque").." :"..reset.." "..xTxt)
+        -- Tooltip on values when data is missing
+        if (bankCopper == nil) and UI and UI.SetTooltip then
+            local hint = Tr("hint_open_gbank_to_update") or "Ouvrir la banque de guilde pour mettre à jour cette donnée"
+            UI.SetTooltip(bankLeftFS, hint)
+            UI.SetTooltip(bankRightFS, hint)
+        else
+            -- Remove tooltips if previously set (safe no-op)
+            if bankLeftFS.SetScript then bankLeftFS:SetScript("OnEnter", nil); bankLeftFS:SetScript("OnLeave", nil) end
+            if bankRightFS.SetScript then bankRightFS:SetScript("OnEnter", nil); bankRightFS:SetScript("OnLeave", nil) end
+        end
+        bankRightFS:SetText(orange..(Tr("lbl_equilibrium") or "Équilibre").." :"..reset.." "..yTxt)
+    end
 end
 
 -- Footer
@@ -544,6 +584,23 @@ local function Build(container)
         bothFS:SetPoint("LEFT", sepFS, "RIGHT", 16, 0)
     end
 
+    -- Bloc aligné à droite: "Solde Banque : X | Équilibre : Y" avec séparateur gris et espacement identique
+    if not bankRightFS then
+        bankRightFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        bankRightFS:SetPoint("RIGHT", footer, "RIGHT", - (UI.FOOTER_RIGHT_PAD or 8), 0)
+        bankRightFS:SetJustifyH("RIGHT")
+    end
+    if not bankSepFS then
+        bankSepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+        bankSepFS:SetPoint("RIGHT", bankRightFS, "LEFT", -16, 0)
+        bankSepFS:SetText("|")
+    end
+    if not bankLeftFS then
+        bankLeftFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        bankLeftFS:SetPoint("RIGHT", bankSepFS, "LEFT", -16, 0)
+        bankLeftFS:SetJustifyH("RIGHT")
+    end
+
 
     local isGM = GLOG.IsMaster and GLOG.IsMaster()
     BuildFooterButtons(footer, isGM)
@@ -577,6 +634,23 @@ do
         end
     end
     ns.Events.Register("GROUP_ROSTER_UPDATE", _onGroupChanged)
+end
+
+-- Rafraîchir le footer quand la banque de guilde met à jour son solde
+do
+    local function _onGuildBankUpdated()
+        -- Rafraîchit uniquement si l'UI principale est visible
+        if ns and ns.UI and ns.UI.Main and ns.UI.Main:IsShown() then
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.1, function()
+                    if Refresh then Refresh() end
+                end)
+            else
+                if Refresh then Refresh() end
+            end
+        end
+    end
+    if GLOG and GLOG.On then GLOG.On("guildbank:updated", _onGuildBankUpdated) end
 end
 
 

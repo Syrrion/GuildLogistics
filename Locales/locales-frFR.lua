@@ -454,6 +454,14 @@ L["raid_row_group3"]         = "Roi-nexus et Dimensius"
 
 -- pied récapitulatif
 L["raid_footer_ilvl_max"]    = "NIVEAU D'OBJET MAX"
+
+-- Pied de page banque/équilibre (Roster)
+L["lbl_bank_balance"] = "Solde Banque"
+L["lbl_equilibrium"]  = "Équilibre"
+
+-- Aide / infos banque guilde
+L["no_data"] = "Aucune données"
+L["hint_open_gbank_to_update"] = "Ouvrir la banque de guilde pour mettre à jour cette donnée"
 L["tab_raid_loot"]           = "Manaforge Oméga"
 L["raid_intro_b1"]           = "Le raid final de la Manaforge Omega contient plusieurs pièces d’équipement de 671 à 723 niveaux d’objet :"
 L["raid_intro_b2"]           = "- Les raids des marcheurs du temps proposent 681 niveaux d’objet (Champion 1) lorsque l’événement est actif."

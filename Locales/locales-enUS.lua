@@ -474,6 +474,14 @@ L["raid_row_group3"]         = "Nexus-King and Dimensius"
 
 -- Footer
 L["raid_footer_ilvl_max"]    = "MAX ITEM LEVEL"
+
+-- Bank/equilibrium footer (Roster)
+L["lbl_bank_balance"] = "Bank balance"
+L["lbl_equilibrium"]  = "Equilibrium"
+
+-- Guild bank help/hints
+L["no_data"] = "No data"
+L["hint_open_gbank_to_update"] = "Open the guild bank to update this data"
 L["tab_raid_loot"]           = "Manaforge Omega"
 L["raid_intro_b1"]           = "The final raid Manaforge Omega contains several gear pieces from ilvl 671 to 723:"
 L["raid_intro_b2"]           = "- Timewalking raids offer ilvl 681 (Champion 1) when active."

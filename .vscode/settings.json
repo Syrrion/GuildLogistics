@@ -59,7 +59,8 @@
         "UISpecialFrames",
         "DEFAULT_CHAT_FRAME",
         "GameTooltip",
-        "AddonCompartmentFrame"
+        "AddonCompartmentFrame",
+        "GuildBankFrame"
     ],
     "Lua.type.weakUnionCheck": true,
     "Lua.diagnostics.disable": [
