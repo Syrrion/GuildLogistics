@@ -18,14 +18,10 @@ local function UpdateDBVersionLabel()
 end
 
 -- Affiche la version de l'addon dans le footer 
-local function UpdateAddonVersionLabel()
-    if not gmFS then return end
-    -- Version locale de l’addon (via TOC, cf. GLOG.GetAddonVersion déjà fourni dans Core/Comm.lua)
-    local ver = (GLOG and GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or (ns and ns.Version) or ""
-    ver = tostring(ver or "")
-    -- Affichage minimaliste, sans clé de locale (ex.: "v1.2.3")
-    gmFS:SetText((ver ~= "" and ("v" .. ver)) or "v ?")
-end
+local function UpdateAddonVersionLabel() end
+
+-- Placeholder pour compatibilité avec anciens appels (étiquette GM retirée)
+local function UpdateMasterLabel() end
 
 
 -- Filtrage UI : ne pas montrer côté RECU les messages dont l'émetteur est moi
@@ -41,7 +37,10 @@ local function TryDecompressPayload(s)
     if type(LibStub) == "table" and LibStub.GetLibrary then
         LD = LibStub:GetLibrary("LibDeflate", true)
     end
-    LD = LD or _G.LibDeflate
+    if type(_G) == "table" then
+        local lib = rawget(_G, "LibDeflate")
+        if lib then LD = LD or lib end
+    end
     if not LD then return nil end
     local decoded = LD:DecodeForWoWAddonChannel(s:sub(5)); if not decoded then return nil end
     return LD:DecompressDeflate(decoded)
@@ -213,6 +212,8 @@ local function groupLogs(raw)
                 dir = e.dir, type = e.type, chan = e.chan, target = e.target,
                 seq = e.seq or 0, total = e.total or 1, lastPart = e.part or 1, size = 0,
                 state = nil,
+                -- ✅ Indicateur: on a vu le dernier fragment côté ENVOI (permet de finaliser l'UI)
+                hasFinalSent = false,
                 sentCount = 0,                -- nb fragments effectivement envoyés (ENVOI)
                 parts = {},
             }
@@ -234,6 +235,16 @@ local function groupLogs(raw)
                 g.sentCount = (g.sentCount or 0) + 1
             end
         end
+
+        -- ✅ Si on voit le dernier fragment côté ENVOI, considérer la séquence comme finalisée
+        if e.dir == "send" then
+            local part  = tonumber(e.part or 0) or 0
+            local total = tonumber(e.total or 0) or 0
+            local isFinal = (total > 0 and part >= total)
+            if isFinal and (e.state == "sent" or e.stateText == "Transmis") then
+                g.hasFinalSent = true
+            end
+        end
     end
 
     local out = {}
@@ -245,6 +256,14 @@ local function groupLogs(raw)
         local got = 0
         for i = 1, (g.total or 1) do if g.parts[i] then got = got + 1 end end
         g.gotCount = got
+
+        -- ✅ Fallback robustesse côté ENVOI: si on a vu le dernier fragment envoyé,
+        -- forcer la complétion à total/total même si des fragments intermédiaires
+        -- n'ont pas été tracés (ex.: debug activé en cours de route)
+        if g.dir == "send" and g.hasFinalSent and tonumber(g.total or 0) > 0 then
+            g.sentCount = g.total
+            g.gotCount  = g.total
+        end
 
         local payloads, raws = {}, {}
         for i = 1, (g.total or 1) do

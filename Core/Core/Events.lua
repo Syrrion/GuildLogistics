@@ -5,7 +5,7 @@ local GLOG = ns.GLOG
 -- ===== Bus d'événements internes pour GuildLogistics =====
 -- Structure : { [eventName] = { callback1, callback2, ... } }
 GLOG.__evt = GLOG.__evt or {}
-GLOG.DELAY_AUTO_STATUS = 10
+GLOG.DELAY_AUTO_STATUS = 180
 
 -- S'abonner à un événem-- ➕ Throttle + garde-fou : on ne refresh que si l'UI doit être rafraîchie
 local _pendingUIRefresh = false

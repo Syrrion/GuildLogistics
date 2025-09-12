@@ -77,6 +77,11 @@ local function _ensureTicker()
 
         C_ChatInfo.SendAddonMessage(item.prefix, item.payload, item.channel, item.target)
 
+        -- Mise à jour de la ligne 'pending' pour refléter la progression réelle
+        if GLOG.UpdateSendLog then
+            GLOG.UpdateSendLog(item)
+        end
+
         -- Consommer 1 jeton après envoi effectif
         if OUT_MAX_PER_SEC > 0 then
             _tb_tokens = math.max(0, _tb_tokens - 1)
@@ -88,7 +93,7 @@ local function _ensureTicker()
                         item.seq, item.part, item.total, item.payload)
         end
 
-        -- Nettoyer l'index d'envoi si c'est le dernier fragment
+        -- Nettoyer l'index d'envoi si c'est le dernier fragment (état final "Transmis")
         if item.part == item.total and GLOG.SendLogIndexBySeq then
             GLOG.SendLogIndexBySeq[item.seq] = nil
         end
@@ -133,6 +138,11 @@ local function _send(typeName, channel, target, kv)
             prefix = PREFIX, payload = msg, channel = channel, target = target,
             type = typeName, seq = Seq, part = idx, total = #parts
         }
+    end
+    -- Cas extrême (payload vide) : finaliser la ligne pending pour éviter un état bloqué
+    if #parts == 0 and GLOG.UpdateSendLog then
+        GLOG.UpdateSendLog({ type = typeName, payload = "", channel = channel, target = target, seq = Seq, part = 1, total = 1 })
+        if GLOG.SendLogIndexBySeq then GLOG.SendLogIndexBySeq[Seq] = nil end
     end
     _ensureTicker()
 end

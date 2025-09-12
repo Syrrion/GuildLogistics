@@ -124,11 +124,24 @@ local function _updateSendLog(item)
     _updateIndexes() -- S'assurer que les index sont dans le bon état
     
     local idx = SendLogIndexBySeq[item.seq]
-    if not idx or not DebugLog[idx] or DebugLog[idx].seq ~= item.seq then
-        -- garde-fou (fallback) : recherche en sens inverse
+    local function findPendingRow()
         for i = #DebugLog, 1, -1 do
             local r = DebugLog[i]
-            if r.dir == "send" and r.seq == item.seq and r.part == 0 then
+            if r.dir == "send" and r.seq == item.seq and safenum(r.part, 0) == 0 then
+                return i
+            end
+        end
+        return nil
+    end
+    -- Si l'index ne pointe pas (ou plus) sur la bonne ligne, cherche d'abord la ligne part==0
+    if not idx or not DebugLog[idx] or DebugLog[idx].seq ~= item.seq then
+        idx = findPendingRow() or idx
+    end
+    -- Dernière chance : une ligne d'envoi quelconque pour ce seq (éviter de ne rien mettre à jour)
+    if (not idx) or (not DebugLog[idx]) or (DebugLog[idx].seq ~= item.seq) then
+        for i = #DebugLog, 1, -1 do
+            local r = DebugLog[i]
+            if r.dir == "send" and r.seq == item.seq then
                 idx = i; break
             end
         end
@@ -144,6 +157,14 @@ local function _updateSendLog(item)
         r.part    = item.part
         r.total   = item.total
         r.raw     = item.payload
+        -- Met à jour l'état/text en fonction de la progression
+        r.state   = "sent"
+        r.status  = "sent"
+        if tonumber(item.part or 0) >= tonumber(item.total or 0) and tonumber(item.total or 0) > 0 then
+            r.stateText = "Transmis"
+        else
+            r.stateText = "En cours"
+        end
         if ns.Emit then ns.Emit("debug:changed") end
     else
         -- Pas trouvé : on trace normalement pour ne pas perdre l'info
