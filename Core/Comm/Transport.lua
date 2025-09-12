@@ -19,6 +19,12 @@ local Seq      = 0     -- séquence réseau
 -- Limitation d'émission (paquets / seconde)
 local OUT_MAX_PER_SEC = 2
 
+-- Seau de jetons global pour limiter tous les envois (toutes files confondues)
+-- Cap de burst = 1 → pas de rafale, intervalle régulier
+local _tb_tokens = 0
+local _tb_lastRefill = 0
+local OUT_BURST_CAP = 1
+
 -- ===== État du transport =====
 -- File d'envoi temporisée
 local OutQ      = {}
@@ -40,12 +46,22 @@ local function _ensureTicker()
     local idle = 0   -- compte les ticks "sans travail"
 
     OutTicker = C_Timer.NewTicker(0.1, function()
-        -- Utilise un temps relatif haute résolution pour le throttling
+        -- Utilise un temps relatif haute résolution pour le throttling (seau de jetons global)
         local t = (type(GetTimePreciseSec) == "function" and GetTimePreciseSec())
                or (type(GetTime) == "function" and GetTime())
                or 0
-        if OUT_MAX_PER_SEC > 0 and (t - last) < (1.0 / OUT_MAX_PER_SEC) then return end
-        last = t
+
+        if OUT_MAX_PER_SEC > 0 then
+            if _tb_lastRefill == 0 then _tb_lastRefill = t end
+            local dt = t - _tb_lastRefill
+            if dt > 0 then
+                _tb_tokens = math.min(OUT_BURST_CAP, _tb_tokens + dt * OUT_MAX_PER_SEC)
+                _tb_lastRefill = t
+            end
+            if _tb_tokens < 1 then
+                return -- pas assez de jetons, attendre le prochain tick
+            end
+        end
 
         local item = table.remove(OutQ, 1)
         if not item then
@@ -60,6 +76,11 @@ local function _ensureTicker()
         idle = 0
 
         C_ChatInfo.SendAddonMessage(item.prefix, item.payload, item.channel, item.target)
+
+        -- Consommer 1 jeton après envoi effectif
+        if OUT_MAX_PER_SEC > 0 then
+            _tb_tokens = math.max(0, _tb_tokens - 1)
+        end
 
         -- Journalisation fragment envoyé (délégué au module de logging)
         if GLOG.PushLog then
