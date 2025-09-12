@@ -326,18 +326,21 @@ function UI.PopupPromptNumber(title, label, onAccept, opts)
 end
 
 -- Demande de transaction entrante (GM)
-function UI.PopupRequest(playerName, delta, onApprove, onRefuse)
+function UI.PopupRequest(playerName, delta, onApprove, onRefuse, extraNote)
     local title = "popup_tx_request"
     local dlg = UI.CreatePopup({
         title  = title,
         width  = math.floor(520 * 1.10),
-        height = math.floor(220 * 1.20),
+        height = math.floor( (extraNote and extraNote ~= "" and 250 or 220) * 1.20),
     })
     local op = (tonumber(delta) or 0) >= 0 and "|cff40ff40+|r" or "|cffff6060-|r"
     local amt = UI.MoneyText(math.abs(tonumber(delta) or 0))
 
-    dlg:SetMessage(Tr("popup_tx_request_message")
-        :format(playerName or "?", op, amt))
+    local msg = Tr("popup_tx_request_message"):format(playerName or "?", op, amt)
+    if extraNote and extraNote ~= "" then
+        msg = msg .. "\n\n" .. (tostring(extraNote) or "")
+    end
+    dlg:SetMessage(msg)
 
     dlg:SetButtons({
         { text = "btn_approve", default = true, onClick = function()

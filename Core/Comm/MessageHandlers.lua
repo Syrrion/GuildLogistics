@@ -285,29 +285,36 @@ local function handleTxReq(sender, kv)
     local ui = ns.UI
     if ui and ui.PopupRequest then
         local _id = tostring(kv.uid or "") .. ":" .. tostring(kv.ts or now())
+        local extra = nil
+        do
+            local r = tostring(kv.reason or "")
+            if r == "GBANK_DEPOSIT" then
+                extra = (ns.Tr and ns.Tr("tx_reason_gbank_deposit")) or "Guild Bank deposit"
+            elseif r == "GBANK_WITHDRAW" then
+                extra = (ns.Tr and ns.Tr("tx_reason_gbank_withdraw")) or "Guild Bank withdraw"
+            elseif r == "CLIENT_REQ" or r == "MANUAL" then
+                extra = (ns.Tr and ns.Tr("tx_reason_manual_request")) or "Manual request"
+            end
+        end
         ui.PopupRequest(kv.who or sender, safenum(kv.delta,0),
             function()
                 -- ⚠️ IMPORTANT : appliquer par NOM (kv.who) et non par UID local (non global)
                 local who = kv.who or sender
+                local ctx = { reason = (kv.reason or "PLAYER_REQUEST"), requester = who, uid = kv.uid }
                 if GLOG.GM_ApplyAndBroadcastEx then
-                    GLOG.GM_ApplyAndBroadcastEx(who, safenum(kv.delta,0), {
-                        reason = "PLAYER_REQUEST",
-                        requester = who,
-                        uid = kv.uid, -- conservé pour audit/debug
-                    })
+                    GLOG.GM_ApplyAndBroadcastEx(who, safenum(kv.delta,0), ctx)
                 elseif GLOG.GM_ApplyAndBroadcast then
                     GLOG.GM_ApplyAndBroadcast(who, safenum(kv.delta,0))
                 elseif GLOG.GM_ApplyAndBroadcastByUID then
                     -- Fallback ultime si l'API ci-dessus n'existe pas
-                    GLOG.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), {
-                        reason = "PLAYER_REQUEST", requester = who
-                    })
+                    GLOG.GM_ApplyAndBroadcastByUID(kv.uid, safenum(kv.delta,0), ctx)
                 end
                 if GLOG.ResolveRequest then GLOG.ResolveRequest(_id, true, playerFullName()) end
             end,
             function()
                 if GLOG.ResolveRequest then GLOG.ResolveRequest(_id, false, playerFullName()) end
-            end
+            end,
+            extra
         )
     end
 end

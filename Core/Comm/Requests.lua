@@ -41,7 +41,7 @@ function GLOG.ResolveRequest(id, accepted, by)
 end
 
 -- ===== Envoi de demandes d'ajustement (côté client) =====
-function GLOG.RequestAdjust(a, b)
+function GLOG.RequestAdjust(a, b, ctx)
     -- Compat : UI appelle (name, delta) ; ancienne forme : (delta)
     local delta = (b ~= nil) and safenum(b, 0) or safenum(a, 0)
     if delta == 0 then return end
@@ -50,7 +50,7 @@ function GLOG.RequestAdjust(a, b)
     local uid = GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)
     if not uid then return end
 
-    local payload = { uid = uid, delta = delta, who = me, ts = now(), reason = "CLIENT_REQ" }
+    local payload = { uid = uid, delta = delta, who = me, ts = now(), reason = (ctx and ctx.reason) or "CLIENT_REQ" }
 
     -- Heuristique temps-réel : considérer "en ligne" si vu récemment via HELLO
     local function _masterSeenRecently(name)

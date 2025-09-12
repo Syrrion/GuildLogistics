@@ -558,11 +558,45 @@ do
     end
 
     -- Capture la valeur dès ouverture/maj de la BdG
+    local _lastBankCopper = nil
+    local _pendingGuildBankCopper = 0 -- delta en cuivre, signe: + dépôt (banque augmente), - retrait (banque diminue)
+    local _pendingOrigin = nil       -- "GBANK_DEPOSIT" | "GBANK_WITHDRAW"
+
+    local function _selfMainName()
+        local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or (UnitName and UnitName("player")) or nil
+        local main = (GLOG.GetMainOf and me and GLOG.GetMainOf(me)) or me
+        local resolved = (GLOG.ResolveFullName and main and GLOG.ResolveFullName(main)) or main
+        return resolved or me
+    end
+
+    local function _applyPendingDeltaIfAny()
+        if (_pendingGuildBankCopper or 0) == 0 then return end
+        local copper = _pendingGuildBankCopper
+        _pendingGuildBankCopper = 0
+        local gold = (tonumber(copper) or 0) / 10000
+        if gold == 0 then return end
+
+        local target = _selfMainName()
+        if not target or target == "" then return end
+
+        if GLOG.IsMaster and GLOG.IsMaster() then
+            if GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(target, gold) end
+        else
+            if GLOG.RequestAdjust then GLOG.RequestAdjust(target, gold, { reason = _pendingOrigin or "CLIENT_REQ" }) end
+        end
+        _pendingOrigin = nil
+    end
+
     local function _capture()
         if not GetGuildBankMoney then return end
         local c = GetGuildBankMoney()
         if type(c) == "number" and c >= 0 then
+            -- Note l'ancien pour détecter l'évolution (au besoin)
+            _lastBankCopper = _lastBankCopper or (GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper()) or nil
             GLOG.SetGuildBankBalanceCopper(c)
+            -- Après mise à jour confirmée par l'API, on applique le delta en attente si c'était nous
+            _applyPendingDeltaIfAny()
+            _lastBankCopper = c
         end
     end
 
@@ -595,14 +629,49 @@ do
 
         -- Retail: ouverture via le manager d'interactions (certains UIs)
         ns.Events.Register("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", GLOG, function(_, _, interactionType)
-            local ok = false
-            if type(Enum) == "table" and Enum.PlayerInteractionType and Enum.PlayerInteractionType.GuildBank then
-                ok = (interactionType == Enum.PlayerInteractionType.GuildBank)
-            else
-                -- Fallback: certains clients passent un nombre magique; on tente une capture légère sans supposer la valeur
-                ok = true
+            if type(Enum) == "table" and type(Enum.PlayerInteractionType) == "table" then
+                local gb = rawget(Enum.PlayerInteractionType, "GuildBank")
+                if gb ~= nil and interactionType == gb then
+                    _captureWithRetry(10, 0.1)
+                end
             end
-            if ok then _captureWithRetry(10, 0.1) end
+        end)
+    end
+
+    -- Hooks locaux: détecter dépôts/retraits faits par le joueur et aligner les soldes via le même pipeline que les boutons UI
+    do
+        local function safeHook(name, fn)
+            if type(hooksecurefunc) == "function" and type(_G[name]) == "function" then
+                hooksecurefunc(name, fn)
+            end
+        end
+
+        -- Dépôt direct dans la banque de guilde (montant en cuivre)
+        safeHook("DepositGuildBankMoney", function(amount)
+            local v = tonumber(amount) or 0
+            if v ~= 0 then 
+                _pendingGuildBankCopper = (_pendingGuildBankCopper or 0) + v 
+                _pendingOrigin = "GBANK_DEPOSIT"
+            end
+        end)
+
+        -- Retrait: on prend l'or depuis la banque (montant en cuivre)
+        -- Certaines UIs utilisent PickupGuildBankMoney; couvrons ce cas
+        safeHook("PickupGuildBankMoney", function(amount)
+            local v = tonumber(amount) or 0
+            if v ~= 0 then 
+                _pendingGuildBankCopper = (_pendingGuildBankCopper or 0) - v 
+                _pendingOrigin = "GBANK_WITHDRAW"
+            end
+        end)
+
+        -- Certains UIs utilisent explicitement WithdrawGuildBankMoney
+        safeHook("WithdrawGuildBankMoney", function(amount)
+            local v = tonumber(amount) or 0
+            if v ~= 0 then 
+                _pendingGuildBankCopper = (_pendingGuildBankCopper or 0) - v 
+                _pendingOrigin = "GBANK_WITHDRAW"
+            end
         end)
     end
 end
