@@ -578,11 +578,27 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         if restFS.SetWidth  then restFS:SetWidth(cw)  end
     end
 
-    -- Séparateur après le solde (espace supplémentaire demandé)
+    -- Avertissement si solde négatif
+    local anchorAfter = restFS
+    do
+        local afterNum = tonumber(after) or 0
+        if afterNum < 0 then
+            local warnFS = dlg.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            warnFS:SetJustifyH("CENTER")
+            warnFS:SetPoint("TOPLEFT",  restFS, "BOTTOMLEFT",  0, -8)
+            warnFS:SetPoint("TOPRIGHT", restFS, "BOTTOMRIGHT", 0, -8)
+            warnFS:SetText( (Tr and Tr("warn_negative_balance")) or "Warning: your balance is negative. Please settle your balance." )
+            if UI and UI.ApplyFont and warnFS then UI.ApplyFont(warnFS) end
+            if warnFS.SetTextColor then warnFS:SetTextColor(1, 0.25, 0.25) end -- rouge doux
+            anchorAfter = warnFS
+        end
+    end
+
+    -- Séparateur après le solde (ou après l'avertissement si présent)
     local sep = dlg.content:CreateTexture(nil, "BORDER")
     sep:SetColorTexture(1, 1, 1, 0.06)
-    sep:SetPoint("TOPLEFT",  restFS, "BOTTOMLEFT",  0, -12)        -- espace SOUS « Solde restant »
-    sep:SetPoint("TOPRIGHT", restFS, "BOTTOMRIGHT", 0, -12)
+    sep:SetPoint("TOPLEFT",  anchorAfter, "BOTTOMLEFT",  0, -12)
+    sep:SetPoint("TOPRIGHT", anchorAfter, "BOTTOMRIGHT", 0, -12)
     sep:SetHeight(1)
 
     -- (Suppression du label "Lots utilisés (détails) :")
@@ -601,7 +617,7 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
         -- ➕ offset dynamique depuis le bas du header texte (pour éviter tout chevauchement)
         local function ComputeLVTopOffset()
             local cTop      = dlg.content:GetTop() or 0
-            local anchorBtm = (header and header.GetBottom and header:GetBottom()) or 0
+            local anchorBtm = (anchorAfter and anchorAfter.GetBottom and anchorAfter:GetBottom()) or 0
             local gap       = 12
             if cTop > 0 and anchorBtm > 0 then
                 return math.max(40, math.floor(cTop - anchorBtm + gap))

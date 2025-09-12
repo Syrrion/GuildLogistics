@@ -218,8 +218,8 @@ local function _BuildColumns()
         { key="lvl",    title=Tr("col_level_short"),    vsep=true,  w=44,  justify="CENTER" },
         { key="name",   title=Tr("col_name"),           vsep=true,  min=50, flex=1         },
         { key="last",   title=Tr("col_attendance"),     vsep=true,  w=200,  justify="LEFT" },
-        { key="ilvl",   title=Tr("col_ilvl"),           vsep=true,  w=100, justify="CENTER" },
-        { key="mplus",  title=Tr("col_mplus_score"),    vsep=true,  w=100,  justify="CENTER" },
+        { key="ilvl",   title=Tr("col_ilvl"),           vsep=true,  w=120, justify="CENTER" },
+        { key="mplus",  title=Tr("col_mplus_score"),    vsep=true,  w=120,  justify="CENTER" },
         { key="mkey",   title=Tr("col_mplus_key"),      vsep=true,  w=240,  justify="LEFT"   },
         { key="ver",    title=Tr("col_version_short"),  vsep=true,  w=60,  justify="CENTER" }
     }
@@ -271,6 +271,18 @@ function BuildRow(r)
     -- ➕ Version (ajoutée uniquement si la colonne existe côté header)
     f.ver   = UI.Label(r, { justify = "CENTER" })
 
+    -- Médailles alignées à gauche des cellules (icônes séparées, texte centré)
+    do
+        local size = 28
+        f.ilvlMedal = r:CreateTexture(nil, "ARTWORK") ; f.ilvlMedal:Hide()
+        f.ilvlMedal:SetSize(size, size)
+        f.ilvlMedal:SetPoint("LEFT", f.ilvl, "LEFT", 0, 0)
+
+        f.mplusMedal = r:CreateTexture(nil, "ARTWORK") ; f.mplusMedal:Hide()
+        f.mplusMedal:SetSize(size, size)
+        f.mplusMedal:SetPoint("LEFT", f.mplus, "LEFT", 0, 0)
+    end
+
     -- Widgets pour "sep" (comme dans Joueurs.lua)
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
     f.sepBG:SetColorTexture(0.18, 0.18, 0.22, 0.6)
@@ -316,6 +328,9 @@ function UpdateRow(i, r, f, it)
         if f.mkey then f.mkey:SetText("") end
         if f.last then f.last:SetText("") end
         if f.ver then f.ver:SetText("") end
+
+        if f.ilvlMedal then f.ilvlMedal:Hide() end
+        if f.mplusMedal then f.mplusMedal:Hide() end
 
         -- 🔒 Nettoyage visuel
         if f.name and f.name.icon then
@@ -436,17 +451,25 @@ function UpdateRow(i, r, f, it)
     -- Score M+
     if f.mplus then
         local score = (GLOG.GetMPlusScore and GLOG.GetMPlusScore(data.name)) or nil
-        local icon = (_mplusRanks and _RankIcon(_mplusRanks[data.name])) or ""
+        local rank = _mplusRanks and _mplusRanks[data.name]
+        -- Positionne l'icône de médaille à gauche (sans perturber le centrage du texte)
+        if f.mplusMedal then
+            if rank == 1 then f.mplusMedal:SetAtlas("challenges-medal-gold")
+            elseif rank == 2 then f.mplusMedal:SetAtlas("challenges-medal-silver")
+            elseif rank == 3 then f.mplusMedal:SetAtlas("challenges-medal-bronze")
+            else f.mplusMedal:SetAtlas(nil) end
+            f.mplusMedal:SetShown(rank == 1 or rank == 2 or rank == 3)
+        end
         if gi.online then
             if score and score > 0 then
-                f.mplus:SetText((icon ~= "" and (icon.." ") or "") .. tostring(score))
+                f.mplus:SetText(tostring(score))
             else
                 f.mplus:SetText(gray(Tr("status_empty")))
             end
         else
             if score and score > 0 then
-                -- icône conservée, texte grisé
-                f.mplus:SetText((icon ~= "" and (icon.." ") or "") .. gray(score))
+                -- texte grisé, médaille conservée (texture à part)
+                f.mplus:SetText(gray(score))
             else
                 f.mplus:SetText(gray(Tr("status_empty")))
             end
@@ -463,11 +486,19 @@ function UpdateRow(i, r, f, it)
         end
     end
 
-    -- iLvl (équipé + max) + médaille top-3
+    -- iLvl (équipé + max) + médaille top-3 (basée sur iLvl MAX)
     if f.ilvl then
         local ilvl    = (GLOG.GetIlvl    and GLOG.GetIlvl(data.name))    or nil
         local ilvlMax = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(data.name)) or nil
-    local icon    = (_ilvlRanks and _RankIcon and _RankIcon(_ilvlRanks[data.name], 28)) or ""
+        local rank    = _ilvlRanks and _ilvlRanks[data.name]
+        -- Positionne l'icône de médaille à gauche (sans perturber le centrage du texte)
+        if f.ilvlMedal then
+            if rank == 1 then f.ilvlMedal:SetAtlas("challenges-medal-gold")
+            elseif rank == 2 then f.ilvlMedal:SetAtlas("challenges-medal-silver")
+            elseif rank == 3 then f.ilvlMedal:SetAtlas("challenges-medal-bronze")
+            else f.ilvlMedal:SetAtlas(nil) end
+            f.ilvlMedal:SetShown(rank == 1 or rank == 2 or rank == 3)
+        end
 
         local function fmtOnline()
             if ilvl and ilvl > 0 then
@@ -475,7 +506,7 @@ function UpdateRow(i, r, f, it)
                 if ilvlMax and ilvlMax > 0 then
                     base = base .. gray(" ("..tostring(ilvlMax)..")")
                 end
-                return ((icon ~= "" and (icon.." ") or "") .. base)
+                return base
             else
                 return gray(Tr("status_empty"))
             end
@@ -487,7 +518,7 @@ function UpdateRow(i, r, f, it)
                 if ilvlMax and ilvlMax > 0 then
                     base = gray(tostring(ilvl).." ("..tostring(ilvlMax)..")")
                 end
-                return ((icon ~= "" and (icon.." ") or "") .. base)
+                return base
             else
                 return gray(Tr("status_empty"))
             end
@@ -681,14 +712,12 @@ local function _DoRefresh()
         end
     end
 
-    -- Calcule le top 3 iLvl (priorise équipé, fallback max) avec ex aequo
+    -- Calcule le top 3 iLvl (basé STRICTEMENT sur iLvl MAX) avec ex aequo
     do
         local ranks = {}
         for _, it in ipairs(base) do
-            local equipped = (GLOG.GetIlvl and GLOG.GetIlvl(it.name)) or 0
             local maximum  = (GLOG.GetIlvlMax and GLOG.GetIlvlMax(it.name)) or 0
-            local v = tonumber(equipped or 0) or 0
-            if (not v or v <= 0) and maximum and maximum > 0 then v = maximum end
+            local v = tonumber(maximum or 0) or 0
             if v and v > 0 then
                 ranks[#ranks+1] = { name = it.name, v = v }
             end
