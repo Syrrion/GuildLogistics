@@ -17,7 +17,7 @@ local MAX_PAY  = 215   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
 -- Limitation d'émission (paquets / seconde)
-local OUT_MAX_PER_SEC = 3
+local OUT_MAX_PER_SEC = 2
 
 -- ===== État du transport =====
 -- File d'envoi temporisée

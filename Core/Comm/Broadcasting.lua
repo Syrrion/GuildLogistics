@@ -622,6 +622,17 @@ function GLOG.CreateStatusUpdatePayload(overrides)
     end
     
     if #_statusCacheData > 0 then payload.S = _statusCacheData end
+
+    -- ➕ Ajoute l'état Banque de guilde (instantané local) avec timestamp
+    -- NOTE: encodeur KV ne supporte pas les objets imbriqués → utiliser des champs plats
+    do
+        local gbc = (GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper()) or nil
+        local gbt = (GLOG.GetGuildBankTimestamp and GLOG.GetGuildBankTimestamp()) or 0
+        if type(gbc) == "number" and gbc >= 0 and gbt and gbt > 0 then
+            payload.gbc  = gbc  -- guild bank copper
+            payload.gbts = gbt  -- guild bank timestamp
+        end
+    end
     
     return payload
 end

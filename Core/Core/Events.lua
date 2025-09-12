@@ -5,21 +5,11 @@ local GLOG = ns.GLOG
 -- ===== Bus d'événements internes pour GuildLogistics =====
 -- Structure : { [eventName] = { callback1, callback2, ... } }
 GLOG.__evt = GLOG.__evt or {}
+GLOG.DELAY_AUTO_STATUS = 10
 
 -- S'abonner à un événem-- ➕ Throttle + garde-fou : on ne refresh que si l'UI doit être rafraîchie
 local _pendingUIRefresh = false
-local function _ScheduleActiveTabRefresh()
-    if _pendingUIRefresh then return end
-    _pendingUIRefresh = true
-    local function doRefresh()
-        _pendingUIRefresh = false
-        -- ⏸️ Pause globale : utilise le nouveau système centralisé de pause UI
-        if ns and ns.UI and ns.UI.ShouldRefreshUI and ns.UI.ShouldRefreshUI() then
-            if ns.RefreshAll then ns.RefreshAll() end
-        end
-    end
-    if C_Timer and C_Timer.After then C_Timer.After(0.15, doRefresh) else doRefresh() end
-end-- @param event: string - nom de l'événement (ex: "roster:updated", "expenses:changed")
+
 -- @param callback: function - fonction appelée quand l'événement est émis
 function GLOG.On(event, callback)
     if type(event) ~= "string" or type(callback) ~= "function" then 
@@ -318,7 +308,7 @@ f:SetScript("OnEvent", function(self, event, name)
 
         -- STATUS_UPDATE automatique toutes les 3 minutes (rafraîchit localement iLvl/Clé/Côte via la fonction existante)
         if not GLOG._statusAutoTicker and C_Timer and C_Timer.NewTicker then
-            GLOG._statusAutoTicker = C_Timer.NewTicker(180, function()
+            GLOG._statusAutoTicker = C_Timer.NewTicker(GLOG.DELAY_AUTO_STATUS, function()
                 if GLOG and GLOG.BroadcastStatusUpdate then
                     GLOG.BroadcastStatusUpdate()
                 end

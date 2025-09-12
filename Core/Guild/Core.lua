@@ -542,12 +542,14 @@ do
         GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
     end
 
-    function GLOG.SetGuildBankBalanceCopper(copper)
+    function GLOG.SetGuildBankBalanceCopper(copper, ts)
         _ensure()
         local v = tonumber(copper) or 0
         GuildLogisticsDB_Char.meta.guildBankCopper = v
+        local t = tonumber(ts) or (time and time()) or (GuildLogisticsDB_Char.meta.guildBankTs or 0)
+        GuildLogisticsDB_Char.meta.guildBankTs = t
         GuildLogisticsDB_Char.meta.lastModified = time and time() or (GuildLogisticsDB_Char.meta.lastModified or 0)
-        if ns.Emit then ns.Emit("guildbank:updated", v) end
+        if ns.Emit then ns.Emit("guildbank:updated", v, t) end
     end
 
     function GLOG.GetGuildBankBalanceCopper()
@@ -555,6 +557,11 @@ do
         local v = GuildLogisticsDB_Char.meta.guildBankCopper
         if v == nil then return nil end
         return tonumber(v) or 0
+    end
+    
+    function GLOG.GetGuildBankTimestamp()
+        _ensure()
+        return tonumber(GuildLogisticsDB_Char.meta.guildBankTs or 0) or 0
     end
 
     -- Capture la valeur dès ouverture/maj de la BdG
@@ -597,7 +604,9 @@ do
             -- Après mise à jour confirmée par l'API, on applique le delta en attente si c'était nous
             _applyPendingDeltaIfAny()
             _lastBankCopper = c
+            return true
         end
+        return false
     end
 
     local function _captureWithRetry(tries, delay)
@@ -605,10 +614,8 @@ do
         delay = delay or 0.1
         local function step(rem)
             if rem <= 0 then return end
-            _capture()
-            -- Stop early if we captured a non-nil value
-            local v = GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
-            if v ~= nil then return end
+            local ok = _capture()
+            if ok then return end
             if C_Timer and C_Timer.After then C_Timer.After(delay, function() step(rem - 1) end) end
         end
         step(tries)
@@ -617,7 +624,7 @@ do
     if ns and ns.Events and ns.Events.Register then
         ns.Events.Register("GUILDBANKFRAME_OPENED", GLOG, function()
             -- Petite latence + retries pour laisser les données arriver
-            if C_Timer and C_Timer.After then C_Timer.After(0.05, function() _captureWithRetry(10, 0.1) end) else _capture() end
+            if C_Timer and C_Timer.After then C_Timer.After(0.05, function() _captureWithRetry(20, 0.1) end) else _capture() end
         end)
         ns.Events.Register("GUILDBANK_UPDATE_MONEY", GLOG, function()
             _capture()
@@ -630,9 +637,12 @@ do
         -- Retail: ouverture via le manager d'interactions (certains UIs)
         ns.Events.Register("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", GLOG, function(_, _, interactionType)
             if type(Enum) == "table" and type(Enum.PlayerInteractionType) == "table" then
+                -- Tolérer différentes clés possibles selon versions (GuildBank, GuildBanker)
                 local gb = rawget(Enum.PlayerInteractionType, "GuildBank")
-                if gb ~= nil and interactionType == gb then
-                    _captureWithRetry(10, 0.1)
+                local gb2 = rawget(Enum.PlayerInteractionType, "GuildBanker")
+                local target = gb or gb2
+                if target ~= nil and interactionType == target then
+                    _captureWithRetry(20, 0.1)
                 end
             end
         end)

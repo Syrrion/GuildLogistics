@@ -562,6 +562,28 @@ local function handleStatusUpdate(sender, kv)
         end
     end
 
+    -- 1.bis) Banque de guilde: appliquer la valeur la plus récente si fournie
+    do
+        local c   = tonumber(kv.gbc)
+        local ts  = tonumber(kv.gbts)
+        if not (c and ts) then
+            -- Fallback compat: nested object (older dev build)
+            local gb = kv.gbank
+            if type(gb) == "table" then
+                c  = tonumber(gb.c or gb.copper)
+                ts = tonumber(gb.ts or gb.t)
+            end
+        end
+        if c and c >= 0 and ts and ts > 0 then
+            local myTs = (GLOG.GetGuildBankTimestamp and GLOG.GetGuildBankTimestamp()) or 0
+            if ts > myTs then
+                if GLOG.SetGuildBankBalanceCopper then
+                    GLOG.SetGuildBankBalanceCopper(c, ts)
+                end
+            end
+        end
+    end
+
     -- 2) Compat (ancien) : enregistrement unitaire (accepte aussi kv.uid) - SUPPRIMÉ LES CHAMPS REDONDANTS
     do
         local uid  = safenum(kv.uid, -1)
