@@ -14,7 +14,7 @@ local playerFullName = U.playerFullName
 local getRev = (U and U.getRev) or function() local db=GuildLogisticsDB; return (db and db.meta and db.meta.rev) or 0 end
 
 -- ===== Constantes de découverte =====
-local HELLO_WAIT_SEC          = 1.0        -- fenêtre collecte OFFERS (+1s)
+local HELLO_WAIT_SEC          = 4.0        -- fenêtre collecte OFFERS (+1s)
 local OFFER_BACKOFF_MS_MAX    = 50         -- étalement OFFERS (0..50ms)
 local FULL_INHIBIT_SEC        = 1          -- n'offre pas si FULL récent vu
 local OFFER_RATE_LIMIT_SEC    = 1          -- anti-spam OFFERS par initiateur

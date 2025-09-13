@@ -48,7 +48,7 @@ end
 
 
 -- Affichage : constantes & helpers
-local HELLO_WAIT_SEC = 5
+local HELLO_WAIT_SEC = 3
 
 local cols = UI.NormalizeColumns({
     { key="time",  title=Tr("col_time"),       w=110 },
