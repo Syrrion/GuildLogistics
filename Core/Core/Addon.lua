@@ -4,14 +4,23 @@ ns.Util = ns.Util or {}
 local GLOG, U = ns.GLOG, ns.Util
 
 -- Helper sûr pour lire les métadonnées du TOC sans référencer de globales non définies
+local _metaCache = { Title = nil, IconTexture = nil, Version = nil }
 local function _GetMeta(key)
+    -- Cache les valeurs lues une fois par session (évite des milliers d'appels lors des refresh UI)
+    if _metaCache and _metaCache[key] ~= nil then
+        return _metaCache[key]
+    end
     if C_AddOns and C_AddOns.GetAddOnMetadata then
-        return C_AddOns.GetAddOnMetadata(ADDON, key)
+        local v = C_AddOns.GetAddOnMetadata(ADDON, key)
+        if _metaCache then _metaCache[key] = v end
+        return v
     end
     do
         local m = _G and rawget(_G, "GetAddOnMetadata")
         if type(m) == "function" then
-            return m(ADDON, key)
+            local v = m(ADDON, key)
+            if _metaCache then _metaCache[key] = v end
+            return v
         end
     end
     return nil
@@ -19,6 +28,9 @@ end
 
 -- Tables pour le suivi des versions d'addon
 GLOG._playerVersions = GLOG._playerVersions or {}
+-- Cache léger pour les recherches de version par nom (évite de rescanner la DB à chaque frame)
+local _versionLookupCache = {} -- [normalizedName] = { v = "1.2.3", ts = now }
+local _versionLookupTTL = 5 -- secondes
 GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
 
 -- Renvoie le titre officiel de l'addon (métadonnée TOC), codes couleur retirés.
@@ -43,9 +55,14 @@ end
 
 -- Renvoie la version déclarée (string). Utile pour affichage/compat.
 function GLOG.GetAddonVersion()
-    local v = _GetMeta("Version")
-           or (ns and ns.Version)
-    return tostring(v or "")
+    -- Version stable pour la session: lit une fois et réutilise
+    if _metaCache and type(_metaCache.Version) == "string" and _metaCache.Version ~= "" then
+        return tostring(_metaCache.Version)
+    end
+    local v = _GetMeta("Version") or (ns and ns.Version)
+    v = tostring(v or "")
+    if _metaCache then _metaCache.Version = v end
+    return v
 end
 
 -- Compare deux versions sémantiques "a.b.c" ; retourne -1 / 0 / 1.
@@ -166,6 +183,9 @@ function GLOG.SetPlayerAddonVersion(name, version, timestamp, reportedBy)
         timestamp = ts,
         seenBy = by
     }
+    -- Invalide le cache de lookup pour ce joueur pour refléter immédiatement la nouvelle valeur
+    local norm = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name)
+    if norm and _versionLookupCache[norm] then _versionLookupCache[norm] = nil end
 end
 
 -- Obtenir la version d'un autre joueur
@@ -175,13 +195,28 @@ function GLOG.GetPlayerAddonVersion(name)
     if not name or name == "" then return nil end
     -- normaliser le nom pour une clé stable
     local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name)
+
+    -- 0) Cache court-terme pour éviter des appels répétés dans la même seconde (ex: rafraîchissements UI)
+    do
+        local c = _versionLookupCache[key]
+        if c then
+            local now = time()
+            if (now - (tonumber(c.ts) or 0)) <= _versionLookupTTL then
+                return c.v
+            else
+                _versionLookupCache[key] = nil
+            end
+        end
+    end
     local data = GLOG._playerVersions[key]
     
     -- Si présent en cache et non périmé, utiliser cette valeur
     if data then
         local cutoff = time() - (7 * 24 * 60 * 60)
         if tonumber(data.timestamp or 0) >= cutoff then
-            return data.version
+            local v = data.version
+            _versionLookupCache[key] = { v = v, ts = time() }
+            return v
         else
             -- purge cache périmé
             GLOG._playerVersions[key] = nil
@@ -211,13 +246,16 @@ function GLOG.GetPlayerAddonVersion(name)
         local mrec = db.account.mains and db.account.mains[mu]
         local ver = mrec and mrec.addonVersion
         if ver and ver ~= "" then
-            return tostring(ver)
+            local v = tostring(ver)
+            _versionLookupCache[key] = { v = v, ts = time() }
+            return v
         end
     end
 
     -- Fallback 2 (lecture seule): ancienne position players[*].addonVersion
     -- Aucune lecture legacy: la version doit être en account.mains ou cache
     
+    _versionLookupCache[key] = { v = nil, ts = time() }
     return nil
 end
 

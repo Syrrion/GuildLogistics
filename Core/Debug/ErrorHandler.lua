@@ -98,10 +98,10 @@ end
 -- Traiter les erreurs précoces capturées avant l'init
 function GLOG.ErrorHandler_ProcessEarlyErrors()
     if not ns.GetEarlyErrors then return end
-    
+
     local earlyErrors = ns.GetEarlyErrors()
     if not earlyErrors or #earlyErrors == 0 then return end
-    
+
     -- Vérifier si le système de communication est prêt
     if not GLOG.GetGuildMasterCached or not GLOG.ErrorComm_SendOrQueue then
         -- Programmer un délai pour réessayer quand le système sera prêt
@@ -110,61 +110,82 @@ function GLOG.ErrorHandler_ProcessEarlyErrors()
         end)
         return
     end
-    
-    for _, errorInfo in ipairs(earlyErrors) do
-        -- Anti-spam : ignorer si vue récemment
-        if not isSpamError(errorInfo.msg, errorInfo.stack) then
-            local rep = {
-                ts = errorInfo.ts,
-                who = playerFullName(),
-                ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or "",
-                msg = errorInfo.msg,
-                st = errorInfo.stack,
-                early = true
-            }
-            
-            -- Routing selon le rôle
-            if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
-                -- GM : ajout direct au journal local
-                if GLOG.ErrorJournal_AddReport then
-                    GLOG.ErrorJournal_AddReport(rep, rep.who)
+
+    -- Traiter en petits lots pour éviter "script ran too long" si la file est volumineuse
+    local CHUNK = 25
+    local i = 1
+
+    local function processChunk()
+        local n = #earlyErrors
+        local stopAt = math.min(i + CHUNK - 1, n)
+        local myVerCached = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
+
+        while i <= stopAt do
+            local errorInfo = earlyErrors[i]
+            i = i + 1
+
+            -- Anti-spam : ignorer si vue récemment
+            if not isSpamError(errorInfo.msg, errorInfo.stack) then
+                local rep = {
+                    ts = errorInfo.ts,
+                    who = playerFullName(),
+                    ver = myVerCached,
+                    msg = errorInfo.msg,
+                    st = errorInfo.stack,
+                    early = true
+                }
+
+                -- Routing selon le rôle
+                if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+                    -- GM : ajout direct au journal local
+                    if GLOG.ErrorJournal_AddReport then
+                        GLOG.ErrorJournal_AddReport(rep, rep.who)
+                    else
+                        -- Fallback si module journal pas encore chargé
+                        GuildLogisticsDB = GuildLogisticsDB or {}
+                        GuildLogisticsDB.errors = GuildLogisticsDB.errors or { list = {}, nextId = 1 }
+                        local t = GuildLogisticsDB.errors
+                        local id = tonumber(t.nextId or 1) or 1
+                        rep.id = id
+                        rep.done = false
+                        t.list[#t.list+1] = rep
+                        t.nextId = id + 1
+                        if ns.Emit then ns.Emit("errors:changed") end
+                    end
                 else
-                    -- Fallback si module journal pas encore chargé
-                    GuildLogisticsDB = GuildLogisticsDB or {}
-                    GuildLogisticsDB.errors = GuildLogisticsDB.errors or { list = {}, nextId = 1 }
-                    local t = GuildLogisticsDB.errors
-                    local id = tonumber(t.nextId or 1) or 1
-                    rep.id = id
-                    rep.done = false
-                    t.list[#t.list+1] = rep
-                    t.nextId = id + 1
-                    if ns.Emit then ns.Emit("errors:changed") end
-                end
-            else
-                -- Client : Pour les erreurs précoces, forcer l'ajout à la queue pending
-                -- même si le GM semble offline (système pas encore initialisé)
-                if GLOG.Pending_AddERRRPT then
-                    GLOG.Pending_AddERRRPT(rep)
+                    -- Client : Pour les erreurs précoces, forcer l'ajout à la queue pending
+                    -- même si le GM semble offline (système pas encore initialisé)
+                    if GLOG.Pending_AddERRRPT then
+                        GLOG.Pending_AddERRRPT(rep)
+                    end
                 end
             end
         end
-    end
-    
-    -- Effacer les erreurs traitées pour éviter de les retraiter
-    if ns.ClearEarlyErrors then
-        ns.ClearEarlyErrors()
-    end
-    
-    -- Programmer un flush dans quelques secondes pour s'assurer que les erreurs précoces
-    -- soient envoyées quand le système sera complètement prêt
-    C_Timer.After(10, function()
-        if GLOG.Pending_FlushToMaster then
-            local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached())
-            if gmName then
-                GLOG.Pending_FlushToMaster(gmName)
+
+        if i <= n then
+            -- Replanifie la suite au frame suivant
+            C_Timer.After(0, processChunk)
+        else
+            -- Effacer les erreurs traitées pour éviter de les retraiter
+            if ns.ClearEarlyErrors then
+                ns.ClearEarlyErrors()
             end
+
+            -- Programmer un flush dans quelques secondes pour s'assurer que les erreurs précoces
+            -- soient envoyées quand le système sera complètement prêt
+            C_Timer.After(10, function()
+                if GLOG.Pending_FlushToMaster then
+                    local gmName = GLOG.GetGuildMasterCached and select(1, GLOG.GetGuildMasterCached())
+                    if gmName then
+                        GLOG.Pending_FlushToMaster(gmName)
+                    end
+                end
+            end)
         end
-    end)
+    end
+
+    -- Lance le premier lot immédiatement
+    processChunk()
 end
 
 -- =========================

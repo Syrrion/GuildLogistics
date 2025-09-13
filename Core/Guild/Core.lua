@@ -513,12 +513,24 @@ end
 
 -- True si le joueur est chef de guilde (rank index 0) — autorisation maximale.
 function GLOG.IsMaster()
+    -- Cache-first to avoid flaky early false
+    if type(GLOG._isMaster) == "boolean" then return GLOG._isMaster end
+    -- Compute once synchronously as best-effort
+    local v = false
     if IsInGuild and IsInGuild() then
         local _, _, ri = GetGuildInfo("player")
-        if ri == 0 then return true end
+        if type(ri) == "number" and ri == 0 then v = true end
+        if not v then
+            -- Fallback via roster cache (detect actual GM and compare to self)
+            local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+                    or (UnitName and UnitName("player")) or nil
+            if me and GLOG.IsNameGuildMaster and GLOG.IsNameGuildMaster(me) then
+                v = true
+            end
+        end
     end
-    -- return true
-    return false
+    GLOG._isMaster = v
+    return v
 end
 
 -- True si le joueur est chef de guilde ou possède des permissions officiers majeures.
@@ -534,6 +546,51 @@ function GLOG.IsGM()
         end
     end
     return false
+end
+
+-- Robustly keep _isMaster in sync with the game state
+do
+    local function _recomputeIsMaster()
+        local before = GLOG._isMaster
+        local nowVal = false
+        if IsInGuild and IsInGuild() then
+            local _, _, ri = GetGuildInfo("player")
+            if type(ri) == "number" and ri == 0 then
+                nowVal = true
+            else
+                local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+                        or (UnitName and UnitName("player")) or nil
+                if me and GLOG.IsNameGuildMaster and GLOG.IsNameGuildMaster(me) then
+                    nowVal = true
+                end
+            end
+        end
+        if before ~= nowVal then
+            GLOG._isMaster = nowVal
+            if ns.Emit then ns.Emit("gm:changed", nowVal) end
+            -- Refresh UI affordances that depend on GM status
+            if ns and ns.UI and ns.UI.RefreshTitle then pcall(ns.UI.RefreshTitle) end
+            if ns and ns.UI and ns.UI.RefreshActive then pcall(ns.UI.RefreshActive) end
+        else
+            GLOG._isMaster = nowVal -- ensure it's set even if same
+        end
+    end
+
+    -- Events that signal guild/roster/rank updates
+    if ns and ns.Events and ns.Events.Register then
+        ns.Events.Register("GUILD_ROSTER_UPDATE", GLOG, function() _recomputeIsMaster() end)
+        ns.Events.Register("PLAYER_GUILD_UPDATE", GLOG, function() _recomputeIsMaster() end)
+        ns.Events.Register("GUILD_RANKS_UPDATE", GLOG, function() _recomputeIsMaster() end)
+        -- First pass after entering world, with a couple of delayed retries to wait for data
+        ns.Events.Register("PLAYER_ENTERING_WORLD", GLOG, function()
+            _recomputeIsMaster()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.5, _recomputeIsMaster)
+                C_Timer.After(1.5, _recomputeIsMaster)
+                C_Timer.After(3.0, _recomputeIsMaster)
+            end
+        end)
+    end
 end
 
 -- ===== Guild Bank balance (local snapshot) =====
