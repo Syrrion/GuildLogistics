@@ -24,7 +24,6 @@ local function _MA()
     local t = _G.GuildLogisticsDB.account
     t.mains     = t.mains     or {}
     t.altToMain = t.altToMain or {}
-    t.shared    = t.shared    or {}   -- données partagées par UID (solde, version, ...)
     return t
 end
 
@@ -61,7 +60,7 @@ end
 function GLOG.SetAsMain(name)
     if not name or name == "" then return false end
     local _, key, uid = _ensurePlayerRec(name)
-    uid = tonumber(uid)
+    uid = tostring(uid)
     if not uid then return false end
     local MA = _MA()
     MA.mains[uid] = (type(MA.mains[uid]) == "table") and MA.mains[uid] or {}
@@ -76,7 +75,7 @@ function GLOG.AssignAltToMain(altName, mainName)
     if not altName or altName == "" or not mainName or mainName == "" then return false end
     local _, mKey, mainUID = _ensurePlayerRec(mainName)
     local _, aKey, altUID  = _ensurePlayerRec(altName)
-    mainUID = tonumber(mainUID); altUID = tonumber(altUID)
+    mainUID = tostring(mainUID); altUID = tostring(altUID)
     if not mainUID or not altUID then return false end
     local MA = _MA()
     MA.mains[mainUID] = (type(MA.mains[mainUID]) == "table") and MA.mains[mainUID] or {}
@@ -90,7 +89,7 @@ end
 -- Dissocie un ALT (retour au pool)
 function GLOG.UnassignAlt(name)
     local _, key, uid = _ensurePlayerRec(name)
-    uid = tonumber(uid)
+    uid = tostring(uid)
     if not uid then return false end
     local MA = _MA()
     MA.altToMain[uid] = nil
@@ -102,11 +101,11 @@ end
 -- Supprime un MAIN confirmé et dissocie tous ses alts
 function GLOG.RemoveMain(name)
     local _, key, uid = _ensurePlayerRec(name)
-    uid = tonumber(uid)
+    uid = tostring(uid)
     if not uid then return false end
     local MA = _MA()
     -- Dissocie tous les alts pointant vers ce main
-    for a, m in pairs(MA.altToMain) do if tonumber(m) == uid then MA.altToMain[a] = nil end end
+    for a, m in pairs(MA.altToMain) do if m == uid then MA.altToMain[a] = nil end end
     MA.mains[uid] = nil
     if ns.Emit then ns.Emit("mainalt:changed", "remove-main", key, uid) end
     if GLOG.BroadcastRemoveMain then GLOG.BroadcastRemoveMain(key) end
@@ -131,14 +130,14 @@ end
 -- Liste des alts d'un main
 function GLOG.GetAltsOf(mainName)
     local _, _k, mainUID = _ensurePlayerRec(mainName)
-    mainUID = tonumber(mainUID)
+    mainUID = tostring(mainUID)
     if not mainUID then return {} end
     local MA = _MA()
     local out = {}
     for altUID, m in pairs(MA.altToMain or {}) do
-        if tonumber(m) == mainUID and tonumber(altUID) ~= mainUID then
+        if m == mainUID and altUID ~= mainUID then
             local name = _nameFor(altUID)
-            if name and name ~= "" then out[#out+1] = { name = name, uid = tonumber(altUID) } end
+            if name and name ~= "" then out[#out+1] = { name = name, uid = altUID } end
         end
     end
     table.sort(out, function(a,b) return (a.name or ""):lower() < (b.name or ""):lower() end)
@@ -151,7 +150,7 @@ function GLOG.GetUnassignedPool()
     local MA = _MA()
     local out = {}
     for full, rec in pairs((_G.GuildLogisticsDB and _G.GuildLogisticsDB.players) or {}) do
-        local uid = tonumber(rec and rec.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+        local uid = (rec and rec.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
         if uid and not MA.mains[uid] and (MA.altToMain[uid] == nil) then
             out[#out+1] = { name = full }
         end
@@ -232,17 +231,17 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     EnsureDB()
     local _, _, altUID  = _ensurePlayerRec(altName)
     local _, _, mainUID = _ensurePlayerRec(currentMainName)
-    altUID  = tonumber(altUID)
-    mainUID = tonumber(mainUID)
+    altUID  = tostring(altUID)
+    mainUID = tostring(mainUID)
     if not altUID then return false end
 
     local MA = _MA()
     -- Si currentMainName non fourni ou invalide, tenter de déduire via mapping
-    if not mainUID or (MA.altToMain[altUID] and tonumber(MA.altToMain[altUID]) ~= mainUID) then
-        mainUID = tonumber(MA.altToMain[altUID]) or mainUID
+    if not mainUID or (MA.altToMain[altUID] and MA.altToMain[altUID] ~= mainUID) then
+        mainUID = MA.altToMain[altUID] or mainUID
     end
     if not mainUID then return false end
-    if tonumber(MA.altToMain[altUID]) ~= mainUID then return false end -- pas un alt de ce main
+    if MA.altToMain[altUID] ~= mainUID then return false end -- pas un alt de ce main
 
     -- Noms complets pour soldes
     local mainName = _nameFor(mainUID)
@@ -286,7 +285,7 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
 
     -- Repointage des liens ALT -> nouveau main (inclut l'ancien main qui devient alt)
     for a, m in pairs(MA.altToMain) do
-        if tonumber(m) == mainUID then
+        if m == mainUID then
             MA.altToMain[a] = altUID
         end
     end

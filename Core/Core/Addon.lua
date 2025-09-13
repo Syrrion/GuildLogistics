@@ -197,17 +197,17 @@ function GLOG.GetPlayerAddonVersion(name)
         -- Utiliser l'UID connu si présent en roster, sinon un lookup non-créateur
         db.players = db.players or {}
         local p = db.players[key]
-        uid = tonumber(p and p.uid)
+        uid = tostring(p and p.uid or "")
         if not uid then
             if GLOG.FindUIDByName then
-                uid = tonumber(GLOG.FindUIDByName(key))
+                uid = tostring(GLOG.FindUIDByName(key) or "")
             elseif GLOG.GetUID then
-                uid = tonumber(GLOG.GetUID(key))
+                uid = tostring(GLOG.GetUID(key) or "")
             end
         end
     end
-    if uid and db.account then
-        local mu = tonumber((db.account.altToMain and db.account.altToMain[uid]) or uid) or uid
+    if uid and uid ~= "" and db.account then
+        local mu = (db.account.altToMain and db.account.altToMain[uid]) or uid
         local mrec = db.account.mains and db.account.mains[mu]
         local ver = mrec and mrec.addonVersion
         if ver and ver ~= "" then

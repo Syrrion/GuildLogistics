@@ -65,8 +65,8 @@ local function _mainUIDForName(name)
     local uid = _uidFor(name)
     if not uid then return nil end
     local MA = _MA()
-    local mu = tonumber(MA.altToMain[uid])
-    return mu or tonumber(uid)
+    local mu = MA.altToMain[uid]
+    return mu or uid
 end
 
 local function _ensureRosterEntry(name)
@@ -91,7 +91,7 @@ local function _getBalanceByName(name)
     if not name or name == "" then return 0 end
     local uid = _uidFor(name)
     local MA = _MA()
-    local mu = uid and (tonumber(MA.altToMain[uid]) or uid) or nil
+    local mu = uid and (MA.altToMain[uid] or uid) or nil
     if mu and MA.mains and MA.mains[mu] and MA.mains[mu].solde ~= nil then
         return tonumber(MA.mains[mu].solde) or 0
     end
@@ -104,7 +104,7 @@ local function _adjustBalanceByName(name, delta)
     local uid = _uidFor(name)
     local MA = _MA()
     if uid then
-        local mu = tonumber(MA.altToMain[uid]) or uid
+    local mu = MA.altToMain[uid] or uid
         MA.mains[mu] = MA.mains[mu] or {}
         MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) + (tonumber(delta) or 0)
     end
@@ -373,10 +373,10 @@ end
 
 -- Helpers by UID (public)
 function GLOG.GetSoldeByUID(uid)
-    uid = tonumber(uid)
-    if not uid or uid <= 0 then return 0 end
+    uid = tostring(uid)
+    if not uid or uid == "" then return 0 end
     local MA = _MA()
-    local mu = uid and (tonumber(MA.altToMain[uid]) or uid) or nil
+    local mu = uid and (MA.altToMain[uid] or uid) or nil
     if mu and MA.mains and MA.mains[mu] then
         return tonumber(MA.mains[mu].solde) or 0
     end
@@ -384,23 +384,41 @@ function GLOG.GetSoldeByUID(uid)
 end
 
 function GLOG.SetSoldeByUID(uid, value)
-    uid = tonumber(uid)
-    if not uid or uid <= 0 then return end
+    uid = tostring(uid)
+    if not uid or uid == "" then return end
     local MA = _MA()
-    local mu = tonumber(MA.altToMain[uid]) or uid
+    local mu = MA.altToMain[uid] or uid
     MA.mains[mu] = MA.mains[mu] or {}
     MA.mains[mu].solde = tonumber(value) or 0
+end
+
+function GLOG.CreditByUID(uid, amount)
+    uid = tostring(uid)
+    if not uid or uid == "" then return end
+    local MA = _MA()
+    local mu = MA.altToMain[uid] or uid
+    MA.mains[mu] = MA.mains[mu] or {}
+    MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) + (tonumber(amount) or 0)
+end
+
+function GLOG.DebitByUID(uid, amount)
+    uid = tostring(uid)
+    if not uid or uid == "" then return end
+    local MA = _MA()
+    local mu = MA.altToMain[uid] or uid
+    MA.mains[mu] = MA.mains[mu] or {}
+    MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) - (tonumber(amount) or 0)
 end
 
 -- Swap the entire main-level payload between two UIDs (solde, addonVersion, etc.)
 -- This is used when promoting an alt to main so that all aggregated data
 -- follows the "bank" identity. O(1) swap of table references.
 function GLOG.SwapSharedBetweenUIDs(uidA, uidB)
-    uidA = tonumber(uidA); uidB = tonumber(uidB)
+    uidA = tostring(uidA); uidB = tostring(uidB)
     if not uidA or not uidB or uidA == uidB then return false end
     local MA = _MA()
-    local muA = tonumber(MA.altToMain[uidA]) or uidA
-    local muB = tonumber(MA.altToMain[uidB]) or uidB
+    local muA = MA.altToMain[uidA] or uidA
+    local muB = MA.altToMain[uidB] or uidB
     local a = MA.mains[muA]
     local b = MA.mains[muB]
     MA.mains[muA], MA.mains[muB] = b, a
@@ -498,7 +516,7 @@ function GLOG.ApplyBatch(kv)
                     local uid = _uidFor(normName)
                     local MA = _MA()
                     if uid then
-                        local mu = tonumber(MA.altToMain[uid]) or uid
+                        local mu = MA.altToMain[uid] or uid
                         MA.mains[mu] = MA.mains[mu] or {}
                         MA.mains[mu].solde = tonumber(info.solde) or 0
                     end
@@ -515,7 +533,7 @@ function GLOG.ApplyBatch(kv)
                     end
                 end
                 -- ignore legacy info.alias to keep players clean
-                if info.uid ~= nil then p.uid = tonumber(info.uid) end
+                if info.uid ~= nil then p.uid = tostring(info.uid) end
             end
         elseif type(info) == "number" then
             -- Ancien format : juste le solde
@@ -524,7 +542,7 @@ function GLOG.ApplyBatch(kv)
                 local uid = _uidFor(normName)
                 local MA = _MA()
                 if uid then
-                    local mu = tonumber(MA.altToMain[uid]) or uid
+                    local mu = MA.altToMain[uid] or uid
                     MA.mains[mu] = MA.mains[mu] or {}
                     MA.mains[mu].solde = tonumber(info) or 0
                 end
@@ -616,7 +634,7 @@ function GLOG.GM_SetReserved(name, flag)
         meta.rev = rv
         meta.lastModified = time()
         
-        local uid = tonumber(p.uid)
+        local uid = tostring(p.uid or GLOG.GetOrAssignUID(full) or "")
         GLOG.Comm_Broadcast("ROSTER_RESERVE", {
             uid = uid, name = full, res = flag and 1 or 0,
             alias = alias,

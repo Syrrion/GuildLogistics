@@ -25,10 +25,25 @@ function GLOG.AddHistorySession(total, perHead, participants, ctx)
     EnsureDB()
     GuildLogisticsDB.history = GuildLogisticsDB.history or {}
 
+    -- Convertir la liste des participants en UIDs (ShortId strings)
+    local U = {}
+    for _, v in ipairs(participants or {}) do
+        local s = tostring(v or "")
+        local uid = s
+        if s:find("%-") then
+            -- ressemble à un nom complet → mapper vers UID
+            uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(s)) or s
+        else
+            -- suppose déjà un UID
+            uid = s
+        end
+        if uid and uid ~= "" then U[#U+1] = uid end
+    end
+
     local s = {
-        count = #(participants or {}),
+        count = #U,
         lots = {},  -- Initialiser lots comme table vide  
-        participants = { unpack(participants or {}) },
+        participants = U, -- stocke uniquement des UIDs
         perHead = math.floor(perHead or 0),
         refunded = false,
         total = math.floor(total or 0),
@@ -66,9 +81,10 @@ function GLOG.AddHistorySession(total, perHead, participants, ctx)
             end
         end
 
+        -- Diffuse les UIDs des participants dans P
         GLOG.Comm_Broadcast("HIST_ADD", {
             ts = s.ts, total = s.total, per = s.perHead, cnt = s.count,
-            r = s.refunded and 1 or 0, P = s.participants, L = Lraw, -- ➕
+            r = s.refunded and 1 or 0, P = s.participants, L = Lraw, -- UIDs
             rv = rv, lm = GuildLogisticsDB.meta.lastModified,
         })
     end
@@ -89,13 +105,15 @@ function GLOG.RefundSession(idx)
 
     if GLOG.IsMaster and GLOG.IsMaster() and GLOG.GM_BroadcastBatch then
         local adjusts = {}
-        for _, name in ipairs(parts) do 
-            adjusts[#adjusts+1] = { name = name, delta = per } 
+        for _, uid in ipairs(parts) do 
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if name then adjusts[#adjusts+1] = { name = name, delta = per } end
         end
         GLOG.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
     else
-        for _, name in ipairs(parts) do 
-            if GuildLogisticsDB.players[name] and GLOG.Credit then 
+        for _, uid in ipairs(parts) do 
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if name and GuildLogisticsDB.players[name] and GLOG.Credit then 
                 GLOG.Credit(name, per) 
             end 
         end
@@ -127,13 +145,15 @@ function GLOG.UnrefundSession(idx)
 
     if GLOG.IsMaster and GLOG.IsMaster() and GLOG.GM_BroadcastBatch then
         local adjusts = {}
-        for _, name in ipairs(parts) do 
-            adjusts[#adjusts+1] = { name = name, delta = -per } 
+        for _, uid in ipairs(parts) do 
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if name then adjusts[#adjusts+1] = { name = name, delta = -per } end
         end
         GLOG.GM_BroadcastBatch(adjusts, { reason = "REFUND", silent = true })
     else
-        for _, name in ipairs(parts) do 
-            if GuildLogisticsDB.players[name] and GLOG.Debit then 
+        for _, uid in ipairs(parts) do 
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if name and GuildLogisticsDB.players[name] and GLOG.Debit then 
                 GLOG.Debit(name, per) 
             end 
         end

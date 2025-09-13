@@ -53,53 +53,71 @@ GLOG.EnsureRosterLocal = GLOG.EnsureRosterLocal or (ns.Util and ns.Util.EnsureRo
 
 -- Fallback minimal si les utilitaires UID ne sont pas disponibles
 if not GLOG.GetOrAssignUID then
+    local function _norm(full)
+        return (GLOG.ResolveFullName and GLOG.ResolveFullName(full, { strict = true }))
+            or tostring(full or "")
+    end
+    local function _shortId(name)
+        if GLOG.ShortId then return GLOG.ShortId(name) end
+        -- Minimal inline fallback if ShortId not available yet
+        local s = tostring(name or "")
+        local chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+        local h = 5381
+        for i=1,#s do h = (h * 33 + string.byte(s, i)) % 9007199254740991 end
+        local function toBase(n)
+            if n == 0 then return chars:sub(1,1):rep(4) end
+            local t, b = {}, #chars
+            while n > 0 do local r = (n % b) + 1; t[#t+1] = chars:sub(r,r); n = math.floor(n / b) end
+            local out = table.concat(t):reverse()
+            if #out < 4 then out = chars:sub(1,1):rep(4-#out)..out end
+            return out
+        end
+        return toBase(h % (62^4))
+    end
+
     function GLOG.GetOrAssignUID(name)
         local db   = GLOG.EnsureDB()
-        local full = tostring(name or "")
-    db.players[full] = db.players[full] or {}
-        if db.players[full].uid then return db.players[full].uid end
-        local nextId = tonumber(db.meta.uidSeq or 1) or 1
-        db.players[full].uid = nextId
-        db.meta.uidSeq = nextId + 1
-        return db.players[full].uid
+        local full = _norm(name)
+        db.players[full] = db.players[full] or {}
+        if db.players[full].uid and db.players[full].uid ~= "" then return db.players[full].uid end
+        local sid = _shortId(full)
+        db.players[full].uid = sid
+        return sid
     end
 
     function GLOG.GetNameByUID(uid)
         local db = GLOG.EnsureDB()
-        local n  = tonumber(uid)
-        if not n then return nil end
+        local id = tostring(uid or "")
+        if id == "" then return nil end
         for full, rec in pairs(db.players or {}) do
-            if tonumber(rec and rec.uid) == n then return full end
+            if rec and tostring(rec.uid or "") == id then return full end
         end
         return nil
     end
 
     function GLOG.MapUID(uid, name)
         local db   = GLOG.EnsureDB()
-        local full =
-            (GLOG.ResolveFullName and GLOG.ResolveFullName(name, { strict = true }))
-            or (type(name)=="string" and name:find("%-") and name)
-            or tostring(name or "")
-        local nuid = tonumber(uid)
-        if not nuid then return nil end
-    db.players[full] = db.players[full] or {}
-        db.players[full].uid = nuid
-        return nuid
+        local full = _norm(name)
+        local sid = tostring(uid or "")
+        if sid == "" then return nil end
+        db.players[full] = db.players[full] or {}
+        db.players[full].uid = sid
+        return sid
     end
 
     function GLOG.UnmapUID(uid)
         local db = GLOG.EnsureDB()
-        local n  = tonumber(uid)
-        if not n then return end
+        local id  = tostring(uid or "")
+        if id == "" then return end
         for _, rec in pairs(db.players or {}) do
-            if tonumber(rec and rec.uid) == n then rec.uid = nil; return end
+            if rec and tostring(rec.uid or "") == id then rec.uid = nil; return end
         end
     end
 
     function GLOG.EnsureRosterLocal(name)
         local db   = GLOG.EnsureDB()
-        local full = tostring(name or "")
-    db.players[full] = db.players[full] or {}
+        local full = _norm(name)
+        db.players[full] = db.players[full] or {}
         return db.players[full]
     end
 end

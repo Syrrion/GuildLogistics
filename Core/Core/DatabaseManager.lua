@@ -67,6 +67,8 @@ local function EnsureDB()
         if ui.debugEnabled == nil then ui.debugEnabled = true end
         if ui.autoOpen     == nil then ui.autoOpen     = true end
     end
+
+    -- Note: no runtime migrations here; data model now natively stores UID participants
 end
 
 -- Fonction de nettoyage (utilisée par Core.lua)
@@ -171,3 +173,53 @@ function GLOG.GetRequests()
     GuildLogisticsDB.requests = GuildLogisticsDB.requests or {}
     return GuildLogisticsDB.requests
 end
+
+-- =========================
+-- ======  MIGRATION  ======
+-- =========================
+-- Base62 ShortId helper (0-9, A-Z, a-z) – 4 chars
+-- NOTE: 62^4 ≈ 14,776,336 combinaisons → suffisant pour un environnement guilde
+local _SID_CHARS  = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+local _SID_WIDTH  = 4
+local function _powi(a,b) local r=1; for _=1,b do r=r*a end; return r end
+local _SID_MOD    = _powi(#_SID_CHARS, _SID_WIDTH) -- 62^4
+
+local function _toBaseChars(n, chars, width)
+    local base = #chars
+    local z = chars:sub(1,1)
+    if n == 0 then return z:rep(width or 1) end
+    local t = {}
+    while n > 0 do
+        local r = n % base
+        t[#t+1] = chars:sub(r+1, r+1)
+        n = math.floor(n / base)
+    end
+    local s = table.concat(t):reverse()
+    if width and #s < width then s = z:rep(width - #s) .. s end
+    return s
+end
+
+-- DJB2 borné 53 bits (sûr en nombres Lua)
+local function _hash53_djb2(s)
+    local MOD = 9007199254740991 -- 2^53 - 1
+    local h = 5381
+    for i = 1, #s do
+        h = (h * 33 + string.byte(s, i)) % MOD
+    end
+    return h
+end
+
+local function _normalizeFullName(name)
+    local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+    return (nf(name or ""):gsub("%s+", ""))
+end
+
+local function _shortId(name)
+    local norm = _normalizeFullName(name)
+    local h = _hash53_djb2(norm)
+    local n = h % _SID_MOD
+    return _toBaseChars(n, _SID_CHARS, _SID_WIDTH)
+end
+
+-- Expose l'API si non définie
+GLOG.ShortId = GLOG.ShortId or _shortId

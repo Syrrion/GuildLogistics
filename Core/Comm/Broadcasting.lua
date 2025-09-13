@@ -49,13 +49,17 @@ function GLOG.BroadcastRosterRemove(idOrName)
     local uid, name = nil, nil
     local s = tostring(idOrName or "")
 
-    -- Si on reçoit un UID numérique ...
-    if s:match("^%d+$") then
-        uid  = s
-        name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
-    else
+    -- Heuristique: si cela ressemble à un nom complet (avec '-') → c'est un nom; sinon, essaye comme UID d'abord
+    if s:find("%-") then
         name = s
         uid  = (GLOG.FindUIDByName and GLOG.FindUIDByName(name)) or (GLOG.GetUID and GLOG.GetUID(name)) or nil
+    else
+        uid  = s
+        name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+        if not name then
+            name = s
+            uid  = (GLOG.FindUIDByName and GLOG.FindUIDByName(name)) or (GLOG.GetUID and GLOG.GetUID(name)) or nil
+        end
     end
 
     local rv = incRev()
@@ -434,13 +438,32 @@ function GLOG.BroadcastHistoryAdd(p)
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
+        -- Normaliser participants → UIDs
+        local P = {}
+        if type(p.participants) == "table" then
+            for _, v in ipairs(p.participants) do
+                local s = tostring(v or "")
+                local uid = s
+                if s:find("%-") then
+                    uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(s)) or s
+                end
+                if uid and uid ~= "" then P[#P+1] = uid end
+            end
+        elseif type(p.names) == "table" then
+            for _, name in ipairs(p.names) do
+                local full = tostring(name or "")
+                local uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or full
+                if uid and uid ~= "" then P[#P+1] = uid end
+            end
+        end
+        local cnt = safenum(p.count or p.c or #P, 0)
         GLOG.Comm_Broadcast("HIST_ADD", {
             h  = safenum(p.hid,0),
             ts = safenum(p.ts, now()),
             t  = safenum(p.total or p.t, 0),
             p  = safenum(p.per or p.p, 0),
-            c  = safenum(p.count or p.c or #(p.names or p.participants or {}), 0),
-            P  = p.names or p.participants or {},
+            c  = cnt,
+            P  = P,
             L  = p.L or {},
             r  = safenum(p.r or (p.refunded and 1 or 0), 0),
             rv = rv, lm = GuildLogisticsDB.meta.lastModified,
@@ -594,14 +617,14 @@ function GLOG.CreateStatusUpdatePayload(overrides)
         local S = {}
         local processedCount = 0
         
-        for full, rec in pairs(GuildLogisticsDB.players) do
+    for full, rec in pairs(GuildLogisticsDB.players) do
             -- Limite le nombre de joueurs traités par appel pour éviter les freezes
             if processedCount >= 50 then break end  -- Limite arbitraire
             
             local ts2 = safenum(rec.statusTimestamp, 0)
             if ts2 > 0 then
-                local uid = tonumber(rec.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
-                if uid then
+                local uid = tostring(rec.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or "")
+                if uid ~= "" then
                     local il   = (rec.ilvl       ~= nil) and math.floor(tonumber(rec.ilvl)    or 0) or -1
                     local ilMx = (rec.ilvlMax    ~= nil) and math.floor(tonumber(rec.ilvlMax) or 0) or -1
                     local mid2 = (rec.mkeyMapId  ~= nil) and safenum(rec.mkeyMapId,  -1)          or -1
@@ -612,7 +635,7 @@ function GLOG.CreateStatusUpdatePayload(overrides)
                     do
                         GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
                         local t = GuildLogisticsDB.account
-                        local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+                        local mu = (t.altToMain and t.altToMain[uid]) or uid
                         local mrec = t.mains and t.mains[mu]
                         if mrec and mrec.addonVersion then ver = tostring(mrec.addonVersion) end
                         -- Utiliser la version cache runtime si connue
@@ -623,7 +646,7 @@ function GLOG.CreateStatusUpdatePayload(overrides)
                         -- La version doit venir de mains ou du cache runtime
                     end
                     if (il >= 0) or (ilMx >= 0) or (mid2 >= 0) or (lvl2 >= 0) or (sc >= 0) or (ver ~= "") then
-                        S[#S+1] = string.format("%d;%d;%d;%d;%d;%d;%d;%s", uid, ts2, il, ilMx, mid2, lvl2, sc, ver)
+                        S[#S+1] = string.format("%s;%d;%d;%d;%d;%d;%d;%s", uid, ts2, il, ilMx, mid2, lvl2, sc, ver)
                         processedCount = processedCount + 1
                     end
                 end
@@ -723,11 +746,11 @@ function GLOG.BroadcastStatusUpdate(overrides)
             -- Version de l'addon: écrire au niveau du main dans account.mains[mainUID]
             local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
             if currentVersion ~= "" then
-                local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or nil
-                if uid then
+                local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or "")
+                if uid ~= "" then
                     GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
                     local t = GuildLogisticsDB.account
-                    local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+                    local mu = (t.altToMain and t.altToMain[uid]) or uid
                     t.mains = t.mains or {}
                     t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
                     t.mains[mu].addonVersion = currentVersion

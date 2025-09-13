@@ -57,12 +57,12 @@ local function handleMAFull(sender, kv)
     local t = GuildLogisticsDB.account
     -- account.version is deprecated; kv.MAv is interpreted but not persisted
     for _, s in ipairs(kv.MA or {}) do
-    local u = tonumber(s); if u and u > 0 then t.mains[u] = {} end
+        local u = tostring(s)
+        if u ~= "" then t.mains[u] = {} end
     end
     for _, s in ipairs(kv.AM or {}) do
-        local a, m = tostring(s):match("^(%-?%d+):(%-?%d+)$")
-        local au, mu = safenum(a,0), safenum(m,0)
-        if au > 0 and mu > 0 then t.altToMain[au] = mu end
+        local a, m = tostring(s):match("^([^:]+):([^:]+)$")
+        if a and m then t.altToMain[tostring(a)] = tostring(m) end
     end
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
     if ns.Emit then ns.Emit("mainalt:changed", "net-full") end
@@ -71,7 +71,7 @@ end
 
 local function handleMASetMain(sender, kv)
     if not _maShouldApply(kv) then return end
-    local u = safenum(kv.u, 0); if u <= 0 then return end
+    local u = tostring(kv.u or ""); if u == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local t = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {} }
     t.mains[u] = (type(t.mains[u]) == "table") and t.mains[u] or {}; t.altToMain[u] = nil
@@ -83,7 +83,8 @@ end
 
 local function handleMAAssign(sender, kv)
     if not _maShouldApply(kv) then return end
-    local au, mu = safenum(kv.a,0), safenum(kv.m,0); if au <= 0 or mu <= 0 then return end
+    local au, mu = tostring(kv.a or ""), tostring(kv.m or "")
+    if au == "" or mu == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local t = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {} }
     t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}; t.mains[au] = nil; t.altToMain[au] = mu
@@ -95,7 +96,7 @@ end
 
 local function handleMAUnassign(sender, kv)
     if not _maShouldApply(kv) then return end
-    local au = safenum(kv.a,0); if au <= 0 then return end
+    local au = tostring(kv.a or ""); if au == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local t = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {} }
     t.altToMain[au] = nil
@@ -107,12 +108,12 @@ end
 
 local function handleMARemoveMain(sender, kv)
     if not _maShouldApply(kv) then return end
-    local u = safenum(kv.u,0); if u <= 0 then return end
+    local u = tostring(kv.u or ""); if u == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local t = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {} }
     t.mains[u] = nil
     -- ne force pas les alts → pool
-    for a, m in pairs(t.altToMain) do if safenum(m,0) == u then t.altToMain[a] = nil end end
+    for a, m in pairs(t.altToMain) do if tostring(m) == u then t.altToMain[a] = nil end end
     GuildLogisticsDB.account = t
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
     if ns.Emit then ns.Emit("mainalt:changed", "net-remove-main") end
@@ -121,11 +122,12 @@ end
 
 local function handleMAPromote(sender, kv)
     if not _maShouldApply(kv) then return end
-    local au, mu = safenum(kv.a,0), safenum(kv.m,0); if au <= 0 or mu <= 0 then return end
+    local au, mu = tostring(kv.a or ""), tostring(kv.m or "")
+    if au == "" or mu == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local t = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {} }
     -- Repointage des alts de mu vers au, et mu devient alt
-    for a, m in pairs(t.altToMain) do if safenum(m,0) == mu then t.altToMain[a] = au end end
+    for a, m in pairs(t.altToMain) do if tostring(m) == mu then t.altToMain[a] = au end end
     t.altToMain[mu] = au
     t.altToMain[au] = nil
     t.mains[mu] = nil
@@ -272,13 +274,23 @@ local function handleRosterReserve(sender, kv)
             if mu then
                 GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
                 local t = GuildLogisticsDB.account
-                t.mains[tonumber(mu)] = (type(t.mains[tonumber(mu)]) == "table") and t.mains[tonumber(mu)] or {}
+                t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
                 -- New semantics: only store explicit false at main-level; nil means reserved
-                t.mains[tonumber(mu)].reserve = ((tonumber(kv.res) or 0) == 0) and false or nil
+                local res_val = tonumber(kv.res) or 0
+                if res_val == 0 then
+                    t.mains[mu].reserve = false
+                else
+                    t.mains[mu].reserve = nil
+                end
             end
             -- Maintain legacy per-character flag for UI compatibility (only explicit false)
             local p = GuildLogisticsDB.players[full] or {}
-            p.reserved = ((tonumber(kv.res) or 0) == 0) and false or nil
+            local res_val = tonumber(kv.res) or 0
+            if res_val == 0 then
+                p.reserved = false
+            else
+                p.reserved = nil
+            end
             GuildLogisticsDB.players[full] = p
             
             local meta = GuildLogisticsDB.meta
@@ -441,7 +453,8 @@ local function handleTxBatch(sender, kv)
                 if nf(name) == meK then
                     local d = safenum(D[i], 0)
                     local per   = -d
-                    local after = (GLOG.GetSolde and GLOG.GetSolde(meFull)) or 0
+                    local before = (GLOG.GetSolde and GLOG.GetSolde(meFull)) or 0
+                    local after = before + d  -- Calculate manually: before + delta (delta is negative for debit)
 
                     -- Parse kv.L (CSV "id,name") → tableau d'objets
                     local Lctx, Lraw = {}, kv and kv.L
@@ -556,8 +569,8 @@ local function handleStatusUpdate(sender, kv)
     end
 
     local function _applyByUID(uid, info)
-        uid = safenum(uid, -1)
-        if uid < 0 then return end
+        uid = tostring(uid or "")
+        if uid == "" then return end
         local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
         if not name or name == "" then return end -- ⚠️ on n'invente pas d'entrée
         _applyOne(name, info)
@@ -569,7 +582,7 @@ local function handleStatusUpdate(sender, kv)
             if type(rec) == "string" then
                 -- Format UID + ';' avec version
                 local uid, ts, ilvl, ilvlMax, mid, lvl, score, version =
-                    rec:match("^([%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);(.*)$")
+                    rec:match("^([^;]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);(.*)$")
                 if uid and ts then
                     _applyByUID(uid, {
                         ts = safenum(ts, now()),
@@ -621,13 +634,13 @@ local function handleStatusUpdate(sender, kv)
 
     -- 2) Compat (ancien) : enregistrement unitaire (accepte aussi kv.uid) - SUPPRIMÉ LES CHAMPS REDONDANTS
     do
-        local uid  = safenum(kv.uid, -1)
+        local uid  = tostring(kv.uid or "")
         local name = tostring(kv.name or "")
         local info = {
             ts = safenum(kv.ts, now()),
             -- Les champs ilvl, ilvlMax, mid, lvl, score sont maintenant uniquement dans le tableau S
         }
-        if uid >= 0 then
+        if uid ~= "" then
             _applyByUID(uid, info)
         elseif name ~= "" then
             _applyOne(name, info)
@@ -1103,15 +1116,17 @@ local function handleHistAdd(sender, kv)
         end
     end
     
-    -- Créer l'entrée d'historique avec la structure correcte (format exact attendu)
+    -- Créer l'entrée d'historique en stockant UNIQUEMENT des UIDs dans participants
+    local pUIDs = {}
+    for _, v in ipairs(participants or {}) do pUIDs[#pUIDs+1] = tostring(v or "") end
     local rec = {
-        count = count,                  -- count (number)
-        lots = lots,                   -- lots (table)  
-        participants = participants,    -- participants (table)
-        perHead = perHead,              -- perHead (number)
-        refunded = refunded,           -- refunded (boolean)
-        total = total,                  -- total (number)
-        ts = ts                        -- ts (number)
+        count = count,
+        lots = lots,
+        participants = pUIDs,          -- UIDs seulement
+        perHead = perHead,
+        refunded = refunded,
+        total = total,
+        ts = ts
     }
     
     -- Ajouter l'entrée
@@ -1119,9 +1134,10 @@ local function handleHistAdd(sender, kv)
     
     -- Débit automatique de tous les participants (pas seulement le joueur local)
     if perHead > 0 and participants and type(participants) == "table" and GLOG.Debit then
-        for _, participantName in ipairs(participants) do
+        for _, uid in ipairs(participants) do
+            local participantName = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
             if participantName and participantName ~= "" then
-                -- Débiter chaque participant
+                -- Débiter chaque participant (via nom)
                 GLOG.Debit(participantName, perHead)
             end
         end
@@ -1131,7 +1147,8 @@ local function handleHistAdd(sender, kv)
         local playerFullName = GetUnitName("player", true) or playerName
         local isLocalPlayerParticipant = false
         
-        for _, pname in ipairs(participants) do
+        for _, uid in ipairs(participants) do
+            local pname = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or ""
             if pname == playerName or pname == playerFullName then
                 isLocalPlayerParticipant = true
                 break
@@ -1139,7 +1156,8 @@ local function handleHistAdd(sender, kv)
         end
         
         if isLocalPlayerParticipant and ns.UI and ns.UI.PopupRaidDebit then
-            local after = (GLOG.GetSolde and GLOG.GetSolde(playerFullName)) or 0
+            local before = (GLOG.GetSolde and GLOG.GetSolde(playerFullName)) or 0
+            local after = before - perHead  -- Calculate: before - deducted amount
             local _sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
             _sv.popups = _sv.popups or {}
             if _sv.popups.raidParticipation ~= false then
@@ -1188,19 +1206,19 @@ local function handleHistRefund(sender, kv)
             if h.perHead and h.perHead > 0 and h.participants then
                 if flag and not wasRefunded then
                     -- Cas 1: Activation du remboursement (gratuit) → créditer tous les participants
-                    if GLOG.Credit then
-                        for _, participantName in ipairs(h.participants) do
-                            if participantName and participantName ~= "" then
-                                GLOG.Credit(participantName, h.perHead)
+                    if GLOG.CreditByUID then
+                        for i, participantUID in ipairs(h.participants) do
+                            if participantUID and participantUID ~= "" then
+                                GLOG.CreditByUID(participantUID, h.perHead)
                             end
                         end
                     end
                 elseif not flag and wasRefunded then
                     -- Cas 2: Annulation du remboursement (re-payant) → débiter tous les participants
-                    if GLOG.Debit then
-                        for _, participantName in ipairs(h.participants) do
-                            if participantName and participantName ~= "" then
-                                GLOG.Debit(participantName, h.perHead)
+                    if GLOG.DebitByUID then
+                        for i, participantUID in ipairs(h.participants) do
+                            if participantUID and participantUID ~= "" then
+                                GLOG.DebitByUID(participantUID, h.perHead)
                             end
                         end
                     end
@@ -1341,7 +1359,6 @@ function GLOG.HandleMessage(sender, msgType, kv)
     if safenum((GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev), 0) == 0 then
         local allowed = tostring(msgType or ""):match("^SYNC_") or msgType == "HELLO" or msgType == "STATUS_UPDATE"
         if not allowed then
-            print("REJET")
             if GLOG.Debug then GLOG.Debug("RECV","BOOTSTRAP_SKIP", msgType) end
             return
         end

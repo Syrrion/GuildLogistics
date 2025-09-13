@@ -65,7 +65,6 @@ Core/Comm/MessageHandlers.lua
 Core/Comm/Requests.lua
 Core/Comm/ModuleLoader.lua
 Core/Comm/Comm.lua
-Core/Comm/RefactoringValidator.lua
 Core/Tracker/GroupTrackerState.lua
 Core/Tracker/GroupTrackerSession.lua
 Core/Tracker/GroupTrackerConsumables.lua

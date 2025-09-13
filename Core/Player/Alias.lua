@@ -83,10 +83,10 @@ function GLOG.GetAliasFor(name)
     local mainUID = uid
     if not MA.mains[uid] then
         local m = MA.altToMain[uid]
-        if m then mainUID = tonumber(m) end
+        if m then mainUID = m end
     end
     if not mainUID then return nil end
-    local entry = MA.mains[tonumber(mainUID)]
+    local entry = MA.mains[mainUID]
     local alias = (type(entry) == "table") and entry.alias or nil
     if alias and alias ~= "" then return alias end
     return nil
@@ -107,15 +107,15 @@ function GLOG.SetAliasLocal(name, alias)
     local mainUID = uid
     if not MA.mains[uid] then
         local m = MA.altToMain[uid]
-        if m then mainUID = tonumber(m) end
+        if m then mainUID = m end
     end
     if not mainUID then return end
     local val = tostring(alias or ""):gsub("^%s+",""):gsub("%s+$","")
     local stored = (val ~= "") and val or nil
-    local entry = MA.mains[tonumber(mainUID)]
+    local entry = MA.mains[mainUID]
     if type(entry) ~= "table" then entry = {} end
     entry.alias = stored
-    MA.mains[tonumber(mainUID)] = entry
+    MA.mains[mainUID] = entry
 
     -- Autorité: account.mains[mainUID].alias
 
@@ -143,7 +143,7 @@ function GLOG.GM_SetAlias(name, alias)
     if GLOG.BroadcastRosterUpsert then
         local MA = _MA(); local uid = _uidFor(name)
         local mainUID = uid
-        if uid and not MA.mains[uid] then mainUID = tonumber(MA.altToMain[uid] or uid) end
+        if uid and not MA.mains[uid] then mainUID = (MA.altToMain[uid] or uid) end
         local mainName = (mainUID and GLOG.GetNameByUID and GLOG.GetNameByUID(mainUID)) or name
         GLOG.BroadcastRosterUpsert(mainName)
     end

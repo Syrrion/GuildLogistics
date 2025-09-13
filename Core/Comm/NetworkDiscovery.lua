@@ -162,7 +162,7 @@ local function _decideAndGrant(hid)
 end
 
 local function _scheduleOfferReply(hid, initiator, rv_init, ver_them)
-    -- Inhibition si FULL récent ≥ mon rv (⚠️ sauf GM pour priorité absolue)
+    -- Inhibition si FULL récent ≥ mon rv
     local iAmGM = (GLOG.IsNameGuildMaster and GLOG.IsNameGuildMaster(playerFullName())) or false
     if not iAmGM then
         if (now() - (LastFullSeenAt or 0)) < FULL_INHIBIT_SEC and (LastFullSeenRv or -1) >= safenum(getRev(), 0) then
@@ -297,7 +297,14 @@ function GLOG.HandleHello(sender, kv)
 
     -- ===== Réponse STATUS_UPDATE au HELLO =====
     -- Envoyer notre statut mis à jour (iLvl, clé M+, etc.) en réponse au HELLO
+    -- IMPORTANT: ne PAS répondre si le HELLO a été reçu en WHISPER (uniquement si reçu via GUILD)
     do
+        local incomingChannel = tostring(kv._ch or "")
+        if incomingChannel ~= "GUILD" then
+            -- Ne pas envoyer de STATUS_UPDATE en réponse à un HELLO en WHISPER
+            return
+        end
+
         local me = playerFullName()
         local meta = GuildLogisticsDB and GuildLogisticsDB.meta
         local myRv = safenum(meta and meta.rev, 0)

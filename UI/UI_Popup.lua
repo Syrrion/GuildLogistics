@@ -388,11 +388,33 @@ function UI.ShowParticipantsPopup(names, showState)
     dlg._lv = lv
 
     local pdb = (GuildLogisticsDB and GuildLogisticsDB.players) or {}
-    local arr = {}
-    for _, n in ipairs(names or {}) do arr[#arr+1] = n end
-    table.sort(arr, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
+    -- Convert provided tokens (UID or full names) to display names using players[full].uid mapping
+    local display = {}
+    for _, tok in ipairs(names or {}) do
+        local s = tostring(tok or "")
+        local full = nil
+        if s ~= "" then
+            if s:find("%-%") then
+                -- Already a FullName-Realm
+                full = s
+            else
+                -- Looks like an UID → try reverse lookup via players[full].uid
+                for fname, prec in pairs(pdb) do
+                    if prec and prec.uid == s then
+                        full = fname; break
+                    end
+                end
+                -- As last resort, show token as-is
+                if not full or full == "" then full = s end
+            end
+        end
+        if full and full ~= "" then
+            display[#display+1] = full
+        end
+    end
+    table.sort(display, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
     local data = {}
-    for _, n in ipairs(arr) do data[#data+1] = { name = n, exists = (pdb[n] ~= nil) } end
+    for _, full in ipairs(display) do data[#data+1] = { name = full, exists = (pdb[full] ~= nil) } end
 
     lv:SetData(data)
     dlg:SetButtons({ { text = CLOSE, default = true } })
@@ -418,11 +440,26 @@ function UI.ShowParticipants2Popup(names)
     dlg._lv = lv
 
     local pdb = (GuildLogisticsDB and GuildLogisticsDB.players) or {}
-    local arr = {}
-    for _, n in ipairs(names or {}) do arr[#arr+1] = n end
-    table.sort(arr, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
+    -- Normalize tokens to displayable full names using players mapping
+    local display = {}
+    for _, tok in ipairs(names or {}) do
+        local s = tostring(tok or "")
+        local full = nil
+        if s ~= "" then
+            if s:find("%-%") then
+                full = s
+            else
+                for fname, prec in pairs(pdb) do
+                    if prec and prec.uid == s then full = fname; break end
+                end
+                if not full or full == "" then full = s end
+            end
+        end
+        if full and full ~= "" then display[#display+1] = full end
+    end
+    table.sort(display, function(a,b) return (a or ""):lower() < (b or ""):lower() end)
     local data = {}
-    for _, n in ipairs(arr) do data[#data+1] = { name = n, exists = (pdb[n] ~= nil) } end
+    for _, full in ipairs(display) do data[#data+1] = { name = full, exists = (pdb[full] ~= nil) } end
 
     lv:SetData(data)
     dlg:SetButtons({ { text = CLOSE, default = true } })
