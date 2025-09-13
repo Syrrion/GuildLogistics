@@ -319,6 +319,8 @@ function GLOG.OnAddonMessage(prefix, message, channel, sender)
                 if GLOG.DecodeKV then
                     kv = GLOG.DecodeKV(plain)
                 end
+                -- Inject incoming channel so handlers can react differently (e.g., avoid HELLO->HELLO on WHISPER)
+                kv._ch = channel
                 
                 -- Déléguer au handler principal (qui sera défini dans un autre module)
                 if GLOG.HandleMessage then

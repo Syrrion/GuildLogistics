@@ -36,6 +36,8 @@ local Discovery = {}
 -- Cooldown d'OFFERS par initiateur
 -- [normInitiator] = lastTs
 local OfferCooldown = {}
+-- Cooldown de réponse HELLO->HELLO (par cible) pour éviter le ping-pong
+local HelloReplyCooldown = {}
 
 -- Petits utilitaires
 local function _norm(s) return normalizeStr(s or "") end
@@ -263,6 +265,36 @@ function GLOG.HandleHello(sender, kv)
         if C_Timer and C_Timer.After then C_Timer.After(1, _tryFlushLater) end
     end
     
+    -- ===== Réponse HELLO (WHISPER) =====
+    do
+        -- Éviter le ping-pong: ne pas répondre à notre propre HELLO et appliquer un petit cooldown par cible
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        local me = playerFullName()
+        -- IMPORTANT: ne jamais répondre à un HELLO reçu en privé (WHISPER)
+        local incomingChannel = tostring(kv._ch or "")
+        local isGuild = (incomingChannel == "GUILD")
+        if isGuild and nf(sender) ~= nf(me) then
+            local key = nf(sender)
+            local last = HelloReplyCooldown[key] or 0
+            local COOLDOWN = 1.0
+            if (now() - last) > COOLDOWN then
+                if GLOG.Comm_Whisper then
+                    local meFull = me
+                    local myRv = safenum(getRev(), 0)
+                    GLOG.Comm_Whisper(sender, "HELLO", {
+                        hid = hid,
+                        rv = myRv,
+                        player = meFull,
+                        caps = {"OFFER","GRANT","TOKEN1"},
+                        ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or "",
+                        reply = true,
+                    })
+                    HelloReplyCooldown[key] = now()
+                end
+            end
+        end
+    end
+
     -- ===== Réponse STATUS_UPDATE au HELLO =====
     -- Envoyer notre statut mis à jour (iLvl, clé M+, etc.) en réponse au HELLO
     do
@@ -539,6 +571,9 @@ function GLOG.CleanupDiscovery()
     for who, ts in pairs(OfferCooldown or {}) do
         if (ts or 0) < coolCutoff then OfferCooldown[who] = nil end
     end
+    for who, ts in pairs(HelloReplyCooldown or {}) do
+        if (ts or 0) < coolCutoff then HelloReplyCooldown[who] = nil end
+    end
 end
 
 -- ===== API publiques pour le debug =====
@@ -591,6 +626,7 @@ GLOG.LastFullSeenRv = function() return LastFullSeenRv end
 GLOG._registerOffer = _registerOffer
 GLOG._decideAndGrant = _decideAndGrant
 GLOG._scheduleOfferReply = _scheduleOfferReply
+GLOG.HelloReplyCooldown = HelloReplyCooldown
 
 -- Fonctions globales pour compatibilité
 HelloElect = HelloElect
@@ -600,3 +636,4 @@ LastFullSeenRv = LastFullSeenRv
 _registerOffer = _registerOffer
 _decideAndGrant = _decideAndGrant
 _scheduleOfferReply = _scheduleOfferReply
+HelloReplyCooldown = HelloReplyCooldown
