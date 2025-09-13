@@ -126,14 +126,45 @@ local function handleMAPromote(sender, kv)
     if au == "" or mu == "" then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local t = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {} }
+
+    -- Conserver l'entrée du main avant mutation pour transférer les métadonnées (solde, alias, version, reserve...)
+    local oldMainEntry = t.mains and t.mains[mu] or nil
+
     -- Repointage des alts de mu vers au, et mu devient alt
     for a, m in pairs(t.altToMain) do if tostring(m) == mu then t.altToMain[a] = au end end
     t.altToMain[mu] = au
     t.altToMain[au] = nil
+
+    -- Nouveau main: garantir la table et transférer les métadonnées de l'ancien main
     t.mains[mu] = nil
     t.mains[au] = (type(t.mains[au]) == "table") and t.mains[au] or {}
+    if type(oldMainEntry) == "table" then
+        for k, v in pairs(oldMainEntry) do t.mains[au][k] = v end
+    end
+
+    -- Transférer l'état "reserved" explicite si présent dans players
+    do
+        local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+        local mainName = (GLOG.GetNameByUID and GLOG.GetNameByUID(mu)) or nil
+        local altName  = (GLOG.GetNameByUID and GLOG.GetNameByUID(au)) or nil
+        if mainName and altName then
+            GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+            local mKey = nf(mainName)
+            local aKey = nf(altName)
+            local recMain = GuildLogisticsDB.players[mKey]
+            local recAlt  = GuildLogisticsDB.players[aKey]
+            if recMain or recAlt then
+                local mainIsFalse = recMain and (recMain.reserved == false)
+                if recAlt then recAlt.reserved = mainIsFalse and false or nil end
+                if recMain then recMain.reserved = nil end
+            end
+        end
+    end
+
     GuildLogisticsDB.account = t
     local meta = GuildLogisticsDB.meta; meta.rev = safenum(kv.rv, meta.rev or 0); meta.lastModified = safenum(kv.lm, now())
+    -- Rebuild derived guild cache (class/byName/mains) to reflect new main immediately
+    if GLOG.RebuildGuildCacheDerived then pcall(GLOG.RebuildGuildCacheDerived) end
     if ns.Emit then ns.Emit("mainalt:changed", "net-promote") end
     refreshActive()
 end
@@ -1042,12 +1073,15 @@ local function handleExpRemove(sender, kv)
     
     if not shouldApply() then return end
     
+    GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
     local id = safenum(kv.id, 0)
+    if id <= 0 then return end
+
     local e = GuildLogisticsDB.expenses
     if e and e.list then
         local keep = {}
         for _, it in ipairs(e.list) do 
-            if safenum(it.id, -1) ~= id then 
+            if safenum(it.id, 0) ~= id then 
                 keep[#keep+1] = it 
             end 
         end

@@ -15,6 +15,33 @@ local U = ns.Util or {}
 -- =========================
 
 local function EnsureDB()
+    -- Version-gated migration: wipe DB when local addon version reaches >= 4.0.0 (one-time)
+    do
+        local cur = (ns and ns.GLOG and ns.GLOG.GetAddonVersion and ns.GLOG.GetAddonVersion()) or (ns and ns.Version) or ""
+        local cmp = ns and ns.Util and ns.Util.CompareVersions
+        if type(cur) == "string" and cur ~= "" and type(cmp) == "function" then
+            -- Read last migration marker from DB_Char.meta.lastMigration (string)
+            local lastMig = nil
+            if type(_G.GuildLogisticsDB_Char) == "table" and type(_G.GuildLogisticsDB_Char.meta) == "table" then
+                lastMig = tostring(_G.GuildLogisticsDB_Char.meta.lastMigration or "")
+            end
+
+            local needsWipe = (cmp(cur, "4.0.0") >= 0) and (not lastMig or cmp(lastMig, "4.0.0") < 0)
+            if needsWipe then
+                -- Use public wipe API if available, else perform a minimal wipe inline
+                GLOG.WipeAllData()
+                _G.GuildLogisticsDB_Char = _G.GuildLogisticsDB_Char or {}
+                _G.GuildLogisticsDB_Char.meta = _G.GuildLogisticsDB_Char.meta or { lastModified=0, fullStamp=0, rev=0, master=nil }
+                _G.GuildLogisticsDB_Char.meta.rev = 0
+                _G.GuildLogisticsDB_Char.meta.lastMigration = "4.0.0"
+                -- Rebind runtime aliases
+                _G.GuildLogisticsDB = _G.GuildLogisticsDB_Char
+                -- Notify UI
+                if ns and ns.Emit then ns.Emit("database:wiped", "migrate-4.0.0") end
+            end
+        end
+    end
+
     GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
     GuildLogisticsUI_Char = GuildLogisticsUI_Char or {}
 
@@ -31,6 +58,8 @@ local function EnsureDB()
         db.expenses = db.expenses or { recording = false, list = {}, nextId = 1 }
         db.lots     = db.lots     or { nextId = 1, list = {} }
         db.meta     = db.meta     or { lastModified = 0, fullStamp = 0, rev = 0, master = nil }
+    -- Track lastMigration as version string (for one-time wipes)
+    if db.meta.lastMigration == nil then db.meta.lastMigration = tostring((ns and ns.GLOG and ns.GLOG.GetAddonVersion and ns.GLOG.GetAddonVersion()) or "") end
         db.requests = db.requests or {}
 
         -- Stockage des liens main/alt et données par compte
@@ -79,6 +108,7 @@ local function WipeDataStructures()
     local keepMaster = (GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.master) or nil
 
     GuildLogisticsDB_Char = {
+        account       = {},
         players       = {},
         history       = { nextId = 1 },
         expenses      = { recording = false, list = {}, nextId = 1 },
@@ -100,6 +130,7 @@ local function WipeAllStructures()
 
     -- Purge les 2 SV par personnage
     GuildLogisticsDB_Char = {
+        account       = {},
         players       = {},
         history       = { nextId = 1 },
         expenses      = { recording = false, list = {}, nextId = 1 },

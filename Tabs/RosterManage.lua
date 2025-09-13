@@ -50,11 +50,9 @@ end
 local cols = UI.NormalizeColumns({
     { key="alias",    title=Tr("col_alias"),     w=80 },
     { key="main",     title=Tr("col_player"),    vsep=true,  min=180, flex=1 },
-    { key="last",     title=Tr("col_last_seen"), vsep=true,  w=100 },
-    { key="count",    title=Tr("col_rerolls"),   vsep=true,  w=60 },
-    { key="ver",      title=Tr("col_version"),   vsep=true,  w=90, justify="CENTER" }, -- ➕ Version après Rerolls
-    { key="actAlias", title="",                  vsep=true,  w=90 },
-    { key="act",      title="",                  vsep=true,  w=240 },
+    { key="last",     title=Tr("col_last_seen"), justify="CENTER", vsep=true,  w=100 },
+    { key="count",    title=Tr("col_rerolls"),   justify="CENTER", vsep=true,  w=60 },
+    { key="act",      title="",                  vsep=true,  w=160 },
 })
 
 -- Construction d’une ligne
@@ -66,20 +64,16 @@ local function BuildRow(r)
     f.main  = UI.CreateNameTag(r)
     f.last  = UI.Label(r, { justify = "CENTER" })
     f.count = UI.Label(r)
-    f.ver = UI.Label(r, { justify = "CENTER" })
+    -- (colonne Version supprimée)
 
     -- Colonne d’actions ROSTER (un seul bouton toggle + un bouton supprimer réservé aux hors-guilde)
     f.act        = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
     f.btnToggle  = UI.Button(f.act, Tr("btn_add_to_roster"), { size="sm", minWidth=120, debounce=0.15 })
     f.btnDelete  = UI.Button(f.act, "X", { size="xs", variant="danger", minWidth=24, debounce=0.15 })
 
-    -- Colonne « actions alias » séparée pour garder l’ergonomie précédente
-    f.actAlias   = CreateFrame("Frame", nil, r); f.actAlias:SetHeight(UI.ROW_H)
-    f.btnAlias   = UI.Button(f.actAlias, Tr("btn_set_alias"), { size="sm", variant="ghost", minWidth=80 })
-
     -- Placement dans les colonnes
     UI.AttachRowRight(f.act,      { f.btnToggle, f.btnDelete }, 6, -4, { leftPad = 8, align = "center" })
-    UI.AttachRowRight(f.actAlias, { f.btnAlias }, 8, -4, { leftPad = 8, align = "center" })
+    -- (colonne Alias… supprimée)
 
     -- Widgets pour "sep"
     f.sepBG = r:CreateTexture(nil, "BACKGROUND"); f.sepBG:Hide()
@@ -117,7 +111,7 @@ local function UpdateRow(i, r, f, it)
         if f.last then f.last:SetText("") end
         if f.count then f.count:SetText("") end
         if f.act then f.act:Hide() end
-        if f.actAlias then f.actAlias:Hide() end
+        -- (colonne Alias… supprimée)
 
         f.sepLabel:ClearAllPoints()
         f.sepLabel:SetPoint("LEFT", r, "LEFT", 8, 0)
@@ -129,7 +123,6 @@ local function UpdateRow(i, r, f, it)
     -- ===== Ligne de données =====
     if f.sepLabel then f.sepLabel:SetText("") end
     if f.act then f.act:Show() end
-    if f.actAlias then f.actAlias:Show() end
 
     local name = tostring(it.main or "")
     -- Nom
@@ -153,11 +146,7 @@ local function UpdateRow(i, r, f, it)
     -- Compteur de rerolls
     if f.count then f.count:SetText(it.count or 0) end
 
-    if f.ver then
-        local name = tostring(it.main or "")
-        local ver  = (ns.GLOG.GetPlayerAddonVersion and ns.GLOG.GetPlayerAddonVersion(name)) or ""
-        f.ver:SetText((ver ~= "" and ver) or Tr("value_empty") or "—")
-    end
+    -- (colonne Version supprimée)
 
     -- Statut "hors guilde" (section dédiée)
     local isOut = (it.outOfGuild == true)
@@ -184,16 +173,7 @@ local function UpdateRow(i, r, f, it)
     local isReserved = (ns.GLOG.IsReserved and (ns.GLOG.IsReserved(fullName) or ns.GLOG.IsReserved(name))) or false
     local inRoster  = ((ns.GLOG.HasPlayer and (ns.GLOG.HasPlayer(fullName) or ns.GLOG.HasPlayer(name))) and not isReserved) or false
 
-    -- Bouton alias (toujours affiché)
-    if f.btnAlias then
-        f.btnAlias:SetShown(true)
-        f.btnAlias:SetOnClick(function()
-            ns.UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
-                if ns.GLOG.GM_SetAlias then ns.GLOG.GM_SetAlias(fullName, val) end
-                RefreshAllViews()
-            end, { strata = "FULLSCREEN_DIALOG" })
-        end)
-    end
+    -- (bouton Alias… supprimé)
 
     -- Bouton Add / Remove (toggle)
     if f.btnToggle then
@@ -238,7 +218,6 @@ local function UpdateRow(i, r, f, it)
     end
 
     -- Relayout des groupes d’actions si nécessaire
-    if f.actAlias and f.actAlias._applyRowActionsLayout then f.actAlias._applyRowActionsLayout() end
     if f.act      and f.act._applyRowActionsLayout      then f.act._applyRowActionsLayout()      end
 end
 
@@ -274,6 +253,15 @@ local function buildItemsFromAgg(agg)
 
     local items = {}
 
+    -- Helper local: calcule le nombre de rerolls via la table compacte (account.altToMain)
+    local function AltCountForEntry(entry)
+        if not entry then return 0 end
+        local full = (EnsureFullMain and EnsureFullMain(entry)) or tostring(entry.main or "")
+        if full == "" then return 0 end
+        local arr = (ns and ns.GLOG and ns.GLOG.GetAltsOf and ns.GLOG.GetAltsOf(full)) or nil
+        return (type(arr) == "table" and #arr) or 0
+    end
+
     if #actives > 0 then
         table.insert(items, { kind="sep", extraTop = 0, label=Tr("lbl_recent_online") })
         for _, e in ipairs(actives) do
@@ -281,7 +269,8 @@ local function buildItemsFromAgg(agg)
                 kind="data",
                 main=e.main, key=e.key,
                 days=e.days, hours=e.hours,
-                count=e.count, onlineCount=e.onlineCount,
+                -- Utilise le mapping manuel Main/Alt pour compter les rerolls uniquement
+                count=AltCountForEntry(e), onlineCount=e.onlineCount,
             })
         end
     end
@@ -293,7 +282,8 @@ local function buildItemsFromAgg(agg)
                 kind="data",
                 main=e.main, key=e.key,
                 days=e.days, hours=e.hours,
-                count=e.count, onlineCount=e.onlineCount,
+                -- Utilise le mapping manuel Main/Alt pour compter les rerolls uniquement
+                count=AltCountForEntry(e), onlineCount=e.onlineCount,
             })
         end
     end
@@ -329,7 +319,8 @@ local function buildItemsFromAgg(agg)
             table.insert(items, {
                 kind="data",
                 main = e.main,
-                count = 0,
+                -- Compte les rerolls via la table compacte même hors guilde
+                count = AltCountForEntry(e),
                 outOfGuild = true, -- drapeau UI (statut, actions)
             })
         end

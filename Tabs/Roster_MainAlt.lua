@@ -56,11 +56,17 @@ local function _removeFromPoolByName(name)
 end
 
 -- ===== Pool (50%) =====
-local poolCols = {
-    { key = "name",  title = Tr("lbl_player") or "Joueur", flex = 1, min = 120 },
-    { key = "note",  title = Tr("lbl_guild_note") or "Guild note",   vsep=true,flex = 1, min = 120, justify = "LEFT" },
-    { key = "act",   title = Tr("lbl_actions") or "Actions", vsep=true, min = 72 },
-}
+-- Dynamic columns builders (hide actions for non-GM)
+local function _BuildPoolCols()
+    local cols = {
+        { key = "name",  title = Tr("lbl_player") or "Joueur", flex = 1, min = 120 },
+        { key = "note",  title = Tr("lbl_guild_note") or "Guild note",   vsep=true,flex = 1, min = 120, justify = "LEFT" },
+    }
+    if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+        cols[#cols+1] = { key = "act", title = Tr("lbl_actions") or "Actions", vsep=true, min = 72 }
+    end
+    return cols
+end
 
 local function BuildRowPool(r)
     local f = {}
@@ -69,15 +75,16 @@ local function BuildRowPool(r)
     f.note = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.note:SetJustifyH("LEFT")
 
-    -- Actions container
-    f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    if GLOG.IsMaster() then
+    -- Actions container (GM only)
+    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    if gm then
+        f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
         -- Crown = set as Main (square icon with classic panel background)
         r.btnCrown = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
     -- Chevron = assign as Alt to selected Main (square with classic panel background)
     r.btnAlt   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName="uitools-icon-chevron-right", size=24, fit=true, pad=3, tooltip=Tr("tip_assign_alt") or "Associer en alt au main sélectionné" })
+        UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 4, -4, { leftPad=4, align="center" })
     end
-    UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 4, -4, { leftPad=4, align="center" })
     return f
 end
 
@@ -122,7 +129,7 @@ local function UpdateRowPool(i, r, f, it)
     if f.note and f.note.SetText then f.note:SetText(note) end
 
     -- Buttons
-    local gm = GLOG.IsMaster()
+    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
         if r.btnCrown then r.btnCrown:SetShown(gm) end
         if r.btnAlt then r.btnAlt:SetShown(gm) end
     if r.btnCrown then
@@ -179,12 +186,17 @@ local function UpdateRowPool(i, r, f, it)
 end
 
 -- ===== Mains (25%) =====
-local mainsCols = {
-    { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 120 },
-    { key = "alias", title = Tr("lbl_alias") or "Alias", vsep=true,w = 120, justify = "LEFT" },
-    { key = "solde", title = Tr("col_balance") or "Solde", vsep=true,w = 90, justify = "RIGHT" },
-    { key = "act",   title = "", vsep=true,min = 72 },
-}
+local function _BuildMainsCols()
+    local cols = {
+        { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 120 },
+        { key = "alias", title = Tr("lbl_alias") or "Alias", vsep=true,w = 120, justify = "LEFT" },
+        { key = "solde", title = Tr("col_balance") or "Solde", vsep=true,w = 90, justify = "RIGHT" },
+    }
+    if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+        cols[#cols+1] = { key = "act", title = "", vsep=true, min = 72 }
+    end
+    return cols
+end
 
 local function BuildRowMains(r)
     local f = {}
@@ -193,12 +205,13 @@ local function BuildRowMains(r)
     f.name = UI.CreateNameTag(r)
     f.alias = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    if GLOG.IsMaster() then
-    r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
-    r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") or "Supprimer" })
+    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    if gm then
+        f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
+        r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
+        r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") or "Supprimer" })
+        UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias }, 4, -4, { leftPad=4, align="center" })
     end
-    UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias }, 4, -4, { leftPad=4, align="center" })
     -- Hover highlight setup (subtle) for mains list
     if r.EnableMouse then r:EnableMouse(true) end
     if not r._hover then
@@ -223,7 +236,7 @@ local function BuildRowMains(r)
         r.btnDel:HookScript("OnLeave", hideHover)
     end
     -- GM-only delete button (no-op if not created)
-    if r.btnDel then r.btnDel:SetShown(GLOG.IsMaster()) end
+    if r.btnDel then r.btnDel:SetShown(GLOG and GLOG.IsMaster and GLOG.IsMaster()) end
     if r.btnAlias then r.btnAlias:SetShown(GLOG.IsMaster()) end
     return f
 end
@@ -329,21 +342,27 @@ local function UpdateRowMains(i, r, f, it)
 end
 
 -- ===== Alts (25%) =====
-local altsCols = {
-    { key = "name",  title = Tr("lbl_associated_alts"), flex = 1, min = 120 },
-    { key = "act",   title = "", vsep=true,min = 90 },
-}
+local function _BuildAltsCols()
+    local cols = {
+        { key = "name",  title = Tr("lbl_associated_alts"), flex = 1, min = 120 },
+    }
+    if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+        cols[#cols+1] = { key = "act", title = "", vsep=true, min = 90 }
+    end
+    return cols
+end
 
 local function BuildRowAlts(r)
     local f = {}
     f.name = UI.CreateNameTag(r)
-    f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-    if GLOG.IsMaster() then
-    r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
-    r.btnAlias   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
-    r.btnDel     = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
+    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    if gm then
+        f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
+        r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
+        r.btnAlias   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
+        r.btnDel     = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
+        UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias, r.btnPromote }, 4, -4, { leftPad=4, align="center" })
     end
-    UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias, r.btnPromote }, 4, -4, { leftPad=4, align="center" })
 
     -- Hover highlight (same as mains list)
     if r.EnableMouse then r:EnableMouse(true) end
@@ -388,9 +407,10 @@ local function UpdateRowAlts(i, r, f, it)
     -- Base gradient for zebra effect
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
     -- Ensure GM-only visibility reflects current status (no-op if buttons weren't created)
-    if r.btnPromote then r.btnPromote:SetShown(GLOG.IsMaster()) end
-    if r.btnAlias then r.btnAlias:SetShown(GLOG.IsMaster()) end
-    if r.btnDel then r.btnDel:SetShown(GLOG.IsMaster()) end
+    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    if r.btnPromote then r.btnPromote:SetShown(gm) end
+    if r.btnAlias then r.btnAlias:SetShown(gm) end
+    if r.btnDel then r.btnDel:SetShown(gm) end
     if r.btnPromote then
         r.btnPromote:SetOnClick(function()
             if not selectedMainName or selectedMainName == "" then return end
@@ -516,16 +536,16 @@ local function Build(container)
     rightPane= CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(leftPane, Tr("lbl_available_pool"))
-    lvPool  = UI.ListView(leftPane,  poolCols,  { buildRow = BuildRowPool,  updateRow = UpdateRowPool,  topOffset = UI.SECTION_HEADER_H or 26 })
+    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool,  topOffset = UI.SECTION_HEADER_H or 26 })
 
     UI.SectionHeader(midPane,  Tr("lbl_mains"))
-    lvMains = UI.ListView(midPane,  mainsCols, { buildRow = BuildRowMains, updateRow = UpdateRowMains, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvMains = UI.ListView(midPane,  _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, topOffset = UI.SECTION_HEADER_H or 26 })
 
     do
         local _, fs = UI.SectionHeader(rightPane, Tr("lbl_associated_alts2"))
         rightPane._sectionHeaderFS = fs
     end
-    lvAlts  = UI.ListView(rightPane, altsCols, { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts,  topOffset = UI.SECTION_HEADER_H or 26 })
+    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(), { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts,  topOffset = UI.SECTION_HEADER_H or 26 })
 
     -- Initial data
     poolDataCache = buildPoolData(); lvPool:SetData(poolDataCache)
