@@ -760,18 +760,34 @@ function GLOG.BroadcastStatusUpdate(overrides)
                 end
             end
 
-            -- Version de l'addon: écrire au niveau du main dans account.mains[mainUID]
+            -- Version de l'addon: n'écris au niveau du MAIN que si mappé alt->main OU déjà main confirmé
             local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
             if currentVersion ~= "" then
                 local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or "")
                 if uid ~= "" then
                     GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
                     local t = GuildLogisticsDB.account
-                    local mu = (t.altToMain and t.altToMain[uid]) or uid
+                    local mapped = t.altToMain and t.altToMain[uid] or nil
+                    local mu = (mapped or uid)
                     t.mains = t.mains or {}
-                    t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
-                    t.mains[mu].addonVersion = currentVersion
-                    changed = true
+                    if mapped and mapped ~= uid then
+                        -- Alt connu: autorisé à créer/mettre à jour l'entrée du MAIN
+                        t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+                        t.mains[mu].addonVersion = currentVersion
+                        changed = true
+                    elseif type(t.mains[mu]) == "table" then
+                        -- MAIN déjà confirmé: mise à jour uniquement
+                        t.mains[mu].addonVersion = currentVersion
+                        changed = true
+                    else
+                        -- Ni mappé, ni main confirmé → ne pas créer d'entrée MAIN implicite
+                        -- Stocker une copie locale par personnage et cache runtime
+                        p.addonVersion = currentVersion
+                        if GLOG.SetPlayerAddonVersion then
+                            GLOG.SetPlayerAddonVersion(me, currentVersion, ts, me)
+                        end
+                        changed = true
+                    end
                 end
             end
 

@@ -154,15 +154,31 @@ local function _SetAddonVersionLocal(name, version, ts, by)
     local nowts = tonumber(ts) or time()
     local prev_ts = tonumber(p.statusTimestamp or 0) or 0
     if nowts >= prev_ts then
-        -- Écrire la version au niveau du main: account.mains[mainUID].addonVersion (ShortId string)
+        -- Écrire la version au niveau du MAIN seulement si:
+        --  - le joueur est mappé alt→main (écrire sur le MAIN; création autorisée)
+        --  - OU le MAIN existe déjà (ne pas promouvoir implicitement)
         local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name)) or "")
         if uid and uid ~= "" then
             GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
             local t = GuildLogisticsDB.account
-            local mu = (t.altToMain and t.altToMain[uid]) or uid
+            local mapped = t.altToMain and t.altToMain[uid] or nil
+            local mu = (mapped or uid)
             t.mains = t.mains or {}
-            t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
-            t.mains[mu].addonVersion = tostring(version or "")
+            if mapped and mapped ~= uid then
+                -- Alt connu: autorisé à créer/mettre à jour l'entrée du MAIN
+                t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+                t.mains[mu].addonVersion = tostring(version or "")
+            elseif type(t.mains[mu]) == "table" then
+                -- MAIN confirmé: mise à jour seulement
+                t.mains[mu].addonVersion = tostring(version or "")
+            else
+                -- Ni mappé, ni main confirmé → ne pas créer une entrée MAIN
+                -- Conserver une copie locale au niveau du personnage et dans le cache runtime
+                p.addonVersion = tostring(version or "")
+                if GLOG.SetPlayerAddonVersion then
+                    GLOG.SetPlayerAddonVersion(name, p.addonVersion, nowts, by)
+                end
+            end
         end
         p.statusTimestamp = nowts
         -- Pas d'événement spécifique pour la version, cela sera inclus dans le refresh global

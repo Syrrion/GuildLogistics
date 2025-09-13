@@ -358,12 +358,13 @@ function UpdateRow(i, r, f, it)
     if f.sepLabel then f.sepLabel:SetText("") end
 
     local data = it -- pour lisibilité
+    -- Cache guild info per item to avoid repeated lookups
+    local gi = data._gi or FindGuildInfo(data.name or "")
 
     -- Nom (sans royaume) + ajout éventuel du reroll connecté (icône + nom)
     UI.SetNameTagShort(f.name, data.name or "")
 
     -- Récupère le reroll online attaché au main (si différent du main)
-    local gi = FindGuildInfo(data.name or "")
     local altBase, altFull, altClass = gi and gi.onlineAltBase, gi and gi.onlineAltFull, gi and gi.altClass
 
     if altBase and altBase ~= "" then
@@ -412,8 +413,7 @@ function UpdateRow(i, r, f, it)
         if a and a ~= "" then f.alias:SetText("   "..a) else f.alias:SetText(" ") end
     end
 
-    -- Infos guilde agrégées
-    local gi = FindGuildInfo(data.name or "")
+    -- Infos guilde agrégées (déjà récupérées ci-dessus)
 
     -- Présence (last) : zone "live" via GetGuildRosterInfo, fallback cache
     if f.last then
@@ -544,8 +544,10 @@ end
 local function _SortMembers(items)
     local online, offline = {}, {}
 
-    for _, it in ipairs(items or {}) do
-        local gi = FindGuildInfo(it.name or "")
+    for i = 1, #(items or {}) do
+        local it = items[i]
+        local gi = it._gi or FindGuildInfo(it.name or "")
+        it._gi = gi
         local alias = (GLOG.GetAliasFor and GLOG.GetAliasFor(it.name)) or ""
         if not alias or alias == "" then
             alias = (tostring(it.name):match("^([^%-]+)") or tostring(it.name) or "")
@@ -554,25 +556,29 @@ local function _SortMembers(items)
 
         -- Heures depuis dernière connexion (plus petit = plus récent)
         local hrs = nil
-        if gi.days ~= nil or gi.hours ~= nil then
+        if gi and (gi.days ~= nil or gi.hours ~= nil) then
             local d = tonumber(gi.days or 0)  or 0
             local h = tonumber(gi.hours or 0) or 0
             hrs = d * 24 + h
         end
         it._sortHrs = hrs or math.huge
 
-        if gi.online then table.insert(online, it) else table.insert(offline, it) end
+        if gi and gi.online then table.insert(online, it) else table.insert(offline, it) end
     end
 
     table.sort(online,  function(a,b)
         if a._sortAlias ~= b._sortAlias then return a._sortAlias < b._sortAlias end
-        return tostring(a.name):lower() < tostring(b.name):lower()
+        local an, bn = a.name or "", b.name or ""
+        an, bn = an:lower(), bn:lower()
+        return an < bn
     end)
 
     table.sort(offline, function(a,b)
         if a._sortHrs ~= b._sortHrs then return a._sortHrs < b._sortHrs end -- plus récent d’abord
         if a._sortAlias ~= b._sortAlias then return a._sortAlias < b._sortAlias end
-        return tostring(a.name):lower() < tostring(b.name):lower()
+        local an, bn = a.name or "", b.name or ""
+        an, bn = an:lower(), bn:lower()
+        return an < bn
     end)
 
     local out = {}
@@ -683,9 +689,15 @@ local function _DoRefresh()
     local agg = (GLOG.GetGuildMainsAggregated and GLOG.GetGuildMainsAggregated()) or
                 (GLOG.GetGuildMainsAggregatedCached and GLOG.GetGuildMainsAggregatedCached()) or {}
 
-    for _, e in ipairs(agg or {}) do
-        local full = (GLOG.ResolveFullName and GLOG.ResolveFullName(e.main)) or e.mostRecentChar or e.main
-        table.insert(base, { name = full })
+    do
+        local resolve = GLOG.ResolveFullName
+        for i = 1, #agg do
+            local e = agg[i]
+            local full = (resolve and resolve(e.main)) or e.mostRecentChar or e.main
+            -- Pre-cache guild info to avoid repeated lookups in UpdateRow/Sort
+            local gi = FindGuildInfo(full or "")
+            base[#base+1] = { name = full, _gi = gi }
+        end
     end
 
     -- Calcule le top 3 M+ (or/argent/bronze) avec ex aequo
@@ -764,9 +776,10 @@ local function _DoRefresh()
 
     -- Sépare Online / Offline
     local online, offline = {}, {}
-    for _, it in ipairs(sorted) do
-        local gi = FindGuildInfo(it.name or "")
-        if gi.online then table.insert(online, it) else table.insert(offline, it) end
+    for i = 1, #sorted do
+        local it = sorted[i]
+        local gi = it._gi or FindGuildInfo(it.name or "")
+        if gi and gi.online then online[#online+1] = it else offline[#offline+1] = it end
     end
 
     -- Injecte les séparateurs

@@ -551,7 +551,11 @@ local function handleStatusUpdate(sender, kv)
                 GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
                 local t = GuildLogisticsDB.account
                 local mu = t.altToMain and t.altToMain[uid]
-                if mu and mu ~= uid then isAlt = true end
+                if mu and mu ~= uid then
+                    isAlt = true
+                    -- Garde-fou fort: un ALT ne doit jamais figurer dans la table des mains
+                    if t.mains and t.mains[uid] ~= nil then t.mains[uid] = nil end
+                end
             end
         end
 
@@ -596,21 +600,43 @@ local function handleStatusUpdate(sender, kv)
     -- ✨ ===== Version de l'addon =====
         local version = tostring(info.version or "")
         if version ~= "" and n_ts >= prev then
-            -- Stocker au niveau du main dans account.mains[mainUID]
-            local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or nil
-            if uid then
+            -- Stocker la version au niveau du MAIN uniquement si:
+            --  - le joueur est déjà mappé comme ALT -> MAIN (écrire sur MAIN, autorisé à créer l'entrée MAIN)
+            --  - OU l'UID cible est déjà un MAIN confirmé (ne pas promouvoir implicitement)
+            local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or "")
+            if uid ~= "" then
                 GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
                 local t = GuildLogisticsDB.account
-                local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+                local mapped = t.altToMain and t.altToMain[uid]
+                local mu = tostring(mapped or uid)
                 t.mains = t.mains or {}
-                t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
-                t.mains[mu].addonVersion = version
-                changed = true
+                if mapped and mapped ~= uid then
+                    -- Alt connu: NE PAS créer d'entrée MAIN implicite. Mettre à jour seulement si le MAIN existe déjà.
+                    if type(t.mains[mu]) == "table" then
+                        t.mains[mu].addonVersion = version
+                        changed = true
+                    else
+                        -- Le MAIN n'existe pas encore → copie locale pour affichage
+                        p.addonVersion = version
+                        changed = true
+                    end
+                elseif type(t.mains[mu]) == "table" then
+                    -- MAIN déjà confirmé: mise à jour uniquement
+                    t.mains[mu].addonVersion = version
+                    changed = true
+                else
+                    -- Ni mappé, ni main confirmé → ne pas créer une entrée MAIN
+                    -- Conserver une copie locale au niveau du personnage
+                    p.addonVersion = version
+                    changed = true
+                end
             end
             -- Utiliser aussi la fonction de traçage de version si disponible
             if GLOG.SetPlayerAddonVersion then
                 GLOG.SetPlayerAddonVersion(pname, version, n_ts, sender)
             end
+            -- Sécurité supplémentaire: sanitiser immédiatement après un changement potentiel
+            if GLOG.SanitizeMainAltState then pcall(GLOG.SanitizeMainAltState) end
         end
 
         if changed and n_ts > prev then p.statusTimestamp = n_ts end
