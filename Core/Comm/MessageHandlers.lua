@@ -543,36 +543,54 @@ local function handleStatusUpdate(sender, kv)
         local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
         if not p then return end
 
+        -- Garde-fou: ignorer les stats pour les ALTs (déterminé via db.account.altToMain)
+        local isAlt = false
+        do
+            local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or "")
+            if uid ~= "" then
+                GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                local t = GuildLogisticsDB.account
+                local mu = t.altToMain and t.altToMain[uid]
+                if mu and mu ~= uid then isAlt = true end
+            end
+        end
+
         local n_ts   = safenum(info.ts, now())
         local prev   = safenum(p.statusTimestamp, 0)
         local changed= false
 
         -- ===== iLvl =====
-        local n_ilvl    = safenum(info.ilvl, -1)
-        local n_ilvlMax = safenum(info.ilvlMax, -1)
-        if n_ilvl >= 0 and n_ts >= prev then
-            p.ilvl = math.floor(n_ilvl)
-            if n_ilvlMax >= 0 then p.ilvlMax = math.floor(n_ilvlMax) end
-            changed = true
-            if ns.Emit then ns.Emit("ilvl:changed", pname) end
+        if not isAlt then
+            local n_ilvl    = safenum(info.ilvl, -1)
+            local n_ilvlMax = safenum(info.ilvlMax, -1)
+            if n_ilvl >= 0 and n_ts >= prev then
+                p.ilvl = math.floor(n_ilvl)
+                if n_ilvlMax >= 0 then p.ilvlMax = math.floor(n_ilvlMax) end
+                changed = true
+                if ns.Emit then ns.Emit("ilvl:changed", pname) end
+            end
         end
 
         -- ===== Clé M+ (mid/lvl) =====
-        local n_mid = safenum(info.mid, -1)
-        local n_lvl = safenum(info.lvl, -1)
-        if (n_mid >= 0 or n_lvl >= 0) and n_ts >= prev then
-            if n_mid >= 0 then p.mkeyMapId = n_mid end
-            if n_lvl >= 0 then p.mkeyLevel = n_lvl end
-            changed = true
-            if ns.Emit then ns.Emit("mkey:changed", pname) end
+        if not isAlt then
+            local n_mid = safenum(info.mid, -1)
+            local n_lvl = safenum(info.lvl, -1)
+            if (n_mid >= 0 or n_lvl >= 0) and n_ts >= prev then
+                if n_mid >= 0 then p.mkeyMapId = n_mid end
+                if n_lvl >= 0 then p.mkeyLevel = n_lvl end
+                changed = true
+                if ns.Emit then ns.Emit("mkey:changed", pname) end
+            end
         end
 
         -- ✨ ===== Score M+ =====
-        local n_score = safenum(info.score, -1)
-        if n_score >= 0 and n_ts >= prev then
-            p.mplusScore = n_score
-            changed = true
-            if ns.Emit then ns.Emit("mplus:changed", pname) end
+        if not isAlt then
+            local n_score = safenum(info.score, -1)
+            if n_score >= 0 and n_ts >= prev then
+                p.mplusScore = n_score
+                changed = true
+                if ns.Emit then ns.Emit("mplus:changed", pname) end
+            end
         end
 
     -- ✨ ===== Version de l'addon =====

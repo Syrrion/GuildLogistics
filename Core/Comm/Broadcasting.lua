@@ -717,30 +717,47 @@ function GLOG.BroadcastStatusUpdate(overrides)
         GuildLogisticsDB.players = GuildLogisticsDB.players or {}
         local p = GuildLogisticsDB.players[me]   -- ⚠️ ne crée pas d'entrée
         if p then
+            -- Garde-fou: ne pas appliquer iLvl/clé/score aux ALTs
+            local isAlt = false
+            do
+                local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or "")
+                if uid ~= "" then
+                    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                    local t = GuildLogisticsDB.account
+                    local mu = t.altToMain and t.altToMain[uid]
+                    if mu and mu ~= uid then isAlt = true end
+                end
+            end
             local prev = safenum(p.statusTimestamp, 0)
             local changed = false
 
             -- iLvl
-            if ilvl ~= nil and ts >= prev then
-                p.ilvl = math.floor(tonumber(ilvl) or 0)
-                if ilvlMax ~= nil then p.ilvlMax = math.floor(tonumber(ilvlMax) or 0) end
-                changed = true
-                if ns.Emit then ns.Emit("ilvl:changed", me) end
+            if not isAlt then
+                if ilvl ~= nil and ts >= prev then
+                    p.ilvl = math.floor(tonumber(ilvl) or 0)
+                    if ilvlMax ~= nil then p.ilvlMax = math.floor(tonumber(ilvlMax) or 0) end
+                    changed = true
+                    if ns.Emit then ns.Emit("ilvl:changed", me) end
+                end
             end
 
             -- Clé M+
-            if safenum(lvl,0) > 0 and ts >= prev then
-                if mid ~= nil then p.mkeyMapId = safenum(mid, 0) end
-                p.mkeyLevel = safenum(lvl, 0)
-                changed = true
-                if ns.Emit then ns.Emit("mkey:changed", me) end
+            if not isAlt then
+                if safenum(lvl,0) > 0 and ts >= prev then
+                    if mid ~= nil then p.mkeyMapId = safenum(mid, 0) end
+                    p.mkeyLevel = safenum(lvl, 0)
+                    changed = true
+                    if ns.Emit then ns.Emit("mkey:changed", me) end
+                end
             end
 
             -- Côte M+
-            if safenum(score, -1) >= 0 and ts >= prev then
-                p.mplusScore = safenum(score, 0)
-                changed = true
-                if ns.Emit then ns.Emit("mplus:changed", me) end
+            if not isAlt then
+                if safenum(score, -1) >= 0 and ts >= prev then
+                    p.mplusScore = safenum(score, 0)
+                    changed = true
+                    if ns.Emit then ns.Emit("mplus:changed", me) end
+                end
             end
 
             -- Version de l'addon: écrire au niveau du main dans account.mains[mainUID]

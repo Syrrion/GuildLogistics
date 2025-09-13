@@ -210,6 +210,22 @@ function GLOG.GetMainOf(name)
     return name
 end
 
+-- Helper public: est-ce un ALT ? (par nom complet ou UID)
+function GLOG.IsAlt(nameOrUID)
+    if not nameOrUID or nameOrUID == "" then return false end
+    EnsureDB()
+    local MA = _MA()
+    local uid
+    if type(nameOrUID) == "string" and nameOrUID:match("^[0-9A-Za-z]+$") and #nameOrUID <= 8 then
+        -- Heuristique: ShortId/UID probable
+        uid = tostring(nameOrUID)
+    else
+        uid = _uidFor(nameOrUID)
+    end
+    if not uid then return false end
+    return (MA.altToMain[uid] ~= nil) and (MA.altToMain[uid] ~= uid) and true or false
+end
+
 -- ➕ Helper: a-t-on un lien manuel (main ou alt) sur ce joueur ?
 function GLOG.HasManualLink(name)
     local uid = _uidFor(name)

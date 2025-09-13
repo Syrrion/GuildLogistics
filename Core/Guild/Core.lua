@@ -21,7 +21,9 @@ local function aggregateRows(rows)
 
             local e = mainsMap[key]
             if not e then
-                e = { main = nil, key = key, count = 0, days = 999999, hours = 9999999, onlineCount = 0, mostRecentChar = full, classTag = nil, mainBase = nil }
+                -- Affiche toujours le nom du MAIN (pas celui d'un alt)
+                local mainBase = tostring(mainName):match("^([^%-]+)") or tostring(mainName)
+                e = { main = mainBase, key = key, count = 0, days = 999999, hours = 9999999, onlineCount = 0, mostRecentChar = full, classTag = nil, mainBase = mainBase }
                 mainsMap[key] = e
             end
 
