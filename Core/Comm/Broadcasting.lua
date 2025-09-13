@@ -607,19 +607,20 @@ function GLOG.CreateStatusUpdatePayload(overrides)
                     local mid2 = (rec.mkeyMapId  ~= nil) and safenum(rec.mkeyMapId,  -1)          or -1
                     local lvl2 = (rec.mkeyLevel  ~= nil) and safenum(rec.mkeyLevel,  -1)          or -1
                     local sc   = (rec.mplusScore ~= nil) and safenum(rec.mplusScore, -1)          or -1
-                    -- Lire la version depuis account.shared[uid].addonVersion
+                    -- Lire la version depuis account.mains[mainUID].addonVersion
                     local ver = ""
                     do
-                        GuildLogisticsDB.account = GuildLogisticsDB.account or { shared = {} }
-                        local sh = GuildLogisticsDB.account.shared or {}
-                        local srec = sh[uid]
-                        if srec and srec.addonVersion then ver = tostring(srec.addonVersion) end
+                        GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                        local t = GuildLogisticsDB.account
+                        local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+                        local mrec = t.mains and t.mains[mu]
+                        if mrec and mrec.addonVersion then ver = tostring(mrec.addonVersion) end
                         -- Utiliser la version cache runtime si connue
                         if (not ver or ver == "") and GLOG.GetPlayerAddonVersion then
                             local cached = GLOG.GetPlayerAddonVersion(full)
                             if cached and cached ~= "" then ver = tostring(cached) end
                         end
-                        -- La version doit venir de shared ou du cache runtime
+                        -- La version doit venir de mains ou du cache runtime
                     end
                     if (il >= 0) or (ilMx >= 0) or (mid2 >= 0) or (lvl2 >= 0) or (sc >= 0) or (ver ~= "") then
                         S[#S+1] = string.format("%d;%d;%d;%d;%d;%d;%d;%s", uid, ts2, il, ilMx, mid2, lvl2, sc, ver)
@@ -719,15 +720,17 @@ function GLOG.BroadcastStatusUpdate(overrides)
                 if ns.Emit then ns.Emit("mplus:changed", me) end
             end
 
-            -- Version de l'addon: écrire dans account.shared[uid]
+            -- Version de l'addon: écrire au niveau du main dans account.mains[mainUID]
             local currentVersion = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
             if currentVersion ~= "" then
                 local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or nil
                 if uid then
-                    GuildLogisticsDB.account = GuildLogisticsDB.account or { shared = {} }
-                    local sh = GuildLogisticsDB.account.shared; if not sh then GuildLogisticsDB.account.shared = {}; sh = GuildLogisticsDB.account.shared end
-                    sh[uid] = sh[uid] or {}
-                    sh[uid].addonVersion = currentVersion
+                    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                    local t = GuildLogisticsDB.account
+                    local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+                    t.mains = t.mains or {}
+                    t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+                    t.mains[mu].addonVersion = currentVersion
                     changed = true
                 end
             end

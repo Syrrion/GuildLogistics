@@ -258,8 +258,27 @@ local function handleRosterReserve(sender, kv)
                 or (name:find("%-") and name)
                 or (uid and GLOG.GetNameByUID and GLOG.GetNameByUID(uid))
         if full and full ~= "" then
-        local p = GuildLogisticsDB.players[full] or { reserved=false }
-            p.reserved = (tonumber(kv.res) or 0) ~= 0
+            -- Write authoritative flag at account.mains[mainUID]
+            local mu
+            do
+                local _uid = uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+                if _uid and GLOG.GetMainOf then
+                    local main = GLOG.GetMainOf(full) or full
+                    mu = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(main)) or _uid
+                else
+                    mu = _uid
+                end
+            end
+            if mu then
+                GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                local t = GuildLogisticsDB.account
+                t.mains[tonumber(mu)] = (type(t.mains[tonumber(mu)]) == "table") and t.mains[tonumber(mu)] or {}
+                -- New semantics: only store explicit false at main-level; nil means reserved
+                t.mains[tonumber(mu)].reserve = ((tonumber(kv.res) or 0) == 0) and false or nil
+            end
+            -- Maintain legacy per-character flag for UI compatibility (only explicit false)
+            local p = GuildLogisticsDB.players[full] or {}
+            p.reserved = ((tonumber(kv.res) or 0) == 0) and false or nil
             GuildLogisticsDB.players[full] = p
             
             local meta = GuildLogisticsDB.meta
@@ -344,8 +363,8 @@ local function handleTxApplied(sender, kv)
         GuildLogisticsDB.players = GuildLogisticsDB.players or {}
         local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
         local full = nf(kv.name or "")
-    local existed = not not GuildLogisticsDB.players[full]
-    local rec = GuildLogisticsDB.players[full] or { reserved = true }
+        local existed = not not GuildLogisticsDB.players[full]
+        local rec = GuildLogisticsDB.players[full] or {}
         -- Route vers stockage partagé si possible
         if GLOG.ApplyDeltaByName then
             GLOG.ApplyDeltaByName(full, safenum(kv.delta,0), kv.by or sender)
@@ -353,7 +372,6 @@ local function handleTxApplied(sender, kv)
         else
             -- legacy path: avoid writing to rec.solde; apply nothing here as shared path is unavailable
         end
-        if not existed and rec.reserved == nil then rec.reserved = true end
         GuildLogisticsDB.players[full] = rec
         applied = true
     end
@@ -402,7 +420,6 @@ local function handleTxBatch(sender, kv)
             else
                 -- legacy path: avoid writing to rec.solde; apply nothing here as shared path is unavailable
             end
-            if not existed and rec.reserved == nil then rec.reserved = true end
             GuildLogisticsDB.players[full] = rec
         end
         done = true
@@ -514,16 +531,18 @@ local function handleStatusUpdate(sender, kv)
             if ns.Emit then ns.Emit("mplus:changed", pname) end
         end
 
-        -- ✨ ===== Version de l'addon =====
+    -- ✨ ===== Version de l'addon =====
         local version = tostring(info.version or "")
         if version ~= "" and n_ts >= prev then
-            -- Stocker dans account.shared[uid]
+            -- Stocker au niveau du main dans account.mains[mainUID]
             local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or nil
             if uid then
-                GuildLogisticsDB.account = GuildLogisticsDB.account or { shared = {} }
-                local sh = GuildLogisticsDB.account.shared; if not sh then GuildLogisticsDB.account.shared = {}; sh = GuildLogisticsDB.account.shared end
-                sh[uid] = sh[uid] or {}
-                sh[uid].addonVersion = version
+                GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                local t = GuildLogisticsDB.account
+                local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+                t.mains = t.mains or {}
+                t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+                t.mains[mu].addonVersion = version
                 changed = true
             end
             -- Utiliser aussi la fonction de traçage de version si disponible
@@ -1259,6 +1278,7 @@ local MESSAGE_HANDLERS = {
     -- Roster
     ["ROSTER_UPSERT"]  = handleRosterUpsert,
     ["ROSTER_REMOVE"]  = handleRosterRemove,
+    ["ROSTER_DELETE"]  = handleRosterRemove, -- alias for backward/forward compatibility
     ["ROSTER_RESERVE"] = handleRosterReserve,
     
     -- Transactions

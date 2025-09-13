@@ -30,26 +30,58 @@ end
 
 local function _MA()
     EnsureDB()
-    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {}, shared = {} }
+    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
     local t = GuildLogisticsDB.account
     t.mains  = t.mains  or {}
     t.altToMain = t.altToMain or {}
-    t.shared = t.shared or {}
     return t
 end
 
 local function _uidFor(name)
     if not name or name == "" then return nil end
-    local full = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    -- Utiliser le vrai royaume si possible (roster/units), sinon fallback NormalizeFull
+    local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
+              or (GLOG.ResolveFullName and GLOG.ResolveFullName(name))
+              or (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name))
+              or tostring(name or "")
     return (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+end
+
+-- Canonicalise un nom pour l'index DB: vrai royaume si connu, sinon fallback
+local function _canonicalFull(name)
+    local s = tostring(name or "")
+    if s == "" then return s end
+    if s:find("%-") then
+        return (ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(s)) or s
+    end
+    local strict = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(s)) or nil
+    if strict and strict ~= "" then return strict end
+    local res = (GLOG.ResolveFullName and GLOG.ResolveFullName(s)) or nil
+    if res and res ~= "" then return res end
+    return (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(s)) or s
+end
+
+local function _mainUIDForName(name)
+    local uid = _uidFor(name)
+    if not uid then return nil end
+    local MA = _MA()
+    local mu = tonumber(MA.altToMain[uid])
+    return mu or tonumber(uid)
 end
 
 local function _ensureRosterEntry(name)
     local db = GetDB()
-    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local key = _canonicalFull(name)
     db.players = db.players or {}
-    db.players[key] = db.players[key] or { reserved = true }
-    if db.players[key].reserved == nil then db.players[key].reserved = true end
+    -- Fusionner une éventuelle ancienne entrée basée sur un mauvais royaume local
+    do
+        local wrong = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+        if wrong ~= key and db.players[wrong] and not db.players[key] then
+            db.players[key] = db.players[wrong]
+            db.players[wrong] = nil
+        end
+    end
+    db.players[key] = db.players[key] or {}
     if not db.players[key].uid then db.players[key].uid = _uidFor(key) end
     return db.players[key]
 end
@@ -59,10 +91,11 @@ local function _getBalanceByName(name)
     if not name or name == "" then return 0 end
     local uid = _uidFor(name)
     local MA = _MA()
-    if uid and MA.shared and MA.shared[uid] and MA.shared[uid].solde ~= nil then
-        return tonumber(MA.shared[uid].solde) or 0
+    local mu = uid and (tonumber(MA.altToMain[uid]) or uid) or nil
+    if mu and MA.mains and MA.mains[mu] and MA.mains[mu].solde ~= nil then
+        return tonumber(MA.mains[mu].solde) or 0
     end
-    -- No legacy fallback: authoritative value lives in MA.shared
+    -- No legacy fallback: authoritative value lives in account.mains
     return 0
 end
 
@@ -71,12 +104,13 @@ local function _adjustBalanceByName(name, delta)
     local uid = _uidFor(name)
     local MA = _MA()
     if uid then
-        MA.shared[uid] = MA.shared[uid] or { solde = 0 }
-        MA.shared[uid].solde = (tonumber(MA.shared[uid].solde) or 0) + (tonumber(delta) or 0)
+        local mu = tonumber(MA.altToMain[uid]) or uid
+        MA.mains[mu] = MA.mains[mu] or {}
+        MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) + (tonumber(delta) or 0)
     end
     -- Keep roster presence and legacy field in sync for UI/compat
     local p = _ensureRosterEntry(name)
-    if p.solde ~= nil then p.solde = nil end -- authoritative value now lives in MA.shared
+    if p.solde ~= nil then p.solde = nil end -- authoritative value now lives in account.mains
 end
 
 function GLOG.GetPlayersArray()
@@ -84,7 +118,17 @@ function GLOG.GetPlayersArray()
     if not db.players then return {} end
     local out = {}
     for name, p in pairs(db.players) do
-        local reserved = (p.reserved == true)
+        local reserved
+        do
+            local mu = _mainUIDForName(name)
+            local MA = _MA()
+            -- New semantics: only store false explicitly; nil means reserved
+            if mu and MA.mains[mu] and MA.mains[mu].reserve == false then
+                reserved = false
+            else
+                reserved = not (p.reserved == false)
+            end
+        end
         table.insert(out, {
             name     = name,
             solde    = _getBalanceByName(name),
@@ -116,17 +160,22 @@ function GLOG.GetPlayersArrayActive()
     end
 
     -- 2) Agréger les crédits/débits de TOUS les persos appartenant à ces mains actifs
+    local seenMain = {}
     for name, p in pairs(GetDB().players or {}) do
         local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
         local mk   = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
         local display = activeSet[mk]
         if display then
-            local b = agg[mk]
-            if not b then
-                b = { name = display, solde = 0, reserved = false }
-                agg[mk] = b
+            local mu = _mainUIDForName(name)
+            if mu and not seenMain[mu] then
+                local b = agg[mk]
+                if not b then
+                    b = { name = display, solde = 0, reserved = false }
+                    agg[mk] = b
+                end
+                b.solde = _getBalanceByName(name)
+                seenMain[mu] = true
             end
-            b.solde = (b.solde or 0) + _getBalanceByName(name)
         end
     end
 
@@ -160,18 +209,23 @@ function GLOG.GetPlayersArrayReserve(opts)
     end
 
     -- Regroupe par main (clé normalisée), ignore ceux déjà actifs
+    local seenMain = {}
     for name, p in pairs(GetDB().players or {}) do
         local main = (GLOG.GetMainOf and GLOG.GetMainOf(name)) or name
         local mk   = (GLOG.NormName and GLOG.NormName(main)) or tostring(main):lower()
 
         if mk and mk ~= "" and not activeSet[mk] then
-            local b = agg[mk]
-            if not b then
-                local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or main
-                b = { name = display, solde = 0, reserved = true, canPurge = true }
-                agg[mk] = b
+            local mu = _mainUIDForName(name)
+            if mu and not seenMain[mu] then
+                local b = agg[mk]
+                if not b then
+                    local display = (GLOG.ResolveFullName and GLOG.ResolveFullName(main)) or main
+                    b = { name = display, solde = 0, reserved = true, canPurge = true }
+                    agg[mk] = b
+                end
+                b.solde = _getBalanceByName(name)
+                seenMain[mu] = true
             end
-            b.solde = (b.solde or 0) + _getBalanceByName(name)
         end
     end
 
@@ -218,11 +272,26 @@ function GLOG.AddPlayer(name)
     EnsureDB()
     if not name or name == "" then return false end
     
-    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local key = _canonicalFull(name)
     local p = GetDB().players[key]
     if p then return true end  -- déjà présent
-    
-    GetDB().players[key] = { reserved = true }
+    -- Fusionner une éventuelle ancienne entrée sous mauvais royaume
+    do
+        local wrong = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+        if wrong ~= key and GetDB().players[wrong] then
+            GetDB().players[key] = GetDB().players[wrong]
+            GetDB().players[wrong] = nil
+        end
+    end
+    GetDB().players[key] = GetDB().players[key] or {}
+    -- Ensure main-level record exists
+    do
+        local mu = _mainUIDForName(key)
+        if mu then
+            local MA = _MA()
+            MA.mains[mu] = MA.mains[mu] or {}
+        end
+    end
     
     -- Diffusion
     if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
@@ -245,9 +314,19 @@ function GLOG.RemovePlayer(name)
     EnsureDB()
     if not name or name == "" then return false end
     
-    local full = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local full = _canonicalFull(name)
     if not GetDB().players[full] then return false end
     
+    -- Clear main-level reserve flag for this main
+    do
+        local mu = _mainUIDForName(full)
+        if mu then
+            local MA = _MA()
+            if MA.mains and MA.mains[mu] then
+                MA.mains[mu].reserve = nil
+            end
+        end
+    end
     GetDB().players[full] = nil
     
     -- Diffusion GM
@@ -270,7 +349,7 @@ end
 function GLOG.HasPlayer(name)
     EnsureDB()
     if not name or name == "" then return false end
-    local key = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+    local key = _canonicalFull(name)
     return GetDB().players[key] ~= nil
 end
 
@@ -297,27 +376,34 @@ function GLOG.GetSoldeByUID(uid)
     uid = tonumber(uid)
     if not uid or uid <= 0 then return 0 end
     local MA = _MA()
-    return (MA.shared and MA.shared[uid] and tonumber(MA.shared[uid].solde)) or 0
+    local mu = uid and (tonumber(MA.altToMain[uid]) or uid) or nil
+    if mu and MA.mains and MA.mains[mu] then
+        return tonumber(MA.mains[mu].solde) or 0
+    end
+    return 0
 end
 
 function GLOG.SetSoldeByUID(uid, value)
     uid = tonumber(uid)
     if not uid or uid <= 0 then return end
     local MA = _MA()
-    MA.shared[uid] = MA.shared[uid] or { solde = 0 }
-    MA.shared[uid].solde = tonumber(value) or 0
+    local mu = tonumber(MA.altToMain[uid]) or uid
+    MA.mains[mu] = MA.mains[mu] or {}
+    MA.mains[mu].solde = tonumber(value) or 0
 end
 
--- Swap the entire shared payload between two UIDs (solde, addonVersion, etc.)
+-- Swap the entire main-level payload between two UIDs (solde, addonVersion, etc.)
 -- This is used when promoting an alt to main so that all aggregated data
 -- follows the "bank" identity. O(1) swap of table references.
 function GLOG.SwapSharedBetweenUIDs(uidA, uidB)
     uidA = tonumber(uidA); uidB = tonumber(uidB)
     if not uidA or not uidB or uidA == uidB then return false end
     local MA = _MA()
-    local a = MA.shared[uidA]
-    local b = MA.shared[uidB]
-    MA.shared[uidA], MA.shared[uidB] = b, a
+    local muA = tonumber(MA.altToMain[uidA]) or uidA
+    local muB = tonumber(MA.altToMain[uidB]) or uidB
+    local a = MA.mains[muA]
+    local b = MA.mains[muB]
+    MA.mains[muA], MA.mains[muB] = b, a
     return true
 end
 
@@ -404,31 +490,43 @@ function GLOG.ApplyBatch(kv)
     EnsureDB()
     for name, info in pairs(kv or {}) do
         if type(info) == "table" then
-            local normName = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+            local normName = _canonicalFull(name)
             if normName ~= "" then
                 local p = _ensureRosterEntry(normName)
                 if info.solde ~= nil then
-                    -- Explicit set of balance: set shared UID solde directly
+                    -- Explicit set of balance: set main UID solde directly
                     local uid = _uidFor(normName)
                     local MA = _MA()
                     if uid then
-                        MA.shared[uid] = MA.shared[uid] or { solde = 0 }
-                        MA.shared[uid].solde = tonumber(info.solde) or 0
+                        local mu = tonumber(MA.altToMain[uid]) or uid
+                        MA.mains[mu] = MA.mains[mu] or {}
+                        MA.mains[mu].solde = tonumber(info.solde) or 0
                     end
                 end
-                if info.reserved ~= nil then p.reserved = (info.reserved == true) end
+                if info.reserved ~= nil then
+                    -- New semantics: only store explicit false
+                    local isFalse = (info.reserved == false)
+                    p.reserved = isFalse and false or nil
+                    local mu = _mainUIDForName(normName)
+                    if mu then
+                        local MA = _MA()
+                        MA.mains[mu] = MA.mains[mu] or {}
+                        MA.mains[mu].reserve = isFalse and false or nil
+                    end
+                end
                 -- ignore legacy info.alias to keep players clean
                 if info.uid ~= nil then p.uid = tonumber(info.uid) end
             end
         elseif type(info) == "number" then
             -- Ancien format : juste le solde
-            local normName = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name or "")
+            local normName = _canonicalFull(name)
             if normName ~= "" then
                 local uid = _uidFor(normName)
                 local MA = _MA()
                 if uid then
-                    MA.shared[uid] = MA.shared[uid] or { solde = 0 }
-                    MA.shared[uid].solde = tonumber(info) or 0
+                    local mu = tonumber(MA.altToMain[uid]) or uid
+                    MA.mains[mu] = MA.mains[mu] or {}
+                    MA.mains[mu].solde = tonumber(info) or 0
                 end
                 _ensureRosterEntry(normName)
             end
@@ -440,20 +538,27 @@ end
 function GLOG.EnsureRosterLocal(name)
     local db = GetDB()
     if not db.players then db.players = {} end
-    local full = tostring(name or "")
-    db.players[full] = db.players[full] or { reserved=true }
-    if db.players[full].reserved == nil then 
-        db.players[full].reserved = true 
-    end
+    local full = _canonicalFull(name)
+    db.players[full] = db.players[full] or {}
     return db.players[full]
 end
 
 function GLOG.RemovePlayerLocal(name, silent)
     local db = GetDB()
     if not db.players then return false end
-    local full = tostring(name or "")
+    local full = _canonicalFull(name)
     if not GetDB().players[full] then return false end
     
+    -- Clear main-level reserve flag for this main
+    do
+        local mu = _mainUIDForName(full)
+        if mu then
+            local MA = _MA()
+            if MA.mains and MA.mains[mu] then
+                MA.mains[mu].reserve = nil
+            end
+        end
+    end
     GetDB().players[full] = nil
     if not silent then
         if ns.RefreshAll then ns.RefreshAll() end
@@ -463,18 +568,42 @@ end
 
 function GLOG.IsReserved(name)
     EnsureDB()
-    local full = tostring(name or "")
+    local full = _canonicalFull(name)
+    -- Authoritative: account.mains[mainUID].reserve stores only false; nil means reserved
+    local mu = _mainUIDForName(full)
+    if mu then
+        local MA = _MA()
+        if MA.mains[mu] and MA.mains[mu].reserve == false then
+            return false
+        end
+    end
+    -- Legacy/per-char mirror: only false stored; nil means reserved
     local p = GetDB().players[full]
-    return p and (p.reserved == true)
+    if p and p.reserved == false then return false end
+    return true
 end
 
 function GLOG.GM_SetReserved(name, flag)
     EnsureDB()
-    local full = tostring(name or "")
+    local full = _canonicalFull(name)
     local p = GetDB().players[full]
     if not p then return false end
-    
-    p.reserved = (flag == true)
+
+    -- Set main-level reserve flag in mains using new semantics
+    do
+        local mu = _mainUIDForName(full)
+        if mu then
+            local MA = _MA()
+            MA.mains[mu] = MA.mains[mu] or {}
+            if flag == false then
+                MA.mains[mu].reserve = false
+            else
+                MA.mains[mu].reserve = nil -- implicit reserved
+            end
+        end
+    end
+    -- Keep legacy/per-char mirror: only store false explicitly; reserved (true) is nil
+    p.reserved = (flag == false) and false or nil
     local alias = ""
     if GLOG.GetAliasFor then
         alias = tostring(GLOG.GetAliasFor(full) or "")

@@ -154,13 +154,15 @@ local function _SetAddonVersionLocal(name, version, ts, by)
     local nowts = tonumber(ts) or time()
     local prev_ts = tonumber(p.statusTimestamp or 0) or 0
     if nowts >= prev_ts then
-        -- Écrire la version dans account.shared[uid]
+        -- Écrire la version au niveau du main: account.mains[mainUID].addonVersion
         local uid = tonumber(p.uid) or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name)) or nil
         if uid then
-            GuildLogisticsDB.account = GuildLogisticsDB.account or { shared = {} }
-            local sh = GuildLogisticsDB.account.shared; if not sh then GuildLogisticsDB.account.shared = {}; sh = GuildLogisticsDB.account.shared end
-            sh[uid] = sh[uid] or {}
-            sh[uid].addonVersion = tostring(version or "")
+            GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+            local t = GuildLogisticsDB.account
+            local mu = tonumber((t.altToMain and t.altToMain[uid]) or uid) or uid
+            t.mains = t.mains or {}
+            t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+            t.mains[mu].addonVersion = tostring(version or "")
         end
         p.statusTimestamp = nowts
         -- Pas d'événement spécifique pour la version, cela sera inclus dans le refresh global

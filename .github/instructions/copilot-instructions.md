@@ -273,7 +273,7 @@ Le projet suit un pattern d'architecture modulaire avec séparation des responsa
 - **`HistoryManager.lua`** : Gestion de l'historique des sessions
 - **`BackupManager.lua`** : Sauvegardes et restauration
 - **`LotsManager.lua`** : Gestion des lots de ressources
-- **`PlayersManager.lua`** : Gestion des joueurs et soldes
+- **`Manager.lua`** : Gestion des joueurs et soldes
 - **`Tiers.lua`** : Système de tiers/difficultés
 - **`Legacy.lua`** : Compatibilité rétro
 - **`Diagnostic.lua`** : Diagnostics et instrumentation internes

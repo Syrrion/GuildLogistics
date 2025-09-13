@@ -73,23 +73,15 @@ function GLOG.SnapshotExport()
         R[#R+1]=tostring(i)..":"..escText(r)
     end
 
-    -- 3) Construire P sans fusion (une entrée par personnage complet)
+    -- 3) Construire P minimal sans fusion (une entrée par personnage complet)
+    --    Nouveau format: uid:rid:name (alias/solde/réserve/addonVersion sont véhiculés via AS)
     local P = {}
-    local shared = (GuildLogisticsDB.account and GuildLogisticsDB.account.shared) or {}
     for full, rec in pairs(GuildLogisticsDB.players) do
         local base, realm = splitName(full)
         local nrealm = normRealm(realm)
         local rid = (nrealm ~= "" and ridByRealm[nrealm]) or 0
-        local aliasText = (aliasFor(full, base) or base)
-        if aliasText == base then aliasText = "@" end
         local uidN = uidNumFor(full)
-        local balance = safenum((shared and shared[uidN] and shared[uidN].solde) or rec.solde, 0)
-        local res = rec.reserved and 1 or 0
-
-        P[#P+1] = table.concat({
-            tostring(uidN), tostring(rid), escText(base), escText(aliasText),
-            tostring(balance), tostring(res)
-        }, ":")
+        P[#P+1] = table.concat({ tostring(uidN), tostring(rid), escText(base) }, ":")
     end
     table.sort(P, function(a,b) return a:lower() < b:lower() end)
 
@@ -174,6 +166,35 @@ function GLOG.SnapshotExport()
         H[#H+1] = rec
     end
 
+    -- ===== AS (Account State) =====
+    -- Export main-level data per main UID: uid:alias:solde:res:addonVersion
+    -- res bit: 0 = not reserved (explicit false at main-level), 1 = reserved (implicit)
+    local AS, ASv = {}, 1
+    do
+        local acc = GuildLogisticsDB.account or {}
+        local mains = (acc and acc.mains) or {}
+        -- Export ONLY mains; importer will map alts via AM
+        local uids = {}
+        for uid, _ in pairs(mains) do
+            local n = tonumber(uid)
+            if n and n > 0 then uids[#uids+1] = n end
+        end
+        table.sort(uids)
+        for _, uid in ipairs(uids) do
+            local mrec = mains[uid] or {}
+            local resBit = (mrec.reserve == false) and 0 or 1
+            local aliasText = tostring(mrec.alias or "")
+            local av = tostring(mrec.addonVersion or "")
+            AS[#AS+1] = table.concat({
+                tostring(uid),
+                escText(aliasText),
+                tostring(safenum(mrec.solde,0)),
+                tostring(resBit),
+                escText(av),
+            }, ":")
+        end
+    end
+
     -- ===== KV final =====
     return {
         sv = 3,
@@ -190,6 +211,9 @@ function GLOG.SnapshotExport()
         MAv = MAv,
         MA  = MA,
         AM  = AM,
+        -- Shared per UID
+        ASv = ASv,
+        AS  = AS,
         H  = H,
     }
 end
@@ -240,34 +264,59 @@ function GLOG.SnapshotApply(kv)
         end
     end
 
-    -- 2) P (brut par PERSONNAGE COMPLET, pas de fusion)
-    -- uid:rid:name:alias:balance:res
+    -- Pre-parse AS/MS (Account State per UID): uid:alias:solde:res:addonVersion
+    -- Compatibility: prefer AS if both exist; otherwise accept MS used by older exporters
+    local asByUID = {}
+    do
+        local srcList = nil
+        local ASv = safenum(kv.ASv, nil)
+        local MSv = safenum(kv.MSv, nil)
+        if type(kv.AS) == "table" and (ASv == 1 or ASv == 0) then
+            srcList = kv.AS
+        elseif type(kv.MS) == "table" and (MSv == 1 or MSv == 0) then
+            srcList = kv.MS
+        elseif type(kv.AS) == "table" and ASv == nil then
+            srcList = kv.AS -- tolerate missing version
+        elseif type(kv.MS) == "table" and MSv == nil then
+            srcList = kv.MS -- tolerate missing version
+        end
+        if type(srcList) == "table" then
+            for _, s in ipairs(srcList or {}) do
+                local uid, alias, bal, res, av = s:match("^([%-%d]+):(.-):([%-%d]+):([%-%d]+):(.-)$")
+                if uid then
+                    local u = safenum(uid,0)
+                    local a = unescText(alias)
+                    local b = safenum(bal,0)
+                    local r = safenum(res,1)
+                    local v = unescText(av)
+                    asByUID[u] = { alias = a, bal = b, res = (r ~= 0), av = v }
+                end
+            end
+        end
+    end
+
+    -- 2) P (Players): uid:rid:name format
+    local aliasByUID, resByUID = {}, {}
     for _, s in ipairs(kv.P or {}) do
-        local uid, rid, name, alias, bal, res = s:match("^([%-%d]+):([%-%d]+):(.-):(.-):([%-%d]+):([%-%d]+)$")
+        local uid, rid, name = s:match("^([%-%d]+):([%-%d]+):(.*)$")
         if uid then
             local uidNum = tonumber(uid) or 0
             local ridNum = tonumber(rid) or 0
             local base   = unescText(name)
-            local aliasS = unescText(alias)
-            if aliasS == "@" then aliasS = base end
             local realm  = realmById[ridNum] or ""
             local full   = (U and U.NormalizeFull and U.NormalizeFull(base, realm))
                         or (realm ~= "" and (base.."-"..realm) or base)
-            local balance= safenum(bal,0)
 
             GuildLogisticsDB.players[full] = GuildLogisticsDB.players[full] or {}
             local prec = GuildLogisticsDB.players[full]
-            prec.uid      = safenum(uidNum,0)
-            prec.reserved = (safenum(res,0) == 1)
-            prec.alias    = aliasS
-            prec.solde    = nil -- legacy field removed
-            -- Write into shared balances as source of truth
-            GuildLogisticsDB.account = GuildLogisticsDB.account or { version = 2, mains = {}, altToMain = {}, shared = {} }
-            local t = GuildLogisticsDB.account
-            t.shared = t.shared or {}
-            if uidNum > 0 then
-                t.shared[uidNum] = t.shared[uidNum] or { solde = 0 }
-                t.shared[uidNum].solde = safenum(balance,0)
+            prec.uid = safenum(uidNum,0)
+            
+            -- Capture data from AS for consolidation
+            if asByUID[uidNum] ~= nil and asByUID[uidNum].res ~= nil then
+                resByUID[uidNum] = asByUID[uidNum].res
+            end
+            if asByUID[uidNum] and asByUID[uidNum].alias and asByUID[uidNum].alias ~= "" then
+                aliasByUID[uidNum] = asByUID[uidNum].alias
             end
         end
     end
@@ -427,6 +476,110 @@ function GLOG.SnapshotApply(kv)
             end
         end
     GuildLogisticsDB.account = t
+    -- ✨ Consolidate alias, reserve, balances, and addonVersion at main-level after MA mapping is known
+    do
+        local players = GuildLogisticsDB.players or {}
+        local mainRes, mainAlias = {}, {}
+        local mainBal, mainAV = {}, {}
+        local muByUID = {}
+        -- Build per-main aggregations using the per-UID captures
+        for full, prec in pairs(players) do
+            local uid = safenum(prec.uid, 0)
+            if uid > 0 then
+                local mu = safenum(t.altToMain[uid] or uid, uid)
+                muByUID[uid] = mu
+                -- Reserve: if any character under this main is explicitly not reserved (res=false), mark main not reserved
+                local r = resByUID[uid]
+                if r ~= nil then
+                    if mainRes[mu] == nil then mainRes[mu] = true end -- default reserved
+                    if r == false then mainRes[mu] = false end
+                end
+                -- Alias: prefer alias defined on the main UID; else take first seen
+                local a = aliasByUID[uid]
+                if a and a ~= "" then
+                    if uid == mu then
+                        mainAlias[mu] = a
+                    elseif mainAlias[mu] == nil then
+                        mainAlias[mu] = a
+                    end
+                end
+            end
+        end
+        -- Fold in AS-only data (UIDs that may not be present in P)
+        do
+            for uid, as in pairs(asByUID or {}) do
+                local u = safenum(uid, 0)
+                if u > 0 then
+                    local mu = safenum(t.altToMain[u] or u, u)
+                    if as.res ~= nil then
+                        if mainRes[mu] == nil then mainRes[mu] = true end
+                        if as.res == false then mainRes[mu] = false end
+                    end
+                    local a = as.alias
+                    if a and a ~= "" then
+                        if u == mu then
+                            mainAlias[mu] = a
+                        elseif mainAlias[mu] == nil then
+                            mainAlias[mu] = a
+                        end
+                    end
+                    -- Balances and addonVersion preference: prefer main's own AS row; otherwise, take first seen
+                    if u == mu then
+                        mainBal[mu] = safenum(as.bal, 0)
+                        if as.av and as.av ~= "" then mainAV[mu] = tostring(as.av) end
+                    else
+                        if mainBal[mu] == nil then mainBal[mu] = safenum(as.bal, 0) end
+                        if (not mainAV[mu]) and as.av and as.av ~= "" then mainAV[mu] = tostring(as.av) end
+                    end
+                end
+            end
+        end
+        -- Write consolidated flags to account.mains
+        for mu, r in pairs(mainRes) do
+            t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+            t.mains[mu].reserve = (r == false) and false or nil -- only explicit false stored
+        end
+        -- Defensive: enforce reserve=false for any UID explicitly flagged in AS/MS with res=0
+        do
+            for uid, as in pairs(asByUID or {}) do
+                local u = safenum(uid, 0)
+                if u > 0 and as.res == false then
+                    local mu = safenum(t.altToMain[u] or u, u)
+                    t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+                    t.mains[mu].reserve = false
+                end
+            end
+        end
+        -- Write balances and addonVersion to account.mains
+        for mu, bal in pairs(mainBal) do
+            t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+            t.mains[mu].solde = safenum(bal, 0)
+        end
+        for mu, av in pairs(mainAV) do
+            t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+            t.mains[mu].addonVersion = tostring(av)
+        end
+        -- Compatibility mirror: write per-character reserved=false when main is explicitly not reserved; otherwise remove the field
+        for full, prec in pairs(players) do
+            local uid = safenum(prec.uid, 0)
+            if uid > 0 then
+                local mu = muByUID[uid] or uid
+                local mrec = t.mains[mu]
+                if mrec and mrec.reserve == false then
+                    prec.reserved = false -- explicit bench mirror for legacy readers
+                else
+                    prec.reserved = nil   -- absence means reserved
+                end
+            end
+        end
+        -- Write consolidated alias under account.mains[mu].alias
+        for mu, a in pairs(mainAlias) do
+            if a and a ~= "" then
+                t.mains[mu] = (type(t.mains[mu]) == "table") and t.mains[mu] or {}
+                t.mains[mu].alias = a
+            end
+        end
+    end
     end
 
     if ns and ns.Emit then

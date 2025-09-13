@@ -48,7 +48,7 @@ local function _ensurePlayerRec(name)
     local key = tostring(full or "")
     local db = _G.GuildLogisticsDB
     db.players = db.players or {}
-    db.players[key] = db.players[key] or { reserved = true }
+    db.players[key] = db.players[key] or {}
     if not db.players[key].uid then
         db.players[key].uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(key)) or nil
     end
@@ -269,15 +269,15 @@ function GLOG.PromoteAltToMain(altName, currentMainName)
     end
 
     -- Transfert de l'attribut 'reserved':
-    --  - le NOUVEAU main (alt promu) récupère la valeur actuelle du main
-    --  - l'ancien main (qui devient alt) est remis à reserved=true
+    --  - le NOUVEAU main (alt promu) récupère l'état explicite du main (false si bench)
+    --  - l'ancien main (qui devient alt) est remis à reserved implicite (nil)
     do
         local recMain = select(1, _ensurePlayerRec(mainName))
         local recAlt  = select(1, _ensurePlayerRec(altFull))
-        local r = (recMain and recMain.reserved)
-        if r == nil then r = true end
-        if recAlt then recAlt.reserved = r end
-        if recMain then recMain.reserved = true end
+        -- Only store explicit false. If main was explicitly not reserved, carry that over to new main.
+        local mainIsFalse = recMain and recMain.reserved == false
+        if recAlt then recAlt.reserved = mainIsFalse and false or nil end
+        if recMain then recMain.reserved = nil end
     end
 
     -- Capturer les métadonnées du main AVANT de modifier les tables
