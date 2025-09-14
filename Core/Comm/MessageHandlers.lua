@@ -658,7 +658,10 @@ local function handleTxBatch(sender, kv)
                     local _sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow())
                     _sv.popups = _sv.popups or {}
                     if _sv.popups.raidParticipation ~= false then
+                        -- Suppress the personal toast while showing the specialized raid popup
+                        if GLOG and GLOG._PushSuppressPersonalToast then GLOG._PushSuppressPersonalToast() end
                         ns.UI.PopupRaidDebit(meFull, per, after, { L = Lctx })
+                        if GLOG and GLOG._PopSuppressPersonalToast then GLOG._PopSuppressPersonalToast() end
                     end
                     if ns.Emit then ns.Emit("raid:popup-shown", meFull) end
                     break
@@ -1383,7 +1386,10 @@ local function handleHistAdd(sender, kv)
             local _sv = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
             _sv.popups = _sv.popups or {}
             if _sv.popups.raidParticipation ~= false then
+                -- Suppress the personal toast while showing the specialized raid popup
+                if GLOG and GLOG._PushSuppressPersonalToast then GLOG._PushSuppressPersonalToast() end
                 ns.UI.PopupRaidDebit(playerFullName, perHead, after, { L = lots })
+                if GLOG and GLOG._PopSuppressPersonalToast then GLOG._PopSuppressPersonalToast() end
             end
         end
     end

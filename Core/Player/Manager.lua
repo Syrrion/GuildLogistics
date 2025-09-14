@@ -69,6 +69,55 @@ local function _mainUIDForName(name)
     return mu or uid
 end
 
+-- Allow other modules to temporarily suppress the personal credit/debit toast
+local _suppressPersonalToast = 0
+function GLOG._PushSuppressPersonalToast()
+    _suppressPersonalToast = (_suppressPersonalToast or 0) + 1
+end
+function GLOG._PopSuppressPersonalToast()
+    _suppressPersonalToast = math.max((_suppressPersonalToast or 0) - 1, 0)
+end
+
+-- ===== Personal credit/debit toast (20s) =====
+-- Show a toast to the local player when THEIR main balance changes.
+local function _emitPersonalDeltaToastByMainUID(targetMu, delta)
+    if not delta or delta == 0 then return end
+    if (_suppressPersonalToast or 0) > 0 then return end
+    if not ns or not ns.UI or not ns.UI.Toast then return end
+    local U = ns.Util or {}
+    local meFull = (U.playerFullName and U.playerFullName()) or (UnitName and UnitName("player")) or nil
+    if not meFull or meFull == "" then return end
+    local myMu = _mainUIDForName(meFull)
+    if not myMu or tostring(myMu) ~= tostring(targetMu or "") then return end
+
+    local Tr = ns.Tr or function(s) return s end
+    local isCredit = (delta or 0) > 0
+    local title = isCredit and (Tr("toast_credit_title") or "Gold credited")
+                            or (Tr("toast_debit_title")  or "Gold debited")
+    local amt = math.abs(tonumber(delta) or 0)
+    local afterBal = (GLOG.GetSolde and GLOG.GetSolde(meFull)) or 0
+    local money = (ns.UI and ns.UI.MoneyText and ns.UI.MoneyText(amt, { h = 11, y = -2 })) or tostring(amt)
+    local moneyAfter = (ns.UI and ns.UI.MoneyText and ns.UI.MoneyText(afterBal, { h = 11, y = -2 })) or tostring(afterBal)
+    local text = isCredit and ((Tr("toast_credit_text_fmt") or "You were credited %s. New balance: %s."):format(money, moneyAfter))
+                           or ((Tr("toast_debit_text_fmt")  or "You were debited %s. New balance: %s."):format(money, moneyAfter))
+
+    ns.UI.Toast({
+        title = title,
+        text = text,
+        icon = isCredit and "Interface\\Icons\\INV_Misc_Coin_02" or "Interface\\Icons\\INV_Misc_Coin_01",
+        variant = isCredit and "success" or "warning",
+        duration = 20,
+        key = string.format("personal:%s:%d", isCredit and "cr" or "db", math.floor((GetTime and GetTime()) or 0)),
+    })
+end
+
+local function _emitPersonalDeltaToastByName(name, delta)
+    if not name or name == "" then return end
+    local mu = _mainUIDForName(name)
+    if not mu then return end
+    _emitPersonalDeltaToastByMainUID(mu, delta)
+end
+
 local function _ensureRosterEntry(name)
     local db = GetDB()
     local key = _canonicalFull(name)
@@ -359,11 +408,13 @@ end
 
 function GLOG.Credit(name, amount)
     _adjustBalanceByName(name, tonumber(amount) or 0)
+    _emitPersonalDeltaToastByName(name, tonumber(amount) or 0)
     if ns.RefreshAll then ns.RefreshAll() end
 end
 
 function GLOG.Debit(name, amount)
     _adjustBalanceByName(name, - (tonumber(amount) or 0))
+    _emitPersonalDeltaToastByName(name, - (tonumber(amount) or 0))
     if ns.RefreshAll then ns.RefreshAll() end
 end
 
@@ -399,6 +450,7 @@ function GLOG.CreditByUID(uid, amount)
     local mu = MA.altToMain[uid] or uid
     MA.mains[mu] = MA.mains[mu] or {}
     MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) + (tonumber(amount) or 0)
+    _emitPersonalDeltaToastByMainUID(mu, tonumber(amount) or 0)
 end
 
 function GLOG.DebitByUID(uid, amount)
@@ -408,6 +460,7 @@ function GLOG.DebitByUID(uid, amount)
     local mu = MA.altToMain[uid] or uid
     MA.mains[mu] = MA.mains[mu] or {}
     MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) - (tonumber(amount) or 0)
+    _emitPersonalDeltaToastByMainUID(mu, - (tonumber(amount) or 0))
 end
 
 -- Swap the entire main-level payload between two UIDs (solde, addonVersion, etc.)
@@ -502,6 +555,7 @@ end
 
 function GLOG.ApplyDeltaByName(name, delta, by)
     _adjustBalanceByName(name, tonumber(delta) or 0)
+    _emitPersonalDeltaToastByName(name, tonumber(delta) or 0)
 end
 
 function GLOG.ApplyBatch(kv)

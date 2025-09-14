@@ -692,6 +692,12 @@ L["lbl_yes"]          = "Yes"
 L["lbl_no"]           = "No"
 -- Toasts
 L["toast_error_title"] = "New Lua Error"
+
+-- Personal credit/debit toasts
+L["toast_credit_title"]      = "Gold credited"
+L["toast_debit_title"]       = "Gold debited"
+L["toast_credit_text_fmt"]   = "You were credited %s. New balance: %s."
+L["toast_debit_text_fmt"]    = "You were debited %s. New balance: %s."
 L["instance_outdoor"] = "Outdoor"
 
 -- ============================================== --

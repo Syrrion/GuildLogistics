@@ -665,6 +665,12 @@ L["btn_copy"]         = "Copier"
 L["lbl_yes"]          = "Oui"
 L["lbl_no"]           = "Non"
 L["toast_error_title"] = "Nouvelle erreur Lua"
+
+-- Notifications personnelles de crédit/débit
+L["toast_credit_title"]      = "Crédit reçu"
+L["toast_debit_title"]       = "Débit appliqué"
+L["toast_credit_text_fmt"]   = "Vous avez été crédité de %s. Nouveau solde : %s."
+L["toast_debit_text_fmt"]    = "Vous avez été débité de %s. Nouveau solde : %s."
 L["instance_outdoor"] = "Extérieur"
 
 -- ============================================== --
