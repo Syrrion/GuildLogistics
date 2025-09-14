@@ -294,7 +294,7 @@ function GLOG.AddPlayer(name)
     end
     
     -- Diffusion
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.Comm_Broadcast then
         local meta = GetDB().meta or {}
         local rv = (meta.rev or 0) + 1
         meta.rev = rv
@@ -330,7 +330,7 @@ function GLOG.RemovePlayer(name)
     GetDB().players[full] = nil
     
     -- Diffusion GM
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.Comm_Broadcast then
         local meta = GetDB().meta or {}
         local rv = (meta.rev or 0) + 1
         meta.rev = rv
@@ -467,7 +467,7 @@ function GLOG.AdjustSolde(name, delta)
     _adjustBalanceByName(name, tonumber(delta) or 0)
     
     -- Mise à jour des métadonnées pour le GM
-    if GLOG.IsMaster and GLOG.IsMaster() then
+    if (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster()) then
         GuildLogisticsDB = GuildLogisticsDB or {}
         GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
         local meta = GuildLogisticsDB.meta
@@ -628,7 +628,7 @@ function GLOG.GM_SetReserved(name, flag)
     end
     
     -- Diffusion GM
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.Comm_Broadcast then
         local meta = GetDB().meta or {}
         local rv = (meta.rev or 0) + 1
         meta.rev = rv

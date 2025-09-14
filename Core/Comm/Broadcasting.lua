@@ -22,7 +22,7 @@ end
 
 -- ===== Roster Broadcasts =====
 function GLOG.BroadcastRosterUpsert(name)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     if not name or name=="" then return end
     -- 🔒 Toujours travailler sur un nom complet strict
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
@@ -43,7 +43,7 @@ function GLOG.BroadcastRosterUpsert(name)
 end
 
 function GLOG.BroadcastRosterRemove(idOrName)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     if not idOrName or idOrName=="" then return end
 
     local uid, name = nil, nil
@@ -73,7 +73,7 @@ function GLOG.BroadcastRosterRemove(idOrName)
 end
 
 function GLOG.BroadcastRosterReserve(name, reserved)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     if not name or name == "" then return end
 
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
@@ -93,7 +93,7 @@ end
 
 -- ===== Transaction Broadcasts =====
 function GLOG.GM_ApplyAndBroadcast(name, delta)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     -- 🔒 Résolution stricte du nom
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
               or (type(name)=="string" and name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
@@ -119,7 +119,7 @@ function GLOG.GM_ApplyAndBroadcast(name, delta)
 end
 
 function GLOG.GM_ApplyAndBroadcastEx(name, delta, extra)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     -- 🔒 Résolution stricte du nom
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name))
               or (type(name)=="string" and name:find("%-") and ((ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(name)) or name))
@@ -147,8 +147,46 @@ function GLOG.GM_ApplyAndBroadcastEx(name, delta, extra)
     end
 end
 
+-- ===== Editors allowlist Broadcasts =====
+-- Broadcast full editors list (main-level UIDs) – sent by GM on demand or post-sync
+function GLOG.BroadcastEditorsFull()
+    if not (GLOG.CanGrantEditor and GLOG.CanGrantEditor()) then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {}, editors = {} }
+    local E = {}
+    for mu, flag in pairs(GuildLogisticsDB.account.editors or {}) do
+        if flag then E[#E+1] = tostring(mu) end
+    end
+    table.sort(E)
+    local rv = incRev()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("EDITORS_FULL", { E = E, rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+-- Broadcast a single grant (main UID)
+function GLOG.BroadcastEditorGrant(mu)
+    if not (GLOG.CanGrantEditor and GLOG.CanGrantEditor()) then return end
+    if not mu or mu == "" then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    local rv = incRev()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("EDITOR_GRANT", { m = tostring(mu), rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
+-- Broadcast a single revoke (main UID)
+function GLOG.BroadcastEditorRevoke(mu)
+    if not (GLOG.CanGrantEditor and GLOG.CanGrantEditor()) then return end
+    if not mu or mu == "" then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+    local rv = incRev()
+    if GLOG.Comm_Broadcast then
+        GLOG.Comm_Broadcast("EDITOR_REVOKE", { m = tostring(mu), rv = rv, lm = GuildLogisticsDB.meta.lastModified })
+    end
+end
+
 function GLOG.GM_ApplyAndBroadcastByUID(uid, delta, extra)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     local p = {
         uid   = uid,
@@ -176,7 +214,7 @@ function GLOG.GM_ApplyAndBroadcastByUID(uid, delta, extra)
 end
 
 function GLOG.GM_ApplyBatchAndBroadcast(uids, deltas, names, reason, silent, extra)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
 
     -- Versionnage unique partagé avec le broadcast
     local rv = incRev()
@@ -238,7 +276,7 @@ end
 
 -- Fonction plus simple pour les appels externes
 function GLOG.GM_BroadcastBatch(adjusts, opts)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     adjusts = adjusts or {}
     opts    = opts or {}
 
@@ -269,7 +307,7 @@ end
 
 -- ===== Expense Broadcasts =====
 function GLOG.BroadcastExpenseAdd(p)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.meta     = GuildLogisticsDB.meta     or {}
     GuildLogisticsDB.expenses = GuildLogisticsDB.expenses or { list = {}, nextId = 1 }
@@ -336,7 +374,7 @@ function GLOG.BroadcastExpenseSplit(p)
 end
 
 function GLOG.GM_RemoveExpense(id)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
@@ -348,7 +386,7 @@ end
 
 -- ===== Lot Broadcasts =====
 function GLOG.BroadcastLotCreate(l)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
 
     local payload = {
@@ -372,7 +410,7 @@ function GLOG.BroadcastLotCreate(l)
 end
 
 function GLOG.BroadcastLotDelete(id)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
@@ -383,7 +421,7 @@ function GLOG.BroadcastLotDelete(id)
 end
 
 function GLOG.BroadcastLotsConsume(ids)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
@@ -395,7 +433,7 @@ end
 
 -- Fonctions GM simplifiées
 function GLOG.GM_CreateLot(name, sessions, totalCopper, itemIds)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     GuildLogisticsDB.lots = GuildLogisticsDB.lots or { list = {}, nextId = 1 }
 
@@ -434,7 +472,7 @@ end
 
 -- ===== History Broadcasts =====
 function GLOG.BroadcastHistoryAdd(p)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
@@ -472,7 +510,7 @@ function GLOG.BroadcastHistoryAdd(p)
 end
 
 function GLOG.BroadcastHistoryRefund(hid, ts, flag)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
@@ -487,7 +525,7 @@ function GLOG.BroadcastHistoryRefund(hid, ts, flag)
 end
 
 function GLOG.BroadcastHistoryDelete(ts)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local rv = incRev()
     
     if GLOG.Comm_Broadcast then
@@ -505,7 +543,7 @@ end
 
 -- Diffuse l'état complet Main/Alt (compact) — utile après opérations complexes
 function GLOG.BroadcastMainAltFull()
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     GuildLogisticsDB = GuildLogisticsDB or {}
     local rv = _maIncRv()
     local MAv = 2
@@ -522,7 +560,7 @@ function GLOG.BroadcastMainAltFull()
 end
 
 function GLOG.BroadcastSetAsMain(name)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or name
     if not full or full == "" then return end
     local uid = GLOG.GetOrAssignUID(full); if not uid then return end
@@ -533,7 +571,7 @@ function GLOG.BroadcastSetAsMain(name)
 end
 
 function GLOG.BroadcastAssignAlt(altName, mainName)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local a = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(altName)) or altName
     local m = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(mainName)) or mainName
     if not a or a == "" or not m or m == "" then return end
@@ -546,7 +584,7 @@ function GLOG.BroadcastAssignAlt(altName, mainName)
 end
 
 function GLOG.BroadcastUnassignAlt(name)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or name
     if not full or full == "" then return end
     local uid = GLOG.GetOrAssignUID(full); if not uid then return end
@@ -557,7 +595,7 @@ function GLOG.BroadcastUnassignAlt(name)
 end
 
 function GLOG.BroadcastRemoveMain(name)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local full = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or name
     if not full or full == "" then return end
     local uid = GLOG.GetOrAssignUID(full); if not uid then return end
@@ -568,7 +606,7 @@ function GLOG.BroadcastRemoveMain(name)
 end
 
 function GLOG.BroadcastPromoteAlt(altName, mainName)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
     local a = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(altName)) or altName
     local m = (GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(mainName)) or mainName
     if not a or a == "" or not m or m == "" then return end

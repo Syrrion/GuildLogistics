@@ -125,29 +125,28 @@ end
 
 -- Action GM : définit l'alias d'un joueur et le diffuse via ROSTER_UPSERT
 function GLOG.GM_SetAlias(name, alias)
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then
-        if UIErrorsFrame then
-            UIErrorsFrame:AddMessage("|cffff6060[GLOG]|r Définition d'alias réservée au GM.", 1, .4, .4)
+    if (ns.GLOG.CanModifyGuildData()) then
+
+        if not name or name=="" then return false end
+        GLOG.SetAliasLocal(name, alias)
+
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+        local rv = (GuildLogisticsDB.meta.rev or 0) + 1
+        GuildLogisticsDB.meta.rev = rv
+        GuildLogisticsDB.meta.lastModified = time()
+
+        -- Broadcast a roster upsert on the MAIN holder to refresh displays on all clients
+        if GLOG.BroadcastRosterUpsert then
+            local MA = _MA(); local uid = _uidFor(name)
+            local mainUID = uid
+            if uid and not MA.mains[uid] then mainUID = (MA.altToMain[uid] or uid) end
+            local mainName = (mainUID and GLOG.GetNameByUID and GLOG.GetNameByUID(mainUID)) or name
+            GLOG.BroadcastRosterUpsert(mainName)
         end
+        return true
+    else
         return false
     end
-    if not name or name=="" then return false end
-    GLOG.SetAliasLocal(name, alias)
-
-    GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-    local rv = (GuildLogisticsDB.meta.rev or 0) + 1
-    GuildLogisticsDB.meta.rev = rv
-    GuildLogisticsDB.meta.lastModified = time()
-
-    -- Broadcast a roster upsert on the MAIN holder to refresh displays on all clients
-    if GLOG.BroadcastRosterUpsert then
-        local MA = _MA(); local uid = _uidFor(name)
-        local mainUID = uid
-        if uid and not MA.mains[uid] then mainUID = (MA.altToMain[uid] or uid) end
-        local mainName = (mainUID and GLOG.GetNameByUID and GLOG.GetNameByUID(mainUID)) or name
-        GLOG.BroadcastRosterUpsert(mainName)
-    end
-    return true
 end
 
 -- alias stockés dans mains[uid].alias (schéma v2)

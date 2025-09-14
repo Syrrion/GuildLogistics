@@ -34,7 +34,12 @@ local function enqueueComplete(sender, t, kv)
 end
 
 local function refreshActive()
-    if ns and ns.UI and ns.UI.RefreshActive then ns.UI.RefreshActive() end
+    -- Prefer a full, coalesced UI refresh across the addon when incoming state changes occur
+    if ns and ns.RefreshAll then
+        ns.RefreshAll()
+    elseif ns and ns.UI and ns.UI.RefreshActive then
+        ns.UI.RefreshActive()
+    end
 end
 
 -- ===== Handlers spécialisés par type de message =====
@@ -169,6 +174,115 @@ local function handleMAPromote(sender, kv)
     refreshActive()
 end
 
+-- ===== Editors allowlist Handlers =====
+local function _edShouldApply(kv)
+    local meta = GuildLogisticsDB and GuildLogisticsDB.meta
+    local rv = safenum(kv.rv, -1)
+    local myrv = safenum(meta and meta.rev, 0)
+    local lm = safenum(kv.lm, -1)
+    local mylm = safenum(meta and meta.lastModified, 0)
+    if rv >= 0 then return rv >= myrv end
+    if lm >= 0 then return lm >= mylm end
+    return false
+end
+
+local function handleEditorsFull(sender, kv)
+    if not _edShouldApply(kv) then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.account
+    -- Capture previous local editor status (before overwrite)
+    local wasEditor = false
+    do
+        local me = playerFullName()
+        local main = (GLOG and GLOG.GetMainOf and GLOG.GetMainOf(me)) or me
+        local mu = (GLOG and GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(main)) or nil
+        if mu and t and t.editors and t.editors[mu] then wasEditor = true end
+    end
+    t.editors = {}
+    for _, s in ipairs(kv.E or {}) do
+        local mu = tostring(s or "")
+        if mu ~= "" then t.editors[mu] = true end
+    end
+    local meta = GuildLogisticsDB.meta
+    meta.rev = (safenum(kv.rv, -1) >= 0) and safenum(kv.rv, -1) or safenum(meta.rev, 0)
+    meta.lastModified = (safenum(kv.lm, -1) >= 0) and safenum(kv.lm, -1) or now()
+    if ns.Emit then ns.Emit("editors:changed", "net-full") end
+    -- Show reload prompt if local status changed (promotion/demotion)
+    do
+        local becameEditor = false
+        local me = playerFullName()
+        local main = (GLOG and GLOG.GetMainOf and GLOG.GetMainOf(me)) or me
+        local mu = (GLOG and GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(main)) or nil
+        if mu and t and t.editors and t.editors[mu] then becameEditor = true end
+        if wasEditor ~= becameEditor then
+            local UI = ns and ns.UI
+            if UI and UI.PopupReloadPrompt then
+                local Tr = ns.Tr or function(s) return s end
+                local msg = becameEditor and (Tr("msg_editor_promo") or "Vous avez été promu éditeur. Certaines options nécessitent un rechargement.")
+                                        or  (Tr("msg_editor_demo")  or "Vous avez été dégradé. L'interface doit être rechargée pour refléter les changements.")
+                UI.PopupReloadPrompt(msg)
+            end
+        end
+    end
+end
+
+local function handleEditorGrant(sender, kv)
+    if not _edShouldApply(kv) then return end
+    local mu = tostring(kv.m or "")
+    if mu == "" then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.account
+    t.editors = t.editors or {}
+    t.editors[mu] = true
+    local meta = GuildLogisticsDB.meta
+    meta.rev = (safenum(kv.rv, -1) >= 0) and safenum(kv.rv, -1) or safenum(meta.rev, 0)
+    meta.lastModified = (safenum(kv.lm, -1) >= 0) and safenum(kv.lm, -1) or now()
+    if ns.Emit then ns.Emit("editors:changed", "net-grant", mu) end
+    -- If message concerns me, prompt reload instead of dynamic refresh
+    do
+        local me = playerFullName()
+        local main = (GLOG and GLOG.GetMainOf and GLOG.GetMainOf(me)) or me
+        local myMu = (GLOG and GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(main)) or nil
+        if myMu and tostring(mu) == tostring(myMu) then
+            local UI = ns and ns.UI
+            if UI and UI.PopupReloadPrompt then
+                local Tr = ns.Tr or function(s) return s end
+                UI.PopupReloadPrompt(Tr("msg_editor_promo") or "Vous avez été promu éditeur. Certaines options nécessitent un rechargement.")
+            end
+        end
+    end
+end
+
+local function handleEditorRevoke(sender, kv)
+    if not _edShouldApply(kv) then return end
+    local mu = tostring(kv.m or "")
+    if mu == "" then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+    local t = GuildLogisticsDB.account
+    t.editors = t.editors or {}
+    t.editors[mu] = nil
+    local meta = GuildLogisticsDB.meta
+    meta.rev = (safenum(kv.rv, -1) >= 0) and safenum(kv.rv, -1) or safenum(meta.rev, 0)
+    meta.lastModified = (safenum(kv.lm, -1) >= 0) and safenum(kv.lm, -1) or now()
+    if ns.Emit then ns.Emit("editors:changed", "net-revoke", mu) end
+    -- If message concerns me, prompt reload instead of dynamic refresh
+    do
+        local me = playerFullName()
+        local main = (GLOG and GLOG.GetMainOf and GLOG.GetMainOf(me)) or me
+        local myMu = (GLOG and GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(main)) or nil
+        if myMu and tostring(mu) == tostring(myMu) then
+            local UI = ns and ns.UI
+            if UI and UI.PopupReloadPrompt then
+                local Tr = ns.Tr or function(s) return s end
+                UI.PopupReloadPrompt(Tr("msg_editor_demo") or "Vous avez été dégradé. L'interface doit être rechargée pour refléter les changements.")
+            end
+        end
+    end
+end
+
 
 -- ===== Roster Handlers =====
 local function handleRosterUpsert(sender, kv)
@@ -192,11 +306,40 @@ local function handleRosterUpsert(sender, kv)
         local full = nf(name)
         if GLOG.MapUID then GLOG.MapUID(uid, full) end
         if GLOG.EnsureRosterLocal then GLOG.EnsureRosterLocal(full) end
+        -- 🔤 Appliquer l'alias reçu (stockage autoritatif au niveau du MAIN)
+        do
+            local alias = kv.alias
+            if alias ~= nil then
+                GuildLogisticsDB = GuildLogisticsDB or {}
+                GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                local t = GuildLogisticsDB.account
+                t.mains = t.mains or {}; t.altToMain = t.altToMain or {}
+                -- Déterminer le holder MAIN (UID de main)
+                local mu = tostring(uid or "")
+                if mu == "" then
+                    local _uid = (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or nil
+                    mu = tostring(_uid or "")
+                end
+                if mu ~= "" then
+                    local mainUID = t.altToMain[mu] or mu
+                    t.mains[mainUID] = t.mains[mainUID] or {}
+                    local stored = nil
+                    if type(alias) == "string" then
+                        local trimmed = alias:gsub("^%s+",""):gsub("%s+$","")
+                        if trimmed ~= "" then stored = trimmed end
+                    end
+                    t.mains[mainUID].alias = stored
+                    if ns.Emit then ns.Emit("alias:changed", tostring(mainUID), stored) end
+                end
+            end
+        end
         
         local meta = GuildLogisticsDB.meta
         meta.rev = (safenum(kv.rv, -1) >= 0) and safenum(kv.rv, -1) or safenum(meta.rev, 0)
         meta.lastModified = safenum(kv.lm, now())
         refreshActive()
+        if ns.Emit then ns.Emit("roster:upsert", full) end
+        if ns.RefreshAll then ns.RefreshAll() end
 
         -- ✏️ Si l'UPSERT me concerne et que je suis connecté, envoyer un message unifié
         local me = nf(playerFullName())
@@ -335,8 +478,8 @@ end
 
 -- ===== Transaction Handlers =====
 local function handleTxReq(sender, kv)
-    -- Seul le GM traite les demandes : les clients non-GM ignorent.
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then
+    -- Autorisé pour les éditeurs (GM cluster + éditeurs accordés)
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then
         return
     end
 
@@ -725,8 +868,8 @@ end
 
 -- ===== Error Report Handler =====
 local function handleErrReport(sender, kv)
-    -- Seul le GM les consomme et journalise
-    if not (GLOG.IsMaster and GLOG.IsMaster()) then
+    -- Autorisé pour les éditeurs (GM cluster + éditeurs accordés)
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then
         return
     end
     if GLOG.Errors_AddIncomingReport then
@@ -1170,7 +1313,8 @@ local function handleHistAdd(sender, kv)
     
     -- Vérifier si l'entrée existe déjà (par timestamp uniquement)
     for _, rec in ipairs(GuildLogisticsDB.history) do
-        if safenum(rec.ts, 0) == ts then 
+        local rts = (type(rec) == "table" and rec.ts) or 0
+        if safenum(rts, 0) == ts then 
             return 
         end
     end
@@ -1276,33 +1420,36 @@ local function handleHistRefund(sender, kv)
     
     -- Chercher l'entrée par timestamp uniquement
     for _, h in ipairs(GuildLogisticsDB.history) do
-        if ts > 0 and safenum(h.ts, 0) == ts then
-            local wasRefunded = h.refunded
-            h.refunded = flag
-            
-            -- Gestion des changements d'état de remboursement
-            if h.perHead and h.perHead > 0 and h.participants then
-                if flag and not wasRefunded then
-                    -- Cas 1: Activation du remboursement (gratuit) → créditer tous les participants
-                    if GLOG.CreditByUID then
-                        for i, participantUID in ipairs(h.participants) do
-                            if participantUID and participantUID ~= "" then
-                                GLOG.CreditByUID(participantUID, h.perHead)
+        local hts = (type(h) == "table" and h.ts) or 0
+        if ts > 0 and safenum(hts, 0) == ts then
+            if type(h) == "table" then
+                local wasRefunded = h.refunded
+                h.refunded = flag
+                -- Gestion des changements d'état de remboursement
+                local perHead = h.perHead
+                local participants = h.participants
+                if perHead and perHead > 0 and participants and type(participants) == "table" then
+                    if flag and not wasRefunded then
+                        -- Cas 1: Activation du remboursement (gratuit) → créditer tous les participants
+                        if GLOG.CreditByUID then
+                            for i, participantUID in ipairs(participants) do
+                                if participantUID and participantUID ~= "" then
+                                    GLOG.CreditByUID(participantUID, perHead)
+                                end
                             end
                         end
-                    end
-                elseif not flag and wasRefunded then
-                    -- Cas 2: Annulation du remboursement (re-payant) → débiter tous les participants
-                    if GLOG.DebitByUID then
-                        for i, participantUID in ipairs(h.participants) do
-                            if participantUID and participantUID ~= "" then
-                                GLOG.DebitByUID(participantUID, h.perHead)
+                    elseif (not flag) and wasRefunded then
+                        -- Cas 2: Annulation du remboursement (re-payant) → débiter tous les participants
+                        if GLOG.DebitByUID then
+                            for i, participantUID in ipairs(participants) do
+                                if participantUID and participantUID ~= "" then
+                                    GLOG.DebitByUID(participantUID, perHead)
+                                end
                             end
                         end
                     end
                 end
             end
-            
             break
         end
     end
@@ -1410,6 +1557,11 @@ local MESSAGE_HANDLERS = {
     ["MA_UNASSIGN"]    = handleMAUnassign,
     ["MA_REMOVE_MAIN"] = handleMARemoveMain,
     ["MA_PROMOTE"]     = handleMAPromote,
+
+    -- Editors allowlist
+    ["EDITORS_FULL"]   = handleEditorsFull,
+    ["EDITOR_GRANT"]   = handleEditorGrant,
+    ["EDITOR_REVOKE"]  = handleEditorRevoke,
 }
 
 -- ===== Handler principal =====

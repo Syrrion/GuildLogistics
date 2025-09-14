@@ -33,7 +33,7 @@ local function UpdateRow(i, r, f, it)
     f.op:SetText(op)
 
     r.btnApprove:SetOnClick(function()
-        if not GLOG.IsMaster or not GLOG.IsMaster() then return end
+        if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
         -- Anti double-clic : masquer la ligne tout de suite
         if r and r.Hide then r:Hide() end
         if lv and lv.Layout then lv:Layout() end
@@ -86,7 +86,7 @@ end
 
 local function Refresh()
     local rows = {}
-    if not GLOG.IsMaster or not GLOG.IsMaster() then
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then
         lv:SetData({})
         if UI and UI.UpdateRequestsBadge then UI.UpdateRequestsBadge() end
         return

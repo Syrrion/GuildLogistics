@@ -9,7 +9,89 @@ local selectedMainName -- full name
 local selectedMainRow -- row frame for immediate selection highlight
 local Layout -- forward decl for local function used in callbacks
 local buildPoolData, buildMainsData, buildAltsData -- forward decl for data builders
+-- forward decl for columns/rows builders used by recreation
+local _BuildPoolCols, _BuildMainsCols, _BuildAltsCols
+local BuildRowPool, UpdateRowPool
+local BuildRowMains, UpdateRowMains
+local BuildRowAlts,  UpdateRowAlts
 local poolDataCache -- incremental cache for left list
+local _RecreateListViews -- forward decl
+
+-- ===== Online helpers (strict full-name + guild cache) =====
+local function _ResolveFull(name)
+    return (GLOG and ((GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(name)) or (GLOG.ResolveFullName and GLOG.ResolveFullName(name)))) or name
+end
+
+local function _NormKey(name)
+    return (GLOG and GLOG.NormName and GLOG.NormName(name)) or (name and string.lower(name)) or nil
+end
+
+-- Returns true if the provided full or ambiguous name appears online in the guild cache
+local function _IsOnlineName(name)
+    if not name or name == "" then return false end
+    -- Prefer explicit API if addon exposes it
+    if GLOG and GLOG.IsPlayerOnline then
+        local ok = GLOG.IsPlayerOnline(name)
+        if ok ~= nil then return ok and true or false end
+    end
+    local full = _ResolveFull(name)
+    local nk   = _NormKey(full)
+    local by   = (GLOG and GLOG._guildCache and GLOG._guildCache.byName) or nil
+    local gr   = (nk and by) and by[nk] or nil
+    if gr and gr.online ~= nil then return gr.online and true or false end
+    -- Fallback: scan cached guild rows
+    local grs = (GLOG and GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or nil
+    if type(grs) == "table" then
+        for _, row in ipairs(grs) do
+            local key = row.name_key or _NormKey(row.name_amb or row.name_raw)
+            if key and nk and key == nk then
+                if row.online ~= nil then return row.online and true or false end
+                break
+            end
+        end
+    end
+    return false
+end
+
+-- Returns true if the main or any of its alts are currently online
+local function _IsAnyGroupOnline(mainName)
+    if not mainName or mainName == "" then return false end
+    local fullMain = _ResolveFull(mainName)
+    if _IsOnlineName(fullMain) then return true end
+    local alts = (GLOG and GLOG.GetAltsOf and GLOG.GetAltsOf(fullMain)) or {}
+    for _, alt in ipairs(alts) do
+        local nm = (type(alt) == "table" and (alt.name or alt.full or alt.n)) or alt
+        if nm and _IsOnlineName(nm) then return true end
+    end
+    return false
+end
+
+-- Tint UIPanelButtonTemplate background to grey (offline) or reset (online)
+local function _SetPanelButtonGrey(btn, grey)
+    if not btn then return end
+    local r,g,b = 1,1,1
+    if grey then
+        local C = (UI and UI.GRAY_OFFLINE) or { 0.30, 0.30, 0.30 }
+        r,g,b = C[1] or 0.30, C[2] or 0.30, C[3] or 0.30
+    end
+    local function tint(tex)
+        if not tex then return end
+        if tex.SetDesaturated then pcall(tex.SetDesaturated, tex, grey and true or false) end
+        if tex.SetVertexColor then pcall(tex.SetVertexColor, tex, r, g, b) end
+    end
+    -- Try direct normal/pushed/disabled if available
+    if btn.GetNormalTexture   then tint(btn:GetNormalTexture())   end
+    if btn.GetPushedTexture   then tint(btn:GetPushedTexture())   end
+    if btn.GetDisabledTexture then tint(btn:GetDisabledTexture()) end
+    -- Fallback: UIPanelButtonTemplate often uses multiple slice textures; scan all regions
+    local regs = { btn:GetRegions() }
+    for _, reg in ipairs(regs) do
+        if reg and reg.GetObjectType and reg:GetObjectType() == "Texture" then
+            local layer = (reg.GetDrawLayer and select(1, reg:GetDrawLayer())) or ""
+            if layer ~= "HIGHLIGHT" then tint(reg) end
+        end
+    end
+end
 
 local function _schedulePoolRebuild()
     local fn = function()
@@ -28,6 +110,8 @@ local ICON_MAIN_ATLAS = "GO-icon-Header-Assist-Applied"
 local ICON_ALT_ATLAS  = "GO-icon-Assist-Available"
 local ICON_ALIAS_ATLAS = "Professions_Icon_FirstTimeCraft"
 local ICON_CLOSE_ATLAS = "uitools-icon-close"
+local ICON_EDITOR_GRANT_TEX = "auctionhouse-icon-favorite-off"
+local ICON_EDITOR_REVOKE_TEX = "auctionhouse-icon-favorite"
 
 -- Helper: get the character's own class tag from guild cache (ignores main's class)
 local function _SelfClassTag(name)
@@ -38,6 +122,39 @@ local function _refreshAll()
     if lvPool and lvPool.Refresh then lvPool:RefreshData(nil) end
     if lvMains and lvMains.Refresh then lvMains:RefreshData(nil) end
     if lvAlts and lvAlts.Refresh then lvAlts:RefreshData(nil) end
+end
+
+-- Destroy a ListView instance cleanly (header + scroll) and return nil
+local function _DestroyListView(lv)
+    if not lv then return nil end
+    if lv.header then lv.header:Hide(); lv.header:SetParent(nil) end
+    if lv.scroll then lv.scroll:Hide(); lv.scroll:SetParent(nil) end
+    return nil
+end
+
+-- Full rebuild of the three ListViews to reflect permission-based columns/buttons
+_RecreateListViews = function()
+    -- Destroy old instances
+    lvPool  = _DestroyListView(lvPool)
+    lvMains = _DestroyListView(lvMains)
+    lvAlts  = _DestroyListView(lvAlts)
+
+    -- Recreate with current columns (depend on CanModifyGuildData/CanGrantEditor)
+    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool,  topOffset = UI.SECTION_HEADER_H or 26 })
+    lvMains = UI.ListView(midPane,   _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(),  { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts,  topOffset = UI.SECTION_HEADER_H or 26 })
+
+    -- Re-apply data
+    poolDataCache = buildPoolData()
+    if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
+    if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
+    if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
+
+    -- Drop stale selected row handle (rows recreated); name selection persists
+    selectedMainRow = nil
+
+    -- Layout panel to place new LVs
+    if Layout then Layout() end
 end
 
 -- Incremental removal from pool cache by name
@@ -62,7 +179,7 @@ local function _BuildPoolCols()
         { key = "name",  title = Tr("lbl_player") or "Joueur", flex = 1, min = 120 },
         { key = "note",  title = Tr("lbl_guild_note") or "Guild note",   vsep=true,flex = 1, min = 120, justify = "LEFT" },
     }
-    if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+    if GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
         cols[#cols+1] = { key = "act", title = Tr("lbl_actions") or "Actions", vsep=true, min = 72 }
     end
     return cols
@@ -76,7 +193,7 @@ local function BuildRowPool(r)
     f.note:SetJustifyH("LEFT")
 
     -- Actions container (GM only)
-    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
     if gm then
         f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
         -- Crown = set as Main (square icon with classic panel background)
@@ -129,11 +246,18 @@ local function UpdateRowPool(i, r, f, it)
     if f.note and f.note.SetText then f.note:SetText(note) end
 
     -- Buttons
-    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
         if r.btnCrown then r.btnCrown:SetShown(gm) end
         if r.btnAlt then r.btnAlt:SetShown(gm) end
     if r.btnCrown then
+        -- Online restriction removed: keep button active for GMs and show tooltip always
+        if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnCrown, gm and 1 or 0.4) end
+        if UI and UI.SetTooltip then
+            local base = Tr("tip_set_main") or "Confirmer en main"
+            UI.SetTooltip(r.btnCrown, base)
+        end
         r.btnCrown:SetOnClick(function()
+            if not gm then return end
             GLOG.SetAsMain(data.name)
             if _removeFromPoolByName(data.name) then
                 if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache); lvPool:Layout() end
@@ -144,10 +268,14 @@ local function UpdateRowPool(i, r, f, it)
     end
 
     if r.btnAlt then
-        -- Disable if no main selected
+        -- If no main selected, keep button soft-disabled (alpha) but still show tooltip
         local can = (selectedMainName and selectedMainName ~= "") and true or false
-        r.btnAlt:SetEnabled(can)
         if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnAlt, can and 1 or 0.4) end
+        if UI and UI.SetTooltip then
+            local base = Tr("tip_assign_alt") or "Associer en alt au main sélectionné"
+            if can then UI.SetTooltip(r.btnAlt, base)
+            else UI.SetTooltip(r.btnAlt, base .. "\n|cffaaaaaa" .. (Tr("lbl_main_prefix") or "Main: ") .. (Tr("value_empty") or "—") .. "|r") end
+        end
         r.btnAlt:SetOnClick(function()
             local mainName = selectedMainName
             if not mainName or mainName == "" then return end
@@ -188,12 +316,16 @@ end
 -- ===== Mains (25%) =====
 local function _BuildMainsCols()
     local cols = {
-        { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 120 },
-        { key = "alias", title = Tr("lbl_alias") or "Alias", vsep=true,w = 120, justify = "LEFT" },
-        { key = "solde", title = Tr("col_balance") or "Solde", vsep=true,w = 90, justify = "RIGHT" },
+        { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 100 },
+        { key = "alias", title = Tr("lbl_alias") or "Alias", vsep=true,w = 100, justify = "LEFT" },
+        { key = "solde", title = Tr("col_balance") or "Solde", vsep=true,w = 80, justify = "RIGHT" },
     }
-    if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
-        cols[#cols+1] = { key = "act", title = "", vsep=true, min = 72 }
+    if GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
+        -- Width depends on whether editor toggle is available to this user
+        local canGrant = (GLOG.CanGrantEditor and GLOG.CanGrantEditor()) or false
+        -- Aliases + Delete only (~2 icons) ≈ 76px; with editor toggle (~4 icons) ≈ 110px
+        local minW = canGrant and 110 or 76
+        cols[#cols+1] = { key = "act", title = "", vsep=true, min = minW }
     end
     return cols
 end
@@ -205,12 +337,21 @@ local function BuildRowMains(r)
     f.name = UI.CreateNameTag(r)
     f.alias = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
+    local canGrant = (GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) or false
     if gm then
         f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
         r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
         r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") or "Supprimer" })
-        UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias }, 4, -4, { leftPad=4, align="center" })
+        -- Editor toggle: create only if user has grant rights; avoids empty space reservation
+        if canGrant then
+            r.btnEditorGrant  = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_EDITOR_GRANT_TEX, size=24, fit=true, pad=5, tooltip = Tr("tip_grant_editor") or "Accorder droits d'édition" })
+            r.btnEditorRevoke = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_EDITOR_REVOKE_TEX, size=24, fit=true, pad=5, tooltip = Tr("tip_revoke_editor") or "Retirer droits d'édition" })
+            UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias, r.btnEditorRevoke, r.btnEditorGrant }, 4, -4, { leftPad=4, align="center" })
+        else
+            -- Pack without editor toggle
+            UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias }, 4, -4, { leftPad=4, align="center" })
+        end
     end
     -- Hover highlight setup (subtle) for mains list
     if r.EnableMouse then r:EnableMouse(true) end
@@ -236,8 +377,10 @@ local function BuildRowMains(r)
         r.btnDel:HookScript("OnLeave", hideHover)
     end
     -- GM-only delete button (no-op if not created)
-    if r.btnDel then r.btnDel:SetShown(GLOG and GLOG.IsMaster and GLOG.IsMaster()) end
-    if r.btnAlias then r.btnAlias:SetShown(GLOG.IsMaster()) end
+    if r.btnDel then r.btnDel:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
+    if r.btnAlias then r.btnAlias:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
+    if r.btnEditorGrant then r.btnEditorGrant:SetShown(GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) end
+    if r.btnEditorRevoke then r.btnEditorRevoke:SetShown(GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) end
     return f
 end
 
@@ -293,7 +436,60 @@ local function UpdateRowMains(i, r, f, it)
     end
 
     -- Ensure GM-only visibility reflects current status
-    if r.btnDel then r.btnDel:SetShown(GLOG.IsMaster()) end
+    if r.btnDel then r.btnDel:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
+    if r.btnAlias then r.btnAlias:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
+
+    -- Editor toggle: compute current editor status for this main (by main UID)
+    local canGrant = (GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) or false
+    local editors = (GLOG and GLOG.GetEditors and GLOG.GetEditors()) or {}
+    -- Resolve the main UID for this entry (works for mains and alts); avoid non-existent GetUID/FindUIDByName
+    local mainName = (GLOG and GLOG.GetMainOf and GLOG.GetMainOf(data.name)) or data.name
+    -- Hide editor controls for the actual Guild Master (always has rights)
+    local targetIsGM = (GLOG and GLOG.IsNameGuildMaster and GLOG.IsNameGuildMaster(mainName)) or false
+    local mu = (GLOG and GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(mainName)) or nil
+    local isEditor = (mu and editors and editors[mu]) and true or false
+    if r.btnEditorGrant then r.btnEditorGrant:SetShown(canGrant and not isEditor and not targetIsGM) end
+    if r.btnEditorRevoke then r.btnEditorRevoke:SetShown(canGrant and isEditor and not targetIsGM) end
+
+    -- Online gating: apply ONLY to editor promotion/demotion buttons
+    local isOnline = _IsAnyGroupOnline(data.name)
+    if r.btnEditorGrant and not targetIsGM then
+        local enableGrant = canGrant and (not isEditor) and isOnline
+        -- Soft-disable: keep tooltip visible even when grayed out
+        if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnEditorGrant, enableGrant and 1 or 0.4) end
+        -- Grey background when offline (visual cue on the panel skin)
+        _SetPanelButtonGrey(r.btnEditorGrant, not isOnline)
+        -- Tooltip reason when disabled
+        if UI and UI.SetTooltip then
+            local base = (Tr("tip_grant_editor") or "Accorder droits d'édition")
+            local statusCtx = Tr("tip_editor_status_demoted") or "Actuellement rétrogradé"
+            if enableGrant then
+                UI.SetTooltip(r.btnEditorGrant, base .. "\n|cffaaaaaa" .. statusCtx .. "|r")
+            else
+                local why = Tr("tip_disabled_offline_group") or "Désactivé : aucun personnage de ce joueur n'est en ligne"
+                UI.SetTooltip(r.btnEditorGrant, base .. "\n|cffaaaaaa" .. statusCtx .. "|r" .. "\n|cffaaaaaa" .. why .. "|r")
+            end
+        end
+    end
+    if r.btnEditorRevoke and not targetIsGM then
+        local enableRevoke = canGrant and isEditor and isOnline
+        -- Soft-disable: keep tooltip visible even when grayed out
+        if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnEditorRevoke, enableRevoke and 1 or 0.4) end
+        -- Grey background when offline
+        _SetPanelButtonGrey(r.btnEditorRevoke, not isOnline)
+        if UI and UI.SetTooltip then
+            local base = (Tr("tip_revoke_editor") or "Retirer droits d'édition")
+            local statusCtx = Tr("tip_editor_status_promoted") or "Actuellement promu"
+            if enableRevoke then
+                UI.SetTooltip(r.btnEditorRevoke, base .. "\n|cffaaaaaa" .. statusCtx .. "|r")
+            else
+                local why = Tr("tip_disabled_offline_group") or "Désactivé : aucun personnage de ce joueur n'est en ligne"
+                UI.SetTooltip(r.btnEditorRevoke, base .. "\n|cffaaaaaa" .. statusCtx .. "|r" .. "\n|cffaaaaaa" .. why .. "|r")
+            end
+        end
+    end
+    -- Re-apply row action layout after visibility changes, otherwise the newly shown button may not reflow
+    if f and f.act and f.act._applyRowActionsLayout then f.act._applyRowActionsLayout() end
 
     local function handleSelect()
         selectedMainName = data.name
@@ -320,6 +516,12 @@ local function UpdateRowMains(i, r, f, it)
     end)
 
     if r.btnDel then
+        -- Online restriction removed for removing a main; always available to authorized users
+        if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnDel, 1) end
+        if UI and UI.SetTooltip then
+            local base = Tr("tip_remove_main") or "Supprimer"
+            UI.SetTooltip(r.btnDel, base)
+        end
         r.btnDel:SetOnClick(function()
             if selectedMainName and GLOG.SamePlayer and GLOG.SamePlayer(selectedMainName, data.name) then
                 selectedMainName = nil
@@ -339,6 +541,34 @@ local function UpdateRowMains(i, r, f, it)
             end, { default = base, strata = "FULLSCREEN_DIALOG" })
         end)
     end
+    if r.btnEditorGrant then
+        r.btnEditorGrant:SetOnClick(function()
+            if not (GLOG and GLOG.GM_GrantEditor) then return end
+            -- Enforce online requirement at click time as well
+            if not _IsAnyGroupOnline(data.name) then return end
+            GLOG.GM_GrantEditor(data.name)
+            -- Swap icons locally for immediate feedback (GM view only)
+            if r.btnEditorGrant and r.btnEditorRevoke then
+                r.btnEditorGrant:Hide()
+                r.btnEditorRevoke:Show()
+                -- Reflow action pack if layout helper exists
+                if f and f.act and f.act._applyRowActionsLayout then f.act._applyRowActionsLayout() end
+            end
+        end)
+    end
+    if r.btnEditorRevoke then
+        r.btnEditorRevoke:SetOnClick(function()
+            if not (GLOG and GLOG.GM_RevokeEditor) then return end
+            if not _IsAnyGroupOnline(data.name) then return end
+            GLOG.GM_RevokeEditor(data.name)
+            -- Swap icons locally for immediate feedback (GM view only)
+            if r.btnEditorGrant and r.btnEditorRevoke then
+                r.btnEditorRevoke:Hide()
+                r.btnEditorGrant:Show()
+                if f and f.act and f.act._applyRowActionsLayout then f.act._applyRowActionsLayout() end
+            end
+        end)
+    end
 end
 
 -- ===== Alts (25%) =====
@@ -346,7 +576,7 @@ local function _BuildAltsCols()
     local cols = {
         { key = "name",  title = Tr("lbl_associated_alts"), flex = 1, min = 120 },
     }
-    if GLOG and GLOG.IsMaster and GLOG.IsMaster() then
+    if GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
         cols[#cols+1] = { key = "act", title = "", vsep=true, min = 90 }
     end
     return cols
@@ -355,7 +585,7 @@ end
 local function BuildRowAlts(r)
     local f = {}
     f.name = UI.CreateNameTag(r)
-    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
     if gm then
         f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
         r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
@@ -407,11 +637,17 @@ local function UpdateRowAlts(i, r, f, it)
     -- Base gradient for zebra effect
     if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
     -- Ensure GM-only visibility reflects current status (no-op if buttons weren't created)
-    local gm = GLOG and GLOG.IsMaster and GLOG.IsMaster()
+    local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
     if r.btnPromote then r.btnPromote:SetShown(gm) end
     if r.btnAlias then r.btnAlias:SetShown(gm) end
     if r.btnDel then r.btnDel:SetShown(gm) end
     if r.btnPromote then
+        -- Online restriction removed here; promotion to main available to GMs regardless of online state
+        if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnPromote, gm and 1 or 0.4) end
+        if UI and UI.SetTooltip then
+            local base = Tr("tip_set_main") or "Confirmer en main"
+            UI.SetTooltip(r.btnPromote, base)
+        end
         r.btnPromote:SetOnClick(function()
             if not selectedMainName or selectedMainName == "" then return end
             local fullMain = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(selectedMainName)) or selectedMainName
@@ -575,6 +811,8 @@ local function Build(container)
             if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
             if Layout then Layout() end
         end)
+        -- Dropped dynamic UI rebuilds on rights changes per new UX: show a popup and let user /reload manually
+        -- Keep the tab stable until a reload, avoiding column structure churn at runtime.
     end
 end
 

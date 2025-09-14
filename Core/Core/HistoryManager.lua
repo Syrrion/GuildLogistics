@@ -17,6 +17,15 @@ local EnsureDB = function()
     end
 end
 
+---@class GLOG_HistoryEntry
+---@field count integer
+---@field lots table
+---@field participants string[]
+---@field perHead integer
+---@field refunded boolean
+---@field total integer
+---@field ts integer
+
 -- =========================
 -- ======  HISTORY    ======
 -- =========================
@@ -40,6 +49,7 @@ function GLOG.AddHistorySession(total, perHead, participants, ctx)
         if uid and uid ~= "" then U[#U+1] = uid end
     end
 
+    ---@type GLOG_HistoryEntry
     local s = {
         count = #U,
         lots = {},  -- Initialiser lots comme table vide  
@@ -64,8 +74,8 @@ function GLOG.AddHistorySession(total, perHead, participants, ctx)
     
     table.insert(GuildLogisticsDB.history, 1, s)
 
-    -- Diffusion réseau (petit message) si GM
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+    -- Diffusion réseau si autorisé (éditeurs + GM)
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.Comm_Broadcast then
         GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
         local rv = (GuildLogisticsDB.meta.rev or 0) + 1
         GuildLogisticsDB.meta.rev = rv
@@ -98,12 +108,14 @@ end
 
 function GLOG.RefundSession(idx)
     EnsureDB()
-    local s = GuildLogisticsDB.history[idx]
+    local hist = GuildLogisticsDB.history or {}
+    local s = hist[idx]
+    if type(s) ~= "table" then return false end
     if not s or s.refunded then return false end
     local per = tonumber(s.perHead) or 0
     local parts = s.participants or {}
 
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.GM_BroadcastBatch then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.GM_BroadcastBatch then
         local adjusts = {}
         for _, uid in ipairs(parts) do 
             local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
@@ -122,7 +134,7 @@ function GLOG.RefundSession(idx)
     s.refunded = true
 
     -- Diffusion du changement d'état si GM
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.Comm_Broadcast then
         GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
         local rv = (GuildLogisticsDB.meta.rev or 0) + 1
         GuildLogisticsDB.meta.rev = rv
@@ -138,12 +150,14 @@ end
 
 function GLOG.UnrefundSession(idx)
     EnsureDB()
-    local s = GuildLogisticsDB.history[idx]
+    local hist = GuildLogisticsDB.history or {}
+    local s = hist[idx]
+    if type(s) ~= "table" then return false end
     if not s or not s.refunded then return false end
     local per = tonumber(s.perHead) or 0
     local parts = s.participants or {}
 
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.GM_BroadcastBatch then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.GM_BroadcastBatch then
         local adjusts = {}
         for _, uid in ipairs(parts) do 
             local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
@@ -162,7 +176,7 @@ function GLOG.UnrefundSession(idx)
     s.refunded = false
 
     -- Diffusion du changement d'état si GM
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.Comm_Broadcast then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.Comm_Broadcast then
         GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
         local rv = (GuildLogisticsDB.meta.rev or 0) + 1
         GuildLogisticsDB.meta.rev = rv
@@ -179,11 +193,11 @@ end
 function GLOG.DeleteHistory(idx)
     EnsureDB()
     local hist = GuildLogisticsDB.history or {}
-    local s = hist[idx]; if not s then return false end
+    local s = hist[idx]; if type(s) ~= "table" then return false end
     table.remove(hist, idx)
 
     -- Diffusion de la suppression si GM via la fonction centralisée
-    if GLOG.IsMaster and GLOG.IsMaster() and GLOG.BroadcastHistoryDelete then
+    if ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) and GLOG.BroadcastHistoryDelete then
         GLOG.BroadcastHistoryDelete(s.ts)  -- ✅ Passe le timestamp (identifiant unique des entrées)
     end
     if ns.Emit then ns.Emit("history:changed") end

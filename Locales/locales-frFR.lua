@@ -289,6 +289,12 @@ L["opt_script_errors"]   = "Afficher les erreurs Lua"
 L["yes"]                 = "Oui"
 L["no"]                  = "Non"
 
+-- === Options: Droits d'édition (Editors) ===
+L["opt_editors_title"]         = "Droits d'édition"
+L["opt_editors_grant_label"]   = "Ajouter un éditeur (main ou alt) :"
+L["btn_grant"]                 = "Accorder"
+L["btn_revoke"]                = "Retirer"
+
 -- ============================================== --
 -- ===     NOTIFS / MINIMAP / INDICATEURS     === --
 -- ============================================== --
@@ -317,6 +323,13 @@ L["lbl_db_ui"]                   = "BDD personelle"
 L["lbl_db_datas"]                = "BDD historique"
 L["lbl_db_backup"]               = "BDD sauvegarde"
 L["lbl_db_previous"]             = "BDD précédente"
+
+-- Reload prompt & editor rights
+L["btn_later"]                  = "Plus tard"
+L["btn_reload_ui"]              = "Recharger l'interface"
+L["msg_reload_needed"]          = "Des changements de droits ont été appliqués."
+L["msg_editor_promo"]           = "Vous avez été promu éditeur dans "..L["app_title"] ..". Certaines options nécessitent un rechargement."
+L["msg_editor_demo"]            = "Vous avez été dégradé dans "..L["app_title"] ..". L'interface doit être rechargée pour refléter les changements."
 
 -- ============================================== --
 -- ===         INVITATIONS CALENDRIER         === --
@@ -713,6 +726,14 @@ L["tip_set_main"] = "Confirmer en main"
 L["tip_assign_alt"] = "Associer en alt au main sélectionné"
 L["tip_remove_main"] = "Supprimer le main (les persos restent dans le pool)"
 L["tip_unassign_alt"] = "Dissocier l'alt (retour au pool)"
+-- Info-bulles éditeur
+L["tip_grant_editor"]  = "Accorder droits d'édition"
+L["tip_revoke_editor"] = "Retirer droits d'édition"
+-- Raison de désactivation (tooltips)
+L["tip_disabled_offline_group"] = "Désactivé : aucun personnage de ce joueur n'est en ligne"
+-- Contexte statut éditeur
+L["tip_editor_status_promoted"] = "Editeur"
+L["tip_editor_status_demoted"]  = "Non-éditeur"
 -- Fusion de solde (popup)
 L["msg_merge_balance_title"] = "Fusionner le solde ?"
 L["msg_merge_balance_body"]  = "Transférer %s de %s vers %s et mettre %s à 0 ?"

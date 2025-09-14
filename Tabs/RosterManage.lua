@@ -164,7 +164,7 @@ local function UpdateRow(i, r, f, it)
     end
 
     -- ===== Actions =====
-    local canGM = (ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
+    local canGM = (ns.GLOG.CanModifyGuildData and ns.GLOG.CanModifyGuildData()) or false
 
     -- Détermine le nom complet (Nom-Royaume) si besoin pour interroger la DB
     local fullName = (EnsureFullMain and EnsureFullMain(it)) or name
@@ -365,7 +365,7 @@ local function Build(container)
     btnAdd = UI.Button(footer, Tr("btn_add_player"), { size="sm", variant="primary", minWidth=120 })
     btnAdd:SetOnClick(function()
         -- Vérification GM au moment du clic (évite l'effet cache obsolète)
-        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
         if not isGM then return end
         UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
             name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
@@ -383,7 +383,7 @@ local function Build(container)
 
     -- Visibilité dynamique selon le statut GM
     local function updateAddVisibility()
-        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
         btnAdd:SetShown(isGM)
     end
     updateAddVisibility()
@@ -465,7 +465,7 @@ function UI.ShowGuildRosterPopup()
     end
 
     -- Footer: Close + (optionnel) Ajouter un joueur comme dans l'onglet Joueurs
-    local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
     local btns = {}
     table.insert(btns, { text = CLOSE, default = true })
     if isGM then
@@ -494,6 +494,5 @@ end
 -- Nouvel onglet "Gestion des membres" dans la catégorie Raids
 UI.RegisterTab(Tr("add_guild_member"), Build, Refresh, Layout, {
     -- Comme auparavant le bouton n'était visible que pour le GM, on garde la visibilité conditionnelle :
-    hidden   = not (GLOG.IsMaster and GLOG.IsMaster()),
     category = Tr("cat_raids"),
 })

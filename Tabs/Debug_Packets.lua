@@ -419,7 +419,7 @@ local function Build(container)
 
     -- Alignement à droite IMMÉDIAT (comme dans Synthese)
     if UI.AttachButtonsFooterRight then
-        local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+        local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
         if isMaster then
             UI.AttachButtonsFooterRight(footer, { forceSyncBtn, purgeEpuBtn, purgeResBtn, purgeDBBtn, purgeAllBtn })
         else
@@ -505,7 +505,7 @@ end
 
 -- ➕ Layout avec footer et visibilité GM
 local function Layout()
-    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+    local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
 
     -- Visibilités GM comme dans Synthese
     if forceSyncBtn then forceSyncBtn:SetShown(isMaster) end

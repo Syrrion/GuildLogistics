@@ -16,7 +16,7 @@ local selected = {} -- sélection : clés = index absolu dans expenses.list
 -- ======   COLONNES   =====
 -- =========================
 local function BuildColsFree()
-    local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
     local cols = {
         { key="qty",    title=Tr("col_qty_short"),     vsep=true,  w=44  },
         { key="item",   title=Tr("col_item"),   vsep=true,  min=260, flex=1 },
@@ -38,7 +38,7 @@ local colsLots = UI.NormalizeColumns({
     { key="status", title=Tr("col_remaining"),     vsep=true,  w=110 },
     { key="content",title=Tr("col_content"),       vsep=true,  w=60 },
     { key="total",  title=Tr("col_total_value"), vsep=true,  w=120 },
-    { key="act",    title="",              vsep=true,  w=(GLOG.IsMaster and GLOG.IsMaster()) and 40 or 0 },
+    { key="act",    title="",              vsep=true,  w=(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) and 40 or 0 },
 })
 
 -- =========================
@@ -155,10 +155,10 @@ local function BuildRowFree(r)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
     r.btnSplit  = UI.Button(f.act, Tr("btn_split"), { size="sm", minWidth=30, tooltip=Tr("hint_split_resource") })
-    r.btnSplit:SetShown(GLOG.IsMaster and GLOG.IsMaster())
+    r.btnSplit:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData())
 
     r.btnDelete = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=30 })
-    r.btnDelete:SetShown(GLOG.IsMaster and GLOG.IsMaster())
+    r.btnDelete:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData())
 
     UI.AttachRowRight(f.act, { r.btnDelete, r.btnSplit }, 8, -4, { leftPad=8, align="center" })
     return f
@@ -169,7 +169,7 @@ local function UpdateRowFree(i, r, f, it)
     local d = it.data or it
     r._abs = it._abs or i
 
-    if GLOG.IsMaster and GLOG.IsMaster() then
+    if GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
         f.sel:Show()
         f.sel:SetChecked(selected[r._abs] or false)
         f.sel:SetScript("OnClick", function(self)
@@ -180,8 +180,8 @@ local function UpdateRowFree(i, r, f, it)
         f.sel:Hide()
         f.sel:SetScript("OnClick", nil)
     end
-    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(GLOG.IsMaster and GLOG.IsMaster()) end
-    if r.btnSplit  and r.btnSplit.SetShown  then r.btnSplit:SetShown(GLOG.IsMaster and GLOG.IsMaster()) end
+    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
+    if r.btnSplit  and r.btnSplit.SetShown  then r.btnSplit:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
 
     f.qty:SetText(tostring(d.qty or 1))
     f.source:SetText(resolveSourceLabel(d))
@@ -211,7 +211,7 @@ local function BuildRowLots(r)
     f.act:SetFrameLevel(r:GetFrameLevel()+1)
 
     -- Bouton X uniquement pour le GM
-    if GLOG.IsMaster and GLOG.IsMaster() then
+    if GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
         r.btnDelete = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=30 })
         UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
     end
@@ -325,8 +325,8 @@ local function Layout()
     bottomPane:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -pad, pad + footerH)
 
     if UI.AttachButtonsFooterRight then
-        local buttons = {}
-        local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local buttons = {}
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
         if isGM and btnCreateLot then table.insert(buttons, btnCreateLot) end
         if isGM then
             if btnToggle   then btnToggle:Show()   table.insert(buttons, btnToggle)   end
@@ -371,7 +371,7 @@ local function Refresh()
     end
     lvLots:SetData(rows)
 
-    btnCreateLot:SetShown(GLOG.IsMaster and GLOG.IsMaster())
+    btnCreateLot:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData())
     btnClearAll:SetEnabled(true)
     local on = GLOG.IsExpensesRecording and GLOG.IsExpensesRecording()
     btnToggle:SetText(on and Tr("btn_stop_recording") or Tr("btn_start_recording_expenses"))
@@ -397,7 +397,7 @@ local function Build(container)
 
     btnCreateLot = UI.Button(footer, Tr("btn_create_bundle"), { size="sm", minWidth=140, tooltip=Tr("hint_select_resources_bundle") })
     btnCreateLot:SetOnClick(function()
-        if not (GLOG.IsMaster and GLOG.IsMaster()) then return end
+    if not (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) then return end
         local idxs = {}
         for abs,v in pairs(selected) do 
             if v then idxs[#idxs+1] = abs end 

@@ -132,7 +132,7 @@ local function UpdateRow(i, r, f, it)
     f.message:SetText(_Preview(it.msg or "", 200))
 
     -- Checkbox "Traité"
-    local isGM = (GLOG and GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isGM = (GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
     local checked = (it.done == true)
     f.done:SetChecked(checked)
     f.done:SetEnabled(isGM)

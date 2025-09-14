@@ -373,6 +373,6 @@ local function Build(container)
 end
 
 UI.RegisterTab(Tr("tab_start_raid"), Build, Refresh, Layout, {
-    hidden   = not (GLOG.IsMaster and GLOG.IsMaster()),
+    -- Visibility is controlled centrally in UI shell (ApplyTabsForGuildMembership/RefreshActive)
     category = Tr("cat_raids"),
 })

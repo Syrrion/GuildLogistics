@@ -59,7 +59,14 @@ end
 
 function UI.MoneyText(v, opts)
     v = tonumber(v) or 0
-    opts = opts or {}
+    -- Accept flexible opts: table preferred; number -> { h = number }; anything else -> {}
+    if type(opts) ~= "table" then
+        if type(opts) == "number" then
+            opts = { h = opts }
+        else
+            opts = {}
+        end
+    end
     local n = math.floor(math.abs(v) + 0.5)
     local h   = tonumber(opts.h)   or 12
     local yOf = tonumber(opts.y)
@@ -76,7 +83,14 @@ end
 
 function UI.MoneyFromCopper(copper, opts)
     local n = tonumber(copper) or 0
-    opts = opts or {}
+    -- Accept flexible opts: table preferred; number -> { h = number }; anything else -> {}
+    if type(opts) ~= "table" then
+        if type(opts) == "number" then
+            opts = { h = opts }
+        else
+            opts = {}
+        end
+    end
     local abs = math.abs(n)
     local g = math.floor(abs / 10000); local rem = abs % 10000
     local s = math.floor(rem / 100);   local c   = rem % 100
@@ -681,6 +695,8 @@ function UI.RefreshAll()
     if i and Registered[i] and Registered[i].refresh then Registered[i].refresh() end
     -- Rafraîchit les indicateurs globaux (pastilles, icônes d'état, etc.)
     if UI.RefreshTopIndicators then UI.RefreshTopIndicators() end
+    -- Force un relayout des ListViews visibles (scrollbars, largeurs dynamiques, snap)
+    if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end
 end
 -- ⏳ Regroupe les refresh pour éviter les rafales pendant les évènements réseau
 function UI.ScheduleRefreshAll(delay)
@@ -707,6 +723,9 @@ function UI.ScheduleRefreshAll(delay)
         -- ⏸️ Pause globale : ne rafraîchit que si l'UI est ouverte ou si on a des popups/zones always-on
         if UI.ShouldRefreshUI and UI.ShouldRefreshUI() then
             if UI.RefreshAll then UI.RefreshAll() end
+        else
+            -- UI fermée: on met tout de même à jour les ListViews des zones always-on/popups
+            if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end
         end
     end
     if C_Timer and C_Timer.After then C_Timer.After(delay, doRefresh) else doRefresh() end
@@ -947,14 +966,15 @@ function UI.ApplyTabsForGuildMembership(inGuild)
     local keepDebugErrors = Tr("tab_debug_errors")  or "Debug/Erreurs LUA"
     local reqLabel        = Tr("tab_requests")
 
-    -- État GM + nombre de demandes en attente
-    local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
+    -- État GM (GM-only: utilise CanGrantEditor; fallback IsMaster) + nombre de demandes en attente
+    local isGM = (ns.GLOG and ((ns.GLOG.CanGrantEditor and ns.GLOG.CanGrantEditor()) or (ns.GLOG.IsMaster and ns.GLOG.IsMaster()))) or false
     local reqCount = 0
     if isGM and ns.GLOG and ns.GLOG.GetRequests then
         local t = ns.GLOG.GetRequests()
         reqCount = (type(t) == "table") and #t or 0
     end
 
+    local isEditor = (ns.GLOG and ns.GLOG.CanModifyGuildData and ns.GLOG.CanModifyGuildData()) or false
     for _, def in ipairs(Registered) do
         local lab = def.label
         local shown
@@ -967,6 +987,15 @@ function UI.ApplyTabsForGuildMembership(inGuild)
             -- ⚠️ Jamais visible pour un joueur ; visible pour le GM seulement s'il existe des demandes
             shown = isGM and (reqCount > 0)
             UI.SetTabBadge(reqLabel, reqCount)
+
+        elseif lab == Tr("tab_start_raid") then
+            shown = inGuild and isEditor
+
+        elseif lab == Tr("add_guild_member") then
+            shown = inGuild and isEditor
+
+        elseif lab == Tr("cat_debug") then
+            shown = inGuild and isGM
 
         else
             -- Visibilité standard selon appartenance à une guilde
@@ -1070,7 +1099,7 @@ end
 
 -- ➕ Règle métier pour l'onglet "Demandes"
 function UI.UpdateRequestsBadge()
-    local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
+    local isGM = (ns.GLOG and ((ns.GLOG.CanGrantEditor and ns.GLOG.CanGrantEditor()) or (ns.GLOG.IsMaster and ns.GLOG.IsMaster()))) or false
     local cnt = 0
     if isGM and ns.GLOG and ns.GLOG.GetRequests then
         local t = ns.GLOG.GetRequests()
@@ -1155,11 +1184,12 @@ end
 
 -- ➕ Hook « RefreshActive » utilisé par Comm.lua
 function UI.RefreshActive()
-    local isGM = (ns.GLOG and ns.GLOG.IsMaster and ns.GLOG.IsMaster()) or false
+    local isGM = (ns.GLOG and ((ns.GLOG.CanGrantEditor and ns.GLOG.CanGrantEditor()) or (ns.GLOG.IsMaster and ns.GLOG.IsMaster()))) or false
+    local canModify = (ns.GLOG and ns.GLOG.CanModifyGuildData and ns.GLOG.CanModifyGuildData()) or false
 
     -- Onglet "Démarrer un raid" visible uniquement pour GM
     if UI.SetTabVisible then
-        UI.SetTabVisible(Tr("tab_start_raid"), isGM)
+        UI.SetTabVisible(Tr("tab_start_raid"), canModify)
     end
 
     -- Sécurisé : met à jour/masque la pastille "Demandes" sans crasher

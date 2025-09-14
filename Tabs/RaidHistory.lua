@@ -44,7 +44,7 @@ local function BuildRow(r)
     -- Boutons réservés GM
     r.btnRefund = UI.Button(f.act, Tr("btn_make_free"), { size="sm", variant="ghost", minWidth=140 })
     r.btnDelete = UI.Button(f.act, "X", { size="sm", variant="danger", minWidth=26, padX=12 })
-    local isGM = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
     r.btnRefund:SetShown(isGM)
     r.btnDelete:SetShown(isGM)
 

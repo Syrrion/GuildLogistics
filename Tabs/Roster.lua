@@ -57,7 +57,7 @@ local function moneyCopper(v)
 end
 
 local function CanActOn(name)
-    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+    local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
     if isMaster then return true, true end
     local meFull = ns.Util.playerFullName and ns.Util.playerFullName()
     local isSelf = ns.Util.SamePlayer and ns.Util.SamePlayer(name, meFull)
@@ -478,7 +478,7 @@ local function Build(container)
             local data = it.data or it
             UpdateRow(i, r, f, data)
             if r.btnReserve then
-                local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+                local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
                 r.btnReserve:SetShown(isMaster)
                 if r.btnRoster then r.btnRoster:SetShown(false) end
                 if isMaster then
@@ -497,7 +497,7 @@ local function Build(container)
             local data = it.data or it
             UpdateRow(i, r, f, data)
             if r.btnRoster then
-                local isMaster = GLOG.IsMaster and GLOG.IsMaster()
+                local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
                 r.btnRoster:SetShown(isMaster)
                 if r.btnReserve then r.btnReserve:SetShown(false) end
                 if isMaster then

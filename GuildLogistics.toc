@@ -30,6 +30,7 @@ Core/Core/Time.lua
 Core/Core/Timers.lua
 Core/Core/Addon.lua
 Core/Core/Debug.lua
+Core/Core/Permissions.lua
 
 Core/Debug/ErrorHandler.lua
 Core/Debug/ErrorJournal.lua

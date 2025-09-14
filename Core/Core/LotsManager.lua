@@ -134,8 +134,8 @@ function GLOG.Lot_Create(name, isMulti, sessions, absIdxs)
     table.insert(L.list, l); L.nextId = id + 1
     if ns.Emit then ns.Emit("lots:changed") end
 
-    -- ➕ Diffusion GM
-    if GLOG.BroadcastLotCreate and GLOG.IsMaster and GLOG.IsMaster() then 
+    -- ➕ Diffusion (editors + GM)
+    if GLOG.BroadcastLotCreate and ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) then 
         GLOG.BroadcastLotCreate(l) 
     end
     return l
@@ -167,8 +167,8 @@ function GLOG.Lot_CreateFromAmount(name, amountCopper, isMulti, sessions)
     if ns.Emit then ns.Emit("lots:changed") end
     if ns.RefreshActive then ns.RefreshActive() end
 
-    -- ➕ Diffusion GM
-    if GLOG.BroadcastLotCreate and GLOG.IsMaster and GLOG.IsMaster() then
+    -- ➕ Diffusion (editors + GM)
+    if GLOG.BroadcastLotCreate and ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) then
         GLOG.BroadcastLotCreate(l)
     end
     return true
@@ -198,8 +198,8 @@ function GLOG.Lot_Delete(id)
     if ns.Emit then ns.Emit("lots:changed") end
     if ns.RefreshActive then ns.RefreshActive() end -- ✅ disparition immédiate à l'écran
 
-    -- ➕ Diffusion GM
-    if GLOG.BroadcastLotDelete and GLOG.IsMaster and GLOG.IsMaster() then 
+    -- ➕ Diffusion (editors + GM)
+    if GLOG.BroadcastLotDelete and ((GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster())) then 
         GLOG.BroadcastLotDelete(id) 
     end
     return true
@@ -230,8 +230,8 @@ function GLOG.Lots_ConsumeMany(ids)
     _ensureLots()
     ids = ids or {}
 
-    local isMaster = GLOG.IsMaster and GLOG.IsMaster()
-    if isMaster then
+    local canEdit = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
+    if canEdit then
         -- GM : applique directement la consommation (évite le blocage __pendingConsume)
         local L = GuildLogisticsDB.lots
         for _, id in ipairs(ids) do

@@ -35,6 +35,14 @@ L["tip_set_main"] = "Mark as main"
 L["tip_assign_alt"] = "Assign as alt to selected main"
 L["tip_remove_main"] = "Remove main (keeps characters in pool)"
 L["tip_unassign_alt"] = "Unlink alt (back to pool)"
+-- Editor tooltips
+L["tip_grant_editor"]  = "Grant edit rights"
+L["tip_revoke_editor"] = "Revoke edit rights"
+-- Disabled reason (tooltips)
+L["tip_disabled_offline_group"] = "Disabled: none of this player's characters are online"
+-- Editor status context
+L["tip_editor_status_promoted"] = "Editor"
+L["tip_editor_status_demoted"]  = "Non-editor"
 -- Merge balance popup
 L["msg_merge_balance_title"] = "Merge balance?"
 L["msg_merge_balance_body"]  = "Transfer %s from %s to %s and set %s to 0?"
@@ -309,6 +317,12 @@ L["opt_script_errors"]    = "Show Lua errors"
 L["yes"]                  = "Yes"
 L["no"]                   = "No"
 
+-- === Options: Editing rights (Editors) ===
+L["opt_editors_title"]         = "Editing rights"
+L["opt_editors_grant_label"]   = "Grant editor (main or alt):"
+L["btn_grant"]                 = "Grant"
+L["btn_revoke"]                = "Revoke"
+
 -- ============================================== --
 -- ===     NOTIFS / MINIMAP / INDICATORS      === --
 -- ============================================== --
@@ -337,6 +351,13 @@ L["lbl_db_ui"]                   = "Personnal DB"
 L["lbl_db_datas"]                = "History DB"
 L["lbl_db_backup"]               = "Backup DB"
 L["lbl_db_previous"]             = "Previous DB"
+
+-- Reload prompt & editor rights
+L["btn_later"]                  = "Later"
+L["btn_reload_ui"]              = "Reload UI"
+L["msg_reload_needed"]          = "Permission changes have been applied."
+L["msg_editor_promo"]           = "You have been promoted to editor within "..L["app_title"] ..". Some options require a reload."
+L["msg_editor_demo"]            = "You have been demoted within "..L["app_title"] ..". The interface must be reloaded to reflect the changes."
 
 
 -- ============================================== --

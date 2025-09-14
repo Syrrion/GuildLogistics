@@ -474,6 +474,26 @@ function UI.PopupText(title, text)
     return dlg
 end
 
+-- Simple reload prompt with two actions: "Plus tard" and "Recharger l'interface"
+function UI.PopupReloadPrompt(message, opts)
+    opts = opts or {}
+    local Tr = ns and ns.Tr or function(s) return s end
+    local dlg = UI.CreatePopup({
+        title  = Tr("popup_info_title") or "Information",
+        width  = opts.width or 520,
+        height = opts.height or 200,
+    })
+    dlg:SetMessage(message or (Tr("msg_reload_needed") or "Des changements de droits ont été appliqués."))
+    dlg:SetButtons({
+        { text = Tr("btn_later") or "Plus tard", variant = "ghost", default = true },
+        { text = Tr("btn_reload_ui") or "Recharger l'interface", onClick = function()
+            if ReloadUI then ReloadUI() end
+        end },
+    })
+    dlg:Show()
+    return dlg
+end
+
 -- ✅ Nouveau : popup large avec deux zones de texte sélectionnables (formaté / brut)
 function UI.PopupDualText(title, topLabel, topText, bottomLabel, bottomText, opts)
     opts = opts or {}

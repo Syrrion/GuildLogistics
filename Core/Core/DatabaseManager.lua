@@ -214,7 +214,7 @@ end
 -- Incrémente / réinitialise la révision selon le rôle
 function GLOG.BumpRevisionLocal()
     EnsureDB()
-    local isMaster = (GLOG.IsMaster and GLOG.IsMaster()) or false
+    local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or (GLOG.IsMaster and GLOG.IsMaster()) or false
     local rv = tonumber(GuildLogisticsDB.meta.rev or 0) or 0
     GuildLogisticsDB.meta.rev = isMaster and (rv + 1) or 0
     GuildLogisticsDB.meta.lastModified = time()

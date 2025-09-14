@@ -1077,6 +1077,9 @@ function UI.ListView_RelayoutAll()
         if lv and lv.Layout then
             local owner = lv.parent or lv.list or lv.scroll
             if uiOpen or (UI and UI.ShouldProcess and UI.ShouldProcess(owner)) then
+                -- Met à jour le contenu des lignes visibles (gating droits, icônes d'action, textes)
+                if lv.UpdateVisibleRows then pcall(lv.UpdateVisibleRows, lv) end
+                -- Puis relayout complet (scrollbars, colonnes dynamiques, snap)
                 lv:Layout()
                 if UI.ListView_ResnapVSeps then UI.ListView_ResnapVSeps(lv) end
             end

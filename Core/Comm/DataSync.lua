@@ -158,6 +158,17 @@ function GLOG.SnapshotExport()
         end
     end
 
+    -- ===== Editors allowlist (main UIDs) =====
+    local EDR
+    do
+        local acc = GuildLogisticsDB.account or {}
+        local editors = acc.editors or {}
+        local list = {}
+        for mu, flag in pairs(editors) do if flag then list[#list+1] = tostring(mu) end end
+        table.sort(list)
+        if #list > 0 then EDR = list end
+    end
+
     -- ===== KV final =====
     return {
         sv = 4,
@@ -177,6 +188,8 @@ function GLOG.SnapshotExport()
         AS  = AS,
         H  = H,
         P  = P,
+        -- Editors allowlist
+        EDR = EDR,
     }
 end
 
@@ -511,6 +524,21 @@ function GLOG.SnapshotApply(kv)
             end
         end
     end
+    end
+
+    -- 9) Editors allowlist (if present)
+    do
+        local acc = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+        local ed = {}
+        if type(kv.EDR) == "table" then
+            for _, s in ipairs(kv.EDR) do
+                local mu = tostring(s or "")
+                if mu ~= "" then ed[mu] = true end
+            end
+        end
+        acc.editors = ed
+        GuildLogisticsDB.account = acc
+        if ns and ns.Emit then ns.Emit("editors:changed", "sync") end
     end
 
     -- No migration step: DB now uses ShortId strings natively
