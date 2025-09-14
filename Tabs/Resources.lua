@@ -48,6 +48,16 @@ local function moneyCopper(v)
     return UI.MoneyFromCopper(tonumber(v) or 0)
 end
 
+-- Affichage arrondi à l'or (comme dans l'onglet Roster): on convertit le cuivre en or
+-- et on utilise UI.MoneyText qui affiche en "po" arrondi.
+local function moneyGoldFromCopper(copper)
+    local g = (tonumber(copper) or 0) / 10000
+    if UI and UI.MoneyText then
+        return UI.MoneyText(g)
+    end
+    return tostring(math.floor(g + 0.5)).." po"
+end
+
 -- Résout la source à afficher depuis l'ID (fallback sur l'ancien champ texte)
 local function resolveSourceLabel(it)
     if it and it.sourceId and ns and ns.GLOG and ns.GLOG.GetExpenseSourceLabel then
@@ -352,7 +362,14 @@ local function Refresh()
         end
     end
     lvFree:SetData(items)
-    totalFS:SetText("|cffffd200"..Tr("lbl_free_resources").."|r " .. moneyCopper(total))
+    -- Affiche à la fois les ressources libres et le total (libres + valeur restante des lots au prorata des charges),
+    -- arrondis à l'or
+    local totalAllCopper = (GLOG and GLOG.Resources_TotalAvailableCopper and GLOG.Resources_TotalAvailableCopper()) or total
+    local txt = "|cffffd200"..Tr("lbl_free_resources").."|r " .. moneyGoldFromCopper(total)
+    if totalAllCopper and (totalAllCopper >= 0) then
+        txt = txt .. "  |  " .. "|cffffd200"..Tr("lbl_total_resources").."|r " .. moneyGoldFromCopper(totalAllCopper)
+    end
+    totalFS:SetText(txt)
 
     local lots = (GLOG.GetLots and GLOG.GetLots()) or {}
     table.sort(lots, function(a,b)
