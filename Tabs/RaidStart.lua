@@ -334,7 +334,6 @@ local function Build(container)
 
     -- Titre + trait : joueurs participants (dans le conteneur paddé)
     UI.SectionHeader(topPane, Tr("lbl_participating_players"))
-
     -- Liste des joueurs (haut), enfant de topPane
     lv = UI.ListView(topPane, cols, {
         buildRow = BuildRow,
@@ -348,6 +347,7 @@ local function Build(container)
         end,
         topOffset = (UI.SECTION_HEADER_H or 26),
         bottomAnchor = lotsPane,
+        rowHeight = UI.ROW_H_SMALL,
     })
 
     -- Titre + trait : lots utilisables
@@ -363,7 +363,8 @@ local function Build(container)
     lotsLV = UI.ListView(lotsPane, colsLots, {
         buildRow = BuildRowLots,
         updateRow = UpdateRowLots,
-        topOffset = (UI.SECTION_HEADER_H or 26)
+        topOffset = (UI.SECTION_HEADER_H or 26),
+        rowHeight = UI.ROW_H_SMALL,
     })
 
     -- Alignement footer

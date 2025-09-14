@@ -181,6 +181,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                         f2.item.btn._link   = nil
                     end
                 end,
+                rowHeight = UI.ROW_H_SMALL,
             })
 
             -- Reconstruit les lignes depuis la DB
@@ -289,7 +290,8 @@ local function Build(container)
         buildRow    = BuildRow,
         updateRow   = UpdateRow,
         topOffset   = (UI.SECTION_HEADER_H or 26) + 6, -- espace sous le header de section
-        bottomAnchor= footer,                           -- occupe tout jusqu’au footer
+        bottomAnchor= footer,
+        rowHeight = UI.ROW_H_SMALL,
     })
 end
 

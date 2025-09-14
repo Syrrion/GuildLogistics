@@ -407,10 +407,9 @@ local function Build(container)
     bottomPane = CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(topPane,    Tr("lbl_item_reserve"))
-    lvFree = UI.ListView(topPane, colsFree, { buildRow=BuildRowFree, updateRow=UpdateRowFree, topOffset=UI.SECTION_HEADER_H or 26 })
-
+    lvFree = UI.ListView(topPane, colsFree, { buildRow=BuildRowFree, updateRow=UpdateRowFree, rowHeight = UI.ROW_H_SMALL, topOffset=UI.SECTION_HEADER_H or 26 })
     UI.SectionHeader(bottomPane, Tr("lbl_usable_bundles_raids"))
-    lvLots = UI.ListView(bottomPane, colsLots, { buildRow=BuildRowLots, updateRow=UpdateRowLots, topOffset=UI.SECTION_HEADER_H or 26})
+    lvLots = UI.ListView(bottomPane, colsLots, { buildRow=BuildRowLots, updateRow=UpdateRowLots, rowHeight = UI.ROW_H_SMALL, topOffset=UI.SECTION_HEADER_H or 26})
 
     btnCreateLot = UI.Button(footer, Tr("btn_create_bundle"), { size="sm", minWidth=140, tooltip=Tr("hint_select_resources_bundle") })
     btnCreateLot:SetOnClick(function()

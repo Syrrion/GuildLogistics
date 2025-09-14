@@ -397,7 +397,7 @@ local function Build(container)
     lv = UI.ListView(panel, cols, {
         buildRow = BuildRow,
         updateRow = UpdateRow,
-        rowHeight = UI.ROW_H,
+        rowHeight = UI.ROW_H_SMALL,
         rowHeightForItem = function(item) return (item.kind == "sep") and (UI.ROW_H + 10) or UI.ROW_H end,
         bottomAnchor = footer,
     })

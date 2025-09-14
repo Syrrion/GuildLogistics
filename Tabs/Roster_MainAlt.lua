@@ -10,12 +10,7 @@ local selectedMainRow -- row frame for immediate selection highlight
 local Layout -- forward decl for local function used in callbacks
 local buildPoolData, buildMainsData, buildAltsData -- forward decl for data builders
 -- forward decl for columns/rows builders used by recreation
-local _BuildPoolCols, _BuildMainsCols, _BuildAltsCols
-local BuildRowPool, UpdateRowPool
-local BuildRowMains, UpdateRowMains
-local BuildRowAlts,  UpdateRowAlts
 local poolDataCache -- incremental cache for left list
-local _RecreateListViews -- forward decl
 
 -- ===== Online helpers (strict full-name + guild cache) =====
 local function _ResolveFull(name)
@@ -122,39 +117,6 @@ local function _refreshAll()
     if lvPool and lvPool.Refresh then lvPool:RefreshData(nil) end
     if lvMains and lvMains.Refresh then lvMains:RefreshData(nil) end
     if lvAlts and lvAlts.Refresh then lvAlts:RefreshData(nil) end
-end
-
--- Destroy a ListView instance cleanly (header + scroll) and return nil
-local function _DestroyListView(lv)
-    if not lv then return nil end
-    if lv.header then lv.header:Hide(); lv.header:SetParent(nil) end
-    if lv.scroll then lv.scroll:Hide(); lv.scroll:SetParent(nil) end
-    return nil
-end
-
--- Full rebuild of the three ListViews to reflect permission-based columns/buttons
-_RecreateListViews = function()
-    -- Destroy old instances
-    lvPool  = _DestroyListView(lvPool)
-    lvMains = _DestroyListView(lvMains)
-    lvAlts  = _DestroyListView(lvAlts)
-
-    -- Recreate with current columns (depend on CanModifyGuildData/CanGrantEditor)
-    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool,  topOffset = UI.SECTION_HEADER_H or 26 })
-    lvMains = UI.ListView(midPane,   _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, topOffset = UI.SECTION_HEADER_H or 26 })
-    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(),  { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts,  topOffset = UI.SECTION_HEADER_H or 26 })
-
-    -- Re-apply data
-    poolDataCache = buildPoolData()
-    if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
-    if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
-    if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
-
-    -- Drop stale selected row handle (rows recreated); name selection persists
-    selectedMainRow = nil
-
-    -- Layout panel to place new LVs
-    if Layout then Layout() end
 end
 
 -- Incremental removal from pool cache by name
@@ -772,16 +734,16 @@ local function Build(container)
     rightPane= CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(leftPane, Tr("lbl_available_pool"))
-    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool,  topOffset = UI.SECTION_HEADER_H or 26 })
+    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26 })
 
     UI.SectionHeader(midPane,  Tr("lbl_mains"))
-    lvMains = UI.ListView(midPane,  _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvMains = UI.ListView(midPane,  _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26 })
 
     do
         local _, fs = UI.SectionHeader(rightPane, Tr("lbl_associated_alts2"))
         rightPane._sectionHeaderFS = fs
     end
-    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(), { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts,  topOffset = UI.SECTION_HEADER_H or 26 })
+    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(), { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26 })
 
     -- Initial data
     poolDataCache = buildPoolData(); lvPool:SetData(poolDataCache)
