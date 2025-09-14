@@ -165,15 +165,37 @@ function GLOG.IsDebugEnabled()
 end
 
 function GLOG.WipeAllData()
+    -- Évite ré-entrance pendant un wipe
+    if GLOG._wipeInProgress then return end
+    GLOG._wipeInProgress = true
     WipeDataStructures()
     if ns.Emit then ns.Emit("database:wiped") end
-    if ns.RefreshAll then ns.RefreshAll() end
+    -- Rafraîchit l'UI de façon asynchrone pour éviter un long blocage dans la même frame
+    if ns.RefreshAll and ns.Util and ns.Util.After then
+        ns.Util.After(0.01, function()
+            pcall(ns.RefreshAll)
+            GLOG._wipeInProgress = nil
+        end)
+    else
+        if ns.RefreshAll then pcall(ns.RefreshAll) end
+        GLOG._wipeInProgress = nil
+    end
 end
 
 function GLOG.WipeAllSaved()
+    if GLOG._wipeInProgress then return end
+    GLOG._wipeInProgress = true
     WipeAllStructures()
     if ns.Emit then ns.Emit("database:wiped") end
-    if ns.RefreshAll then ns.RefreshAll() end
+    if ns.RefreshAll and ns.Util and ns.Util.After then
+        ns.Util.After(0.01, function()
+            pcall(ns.RefreshAll)
+            GLOG._wipeInProgress = nil
+        end)
+    else
+        if ns.RefreshAll then pcall(ns.RefreshAll) end
+        GLOG._wipeInProgress = nil
+    end
 end
 
 function GLOG.GetRev()
