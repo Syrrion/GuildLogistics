@@ -22,17 +22,8 @@ end
 -- === Gestion des entrées ===
 -- =========================
 
--- Ajoute un rapport d'erreur au journal (avec filtrage version)
+-- Ajoute un rapport d'erreur au journal (sans filtrage de version)
 function GLOG.ErrorJournal_AddReport(kv, sender)
-    -- Filtrage version : n'accepter que si ver(émetteur) >= ver(GM)
-    local myVer  = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
-    local hisVer = tostring(kv and kv.ver or "")
-    if hisVer == "" then
-        return -- version inconnue côté émetteur -> on ignore
-    end
-    if U and U.CompareVersions and U.CompareVersions(hisVer, myVer) < 0 then
-        return -- émetteur plus ancien que le GM -> on ignore
-    end
 
     ensureJournal()
     local t = GuildLogisticsDB.errors
