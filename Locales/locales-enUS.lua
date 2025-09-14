@@ -317,12 +317,6 @@ L["opt_script_errors"]    = "Show Lua errors"
 L["yes"]                  = "Yes"
 L["no"]                   = "No"
 
--- === Options: Editing rights (Editors) ===
-L["opt_editors_title"]         = "Editing rights"
-L["opt_editors_grant_label"]   = "Grant editor (main or alt):"
-L["btn_grant"]                 = "Grant"
-L["btn_revoke"]                = "Revoke"
-
 -- ============================================== --
 -- ===     NOTIFS / MINIMAP / INDICATORS      === --
 -- ============================================== --
@@ -388,6 +382,7 @@ L["weekday_sun"] = "Sunday"
 L["options_notifications_title"] = "Popup display"
 L["opt_popup_calendar_invite"]   = "Calendar invite notification"
 L["opt_popup_raid_participation"]= "Raid participation notification"
+L["opt_popup_gchat_mention"]      = "Guild chat mention notification"
 
 
 -- ============================================== --
@@ -699,6 +694,10 @@ L["toast_debit_title"]       = "Gold debited"
 L["toast_credit_text_fmt"]   = "You were credited %s. New balance: %s."
 L["toast_debit_text_fmt"]    = "You were debited %s. New balance: %s."
 L["instance_outdoor"] = "Outdoor"
+
+-- Guild chat mention
+L["toast_gmention_title"]      = "Guild chat mention"
+L["toast_gmention_text_fmt"]   = "You were mentioned by %s: %s"
 
 -- ============================================== --
 -- ===              BACKUP/RESTORE            === --

@@ -82,6 +82,13 @@ local function _CreateToast(opts)
     f:SetAlpha(0.999) -- évite un clignotement
 
     local colors = _VariantColors(opts.variant)
+    -- Allow per-toast color overrides for background/border
+    if type(opts.colors) == "table" then
+        if type(opts.colors.bg) == "table" then colors.bg = opts.colors.bg end
+        if type(opts.colors.border) == "table" then colors.border = opts.colors.border end
+    end
+    if type(opts.bg) == "table" then colors.bg = opts.bg end
+    if type(opts.border) == "table" then colors.border = opts.border end
 
     if f.SetBackdrop then
         f:SetBackdrop({

@@ -779,3 +779,151 @@ if GLOG and GLOG.On then
         if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 end
+
+-- ===== Mentions dans le chat de guilde → Toast (20s) =====
+do
+    local function _myBaseName()
+        local full = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
+                  or (UnitName and UnitName("player"))
+        if not full or full == "" then return nil end
+        local base = tostring(full):match("^([^%-]+)") or tostring(full)
+        return base
+    end
+
+    -- Collect mention tokens: player's base name, alias, and all base names of the player's main group (main + alts)
+    local function _collectMentionNeedles()
+        local needles, seen = {}, {}
+        local function add(s)
+            s = type(s) == "string" and s or nil
+            if not s or s == "" then return end
+            local v = s:lower()
+            if not seen[v] then seen[v] = true; table.insert(needles, v) end
+        end
+
+        -- Self base name
+        local myBase = _myBaseName(); add(myBase)
+
+        -- Alias defined on the main group (if any)
+        local meFull = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or (UnitName and UnitName("player")) or nil
+        if meFull and GLOG and GLOG.GetAliasFor then
+            local alias = GLOG.GetAliasFor(meFull)
+            if alias and alias ~= "" then add(alias) end
+        end
+
+        -- All character base names in my main group (guild cache only)
+        local rows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        if meFull and #rows > 0 and GLOG and GLOG.NormName then
+            local myMainName = (GLOG.GetMainOf and GLOG.GetMainOf(meFull)) or meFull
+            local myMainKey  = (myMainName and GLOG.NormName and GLOG.NormName(myMainName)) or nil
+            if myMainKey and myMainKey ~= "" then
+                for _, gr in ipairs(rows) do
+                    local full = gr.name_amb or gr.name_raw
+                    if full and full ~= "" then
+                        local mn = (GLOG.GetMainOf and GLOG.GetMainOf(full)) or full
+                        local mk = (mn and GLOG.NormName and GLOG.NormName(mn)) or nil
+                        if mk == myMainKey then
+                            local base = tostring(full):match("^([^%-]+)") or tostring(full)
+                            add(base)
+                        end
+                    end
+                end
+            end
+        end
+
+        return needles
+    end
+
+    local function _isEnabled()
+        local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
+        saved.popups = saved.popups or {}
+        local v = saved.popups.guildChatMention
+        if v == nil then return true end -- activé par défaut
+        return v and true or false
+    end
+
+    local function _showMentionToast(from, msg)
+        if not ns or not ns.UI or not ns.UI.Toast then return end
+        local Tr = ns.Tr or function(s) return s end
+        local icon = "Interface\\FriendsFrame\\UI-Toast-ChatInviteIcon" -- chat icon
+        -- Texte court: "Vous avez été mentionné par <from>"
+        local title = Tr("toast_gmention_title") or "Mention dans le chat de guilde"
+        local body  = (Tr("toast_gmention_text_fmt") or "Vous avez été mentionné par %s : %s"):format(from or "?", msg or "")
+        ns.UI.Toast({
+            title = title,
+            text = body,
+            icon = icon,
+            variant = "info",
+            duration = 20,
+            sound = 568154,
+            key = string.format("gmention:%d", math.floor((GetTime and GetTime()) or (time and time()) or 0)),
+            -- Blue-tinted background for mention toasts
+            bg = { 0.06, 0.10, 0.22, 0.92 },       -- deep blue background
+            border = { 0.30, 0.55, 1.0, 1.0 },     -- bright blue border
+        })
+    end
+
+    local function _onGuildChat(_, _, msg, author)
+        if not _isEnabled() then return end
+        if type(msg) ~= "string" or msg == "" then return end
+        local myBase = _myBaseName()
+        if not myBase or myBase == "" then return end
+
+        -- Auteur (peut contenir -Royaume)
+        local authorFull = tostring(author or "")
+        local from = authorFull:gsub("%-.+", "")
+
+        -- Ignore messages authored by self
+        local meFull = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()) or (UnitName and UnitName("player")) or nil
+        local meBase = meFull and (tostring(meFull):match("^([^%-]+)") or tostring(meFull)) or nil
+        if meBase and from and meBase:lower() == from:lower() then return end
+
+        -- Simple, robust search: case-insensitive substring match on any token (self base, alias, alts)
+        local hay = msg:lower()
+        local tokens = _collectMentionNeedles()
+        for i = 1, #tokens do
+            local needle = tokens[i]
+            if needle ~= "" and hay:find(needle, 1, true) then
+                _showMentionToast(from, msg)
+                break
+            end
+        end
+    end
+
+    -- Dynamic binding based on option value
+    local MentionOwner = {}
+    local function _bindMentionEvents()
+        if not (ns and ns.Events and ns.Events.Register) then return end
+        -- event args: (event, text, author, ...)
+        ns.Events.Register("CHAT_MSG_GUILD", MentionOwner, function(_, _, ...)
+            local text, author = ...
+            _onGuildChat(nil, nil, text, author)
+        end)
+        ns.Events.Register("CHAT_MSG_OFFICER", MentionOwner, function(_, _, ...)
+            local text, author = ...
+            _onGuildChat(nil, nil, text, author)
+        end)
+    end
+    local function _unbindMentionEvents()
+        if ns and ns.Events and ns.Events.UnregisterOwner then
+            ns.Events.UnregisterOwner(MentionOwner)
+        end
+    end
+    local function _refreshMentionBinding()
+        _unbindMentionEvents()
+        if _isEnabled() then _bindMentionEvents() end
+    end
+
+    -- React to option changes and game load
+    if ns and ns.Events and ns.Events.Register then
+        ns.Events.Register("PLAYER_ENTERING_WORLD", MentionOwner, function()
+            _refreshMentionBinding()
+        end)
+    end
+    if GLOG and GLOG.On then
+        GLOG.On("opt:popups:changed", function(key, value)
+            if key == "guildChatMention" then _refreshMentionBinding() end
+        end)
+    end
+    -- Initial binding at file load (best-effort if events hub already ready)
+    _refreshMentionBinding()
+end

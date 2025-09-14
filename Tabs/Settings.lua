@@ -192,15 +192,20 @@ function Build(container)
 
         cb:SetScript("OnClick", function(btn)
             savedForPop.popups[key] = btn:GetChecked() and true or false
+            -- Notify modules about popup options changes (live reaction without reload)
+            local v = savedForPop.popups[key]
+            if ns and ns.Emit then pcall(ns.Emit, "opt:popups:changed", key, v) end
+            if GLOG and GLOG.Emit then pcall(GLOG.Emit, "opt:popups:changed", key, v) end
         end)
 
         y = y + (cb:GetHeight() or 24) -8
         return cb
     end
 
-    -- Cases à cocher : calendrier / participation raid
+    -- Cases à cocher : calendrier / participation raid / mention chat guilde
     makeCheck("calendarInvite",    "opt_popup_calendar_invite")
     makeCheck("raidParticipation", "opt_popup_raid_participation")
+    makeCheck("guildChatMention",  "opt_popup_gchat_mention")
 
     -- === Section 5 : Activer le débug ===
     local headerH4 = UI.SectionHeader(optionsPane, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
@@ -231,126 +236,6 @@ function Build(container)
             elseif SetCVar then pcall(SetCVar, "scriptErrors", "0") end
         end
     )
-
-    -- === Section 7 : Droits d'édition (Editors allowlist) ===
-    local headerH6 = UI.SectionHeader(optionsPane, Tr("opt_editors_title") or "Droits d\'édition", { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
-    y = y + headerH6 + 8
-
-    -- Inline input + Grant button (GM-only)
-    do
-        local canGrant = _EditorsCanModify()
-
-        local lbl = optionsPane:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        lbl:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)
-        lbl:SetText(Tr("opt_editors_grant_label") or "Ajouter un éditeur (main ou alt) :")
-
-        editorsInput = CreateFrame("EditBox", nil, optionsPane, "InputBoxTemplate")
-        editorsInput:SetAutoFocus(false)
-        editorsInput:SetSize(260, 28)
-        editorsInput:SetPoint("LEFT", lbl, "RIGHT", 8, 0)
-        editorsInput:SetEnabled(canGrant)
-        editorsInput:SetAlpha(canGrant and 1 or 0.35)
-
-        editorsGrantBtn = UI.Button(optionsPane, Tr("btn_grant") or "Accorder", { size = "sm", minWidth = 100 })
-        editorsGrantBtn:ClearAllPoints()
-        editorsGrantBtn:SetPoint("LEFT", editorsInput, "RIGHT", 8, 0)
-        editorsGrantBtn:SetEnabled(canGrant)
-        if not canGrant then editorsGrantBtn:SetAlpha(0.35) end
-
-        local function TryGrant()
-            if not _EditorsCanModify() then return end
-            local txt = (editorsInput and editorsInput:GetText()) or ""
-            txt = tostring(txt or ""):gsub("^%s+", ""):gsub("%s+$", "")
-            if txt == "" then return end
-            local full = (GLOG and GLOG.ResolveFullNameStrict and GLOG.ResolveFullNameStrict(txt)) or txt
-            if GLOG and GLOG.GM_GrantEditor then
-                local ok = GLOG.GM_GrantEditor(full)
-                if ok then
-                    editorsInput:SetText("")
-                end
-            end
-        end
-        editorsGrantBtn:SetOnClick(TryGrant)
-        editorsInput:SetScript("OnEnterPressed", TryGrant)
-
-        y = y + 28 + 8
-    end
-
-    -- Editors list (read-only for non-GM, revoke buttons for GM)
-    do
-        local cols = UI.NormalizeColumns({
-            { key = "name", title = Tr("col_player") or "Joueur", min = 200, flex = 1 },
-            { key = "act",  title = "", vsep = true,  w = 90 },
-        })
-
-        local function BuildRow(r)
-            local fld = {}
-            fld.name = UI.Label(r, { template = "GameFontHighlightSmall", justify = "LEFT" })
-            fld.act  = CreateFrame("Frame", nil, r); fld.act:SetHeight(24); fld.act:SetFrameLevel(r:GetFrameLevel()+1)
-            r.btnRevoke = UI.Button(fld.act, Tr("btn_revoke") or "Retirer", { size = "xs", minWidth = 60, variant = "danger" })
-            UI.AttachRowRight(fld.act, { r.btnRevoke }, 8, -4, { leftPad = 8, align = "center" })
-            return fld
-        end
-
-        local function UpdateRow(i, r, fld, it)
-            fld.name:SetText(tostring(it.display or it.name or "?"))
-            local canGrant = _EditorsCanModify()
-            if r.btnRevoke and r.btnRevoke.SetShown then r.btnRevoke:SetShown(canGrant) end
-            if r.btnRevoke then
-                r.btnRevoke:SetOnClick(function()
-                    if not _EditorsCanModify() then return end
-                    if GLOG and GLOG.GM_RevokeEditor then
-                        GLOG.GM_RevokeEditor(it.uid or it.name)
-                    end
-                end)
-            end
-        end
-
-        -- Container frame to give the list a fixed height within options
-        local listFrame = CreateFrame("Frame", nil, optionsPane)
-        listFrame:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)
-        listFrame:SetPoint("TOPRIGHT", optionsPane, "TOPRIGHT", 0, -y)
-        listFrame:SetHeight(160)
-
-        editorsLV = UI.ListView(listFrame, cols, { topOffset = 0, buildRow = BuildRow, updateRow = UpdateRow })
-
-        local function RefreshEditors()
-            local rows = {}
-            if GLOG and GLOG.GetEditors then
-                local t = GLOG.GetEditors() or {}
-                for mu, v in pairs(t) do
-                    if v then
-                        local nm = (GLOG.GetNameByUID and GLOG.GetNameByUID(mu)) or tostring(mu)
-                        rows[#rows+1] = { name = nm, display = nm, uid = mu }
-                    end
-                end
-            end
-            table.sort(rows, function(a,b) return (tostring(a.display or a.name or ""):lower()) < (tostring(b.display or b.name or ""):lower()) end)
-            if editorsLV and editorsLV.RefreshData then editorsLV:RefreshData(rows) end
-        end
-
-        -- Initial populate
-        RefreshEditors()
-
-        -- Live updates on changes
-        if GLOG and GLOG.On then
-            GLOG.On("editors:changed", function()
-                RefreshEditors()
-                -- Update grant controls state if GM status changed elsewhere
-                local can = _EditorsCanModify()
-                if editorsInput and editorsInput.SetEnabled then editorsInput:SetEnabled(can); editorsInput:SetAlpha(can and 1 or 0.35) end
-                if editorsGrantBtn and editorsGrantBtn.SetEnabled then editorsGrantBtn:SetEnabled(can); editorsGrantBtn:SetAlpha(can and 1 or 0.35) end
-            end)
-            GLOG.On("gm:changed", function()
-                local can = _EditorsCanModify()
-                if editorsInput and editorsInput.SetEnabled then editorsInput:SetEnabled(can); editorsInput:SetAlpha(can and 1 or 0.35) end
-                if editorsGrantBtn and editorsGrantBtn.SetEnabled then editorsGrantBtn:SetEnabled(can); editorsGrantBtn:SetAlpha(can and 1 or 0.35) end
-                if editorsLV and editorsLV.UpdateVisibleRows then editorsLV:UpdateVisibleRows() end
-            end)
-        end
-
-        y = y + 160 + 8
-    end
 
     -- État initial depuis la sauvegarde
     local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}

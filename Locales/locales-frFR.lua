@@ -289,12 +289,6 @@ L["opt_script_errors"]   = "Afficher les erreurs Lua"
 L["yes"]                 = "Oui"
 L["no"]                  = "Non"
 
--- === Options: Droits d'édition (Editors) ===
-L["opt_editors_title"]         = "Droits d'édition"
-L["opt_editors_grant_label"]   = "Ajouter un éditeur (main ou alt) :"
-L["btn_grant"]                 = "Accorder"
-L["btn_revoke"]                = "Retirer"
-
 -- ============================================== --
 -- ===     NOTIFS / MINIMAP / INDICATEURS     === --
 -- ============================================== --
@@ -359,6 +353,7 @@ L["weekday_sun"] = "dimanche"
 L["options_notifications_title"] = "Affichage des popups"
 L["opt_popup_calendar_invite"]   = "Notification d'invitation dans le calendrier"
 L["opt_popup_raid_participation"]= "Notification de participation à un raid"
+L["opt_popup_gchat_mention"]      = "Notification de mention dans le chat de guilde"
 
 
 -- ============================================== --
@@ -672,6 +667,10 @@ L["toast_debit_title"]       = "Débit appliqué"
 L["toast_credit_text_fmt"]   = "Vous avez été crédité de %s. Nouveau solde : %s."
 L["toast_debit_text_fmt"]    = "Vous avez été débité de %s. Nouveau solde : %s."
 L["instance_outdoor"] = "Extérieur"
+
+-- Mention dans le chat de guilde
+L["toast_gmention_title"]      = "Mention dans le chat de guilde"
+L["toast_gmention_text_fmt"]   = "Vous avez été mentionné par %s : %s"
 
 -- ============================================== --
 -- ===              BACKUP/RESTORE            === --
