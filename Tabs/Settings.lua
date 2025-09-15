@@ -106,12 +106,20 @@ function Build(container)
         local mode = (GLOG.GetMode and GLOG.GetMode()) or nil
         local grp = {}
         local function onPick(newMode)
-            if newMode == mode then return end
+            local prevMode = mode
+            if newMode == prevMode then return end
             mode = newMode
             _SetRadioGroupChecked(grp, mode)
-            -- Sauvegarde immédiate; rechargement uniquement pour standalone
+            -- Sauvegarde immédiate; rechargement si on bascule vers standalone
+            -- ou si on clique "Version de guilde" alors qu'on était en standalone
             if GLOG.SetMode then GLOG.SetMode(mode) end
-            if mode == "standalone" and ReloadUI then ReloadUI() end
+            if ReloadUI then
+                if mode == "standalone" then
+                    ReloadUI()
+                elseif prevMode == "standalone" and mode == "guild" then
+                    ReloadUI()
+                end
+            end
         end
         local rGuild = CreateFrame("CheckButton", nil, optionsPane, "UIRadioButtonTemplate")
         rGuild:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)

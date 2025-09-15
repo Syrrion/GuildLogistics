@@ -315,23 +315,13 @@ local function UpdateRowPool(i, r, f, it)
     local data = it.data or it
     do
         local cls = data.classTag or _SelfClassTag(data.name)
-        if UI and UI.SetNameTagShortEx then
-            UI.SetNameTagShortEx(f.name, data.name or "", cls)
+        local suggSet = _GetSuggestionsForSelectedMain() or {}
+        local nk = (GLOG and GLOG.NormName and GLOG.NormName(data.name)) or string.lower(data.name or "")
+        local isSuggested = (nk ~= "" and suggSet[nk]) and true or false
+        if UI and UI.UpdateNameTagCached then
+            UI.UpdateNameTagCached(f.name, data.name or "", cls, isSuggested and Tr("lbl_suggested") or nil, {0,1,0})
         else
-            UI.SetNameTagShort(f.name, data.name or "")
-        end
-        -- Append suggestion tag to player name (green), not in note column
-        -- Compute dynamically from current selection to avoid full SetData on selection change
-        local isSuggested = false
-        do
-            local suggSet = _GetSuggestionsForSelectedMain() or {}
-            local nk = (GLOG and GLOG.NormName and GLOG.NormName(data.name)) or string.lower(data.name or "")
-            if nk ~= "" and suggSet[nk] then isSuggested = true end
-        end
-        if isSuggested and f.name and f.name.text then
-            local raw = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(data.name)) or tostring(data.name or "")
-            local display = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(raw)) or raw
-            f.name.text:SetText(string.format("%s |cff00ff00(%s)|r", display, Tr("lbl_suggested")))
+            if UI and UI.SetNameTagShortEx then UI.SetNameTagShortEx(f.name, data.name or "", cls) else UI.SetNameTagShort(f.name, data.name or "") end
         end
     end
 
@@ -502,10 +492,10 @@ local function UpdateRowMains(i, r, f, it)
     local data = it.data or it
     do
         local cls = _SelfClassTag(data.name)
-        if UI and UI.SetNameTagShortEx then
-            UI.SetNameTagShortEx(f.name, data.name or "", cls)
+        if UI and UI.UpdateNameTagCached then
+            UI.UpdateNameTagCached(f.name, data.name or "", cls)
         else
-            UI.SetNameTagShort(f.name, data.name or "")
+            if UI and UI.SetNameTagShortEx then UI.SetNameTagShortEx(f.name, data.name or "", cls) else UI.SetNameTagShort(f.name, data.name or "") end
         end
     end
     -- Alias text (group-level)
@@ -768,10 +758,10 @@ local function UpdateRowAlts(i, r, f, it)
     local data = it.data or it
     do
         local cls = _SelfClassTag(data.name)
-        if UI and UI.SetNameTagShortEx then
-            UI.SetNameTagShortEx(f.name, data.name or "", cls)
+        if UI and UI.UpdateNameTagCached then
+            UI.UpdateNameTagCached(f.name, data.name or "", cls)
         else
-            UI.SetNameTagShort(f.name, data.name or "")
+            if UI and UI.SetNameTagShortEx then UI.SetNameTagShortEx(f.name, data.name or "", cls) else UI.SetNameTagShort(f.name, data.name or "") end
         end
     end
     -- Base gradient for zebra effect

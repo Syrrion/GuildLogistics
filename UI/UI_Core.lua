@@ -377,8 +377,9 @@ function UI.DecorateRow(r)
         oddTop        = { r = 0, g = 0, b = 0, a = 0.05 },
         oddBottom     = { r = 0, g = 0, b = 0, a = 0.20 },
         -- Lignes paires
-        evenTop       = oddTop,
-        evenBottom    = oddBottom,
+        -- dupliquer explicitement pour éviter la référence à des variables non définies
+        evenTop       = { r = 0, g = 0, b = 0, a = 0.05 },
+        evenBottom    = { r = 0, g = 0, b = 0, a = 0.20 },
         -- Survol & séparateur
         hover      = { r = 1.00, g = 0.82, b = 0.00, a = 0.06 },
         sep        = { r = 1.00, g = 1.00, b = 1.00, a = 0.2 },
@@ -461,11 +462,6 @@ function UI.ApplyRowGradient(row, isEven)
             CreateColor(top.r, top.g, top.b, (top.a or 1) * mul),
             CreateColor(bottom.r, bottom.g, bottom.b, (bottom.a or 1) * mul)
         )
-    elseif tex.SetGradientAlpha then
-        tex:SetGradientAlpha("VERTICAL",
-            top.r or 1, top.g or 1, top.b or 1, (top.a or 1) * mul,
-            bottom.r or 1, bottom.g or 1, bottom.b or 1, (bottom.a or 1) * mul
-        )
     end
 end
 
@@ -506,8 +502,6 @@ function UI.SetRowAccentGradient(row, shown, r, g, b, startAlpha)
     r, g, b = tonumber(r) or 1, tonumber(g) or .82, tonumber(b) or 0
     if grad.SetGradient and type(CreateColor) == "function" then
         grad:SetGradient("HORIZONTAL", CreateColor(r, g, b, sa), CreateColor(r, g, b, 0))
-    elseif grad.SetGradientAlpha then
-        grad:SetGradientAlpha("HORIZONTAL", r, g, b, sa, r, g, b, 0)
     else
         grad:SetVertexColor(r, g, b, sa)
     end
@@ -808,10 +802,10 @@ function UI.CreateFooter(parent, height)
     grad:SetAllPoints(f)
     local gt = UI.FOOTER_GRAD_TOP    or {1, 1, 1, 0.05}
     local gb = UI.FOOTER_GRAD_BOTTOM or {0, 0, 0, 0.15}
-    if grad.SetGradient then
+    if grad.SetGradient and type(CreateColor) == "function" then
         grad:SetGradient("VERTICAL", CreateColor(gt[1], gt[2], gt[3], gt[4]), CreateColor(gb[1], gb[2], gb[3], gb[4]))
-    elseif grad.SetGradientAlpha then
-        grad:SetGradientAlpha("VERTICAL", gt[1], gt[2], gt[3], gt[4], gb[1], gb[2], gb[3], gb[4])
+    else
+        grad:SetVertexColor((gt[1]+gb[1])/2, (gt[2]+gb[2])/2, (gt[3]+gb[3])/2, (gt[4]+gb[4])/2)
     end
 
     -- Liseré supérieur (séparation nette)
@@ -910,9 +904,6 @@ function UI.SetItemCell(cell, item)
 
     -- 2) Résolution du lien (préférer GetItemInfo; sinon garder un lien texte complet s'il existe)
     local link = nil
-    if itemID and GetItemInfo then
-        link = select(2, GetItemInfo(itemID))
-    end
     if not link and type(item.itemLink) == "string" and string.find(item.itemLink, "|Hitem:") then
         link = item.itemLink
     end
@@ -922,18 +913,21 @@ function UI.SetItemCell(cell, item)
     if not name and type(link) == "string" then
         name = string.match(link, "%[(.-)%]") -- extrait le nom entre crochets
     end
-    if not name and itemID and GetItemInfo then
-        name = select(1, GetItemInfo(itemID))
-    end
+    -- don't call deprecated GetItemInfo here; keep fallback name below
     if not name then
         name = "Objet #" .. tostring(itemID or "?")
     end
 
-    -- 4) Icône
-    local icon = (itemID and GetItemIcon and GetItemIcon(itemID)) or "Interface/Icons/INV_Misc_QuestionMark"
-
-    -- 5) Remplissage de la cellule + données tooltip
-    cell.icon:SetTexture(icon)
+    -- 4) Icône (sélection sûre sans typer la variable)
+    do
+        local defaultIcon = "Interface/Icons/INV_Misc_QuestionMark"
+        local ic = nil
+        if itemID and C_Item and C_Item.GetItemInfoInstant then
+            local _, _, _, _, fileID = C_Item.GetItemInfoInstant(itemID)
+            ic = fileID
+        end
+        if ic then cell.icon:SetTexture(ic) else cell.icon:SetTexture(defaultIcon) end
+    end
     cell.text:SetText(name or "")
     cell.btn._itemID = itemID           -- SetItemByID sera utilisé si présent
     cell.btn._link   = (type(link)=="string") and link or nil -- fallback Hyperlink si pas d'ID
@@ -1109,7 +1103,7 @@ function UI.AttachBadge(frame)
         if v > max then
             self.txt:SetText(max .. "+")
         else
-            self.txt:SetText(v)
+            self.txt:SetText(tostring(v))
         end
 
         -- Taille en fonction du contenu (pastille circulaire)
@@ -1346,6 +1340,41 @@ function UI.SetNameTagShortEx(tag, name, overrideClassTag)
     end
 end
 
+-- Reusable cached updater for NameTag widgets (icon + colored name + optional suffix)
+-- suffix: optional plain text appended after the display name (e.g., "(Suggested)")
+-- suffixColor: optional {r,g,b} for the suffix (default green)
+function UI.UpdateNameTagCached(tag, name, overrideClassTag, suffix, suffixColor)
+    if not tag then return end
+    local raw = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or tostring(name or "")
+    local baseDisp = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(raw)) or raw
+
+    local cls = overrideClassTag or ""
+    if tag._lastNameRaw ~= raw or tag._lastClassTag ~= cls then
+        if UI.SetNameTagShortEx then
+            UI.SetNameTagShortEx(tag, raw, (cls ~= "" and cls) or nil)
+        else
+            UI.SetNameTagShort(tag, raw)
+        end
+        tag._lastNameRaw  = raw
+        tag._lastClassTag = cls
+        tag._lastComposed = nil
+        tag._baseDisplay  = baseDisp
+    end
+
+    local composed = tag._baseDisplay or baseDisp
+    if suffix and suffix ~= "" then
+        local c = suffixColor or {0,1,0}
+        local r,g,b = tonumber(c[1] or 0), tonumber(c[2] or 1), tonumber(c[3] or 0)
+        local hex = string.format("%02x%02x%02x", math.floor(r*255+0.5), math.floor(g*255+0.5), math.floor(b*255+0.5))
+        composed = string.format("%s |cff%s%s|r", composed, hex, tostring(suffix))
+    end
+
+    if tag.text and tag._lastComposed ~= composed then
+        tag.text:SetText(composed)
+        tag._lastComposed = composed
+    end
+end
+
 -- Icône de type de jet (Need/Greed/DE/Pass) + libellé
 function UI.SetRollIcon(tex, rollType)
     if not tex or (tex.GetObjectType and tex:GetObjectType() ~= "Texture") then return end
@@ -1498,11 +1527,14 @@ function GLOG.Minimap_Init()
     end
     if GuildLogisticsUI.minimap.hide then return end
 
-    if _G.GLOG_MinimapButton then
-        local r = (Minimap:GetWidth() / 2) - 5
-        local rad = math.rad(GuildLogisticsUI.minimap.angle or 215)
-        _G.GLOG_MinimapButton:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
-        return
+    do
+        local mb = _G and _G["GLOG_MinimapButton"]
+        if mb then
+            local r = (Minimap:GetWidth() / 2) - 5
+            local rad = math.rad(GuildLogisticsUI.minimap.angle or 215)
+            mb:SetPoint("CENTER", Minimap, "CENTER", math.cos(rad) * r, math.sin(rad) * r)
+            return
+        end
     end
 
     local b = CreateFrame("Button", "GLOG_MinimapButton", Minimap)
@@ -1641,7 +1673,7 @@ end
 function UI.ClassName(classID, classTag)
     if classID then
         local info = UI.GetClassInfoByID(classID)
-        if info then return (info.className or info.name or info.classFile) end
+        if info then return (info.className or info.classFile or "") end
     end
     return classTag or ""
 end
@@ -1653,19 +1685,6 @@ UI._specCache = UI._specCache or nil
 local function _BuildSpecCache()
     if UI._specCache then return UI._specCache end
     local cache = {}
-    if GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
-        for cid = 1, 30 do
-            local n = GetNumSpecializationsForClassID(cid)
-            if type(n) == "number" then
-                for i = 1, n do
-                    local id, name = GetSpecializationInfoForClassID(cid, i)
-                    if id and name then
-                        cache[id] = { name = name, classID = cid }
-                    end
-                end
-            end
-        end
-    end
     UI._specCache = cache
     return cache
 end
@@ -1686,43 +1705,12 @@ function UI.SpecName(classID, specID)
     if not specID or specID == 0 then
         return (Tr and Tr("lbl_spec")) or "Specialization"
     end
-
-    -- 1) Si la classe est connue : résolution directe via l’API Blizzard
-    if classID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
-        local n = GetNumSpecializationsForClassID(classID) or 0
-        for i = 1, n do
-            local id, name = GetSpecializationInfoForClassID(classID, i)
-            if id == specID and name then
-                return name
-            end
-        end
-    end
-
-    -- 2) Fallback générique : par specID (indépendant du joueur/sa classe)
     return UI.SpecNameBySpecID(specID)
 end
 
 
 -- Human-readable specialization name; ⚙️ robuste pour n'importe quelle classe
-function UI.SpecName(classID, specID)
-    if not specID or specID == 0 then
-        return (Tr and Tr("lbl_spec")) or "Specialization"
-    end
-
-    -- 1) Si la classe est connue : résolution directe via l’API
-    if classID and GetNumSpecializationsForClassID and GetSpecializationInfoForClassID then
-        local n = GetNumSpecializationsForClassID(classID) or 0
-        for i = 1, n do
-            local id, name = GetSpecializationInfoForClassID(classID, i)
-            if id == specID and name then
-                return name
-            end
-        end
-    end
-
-    -- 2) Fallback générique : par specID (indépendant du joueur/sa classe)
-    return UI.SpecNameBySpecID(specID)
-end
+-- (duplicate removed)
 
 -- Returns the player's (classID, classTag, specID!=0 when possible)
 function UI.ResolvePlayerClassSpec()
@@ -2062,8 +2050,8 @@ function UI.OpenCalendar()
     if not CalendarFrame then
         if UIParentLoadAddOn then
             UIParentLoadAddOn("Blizzard_Calendar")
-        elseif LoadAddOn then
-            pcall(LoadAddOn, "Blizzard_Calendar")
+        elseif C_AddOns and C_AddOns.LoadAddOn then
+            pcall(C_AddOns.LoadAddOn, "Blizzard_Calendar")
         end
     end
     if CalendarFrame and CalendarFrame.Show then
