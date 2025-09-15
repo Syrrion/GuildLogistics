@@ -40,16 +40,16 @@ end
 -- Centralisation via Core/Events.lua
 local function _OnEvent(_, event, ...)
     if event == "PLAYER_ENTERING_WORLD" then
-        -- Rebuild des lookups
+        -- Seed + rebuild des lookups (ordre important: seed -> rebuild)
         if ns.GroupTrackerConsumables then
+            if ns.GroupTrackerConsumables.EnsureDefaultCustomLists then
+                ns.GroupTrackerConsumables.EnsureDefaultCustomLists(false)
+            end
             if ns.GroupTrackerConsumables.RebuildCategoryLookup then
                 ns.GroupTrackerConsumables.RebuildCategoryLookup()
             end
             if ns.GroupTrackerConsumables.RebuildCustomLookup then
                 ns.GroupTrackerConsumables.RebuildCustomLookup()
-            end
-            if ns.GroupTrackerConsumables.EnsureDefaultCustomLists then
-                ns.GroupTrackerConsumables.EnsureDefaultCustomLists(false)
             end
         end
 
@@ -115,15 +115,29 @@ local function _OnEvent(_, event, ...)
     elseif event == "ADDON_LOADED" then
         local name = ...
         if name == ADDON then
+            -- Seed par défaut avant rebuilds
+            if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.EnsureDefaultCustomLists then
+                ns.GroupTrackerConsumables.EnsureDefaultCustomLists(false)
+            end
             if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.RebuildCategoryLookup then
                 ns.GroupTrackerConsumables.RebuildCategoryLookup()
+            end
+            if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.RebuildCustomLookup then
+                ns.GroupTrackerConsumables.RebuildCustomLookup()
             end
             _RefreshEventSubscriptions()
         end
 
     elseif event == "PLAYER_LOGIN" then
+        -- Assure seed + rebuild au login également
+        if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.EnsureDefaultCustomLists then
+            ns.GroupTrackerConsumables.EnsureDefaultCustomLists(false)
+        end
         if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.RebuildCategoryLookup then
             ns.GroupTrackerConsumables.RebuildCategoryLookup()
+        end
+        if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.RebuildCustomLookup then
+            ns.GroupTrackerConsumables.RebuildCustomLookup()
         end
         _RefreshEventSubscriptions()
 
@@ -236,23 +250,28 @@ local function _OnEvent(_, event, ...)
             CombatLogGetCurrentEventInfo()
         if not _isGroupSource(sourceFlags) then return end
 
-        -- On garde CAST_SUCCESS et AURA_APPLIED (utile pour potions/pierres).
-        if sub == "SPELL_CAST_SUCCESS" or sub == "SPELL_AURA_APPLIED" then
+        -- On garde CAST_SUCCESS et AURA_APPLIÉ; on ajoute les dispels explicites
+        if sub == "SPELL_CAST_SUCCESS" or sub == "SPELL_AURA_APPLIED" or sub == "SPELL_DISPEL" or sub == "SPELL_STOLEN" then
             local normID = spellID
             if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.NormalizeSpellID then
                 normID = ns.GroupTrackerConsumables.NormalizeSpellID(spellID)
             end
             
             local sName = spellName or ""
-            if not sName or sName == "" then
-                if GetSpellInfo and normID then
-                    sName = select(1, GetSpellInfo(normID)) or ""
+            if (not sName or sName == "") and normID then
+                if C_Spell and C_Spell.GetSpellInfo then
+                    local si = C_Spell.GetSpellInfo(normID)
+                    sName = (si and si.name) or sName or ""
                 end
             end
             
             local cat = nil
             if ns.GroupTrackerConsumables and ns.GroupTrackerConsumables.DetectCategory then
                 cat = ns.GroupTrackerConsumables.DetectCategory(normID, sName)
+            end
+            -- Forcer la catégorie « dispel » pour les sous-événements dédiés
+            if sub == "SPELL_DISPEL" or sub == "SPELL_STOLEN" then
+                cat = "dispel"
             end
             
             local ids = {}

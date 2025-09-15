@@ -174,6 +174,16 @@ function GLOG.GroupTracker_ShowWindow(show)
     
     if show then
         state.enabled = true
+        -- Assure que les colonnes personnalisées par défaut sont bien seedées
+        -- et que le mapping custom est reconstruit AVANT la création de la fenêtre
+        if ns.GroupTrackerConsumables then
+            if ns.GroupTrackerConsumables.EnsureDefaultCustomLists then
+                ns.GroupTrackerConsumables.EnsureDefaultCustomLists(false)
+            end
+            if ns.GroupTrackerConsumables.RebuildCustomLookup then
+                ns.GroupTrackerConsumables.RebuildCustomLookup()
+            end
+        end
         
         -- Créer/montrer la fenêtre
         local f = nil
