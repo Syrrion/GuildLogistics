@@ -214,6 +214,20 @@ local function _AddIfEligible(link, looter)
     if not link then return end
     local who = tostring(looter or (UnitName and UnitName("player")) or "")
 
+    -- Pending guard (race condition prevention): if an async insertion for (who,link) is already scheduled, skip.
+    -- Without this, two near-simultaneous _AddIfEligible calls (e.g. MarkAsWon then chat loot message)
+    -- can both schedule _QueryItemInfo before the store contains the entry, producing duplicates.
+    ns.__lootPendingAdds = ns.__lootPendingAdds or {}
+    local _pendingKey = _NormName(who) .. "|" .. link
+    local nowPending = _Now()
+    local pend = ns.__lootPendingAdds[_pendingKey]
+    if pend and (nowPending - pend) < 10 then
+        -- Another insertion still pending (<=10s window); let the first complete.
+        return
+    end
+    -- Mark as pending immediately (cleared / updated after async completion)
+    ns.__lootPendingAdds[_pendingKey] = nowPending
+
     -- Déduplication forte: si une entrée existe déjà récemment pour (looter, link), on ignore
     if _HasStoreEntry(link, who, 600) then
         return
@@ -253,6 +267,9 @@ local function _AddIfEligible(link, looter)
 
     _QueryItemInfo(link, function(info)
         if not info or not info.link then return end
+
+        -- If a previous async already inserted (store check), abort and keep pending time (avoid rapid re-add)
+        if _HasStoreEntry(info.link, who, 600) then return end
 
         -- === Filtres utilisateurs (GuildLogisticsDatas_Char.config) ===
         local cfg = cfgEarly
@@ -337,9 +354,19 @@ local function _AddIfEligible(link, looter)
         -- Sauvegarde
         if ns.LootTrackerState and ns.LootTrackerState.GetStore then
             local store = ns.LootTrackerState.GetStore()
-            table.insert(store, 1, entry)
-            if #store > 500 then
-                for i = #store, 401, -1 do table.remove(store, i) end
+            -- Final safety: scan a few recent entries to ensure no duplicate (who,link)
+            local dup = false
+            for i = 1, math.min(25, #store) do
+                local e = store[i]
+                if e and e.link == entry.link and _NormName(e.looter) == _NormName(entry.looter) then
+                    dup = true; break
+                end
+            end
+            if not dup then
+                table.insert(store, 1, entry)
+                if #store > 500 then
+                    for i = #store, 401, -1 do table.remove(store, i) end
+                end
             end
         end
 
@@ -353,6 +380,11 @@ local function _AddIfEligible(link, looter)
             else
                 ns.LootTrackerState.BackfillMPlus(entry.link)
             end
+        end
+
+        -- Update pending marker timestamp to extend protection for a short while
+        if ns.__lootPendingAdds then
+            ns.__lootPendingAdds[_pendingKey] = _Now()
         end
 
     end)
@@ -415,7 +447,12 @@ ns.LootTrackerParser = {
 
         -- If no entry yet (likely skipped due to gating), add it now
         if not idxFound then
-            _AddIfEligible(itemLink, playerName)
+            -- Avoid racing with a pending async insert already scheduled
+            local _pendKey = _NormName(playerName) .. "|" .. itemLink
+            local pend = ns.__lootPendingAdds and ns.__lootPendingAdds[_pendKey]
+            if not pend or ((_Now() - pend) > 10) then
+                _AddIfEligible(itemLink, playerName)
+            end
             for i, entry in ipairs(store) do
                 if entry.link == itemLink and _NormName(entry.looter) == _NormName(playerName) and entry.ts >= cutoffTime then
                     idxFound = i; break

@@ -59,7 +59,7 @@ local function setMainMapScores(mainFullName, scores)
         end
     end
     p.mplusMapsTs = time and time() or (p.mplusMapsTs or 0)
-    if print then print("[GLOG] M+ maps saved for:", tostring(mainFullName), "count=", tostring(#scores or 0)) end
+    -- (silenced) previously: print("[GLOG] M+ maps saved for:", mainFullName, "count=", #scores)
     if GLOG and GLOG.DebugLocal and GLOG.IsDebugEnabled and GLOG.IsDebugEnabled() then
         GLOG.DebugLocal("MPLUS_CAPTURE", {
             main = mainFullName,
@@ -160,7 +160,7 @@ local function readBestMapScores(unit)
             }
         end
     end
-    if print then print("[GLOG] M+ API summary entries:", tostring(#out or 0)) end
+    -- (silenced) previously: print("[GLOG] M+ API summary entries:", #out)
     local overall = tonumber(rawget(summary, "currentSeasonScore") or rawget(summary, "seasonScore") or rawget(summary, "overall") or 0) or 0
     return { list = out, overall = overall }
 end
@@ -234,17 +234,17 @@ local function onGroupChanged()
     local now = (GetTimePreciseSec and GetTimePreciseSec()) or (debugprofilestop and (debugprofilestop()/1000)) or 0
     if now < (_nextAt or 0) then return end
     _nextAt = now + 2.0 -- throttle to 1 op per 2s
-    if print then print("[GLOG] M+ capture tick") end
+    -- (silenced) previously: print("[GLOG] M+ capture tick")
 
     if not shouldCaptureForSelf() then
         local me = (U and U.playerFullName and U.playerFullName()) or (UnitName and UnitName("player")) or "?"
         local mainDbg = myMainFullName() or "nil"
-        if print then print("[GLOG] M+ capture skipped: not main (me=", tostring(me), "-> main=", tostring(mainDbg), ")") end
+    -- (silenced) capture skipped (not main)
         return
     end
 
     local main = myMainFullName()
-    if print then print("[GLOG] M+ resolved main:", tostring(main or "nil")) end
+    -- (silenced) previously: print resolved main
     if not main then return end
 
     -- Ensure the main has an existing roster entry before persisting (create if allowed)
@@ -253,7 +253,7 @@ local function onGroupChanged()
         U.EnsureRosterLocal(main)
     end
     if not (GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[main]) then
-        if print then print("[GLOG] M+ capture skipped: no roster entry for", tostring(main)) end
+    -- (silenced) previously: print capture skipped (no roster entry)
         if GLOG and GLOG.DebugLocal and GLOG.IsDebugEnabled and GLOG.IsDebugEnabled() then
             GLOG.DebugLocal("MPLUS_CAPTURE_SKIP", { reason = "no_roster_entry", main = tostring(main) })
         end
@@ -275,7 +275,7 @@ local function onGroupChanged()
         -- After successful self capture, attempt capture of group/raid members (deferred slightly)
     if C_Timer and C_Timer.After then C_Timer.After(0.3, captureGroupMembers) else captureGroupMembers() end
     else
-        if print then print("[GLOG] M+ capture: no scores returned") end
+    -- (silenced) previously: print no scores returned
         if GLOG and GLOG.DebugLocal and GLOG.IsDebugEnabled and GLOG.IsDebugEnabled() then
             local ok = type(scores) == "table"
             GLOG.DebugLocal("MPLUS_CAPTURE_NONE", { ok = ok and true or false })
@@ -283,7 +283,7 @@ local function onGroupChanged()
         -- Retry with gentle backoff: 0.8s, 2s, 5s (once per stage)
         if (_retryLeft or 0) > 0 and C_Timer and C_Timer.After then
             local delay = (_retryLeft == 3 and 0.8) or (_retryLeft == 2 and 2.0) or 5.0
-            if print then print("[GLOG] M+ capture retry in", tostring(delay), "s (left:", tostring(_retryLeft), ")") end
+            -- (silenced) previously: print retry scheduling
             local function _retry()
                 onGroupChanged()
             end

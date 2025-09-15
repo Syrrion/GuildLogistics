@@ -240,7 +240,22 @@ local function UpdateRow(i, row, w, it)
     end
 
     -- Qui + icône de roll si connue
-    if w.who then UI.SetNameTagShort(w.who, it.looter or "") end
+    if w.who then
+        local baseName = it.looter or ""
+        local rollSuffix = ""
+        if it.roll then
+            local lbl = (UI.RollLabel and UI.RollLabel(it.roll)) or it.roll
+            local val = tonumber(it.rollV or 0)
+            if lbl and lbl ~= "" then
+                if val and val > 0 then
+                    rollSuffix = string.format(" |cffffaa00(%s %d)|r", lbl, val)
+                else
+                    rollSuffix = string.format(" |cffffaa00(%s)|r", lbl)
+                end
+            end
+        end
+        UI.SetNameTagShort(w.who, baseName .. rollSuffix)
+    end
     if w.rollTex and w.rollBtn then
         if it.roll and UI.SetRollIcon then
             UI.SetRollIcon(w.rollTex, it.roll)
