@@ -168,3 +168,141 @@ function GLOG.SetLastActiveTabLabel(label)
     GuildLogisticsUI = GuildLogisticsUI or {}
     GuildLogisticsUI.lastTabLabel = tostring(label)
 end
+
+-- =========================
+-- ====== MODE (UI) ========
+-- =========================
+
+-- Persisted account-wide per guild in GuildLogisticsShared.guilds[guildKey].uiModeByUID[uid]
+-- Values: "guild" | "standalone" | nil (unset → triggers first-run chooser)
+function GLOG.GetMode()
+    -- IMPORTANT: do NOT call EnsureDB here to avoid recursion, since EnsureDB consults GetMode.
+    -- Read raw shared bucket directly; store by unique UID for the character
+    local Shared = _G.GuildLogisticsShared or { guilds = {} }
+    Shared.guilds = Shared.guilds or {}
+    -- IMPORTANT: if we created a fresh table, persist it back to the global so SavedVariables exists
+    _G.GuildLogisticsShared = Shared
+    -- Compute identifiers for this character: prefer GUID; also compute name-realm as fallback/binding key
+    local guid = (UnitGUID and UnitGUID("player")) or ""
+    local pname = (UnitName and UnitName("player")) or "?"
+    local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+    local nameKey = (realm ~= "" and (pname.."-"..realm)) or pname
+    local uid = (guid and guid ~= "") and guid or nameKey
+    -- Resolve base guild bucket key (mode-independent) to store/read uiModeByUID
+    local gname = (GetGuildInfo and GetGuildInfo("player")) or nil
+    local guildKey = (function()
+        if not gname or gname == "" then return "__noguild__" end
+        local k = tostring(gname):gsub("%s+",""):gsub("'",""):lower()
+        return k
+    end)()
+    local bucket = Shared.guilds[guildKey]
+    if not bucket then
+        bucket = {}
+        Shared.guilds[guildKey] = bucket
+    end
+    bucket.uiModeByUID = bucket.uiModeByUID or {}
+
+    -- Read per-UID mode from shared per-guild bucket
+    -- Try both GUID and nameKey to be robust across early/late availability
+    local m = bucket.uiModeByUID[guid] or bucket.uiModeByUID[nameKey]
+
+    -- Fallback 1: legacy shorthand at bucket level
+    if m == nil and (bucket.uiMode == "guild" or bucket.uiMode == "standalone") then
+        m = bucket.uiMode
+        bucket.uiModeByUID[uid] = m
+    end
+
+    -- Fallback 2: migrate from __noguild__ bucket if it was written before guild info became available
+    if m == nil and guildKey ~= "__noguild__" then
+        local noGuild = Shared.guilds["__noguild__"]
+        local by = noGuild and noGuild.uiModeByUID or nil
+        local prev = by and (by[guid] or by[nameKey])
+        if prev == "guild" or prev == "standalone" then
+            -- Promote to current guild bucket under both keys
+            if guid and guid ~= "" then bucket.uiModeByUID[guid] = prev end
+            bucket.uiModeByUID[nameKey] = prev
+            m = prev
+            -- optional cleanup: leave old entry intact to be safe; uncomment to remove
+            -- by[uid] = nil
+        end
+    end
+
+    -- Fallback 3: global per-UID mode (guild-agnostic) saved when choice happened while guild was unresolved
+    if m == nil then
+        Shared.uiModeByUID_Global = Shared.uiModeByUID_Global or {}
+        local gprev = Shared.uiModeByUID_Global[guid] or Shared.uiModeByUID_Global[nameKey]
+        if gprev == "guild" or gprev == "standalone" then
+            if guid and guid ~= "" then bucket.uiModeByUID[guid] = gprev end
+            bucket.uiModeByUID[nameKey] = gprev
+            m = gprev
+        end
+    end
+
+    -- Fallback 4: back-compat migration from legacy per-character store
+    if m == nil then
+        local src = _G.GuildLogisticsUI_Char or _G.GuildLogisticsUI or {}
+        local legacy = tostring((src and src.mode) or "")
+        if legacy == "guild" or legacy == "standalone" then
+            if guid and guid ~= "" then bucket.uiModeByUID[guid] = legacy end
+            bucket.uiModeByUID[nameKey] = legacy
+            m = legacy
+        end
+    end
+    if m == "guild" or m == "standalone" then return m end
+    return nil
+end
+
+function GLOG.SetMode(mode)
+    if mode ~= "guild" and mode ~= "standalone" then return false end
+    -- Write into shared per-guild bucket; store by unique UID so each character can differ
+    _G.GuildLogisticsShared = _G.GuildLogisticsShared or { guilds = {} }
+    _G.GuildLogisticsShared.guilds = _G.GuildLogisticsShared.guilds or {}
+    local gname = (GetGuildInfo and GetGuildInfo("player")) or nil
+    local guildKey = (function()
+        if not gname or gname == "" then return "__noguild__" end
+        local k = tostring(gname):gsub("%s+",""):gsub("'",""):lower()
+        return k
+    end)()
+    local bucket = _G.GuildLogisticsShared.guilds[guildKey]
+    if not bucket then bucket = {}; _G.GuildLogisticsShared.guilds[guildKey] = bucket end
+    bucket.uiModeByUID = bucket.uiModeByUID or {}
+
+    local guid = (UnitGUID and UnitGUID("player")) or ""
+    local uid
+    if guid and guid ~= "" then
+        uid = guid
+    else
+        local n = (UnitName and UnitName("player")) or "?"
+        local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+        uid = (rn ~= "" and (n.."-"..rn)) or n
+    end
+    if uid and uid ~= "" then
+        bucket.uiModeByUID[uid] = mode
+        -- If we don't yet know the guild at selection time, also persist a global per-UID fallback
+        if guildKey == "__noguild__" then
+            _G.GuildLogisticsShared.uiModeByUID_Global = _G.GuildLogisticsShared.uiModeByUID_Global or {}
+            _G.GuildLogisticsShared.uiModeByUID_Global[uid] = mode
+        end
+    else
+        -- Fallback if uid cannot be computed; store a shorthand and a global fallback
+        bucket.uiMode = mode
+        _G.GuildLogisticsShared.uiModeByUID_Global = _G.GuildLogisticsShared.uiModeByUID_Global or {}
+        -- Use name-realm as best-effort key for global map if available
+        local n = (UnitName and UnitName("player")) or "?"
+        local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+        local key = (rn ~= "" and (n.."-"..rn)) or n
+        if key and key ~= "" then _G.GuildLogisticsShared.uiModeByUID_Global[key] = mode end
+    end
+    return true
+end
+
+function GLOG.IsStandaloneMode()
+    return (GLOG.GetMode and GLOG.GetMode() == "standalone") or false
+end
+
+-- Convenience: should the communication stack be enabled in this session?
+function GLOG.ShouldEnableComm()
+    -- Only enable when explicitly in guild mode; disabled in standalone or unset (first run)
+    local m = GLOG.GetMode and GLOG.GetMode()
+    return m == "guild"
+end

@@ -12,7 +12,34 @@ local now = U.now
 local playerFullName = U.playerFullName
 
 -- ===== Constantes =====
-local PREFIX   = "GLOG"
+-- Dynamic addon message prefix:
+-- - Guild mode: "GLOG" (shared with guild comms)
+-- - Standalone mode: "STANDALONE-xxxxx" where xxxxx is a stable 5-digit id (<=16 chars total)
+local function _computePrefix()
+    local isStandalone = (GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
+    if not isStandalone then
+        return "GLOG"
+    end
+    -- Build a stable per-character numeric id from UnitGUID("player")
+    local guid = (UnitGUID and UnitGUID("player")) or ""
+    if guid == "" then
+        -- Fallback: name-realm
+        local n = (UnitName and UnitName("player")) or "?"
+        local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+        guid = tostring(n).."-"..tostring(rn)
+    end
+    local h = 0
+    for i = 1, #guid do
+        h = (h * 33 + string.byte(guid, i)) % 100000 -- keep 5 digits
+    end
+    local num = string.format("%05d", h)
+    -- Ensure length <= 16 for RegisterAddonMessagePrefix
+    return "STANDALONE-" .. num -- 11 + 5 = 16 chars
+end
+
+local PREFIX   = _computePrefix()
+-- Expose dynamic prefix for other modules (debug filters, etc.)
+GLOG.PREFIX = PREFIX
 local MAX_PAY  = 215   -- fragmentation des messages
 local Seq      = 0     -- séquence réseau
 
@@ -155,7 +182,17 @@ function GLOG.Comm_Broadcast(typeName, kv)
         local ver = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or ""
         if ver ~= "" then kv.ver = ver end
     end
-    _send(typeName, "GUILD", nil, kv)
+    local ch = "GUILD"
+    if GLOG.IsStandaloneMode and GLOG.IsStandaloneMode() then
+        -- In standalone, don't send to GUILD; use WHISPER to self to keep logs and flows consistent but off the network.
+        ch = "WHISPER"
+        local n = (UnitName and UnitName("player")) or "?"
+        local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
+        local selfTarget = (rn ~= "" and (n.."-"..rn)) or n
+        _send(typeName, ch, selfTarget, kv)
+        return
+    end
+    _send(typeName, ch, nil, kv)
 end
 
 function GLOG.Comm_Whisper(target, msgType, data)

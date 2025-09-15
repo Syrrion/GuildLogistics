@@ -37,7 +37,7 @@ end
 
 function UI.ConfirmClick(btn, message, handler)
     btn:SetScript("OnClick", function(self)
-        UI.PopupConfirm(message or "Confirmer ?", function()
+        UI.PopupConfirm(message or Tr("confirm_question"), function()
             if handler then handler(self) end
         end)
     end)
@@ -59,7 +59,7 @@ end
 function UI.Button(parent, text, opts)
     opts = opts or {}
     local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetText((Tr and Tr(text or "OK")) or (text or "OK"))
+    b:SetText((Tr and Tr(text or "btn_ok")))
     b:SetHeight(SIZE[opts.size or "sm"] or (opts.height or 24))
     UI.SizeToText(b, opts)
     if opts.tooltip then UI.SetTooltip(b, (Tr and Tr(opts.tooltip)) or opts.tooltip) end

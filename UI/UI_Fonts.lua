@@ -62,19 +62,20 @@ function UI.ApplyFont(fs)
     return fs
 end
 
-function UI.ApplyFontRecursively(frame)
+function UI.ApplyFontRecursively(frame, maxDepth)
+    maxDepth = maxDepth or 10
+    if maxDepth < 1 then return end
     if not (UI.GLOBAL_FONT_ENABLED and frame and frame.GetRegions) then return end
-    
+
     for _, r in ipairs({ frame:GetRegions() }) do
         if r and r.GetObjectType and r:GetObjectType() == "FontString" then
             _apply(r)
         end
     end
-    
+
     -- Traite les contrôles spéciaux avec FontString intégrées
     local objectType = (frame.GetObjectType and frame:GetObjectType()) or ""
     if objectType == "EditBox" then
-        -- EditBox a souvent des FontString intégrées accessible via GetTextInsets, etc.
         if frame.GetFont and frame.SetFont then
             local font, size, flags = frame:GetFont()
             if font then
@@ -82,19 +83,16 @@ function UI.ApplyFontRecursively(frame)
                 frame.__glog_baseFontFile = font
                 frame.__glog_baseFontSize = size or 12
                 frame.__glog_baseFontFlags = flags
-                
                 local baseSize = frame.__glog_baseFontSize or 12
                 local newFlags = UI.GLOBAL_FONT_FLAGS or frame.__glog_baseFontFlags
                 local path = UI.GLOBAL_FONT_PATH
                 local scaled = math.floor(baseSize * (UI.GLOBAL_FONT_SCALE or 1.0) + 0.5)
                 local final = scaled + _accumDelta(frame)
                 if final < 6 then final = 6 end
-                
                 frame:SetFont(path, final, newFlags)
             end
         end
     elseif objectType == "Button" then
-        -- Les boutons ont souvent des FontString pour leur texte
         if frame.GetFontString then
             local fs = frame:GetFontString()
             if fs then _apply(fs) end
@@ -106,22 +104,20 @@ function UI.ApplyFontRecursively(frame)
                 frame.__glog_baseFontFile = font
                 frame.__glog_baseFontSize = size or 12
                 frame.__glog_baseFontFlags = flags
-                
                 local baseSize = frame.__glog_baseFontSize or 12
                 local newFlags = UI.GLOBAL_FONT_FLAGS or frame.__glog_baseFontFlags
                 local path = UI.GLOBAL_FONT_PATH
                 local scaled = math.floor(baseSize * (UI.GLOBAL_FONT_SCALE or 1.0) + 0.5)
                 local final = scaled + _accumDelta(frame)
                 if final < 6 then final = 6 end
-                
                 frame:SetFont(path, final, newFlags)
             end
         end
     end
-    
+
     if frame.GetChildren then
         for _, child in ipairs({ frame:GetChildren() }) do
-            UI.ApplyFontRecursively(child)
+            UI.ApplyFontRecursively(child, maxDepth - 1)
         end
     end
 end

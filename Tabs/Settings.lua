@@ -99,6 +99,38 @@ function Build(container)
     end
     y = y + 8
 
+    -- === Section Mode d'utilisation ===
+    local headerMode = UI.SectionHeader(optionsPane, Tr("mode_settings_header"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)
+    y = y + headerMode + 8
+    do
+        local mode = (GLOG.GetMode and GLOG.GetMode()) or nil
+        local grp = {}
+        local function onPick(newMode)
+            if newMode == mode then return end
+            mode = newMode
+            _SetRadioGroupChecked(grp, mode)
+            -- Sauvegarde immédiate; rechargement uniquement pour standalone
+            if GLOG.SetMode then GLOG.SetMode(mode) end
+            if mode == "standalone" and ReloadUI then ReloadUI() end
+        end
+        local rGuild = CreateFrame("CheckButton", nil, optionsPane, "UIRadioButtonTemplate")
+        rGuild:SetPoint("TOPLEFT", optionsPane, "TOPLEFT", 0, -y)
+        local lGuild = rGuild.Text or rGuild:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); if not rGuild.Text then lGuild:SetPoint("LEFT", rGuild, "RIGHT", 6, 0); rGuild.Text = lGuild end
+    lGuild:SetText(Tr("mode_guild"))
+        rGuild:SetScript("OnClick", function() onPick("guild") end)
+        grp["guild"] = rGuild
+
+        local rStandalone = CreateFrame("CheckButton", nil, optionsPane, "UIRadioButtonTemplate")
+        rStandalone:SetPoint("LEFT", rGuild, "RIGHT", 220, 0)
+        local lSolo = rStandalone.Text or rStandalone:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); if not rStandalone.Text then lSolo:SetPoint("LEFT", rStandalone, "RIGHT", 6, 0); rStandalone.Text = lSolo end
+    lSolo:SetText(Tr("mode_standalone"))
+        rStandalone:SetScript("OnClick", function() onPick("standalone") end)
+        grp["standalone"] = rStandalone
+
+        _SetRadioGroupChecked(grp, mode or "guild")
+        y = y + (rGuild:GetHeight() or 24) + RADIO_V_SPACING
+    end
+
     -- === Section 1 : Echelle de l'interface ===
     local headerH2 = UI.SectionHeader(optionsPane, Tr("opt_ui_scale_long"), { topPad = y })
     y = y + headerH2 + 8

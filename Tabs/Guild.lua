@@ -251,7 +251,8 @@ local function _RecreateListView()
         -- 🎨 Couleur spécifique des séparateurs pour l’onglet Guilde
         sepLabelColor = UI.MIDGREY,
         topOffset = UI.SECTION_HEADER_H or 26,
-        bottomAnchor = footer
+        bottomAnchor = footer,
+        maxCreatePerFrame = 80
     })
 
 end

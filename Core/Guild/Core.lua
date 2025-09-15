@@ -597,30 +597,30 @@ end
 do
     local function _ensure()
         if GLOG.EnsureDB then GLOG.EnsureDB() end
-        GuildLogisticsDB_Char = GuildLogisticsDB_Char or {}
-        GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
+        GuildLogisticsDB = GuildLogisticsDB or {}
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
     end
 
     function GLOG.SetGuildBankBalanceCopper(copper, ts)
         _ensure()
         local v = tonumber(copper) or 0
-        GuildLogisticsDB_Char.meta.guildBankCopper = v
-        local t = tonumber(ts) or (time and time()) or (GuildLogisticsDB_Char.meta.guildBankTs or 0)
-        GuildLogisticsDB_Char.meta.guildBankTs = t
-        GuildLogisticsDB_Char.meta.lastModified = time and time() or (GuildLogisticsDB_Char.meta.lastModified or 0)
+        GuildLogisticsDB.meta.guildBankCopper = v
+        local t = tonumber(ts) or (time and time()) or (GuildLogisticsDB.meta.guildBankTs or 0)
+        GuildLogisticsDB.meta.guildBankTs = t
+        GuildLogisticsDB.meta.lastModified = time and time() or (GuildLogisticsDB.meta.lastModified or 0)
         if ns.Emit then ns.Emit("guildbank:updated", v, t) end
     end
 
     function GLOG.GetGuildBankBalanceCopper()
         _ensure()
-        local v = GuildLogisticsDB_Char.meta.guildBankCopper
+        local v = GuildLogisticsDB.meta.guildBankCopper
         if v == nil then return nil end
         return tonumber(v) or 0
     end
     
     function GLOG.GetGuildBankTimestamp()
         _ensure()
-        return tonumber(GuildLogisticsDB_Char.meta.guildBankTs or 0) or 0
+        return tonumber(GuildLogisticsDB.meta.guildBankTs or 0) or 0
     end
 
     -- Capture la valeur dès ouverture/maj de la BdG

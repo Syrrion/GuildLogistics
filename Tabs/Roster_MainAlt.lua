@@ -138,11 +138,11 @@ end
 -- Dynamic columns builders (hide actions for non-GM)
 local function _BuildPoolCols()
     local cols = {
-        { key = "name",  title = Tr("lbl_player") or "Joueur", flex = 1, min = 120 },
-        { key = "note",  title = Tr("lbl_guild_note") or "Guild note",   vsep=true,flex = 1, min = 120, justify = "LEFT" },
+        { key = "name",  title = Tr("lbl_player"), flex = 1, min = 120 },
+        { key = "note",  title = Tr("lbl_guild_note"),   vsep=true,flex = 1, min = 120, justify = "LEFT" },
     }
     if GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
-        cols[#cols+1] = { key = "act", title = Tr("lbl_actions") or "Actions", vsep=true, min = 72 }
+        cols[#cols+1] = { key = "act", title = Tr("lbl_actions"), vsep=true, min = 72 }
     end
     return cols
 end
@@ -159,9 +159,9 @@ local function BuildRowPool(r)
     if gm then
         f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
         -- Crown = set as Main (square icon with classic panel background)
-        r.btnCrown = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
+        r.btnCrown = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") })
     -- Chevron = assign as Alt to selected Main (square with classic panel background)
-    r.btnAlt   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName="uitools-icon-chevron-right", size=24, fit=true, pad=3, tooltip=Tr("tip_assign_alt") or "Associer en alt au main sélectionné" })
+    r.btnAlt   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName="uitools-icon-chevron-right", size=24, fit=true, pad=3, tooltip=Tr("tip_assign_alt") })
         UI.AttachRowRight(f.act, { r.btnCrown, r.btnAlt }, 4, -4, { leftPad=4, align="center" })
     end
     return f
@@ -180,7 +180,7 @@ local function UpdateRowPool(i, r, f, it)
         if data.suggested and f.name and f.name.text then
             local raw = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(data.name)) or tostring(data.name or "")
             local display = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(raw)) or raw
-            f.name.text:SetText(string.format("%s |cff00ff00(%s)|r", display, Tr("lbl_suggested") or "Suggéré"))
+            f.name.text:SetText(string.format("%s |cff00ff00(%s)|r", display, Tr("lbl_suggested")))
         end
     end
 
@@ -215,17 +215,17 @@ local function UpdateRowPool(i, r, f, it)
         -- Online restriction removed: keep button active for GMs and show tooltip always
         if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnCrown, gm and 1 or 0.4) end
         if UI and UI.SetTooltip then
-            local base = Tr("tip_set_main") or "Confirmer en main"
+            local base = Tr("tip_set_main")
             UI.SetTooltip(r.btnCrown, base)
         end
         r.btnCrown:SetOnClick(function()
             if not gm then return end
             GLOG.SetAsMain(data.name)
             if _removeFromPoolByName(data.name) then
-                if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache); lvPool:Layout() end
+                if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
             end
             -- update mains list; alts unaffected
-            if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()); lvMains:Layout() end
+            if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
         end)
     end
 
@@ -234,9 +234,9 @@ local function UpdateRowPool(i, r, f, it)
         local can = (selectedMainName and selectedMainName ~= "") and true or false
         if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnAlt, can and 1 or 0.4) end
         if UI and UI.SetTooltip then
-            local base = Tr("tip_assign_alt") or "Associer en alt au main sélectionné"
+            local base = Tr("tip_assign_alt")
             if can then UI.SetTooltip(r.btnAlt, base)
-            else UI.SetTooltip(r.btnAlt, base .. "\n|cffaaaaaa" .. (Tr("lbl_main_prefix") or "Main: ") .. (Tr("value_empty") or "—") .. "|r") end
+            else UI.SetTooltip(r.btnAlt, base .. "\n|cffaaaaaa" .. Tr("lbl_main_prefix") .. Tr("value_empty") .. "|r") end
         end
         r.btnAlt:SetOnClick(function()
             local mainName = selectedMainName
@@ -254,20 +254,19 @@ local function UpdateRowPool(i, r, f, it)
                 end
                 GLOG.AssignAltToMain(altFull, fullMain)
                 if _removeFromPoolByName(altFull) then
-                    if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache); lvPool:Layout() end
+                    if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
                 end
                 -- update current main's alts incrementally
-                if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()); lvAlts:Layout() end
+                if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
             end
 
             if altBal ~= 0 and UI and UI.PopupConfirm then
-                local Tr = ns.Tr or function(s) return s end
                 local amt = (UI.MoneyText and UI.MoneyText(altBal)) or tostring(altBal)
-                local body = (Tr("msg_merge_balance_body") or "Transfer %s from %s to %s and set %s to 0?")
+                local body = Tr("msg_merge_balance_body")
                 body = string.format(body, amt, altFull, fullMain, altFull)
                 UI.PopupConfirm(body, function()
                     doAssignWithOptionalMerge()
-                end, nil, { title = Tr("msg_merge_balance_title") or "Merge balance?" })
+                end, nil, { title = Tr("msg_merge_balance_title") })
             else
                 doAssignWithOptionalMerge()
             end
@@ -278,13 +277,15 @@ end
 -- ===== Mains (25%) =====
 local function _BuildMainsCols()
     local cols = {
-        { key = "name",  title = Tr("lbl_mains") or "Mains", flex = 1, min = 100 },
-        { key = "alias", title = Tr("lbl_alias") or "Alias", vsep=true,w = 100, justify = "LEFT" },
-        { key = "solde", title = Tr("col_balance") or "Solde", vsep=true,w = 80, justify = "RIGHT" },
+        { key = "name",  title = Tr("lbl_mains"), flex = 1, min = 100 },
+        { key = "alias", title = Tr("lbl_alias"), vsep=true,w = 100, justify = "LEFT" },
+        { key = "solde", title = Tr("col_balance"), vsep=true,w = 80, justify = "RIGHT" },
     }
     if GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
         -- Width depends on whether editor toggle is available to this user
+        local isStandalone = (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
         local canGrant = (GLOG.CanGrantEditor and GLOG.CanGrantEditor()) or false
+        if isStandalone then canGrant = false end
         -- Aliases + Delete only (~2 icons) ≈ 76px; with editor toggle (~4 icons) ≈ 110px
         local minW = canGrant and 110 or 76
         cols[#cols+1] = { key = "act", title = "", vsep=true, min = minW }
@@ -300,15 +301,17 @@ local function BuildRowMains(r)
     f.alias = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
+    local isStandalone = (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
     local canGrant = (GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) or false
+    if isStandalone then canGrant = false end
     if gm then
         f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-        r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
-        r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") or "Supprimer" })
+        r.btnAlias = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = Tr("btn_set_alias") })
+        r.btnDel   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_remove_main") })
         -- Editor toggle: create only if user has grant rights; avoids empty space reservation
         if canGrant then
-            r.btnEditorGrant  = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_EDITOR_GRANT_TEX, size=24, fit=true, pad=5, tooltip = Tr("tip_grant_editor") or "Accorder droits d'édition" })
-            r.btnEditorRevoke = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_EDITOR_REVOKE_TEX, size=24, fit=true, pad=5, tooltip = Tr("tip_revoke_editor") or "Retirer droits d'édition" })
+            r.btnEditorGrant  = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_EDITOR_GRANT_TEX, size=24, fit=true, pad=5, tooltip = Tr("tip_grant_editor") })
+            r.btnEditorRevoke = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_EDITOR_REVOKE_TEX, size=24, fit=true, pad=5, tooltip = Tr("tip_revoke_editor") })
             UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias, r.btnEditorRevoke, r.btnEditorGrant }, 4, -4, { leftPad=4, align="center" })
         else
             -- Pack without editor toggle
@@ -341,8 +344,8 @@ local function BuildRowMains(r)
     -- GM-only delete button (no-op if not created)
     if r.btnDel then r.btnDel:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
     if r.btnAlias then r.btnAlias:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
-    if r.btnEditorGrant then r.btnEditorGrant:SetShown(GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) end
-    if r.btnEditorRevoke then r.btnEditorRevoke:SetShown(GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) end
+    if r.btnEditorGrant then r.btnEditorGrant:SetShown((GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) and not ((GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false)) end
+    if r.btnEditorRevoke then r.btnEditorRevoke:SetShown((GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) and not ((GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false)) end
     return f
 end
 
@@ -402,7 +405,9 @@ local function UpdateRowMains(i, r, f, it)
     if r.btnAlias then r.btnAlias:SetShown(GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
 
     -- Editor toggle: compute current editor status for this main (by main UID)
+    local isStandalone = (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
     local canGrant = (GLOG and GLOG.CanGrantEditor and GLOG.CanGrantEditor()) or false
+    if isStandalone then canGrant = false end
     local editors = (GLOG and GLOG.GetEditors and GLOG.GetEditors()) or {}
     -- Resolve the main UID for this entry (works for mains and alts); avoid non-existent GetUID/FindUIDByName
     local mainName = (GLOG and GLOG.GetMainOf and GLOG.GetMainOf(data.name)) or data.name
@@ -423,12 +428,12 @@ local function UpdateRowMains(i, r, f, it)
         _SetPanelButtonGrey(r.btnEditorGrant, not isOnline)
         -- Tooltip reason when disabled
         if UI and UI.SetTooltip then
-            local base = (Tr("tip_grant_editor") or "Accorder droits d'édition")
-            local statusCtx = Tr("tip_editor_status_demoted") or "Actuellement rétrogradé"
+            local base = Tr("tip_grant_editor")
+            local statusCtx = Tr("tip_editor_status_demoted")
             if enableGrant then
                 UI.SetTooltip(r.btnEditorGrant, base .. "\n|cffaaaaaa" .. statusCtx .. "|r")
             else
-                local why = Tr("tip_disabled_offline_group") or "Désactivé : aucun personnage de ce joueur n'est en ligne"
+                local why = Tr("tip_disabled_offline_group")
                 UI.SetTooltip(r.btnEditorGrant, base .. "\n|cffaaaaaa" .. statusCtx .. "|r" .. "\n|cffaaaaaa" .. why .. "|r")
             end
         end
@@ -440,12 +445,12 @@ local function UpdateRowMains(i, r, f, it)
         -- Grey background when offline
         _SetPanelButtonGrey(r.btnEditorRevoke, not isOnline)
         if UI and UI.SetTooltip then
-            local base = (Tr("tip_revoke_editor") or "Retirer droits d'édition")
-            local statusCtx = Tr("tip_editor_status_promoted") or "Actuellement promu"
+            local base = Tr("tip_revoke_editor")
+            local statusCtx = Tr("tip_editor_status_promoted")
             if enableRevoke then
                 UI.SetTooltip(r.btnEditorRevoke, base .. "\n|cffaaaaaa" .. statusCtx .. "|r")
             else
-                local why = Tr("tip_disabled_offline_group") or "Désactivé : aucun personnage de ce joueur n'est en ligne"
+                local why = Tr("tip_disabled_offline_group")
                 UI.SetTooltip(r.btnEditorRevoke, base .. "\n|cffaaaaaa" .. statusCtx .. "|r" .. "\n|cffaaaaaa" .. why .. "|r")
             end
         end
@@ -463,7 +468,7 @@ local function UpdateRowMains(i, r, f, it)
         if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
         -- Update dynamic header without a full layout
         if rightPane and rightPane._sectionHeaderFS then
-            rightPane._sectionHeaderFS:SetText((Tr("lbl_main_prefix") or "Main: ") .. (selectedMainName or ""))
+            rightPane._sectionHeaderFS:SetText(Tr("lbl_main_prefix") .. (selectedMainName or ""))
         end
         -- Rebuild pool (for suggestions ordering) lightly after a short delay
         _schedulePoolRebuild()
@@ -481,8 +486,7 @@ local function UpdateRowMains(i, r, f, it)
         -- Online restriction removed for removing a main; always available to authorized users
         if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnDel, 1) end
         if UI and UI.SetTooltip then
-            local base = Tr("tip_remove_main") or "Supprimer"
-            UI.SetTooltip(r.btnDel, base)
+            UI.SetTooltip(r.btnDel, Tr("tip_remove_main"))
         end
         r.btnDel:SetOnClick(function()
             if selectedMainName and GLOG.SamePlayer and GLOG.SamePlayer(selectedMainName, data.name) then
@@ -498,7 +502,7 @@ local function UpdateRowMains(i, r, f, it)
             if not target or target == "" then return end
             -- Préremplir avec le nom du joueur (sans royaume)
             local base = tostring(target):match("^([^%-]+)") or tostring(target)
-            UI.PopupPromptText(Tr("popup_set_alias_title") or "Définir alias", Tr("lbl_alias") or "Alias", function(val)
+            UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
                 if GLOG.GM_SetAlias then GLOG.GM_SetAlias(target, val) end
             end, { default = base, strata = "FULLSCREEN_DIALOG" })
         end)
@@ -550,9 +554,9 @@ local function BuildRowAlts(r)
     local gm = GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()
     if gm then
         f.act  = CreateFrame("Frame", nil, r); f.act:SetHeight(UI.ROW_H)
-        r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") or "Confirmer en main" })
-        r.btnAlias   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = "Définir un alias" })
-        r.btnDel     = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_unassign_alt") or "Dissocier" })
+        r.btnPromote = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_MAIN_ATLAS, size=24, fit=true, pad=3, tooltip = Tr("tip_set_main") })
+        r.btnAlias   = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_ALIAS_ATLAS, size=24, fit=true, pad=5, tooltip = Tr("btn_set_alias") })
+        r.btnDel     = UI.IconButton(f.act, nil, { skin="panel", atlas=true, atlasName=ICON_CLOSE_ATLAS, size=24, fit=true, pad=5, tooltip=Tr("tip_unassign_alt") })
         UI.AttachRowRight(f.act, { r.btnDel, r.btnAlias, r.btnPromote }, 4, -4, { leftPad=4, align="center" })
     end
 
@@ -607,7 +611,7 @@ local function UpdateRowAlts(i, r, f, it)
         -- Online restriction removed here; promotion to main available to GMs regardless of online state
         if UI and UI.SetButtonAlpha then UI.SetButtonAlpha(r.btnPromote, gm and 1 or 0.4) end
         if UI and UI.SetTooltip then
-            local base = Tr("tip_set_main") or "Confirmer en main"
+            local base = Tr("tip_set_main")
             UI.SetTooltip(r.btnPromote, base)
         end
         r.btnPromote:SetOnClick(function()
@@ -617,8 +621,8 @@ local function UpdateRowAlts(i, r, f, it)
             -- Keep selection on the new main (the promoted alt)
             selectedMainName = data.name
             -- Refresh lists: mains changed (swap), alts for new main changed, pool likely unchanged
-            if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()); lvMains:Layout() end
-            if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()); lvAlts:Layout() end
+            if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
+            if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
         end)
     end
     if r.btnDel then
@@ -633,7 +637,7 @@ local function UpdateRowAlts(i, r, f, it)
             if not target or target == "" then return end
             -- Alias is stored on the group (main). Editing from an alt edits the main group's alias.
             local base = tostring(target):match("^([^%-]+)") or tostring(target)
-            UI.PopupPromptText(Tr("popup_set_alias_title") or "Définir alias", Tr("lbl_alias") or "Alias", function(val)
+            UI.PopupPromptText(Tr("popup_set_alias_title"), Tr("lbl_alias"), function(val)
                 if GLOG.GM_SetAlias then GLOG.GM_SetAlias(target, val) end
             end, { default = base, strata = "FULLSCREEN_DIALOG" })
         end)
@@ -734,16 +738,16 @@ local function Build(container)
     rightPane= CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(leftPane, Tr("lbl_available_pool"))
-    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26, maxCreatePerFrame = 60 })
 
     UI.SectionHeader(midPane,  Tr("lbl_mains"))
-    lvMains = UI.ListView(midPane,  _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvMains = UI.ListView(midPane,  _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26, maxCreatePerFrame = 60 })
 
     do
         local _, fs = UI.SectionHeader(rightPane, Tr("lbl_associated_alts2"))
         rightPane._sectionHeaderFS = fs
     end
-    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(), { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26 })
+    lvAlts  = UI.ListView(rightPane, _BuildAltsCols(), { buildRow = BuildRowAlts,  updateRow = UpdateRowAlts, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26, maxCreatePerFrame = 60 })
 
     -- Initial data
     poolDataCache = buildPoolData(); lvPool:SetData(poolDataCache)
@@ -821,7 +825,7 @@ function Layout()
     -- Update dynamic header for alts
     if rightPane._sectionHeaderFS then
         if selectedMainName and selectedMainName ~= "" then
-            rightPane._sectionHeaderFS:SetText((Tr("lbl_main_prefix") or "Main: ") .. (selectedMainName or ""))
+            rightPane._sectionHeaderFS:SetText(Tr("lbl_main_prefix") .. (selectedMainName or ""))
         else
             rightPane._sectionHeaderFS:SetText(Tr("lbl_associated_alts2"))
         end
@@ -830,6 +834,6 @@ end
 
 -- (dynamic SectionHeader FontString captured during Build)
 
-UI.RegisterTab(Tr("tab_main_alt") or "Main/Alt", Build, Refresh, Layout, {
+UI.RegisterTab(Tr("tab_main_alt"), Build, Refresh, Layout, {
     category = Tr("cat_guild"),
 })

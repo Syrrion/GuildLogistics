@@ -715,6 +715,12 @@ L["lbl_equippable_only"]   = "Équippable seulement"
 L["btn_expand"]          = "+"
 L["btn_collapse"]        = "-"
 L["value_empty"]         = "—"
+-- === Sélection de mode (dual-mode) ===
+L["mode_settings_header"]    = "Mode d'utilisation"
+L["mode_guild"]              = "Version de guilde"
+L["mode_standalone"]         = "Version standalone"
+L["mode_firstrun_title"]     = "Choisir le mode d'utilisation"
+L["mode_firstrun_body"]      = "\nVeuillez choisir le mode à utiliser sur ce personnage pour "..L["app_title"].." : \n\n|cffffd200Version de guilde|r\n Synchronisation des données avec votre guilde entre les possesseurs de l'addon mais nécéssite le rôle de GM pour configurer l'addon et initier le partage.\n\n|cffffd200Version standalone|r\n Aucune synchronisation avec les autres joueurs mais toutes les fonctions sont utilisables sans droits GM.\n\n\n\nVous pourrez changer de mode plus tard dans les options pour basculer d'un mode a l'autre - les deux modes pouvant fonctionner indépendamment sans perte de données."
 -- Main/Alt (nouveaux libellés)
 L["tab_main_alt"] = "Main/Alt"
 L["lbl_player"] = "Joueur"

@@ -309,9 +309,7 @@ f:SetScript("OnEvent", function(self, event, name)
         -- STATUS_UPDATE automatique toutes les 3 minutes (rafraîchit localement iLvl/Clé/Côte via la fonction existante)
         if not GLOG._statusAutoTicker and C_Timer and C_Timer.NewTicker then
             GLOG._statusAutoTicker = C_Timer.NewTicker(GLOG.DELAY_AUTO_STATUS, function()
-                if GLOG and GLOG.BroadcastStatusUpdate then
-                    GLOG.BroadcastStatusUpdate()
-                end
+                if GLOG and GLOG.BroadcastStatusUpdate then GLOG.BroadcastStatusUpdate() end
             end)
         end
 
@@ -396,6 +394,47 @@ f:SetScript("OnEvent", function(self, event, name)
         -- ✨ déclenche le statut unifié si on est sur le main
         if GLOG.UpdateOwnStatusIfMain then
             ns.Util.After(5.0, function() GLOG.UpdateOwnStatusIfMain() end)
+        end
+
+        -- First-run: demander le mode si non défini (affiché quand les infos perso/guilde sont prêtes)
+        do
+            local function _maybeShowChooser()
+                if not (ns and ns.UI and ns.UI.CreatePopup) then return end
+                local m = (GLOG.GetMode and GLOG.GetMode()) or nil
+                if m ~= nil then return end
+                -- one-shot guard
+                if GLOG._firstRunPopupShown then return end
+                GLOG._firstRunPopupShown = true
+                local dlg = ns.UI.CreatePopup({
+                    title = (ns.Tr and ns.Tr("mode_firstrun_title")) or "Choisir le mode d'utilisation",
+                    width = 720,
+                    height = 360,
+                    enforceAction = true,
+                })
+                local msg = (ns.Tr and ns.Tr("mode_firstrun_body"))
+                if dlg.SetMessage then
+                    dlg:SetMessage(msg)
+                    if dlg.msgFS and dlg.msgFS.SetJustifyH then dlg.msgFS:SetJustifyH("LEFT") end
+                    if dlg.msgFS and dlg.msgFS.SetJustifyV then dlg.msgFS:SetJustifyV("TOP") end
+                end
+                dlg:SetButtons({
+                    { text = (ns.Tr and ns.Tr("mode_standalone")) or "Version standalone", variant = "ghost", onClick = function()
+                        if GLOG.SetMode then GLOG.SetMode("standalone") end
+                        if ReloadUI then ReloadUI() end
+                    end },
+                    { text = (ns.Tr and ns.Tr("mode_guild")) or "Version de guilde", default = true, onClick = function()
+                        if GLOG.SetMode then GLOG.SetMode("guild") end
+                        -- No reload when choosing guild mode
+                    end },
+                })
+                dlg:Show()
+            end
+            -- Delay slightly to ensure GUID/realm and guild info are available
+            if ns and ns.Util and ns.Util.After then
+                ns.Util.After(0.5, _maybeShowChooser)
+            else
+                _maybeShowChooser()
+            end
         end
 
     elseif event == "PLAYER_AVG_ITEM_LEVEL_UPDATE"

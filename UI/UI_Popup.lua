@@ -255,7 +255,7 @@ end
 -- Confirm standard
 function UI.PopupConfirm(text, onAccept, onCancel, opts)
     local dlg = UI.CreatePopup({
-        title         = (opts and opts.title) or "Confirmation",
+        title         = (opts and opts.title) or "popup_confirm_title",
         width         = math.floor(((opts and opts.width)  or 460) * 1.10),
         height        = math.floor(((opts and opts.height) or 180) * 1.20),
         strata        = opts and opts.strata,          -- ➕ passe la strate demandée
@@ -273,7 +273,7 @@ end
 -- Prompt numérique
 function UI.PopupPromptNumber(title, label, onAccept, opts)
     local dlg = UI.CreatePopup({
-        title  = title or "Saisie",
+        title  = title or "popup_input_title",
         width  = math.floor(((opts and opts.width)  or 460) * 1.10),
         height = math.floor(((opts and opts.height) or 220) * 1.20),
     })
@@ -361,10 +361,10 @@ end
 
 -- Popup liste des participants (inchangée côté logique, Look&Feel hérité)
 function UI.ShowParticipantsPopup(names, showState)
-    local dlg = UI.CreatePopup({ title = "Participants", width = 540, height = 440 })
+    local dlg = UI.CreatePopup({ title = "popup_group_title", width = 540, height = 440 })
     local cols = {
-        { key="name",   title="Nom",    min=300, justify="LEFT" },
-        { key="status", title="Statut", w=180,  justify="LEFT"  },
+        { key="name",   title="col_name",    min=300, justify="LEFT" },
+        { key="status", title="col_status", w=180,  justify="LEFT"  },
     }
     local lv = UI.ListView(dlg.content, cols, {
         buildRow = function(r)
@@ -417,15 +417,15 @@ function UI.ShowParticipantsPopup(names, showState)
     for _, full in ipairs(display) do data[#data+1] = { name = full, exists = (pdb[full] ~= nil) } end
 
     lv:SetData(data)
-    dlg:SetButtons({ { text = CLOSE, default = true } })
+    dlg:SetButtons({ { text = "btn_close", default = true } })
     dlg:Show()
 end
 
 -- Popup liste des participants (inchangée côté logique, Look&Feel hérité)
 function UI.ShowParticipants2Popup(names)
-    local dlg = UI.CreatePopup({ title = "Participants", width = 340, height = 400 })
+    local dlg = UI.CreatePopup({ title = "popup_group_title", width = 340, height = 400 })
     local cols = {
-        { key="name",   title="Nom",    min=300, justify="LEFT" },
+        { key="name",   title="col_name",    min=300, justify="LEFT" },
     }
     local lv = UI.ListView(dlg.content, cols, {
         buildRow = function(r)
@@ -462,14 +462,14 @@ function UI.ShowParticipants2Popup(names)
     for _, full in ipairs(display) do data[#data+1] = { name = full, exists = (pdb[full] ~= nil) } end
 
     lv:SetData(data)
-    dlg:SetButtons({ { text = CLOSE, default = true } })
+    dlg:SetButtons({ { text = "btn_close", default = true } })
     dlg:Show()
 end
 
 function UI.PopupText(title, text)
-    local dlg = UI.CreatePopup({ title = (Tr and Tr(title or "popup_info_title")) or (title or "Information") })
-    dlg:SetMessage((Tr and Tr(text)) or text)
-    dlg:SetButtons({ { text = Tr("btn_close"), default = true } })
+    local dlg = UI.CreatePopup({ title = title or "popup_info_title" })
+    dlg:SetMessage(text)
+    dlg:SetButtons({ { text = "btn_close", default = true } })
     dlg:Show()
     return dlg
 end
@@ -477,16 +477,15 @@ end
 -- Simple reload prompt with two actions: "Plus tard" and "Recharger l'interface"
 function UI.PopupReloadPrompt(message, opts)
     opts = opts or {}
-    local Tr = ns and ns.Tr or function(s) return s end
     local dlg = UI.CreatePopup({
-        title  = Tr("popup_info_title") or "Information",
+        title  = "popup_info_title",
         width  = opts.width or 520,
         height = opts.height or 200,
     })
-    dlg:SetMessage(message or (Tr("msg_reload_needed") or "Des changements de droits ont été appliqués."))
+    dlg:SetMessage(message or "msg_reload_needed")
     dlg:SetButtons({
-        { text = Tr("btn_later") or "Plus tard", variant = "ghost", default = true },
-        { text = Tr("btn_reload_ui") or "Recharger l'interface", onClick = function()
+        { text = "btn_later", variant = "ghost", default = true },
+        { text = "btn_reload_ui", onClick = function()
             if ReloadUI then ReloadUI() end
         end },
     })
@@ -576,7 +575,7 @@ end
 
 function UI.PopupRaidDebit(name, deducted, after, ctx)
     -- Hauteur augmentée pour accueillir le détail des composants
-    local dlg = UI.CreatePopup({ title = (Tr and Tr("popup_raid_ok")) or "Participation au raid validée !", width = 660, height = 400 })
+    local dlg = UI.CreatePopup({ title = "popup_raid_ok", width = 660, height = 400 })
     local lines = {}
     lines[#lines+1] = Tr("msg_good_raid") .. "\n"
 
@@ -647,7 +646,7 @@ function UI.PopupRaidDebit(name, deducted, after, ctx)
             warnFS:SetJustifyH("CENTER")
             warnFS:SetPoint("TOPLEFT",  restFS, "BOTTOMLEFT",  0, -8)
             warnFS:SetPoint("TOPRIGHT", restFS, "BOTTOMRIGHT", 0, -8)
-            warnFS:SetText( (Tr and Tr("warn_negative_balance")) or "Warning: your balance is negative. Please settle your balance." )
+            warnFS:SetText( Tr("warn_negative_balance") )
             if UI and UI.ApplyFont and warnFS then UI.ApplyFont(warnFS) end
             if warnFS.SetTextColor then warnFS:SetTextColor(1, 0.25, 0.25) end -- rouge doux
             anchorAfter = warnFS
@@ -759,7 +758,7 @@ end
 function UI.PopupPromptText(title, label, onAccept, opts)
     opts = opts or {}
     local dlg = UI.CreatePopup({
-        title  = title or "Saisie",
+        title  = title or "popup_input_title",
         width  = math.floor((opts.width  or 460) * 1.10),
         height = math.floor((opts.height or 220) * 1.20),
         strata = "FULLSCREEN_DIALOG",  -- au-dessus de la popup des membres

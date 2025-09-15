@@ -130,15 +130,15 @@ local function UpdateRow(i, r, f, it)
         f.state:SetText(st)
     end
 
-    f.type:SetText(it.type or "")
+    f.type:SetText(tostring(it.type or ""))
     f.rv:SetText(it.rv and tostring(it.rv) or "")  -- <= affiche la révision
     f.size:SetText(tostring(it.size or 0))
-    f.chan:SetText(it.chan or "")
+    f.chan:SetText(tostring(it.chan or ""))
 
     -- Colonne "Émetteur" : côté RECU = sender (sans royaume), côté ENVOI = moi (sans royaume)
     -- Côté affichage : on conserve toujours le nom complet
     local emitter = (it.dir == "recv") and (it.target or "") or _selfFullName()
-    f.target:SetText(emitter or "")
+    f.target:SetText(tostring(emitter or ""))
 
     local progress = (it.dir == "send") and sent or got
     f.frag:SetText(tostring(progress) .. "/" .. tostring(total))
@@ -202,7 +202,7 @@ end
 local function groupLogs(raw)
     local map = {}
     for _, e in ipairs(raw) do
-        local key = table.concat({ e.dir or "?", e.type or "?", e.chan or "?", e.target or "?", tostring(e.seq or 0) }, "|")
+        local key = table.concat({ tostring(e.dir or "?"), tostring(e.type or "?"), tostring(e.chan or "?"), tostring(e.target or "?"), tostring(e.seq or 0) }, "|")
         local g = map[key]
         if not g then
             g = {
@@ -268,9 +268,17 @@ local function groupLogs(raw)
         local payloads, raws = {}, {}
         for i = 1, (g.total or 1) do
             local raw = g.parts[i]
-            if raw then
+            if raw ~= nil then
+                -- Ensure raw is a string to avoid concat errors when a table slips through
+                if type(raw) ~= "string" then
+                    raw = (GLOG and GLOG.Debug_TinyDump and GLOG.Debug_TinyDump(raw, 2)) or tostring(raw)
+                end
                 raws[#raws+1] = raw
-                payloads[#payloads+1] = raw:match("|n=%d+|(.*)$") or ""
+                local pay = ""
+                if type(raw) == "string" then
+                    pay = raw:match("|n=%d+|(.*)$") or ""
+                end
+                payloads[#payloads+1] = pay
             end
         end
         g.fullPayload = table.concat(payloads, "")
@@ -574,6 +582,9 @@ function GLOG.Debug_TinyDump(v, depth)
     end
 end
 
-UI.RegisterTab(Tr("tab_debug"), Build, Refresh, Layout, {
-    category = Tr("cat_debug"),
-})
+-- Hide this tab entirely when running in Standalone mode
+if not (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) then
+    UI.RegisterTab(Tr("tab_debug"), Build, Refresh, Layout, {
+        category = Tr("cat_debug"),
+    })
+end

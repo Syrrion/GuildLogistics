@@ -43,19 +43,19 @@ end
 -- =========================
 
 function GLOG.CreateDatabaseBackup()
-    -- Vérification de l'existence de la base principale
-    if not GuildLogisticsDB_Char then
+    -- Vérification de l'existence de la base active (partagée par guilde)
+    if not GuildLogisticsDB then
         return false, ns.Tr("err_no_main_db") or "Aucune base de données principale trouvée"
     end
     
-    -- Créer une copie complète de la base de données
-    local backup = deepCopy(GuildLogisticsDB_Char)
+    -- Créer une copie complète de la base de données active
+    local backup = deepCopy(GuildLogisticsDB)
     
     -- Ajouter des métadonnées de backup
     backup._backupMeta = {
         timestamp = time(),
         date = date("%Y-%m-%d %H:%M:%S"),
-        source = "GuildLogisticsDB_Char",
+    source = "GuildLogisticsDB",
         version = (GLOG.GetAddonVersion and GLOG.GetAddonVersion()) or "unknown",
         playerName = (UnitName and UnitName("player")) or "unknown",
         realm = (GetRealmName and GetRealmName()) or "unknown",
@@ -90,8 +90,8 @@ function GLOG.RestoreDatabaseFromBackup()
     -- Capturer la révision actuelle pour préserver le versionning
     -- IMPORTANT: On capture au moment de la restauration pour éviter tout décalage temporel
     local currentRev = nil
-    if GuildLogisticsDB_Char and GuildLogisticsDB_Char.meta and GuildLogisticsDB_Char.meta.rev then
-        currentRev = GuildLogisticsDB_Char.meta.rev
+    if GuildLogisticsDB and GuildLogisticsDB.meta and GuildLogisticsDB.meta.rev then
+        currentRev = GuildLogisticsDB.meta.rev
     end
     
     -- Créer une copie du backup (sans les métadonnées de backup)
@@ -101,8 +101,8 @@ function GLOG.RestoreDatabaseFromBackup()
     restored._backupMeta = nil
     
     -- Sauvegarder la base actuelle comme "previous" au cas où
-    if GuildLogisticsDB_Char then
-        GuildLogisticsDB_Previous = deepCopy(GuildLogisticsDB_Char)
+    if GuildLogisticsDB then
+        GuildLogisticsDB_Previous = deepCopy(GuildLogisticsDB)
         -- Stocker la révision actuelle dans les métadonnées de "previous" pour traçabilité
         if GuildLogisticsDB_Previous then
             GuildLogisticsDB_Previous._restoreMeta = {
@@ -115,28 +115,19 @@ function GLOG.RestoreDatabaseFromBackup()
     end
     
     -- Restaurer la base de données
-    GuildLogisticsDB_Char = restored
+    GuildLogisticsDB = restored
     
     -- Restaurer la révision actuelle pour ne pas perturber le versionning
     if currentRev then
-        GuildLogisticsDB_Char.meta = GuildLogisticsDB_Char.meta or {}
-        GuildLogisticsDB_Char.meta.rev = currentRev
+        GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
+        GuildLogisticsDB.meta.rev = currentRev
     end
     
     -- Aussi mettre à jour l'alias global si il existe
-    if GuildLogisticsDB then
-        GuildLogisticsDB = GuildLogisticsDB_Char
-        -- S'assurer que la révision est aussi conservée dans l'alias global
-        if currentRev then
-            GuildLogisticsDB.meta = GuildLogisticsDB.meta or {}
-            GuildLogisticsDB.meta.rev = currentRev
-        end
-    end
+    -- Rebind de l'alias global déjà effectué ci-dessus
     
     -- Forcer le rechargement des modules qui dépendent de la DB
-    if GLOG.EnsureDB then
-        GLOG.EnsureDB()
-    end
+    if GLOG.EnsureDB then GLOG.EnsureDB() end
     
     -- Informer les autres modules du changement
     if ns.Emit then
@@ -229,8 +220,8 @@ end
 function GLOG.GetDatabaseSizes()
     local sizes = {}
     
-    if GuildLogisticsDB_Char then
-        sizes.main = calculateSize(GuildLogisticsDB_Char)
+    if GuildLogisticsDB then
+        sizes.main = calculateSize(GuildLogisticsDB)
     end
     
     if GuildLogisticsDB_Backup then

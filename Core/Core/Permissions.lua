@@ -64,6 +64,10 @@ end
 
 -- Public: return true if the provided name/uid (or current player when nil) is authorized to modify guild data
 function GLOG.CanModifyGuildData(nameOrUID)
+    -- In standalone mode, allow all local modifications
+    if GLOG.IsStandaloneMode and GLOG.IsStandaloneMode() then
+        return true
+    end
     _ensure()
     -- Resolve candidate
     local candidate

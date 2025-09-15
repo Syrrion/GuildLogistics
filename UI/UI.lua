@@ -983,6 +983,11 @@ function UI.ApplyTabsForGuildMembership(inGuild)
         if (lab == keepDebug) or (lab == keepDebugDB) or (lab == keepDebugEvents) or (lab == keepDebugErrors) then
             -- Tous les onglets liés au Debug suivent l’option UI
             shown = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
+            -- En mode standalone, on masque spécifiquement l'onglet "paquets" (diffusion réseau)
+            if lab == keepDebug then
+                local isStandalone = (ns and ns.GLOG and ns.GLOG.IsStandaloneMode and ns.GLOG.IsStandaloneMode()) or false
+                if isStandalone then shown = false end
+            end
 
         elseif lab == reqLabel then
             -- ⚠️ Jamais visible pour un joueur ; visible pour le GM seulement s'il existe des demandes
@@ -1018,7 +1023,12 @@ function UI.SetDebugEnabled(enabled)
 
     -- Affiche/masque l’onglet Debug si présent (même si l’accès principal est par le bouton)
     if UI.SetTabVisible then
-        UI.SetTabVisible(Tr("tab_debug"),         GuildLogisticsUI.debugEnabled)
+        -- En mode standalone, l’onglet paquets (diffusion réseau) doit rester masqué
+        local showPackets = GuildLogisticsUI.debugEnabled
+        if ns and ns.GLOG and ns.GLOG.IsStandaloneMode and ns.GLOG.IsStandaloneMode() then
+            showPackets = false
+        end
+        UI.SetTabVisible(Tr("tab_debug"),         showPackets)
         UI.SetTabVisible(Tr("tab_debug_db"),      GuildLogisticsUI.debugEnabled)
         UI.SetTabVisible(Tr("tab_debug_events"),  GuildLogisticsUI.debugEnabled)
         UI.SetTabVisible(Tr("tab_debug_errors"),  GuildLogisticsUI.debugEnabled)

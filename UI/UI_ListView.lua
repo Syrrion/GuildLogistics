@@ -110,8 +110,8 @@ function UI.ListView(parent, cols, opts)
         ov.bg:SetAllPoints(ov)
         ov.bg:SetColorTexture(0, 0, 0, 0.12) -- léger grisage
 
-        ov.fs = ov:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
-        ov.fs:SetText(Tr(self.opts.emptyText or Tr("lbl_no_data")))
+    ov.fs = ov:CreateFontString(nil, "OVERLAY", "GameFontDisableLarge")
+    ov.fs:SetText(Tr(self.opts.emptyText or "lbl_no_data"))
         ov.fs:SetJustifyH("CENTER"); ov.fs:SetJustifyV("MIDDLE")
 
         ov.fs:SetPoint("CENTER", ov, "CENTER", 0, 0)
@@ -513,17 +513,34 @@ end
         local baseHWithPad = baseRowH + 2
 
         -- Crée les lignes manquantes avec la bonne hauteur de base
-        for i = #self.rows + 1, #data do
+        -- Optionnel: création par lots pour éviter les freezes sur de grosses listes
+        local have = #self.rows
+        local need = #data
+        local step = tonumber(self.opts and self.opts.maxCreatePerFrame) or 0
+        local createUntil = need
+        if step > 0 and have < need then
+            createUntil = math.min(need, have + step)
+        end
+        for i = have + 1, createUntil do
             local r = CreateFrame("Frame", nil, self.list)
             r:SetHeight(baseHWithPad)
             UI.DecorateRow(r)
             r._fields = (self.opts.buildRow and self.opts.buildRow(r)) or {}
             self.rows[i] = r
-            
+
             -- Applique immédiatement la police aux nouvelles lignes
             if UI and UI.ApplyFontRecursively then
                 UI.ApplyFontRecursively(r)
             end
+        end
+        -- Si tout n'est pas créé, planifie la suite au frame suivant et évite les doublons
+        if step > 0 and createUntil < need and not self._batchPending then
+            self._batchPending = true
+            UI.NextFrame(function()
+                if not self then return end
+                self._batchPending = nil
+                if self.SetData then self:SetData(self._data or data) end
+            end)
         end
 
         -- Première ligne visible (pour masquer son séparateur TOP)

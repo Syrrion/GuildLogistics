@@ -490,6 +490,7 @@ local function Build(container)
         end,
         topOffset = UI.SECTION_HEADER_H or 26,
         rowHeight = UI.ROW_H_SMALL,
+        maxCreatePerFrame = 60,
     })
 
     lvReserve = UI.ListView(reserveArea, cols, {
@@ -511,6 +512,7 @@ local function Build(container)
         topOffset = UI.SECTION_HEADER_H or 26,
         bottomAnchor = footer,
         rowHeight = UI.ROW_H_SMALL,
+        maxCreatePerFrame = 60,
     })
 
     -- Masque de fond englobant (header + contenu) pour la ListView des Actifs

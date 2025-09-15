@@ -48,9 +48,7 @@ local function _FindUniqueFullByBase(baseName)
         end
     end
     
-    scan(_G.GuildLogisticsDB_Char) 
-    if found == "__AMB__" then return nil end
-    
+    -- Scan the active shared DB only; legacy per-character store is no longer authoritative at runtime
     scan(_G.GuildLogisticsDB)     
     if found == "__AMB__" then return nil end
     

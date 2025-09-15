@@ -3,6 +3,10 @@ ns.GLOG = ns.GLOG or {}
 ns.Util = ns.Util or {}
 local GLOG, U = ns.GLOG, ns.Util
 
+-- Ensure account-level SavedVariables (GuildLogisticsShared) exists ASAP
+_G.GuildLogisticsShared = _G.GuildLogisticsShared or { guilds = {} }
+if type(_G.GuildLogisticsShared.guilds) ~= "table" then _G.GuildLogisticsShared.guilds = {} end
+
 -- Helper sûr pour lire les métadonnées du TOC sans référencer de globales non définies
 local _metaCache = { Title = nil, IconTexture = nil, Version = nil }
 local function _GetMeta(key)

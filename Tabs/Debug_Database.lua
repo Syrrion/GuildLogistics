@@ -7,18 +7,21 @@ local GLOG, UI = ns.GLOG, ns.UI
 -- =========================
 local panel, footer
 local lv, breadcrumbFS, btnRoot, btnUp, backupInfoFS, ddRoot
+local dbgInfoFS
 local currentPath = {}  -- tableau de clés (strings ou numbers)
 local Build, Refresh, Layout, UpdateRow, updateBackupInfo, refreshDropdown
--- Sélection de la base à explorer : "DB" (données) ou "DB_UI" (paramètres UI)
-local selectedRoot = "DB"
+-- Sélection par défaut: base partagée (GuildLogisticsShared)
+local selectedRoot = "DB_SHARED"
 local ddRoot
 
 local function _GetRoot()
     -- Les alias de Core.lua (Core.lua) pointent les *\_Char* en runtime
-    if selectedRoot == "DB_DATAS" then
-        return GuildLogisticsDatas_Char or GuildLogisticsDatas or {}
+    if selectedRoot == "DB_SHARED" then
+        return GuildLogisticsShared or {}
     elseif selectedRoot == "DB_UI" then
-        return GuildLogisticsUI_Char or GuildLogisticsUI or {}
+        return GuildLogisticsUI_Char or {}
+    elseif selectedRoot == "DB_DATAS" then
+        return GuildLogisticsDatas_Char or {}
     elseif selectedRoot == "DB_BACKUP" then
         return GuildLogisticsDB_Backup or {}
     elseif selectedRoot == "DB_PREVIOUS" then
@@ -29,10 +32,13 @@ end
 
 local function _PathToText(path)
     local rootName
-    if selectedRoot == "DB_DATAS" then
-        rootName = "GuildLogisticsDatas_Char"
+    
+    if selectedRoot == "DB_SHARED" then
+        rootName = "GuildLogisticsShared"
     elseif selectedRoot == "DB_UI" then
         rootName = "GuildLogisticsUI_Char"
+    elseif selectedRoot == "DB_DATAS" then
+        rootName = "GuildLogisticsDatas_Char"
     elseif selectedRoot == "DB_BACKUP" then
         rootName = "GuildLogisticsDB_Backup"
     elseif selectedRoot == "DB_PREVIOUS" then
@@ -136,7 +142,12 @@ local function ShowEditPopup(parent, key, value, onSave)
     dlg:SetButtons({
         { text = Tr("btn_confirm"), default = true, onClick = function()
             local txt = box:GetText() or ""
-            local newV, err = (GLOG.DeserializeLua and GLOG.DeserializeLua(txt))
+            local okV, newV, err
+            if GLOG.DeserializeLua then
+                newV, err = GLOG.DeserializeLua(txt)
+            else
+                okV, newV = true, txt
+            end
             if err then
                 if UI.Toast then UI.Toast("|cffff6060Erreur :|r "..tostring(err)) end
                 return
@@ -206,7 +217,8 @@ local function ShowAddFieldPopup()
             local valTxt = valBox:GetText() or ""
 
             -- Parse la valeur via littéral Lua
-            local newVal, errV = (GLOG.DeserializeLua and GLOG.DeserializeLua(valTxt))
+            local newVal, errV
+            if GLOG.DeserializeLua then newVal, errV = GLOG.DeserializeLua(valTxt) else newVal = valTxt end
             if errV then
                 if UI.Toast then UI.Toast("|cffff6060Erreur valeur :|r "..tostring(errV)) end
                 return
@@ -228,7 +240,8 @@ local function ShowAddFieldPopup()
                     if UI.Toast then UI.Toast("|cffff6060"..(Tr("err_need_key") or "Clé requise pour une table de hachage").."|r") end
                     return
                 end
-                local kParsed, errK = (GLOG.DeserializeLua and GLOG.DeserializeLua(keyTxt))
+                local kParsed, errK
+                if GLOG.DeserializeLua then kParsed, errK = GLOG.DeserializeLua(keyTxt) end
                 local kFinal = (not errK and (type(kParsed)=="string" or type(kParsed)=="number")) and kParsed or keyTxt
                 node[kFinal] = newVal
             end
@@ -364,35 +377,37 @@ Build = function(container)
                 return i
             end
 
-            entries[#entries+1] = info(Tr("lbl_db_data") or "DB (données)", selectedRoot == "DB", function()
-                selectedRoot = "DB"
-                ddRoot:SetSelected("DB", "DB")
+
+
+            entries[#entries+1] = info(Tr("lbl_db_data"), selectedRoot == "DB_SHARED", function()
+                selectedRoot = "DB_SHARED"
+                ddRoot:SetSelected("DB_SHARED", "DB_SHARED")
                 breadcrumbFS:SetText(_PathToText(currentPath))
                 Refresh()
             end)
 
-            entries[#entries+1] = info(Tr("lbl_db_ui") or "DB_UI (interface)", selectedRoot == "DB_UI", function()
+            entries[#entries+1] = info(Tr("lbl_db_ui"), selectedRoot == "DB_UI", function()
                 selectedRoot = "DB_UI"
                 ddRoot:SetSelected("DB_UI", "DB_UI")
                 breadcrumbFS:SetText(_PathToText(currentPath))
                 Refresh()
             end)
 
-            entries[#entries+1] = info(Tr("lbl_db_datas") or "DB_DATAS (trackers)", selectedRoot == "DB_DATAS", function()
+            entries[#entries+1] = info(Tr("lbl_db_datas"), selectedRoot == "DB_DATAS", function()
                 selectedRoot = "DB_DATAS"
                 ddRoot:SetSelected("DB_DATAS", "DB_DATAS")
                 breadcrumbFS:SetText(_PathToText(currentPath))
                 Refresh()
             end)
 
-            entries[#entries+1] = info(Tr("lbl_db_backup") or "DB_BACKUP (backup)", selectedRoot == "DB_BACKUP", function()
+            entries[#entries+1] = info(Tr("lbl_db_backup"), selectedRoot == "DB_BACKUP", function()
                 selectedRoot = "DB_BACKUP"
                 ddRoot:SetSelected("DB_BACKUP", "DB_BACKUP")
                 breadcrumbFS:SetText(_PathToText(currentPath))
                 Refresh()
             end)
 
-            entries[#entries+1] = info(Tr("lbl_db_previous") or "DB_PREVIOUS (restore safety)", selectedRoot == "DB_PREVIOUS", function()
+            entries[#entries+1] = info(Tr("lbl_db_previous"), selectedRoot == "DB_PREVIOUS", function()
                 selectedRoot = "DB_PREVIOUS"
                 ddRoot:SetSelected("DB_PREVIOUS", "DB_PREVIOUS")
                 breadcrumbFS:SetText(_PathToText(currentPath))
@@ -411,6 +426,25 @@ Build = function(container)
     backupInfoFS = nav:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     backupInfoFS:SetPoint("RIGHT", ddRoot, "LEFT", -12, 0)
     backupInfoFS:SetJustifyH("RIGHT")
+
+    -- Petit affichage debug (clé active + UID) pour QA
+    dbgInfoFS = nav:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    dbgInfoFS:SetPoint("LEFT", breadcrumbFS, "RIGHT", 12, 0)
+    local function _updateDbg()
+        local key = (GLOG and GLOG.GetActiveGuildBucketKey and GLOG.GetActiveGuildBucketKey())
+        if not key then
+            -- Fallback: try to recompute like DatabaseManager
+            if GLOG and GLOG.GetMode then
+                local gname = (GetGuildInfo and GetGuildInfo("player")) or nil
+                local base = (not gname or gname == "") and "__noguild__" or tostring(gname):gsub("%s+",""):gsub("'",""):lower()
+                local mode = GLOG.GetMode()
+                key = (base == "__noguild__") and base or ((mode == "standalone") and ("standalone_"..base) or base)
+            end
+        end
+        local uid = (UnitGUID and UnitGUID("player")) or ""
+        dbgInfoFS:SetText("|cff808080["..tostring(key or "?").."]("..(uid ~= "" and uid:sub(-6) or "no GUID")..")|r")
+    end
+    _updateDbg()
     
     updateBackupInfo = function()
         if GLOG.GetBackupInfo then
@@ -583,6 +617,20 @@ end
 
 Refresh = function()
     if breadcrumbFS then breadcrumbFS:SetText(_PathToText(currentPath)) end
+    if dbgInfoFS and dbgInfoFS.SetText then
+        -- refresh debug info (active key + UID)
+        local key = (GLOG and GLOG.GetActiveGuildBucketKey and GLOG.GetActiveGuildBucketKey())
+        if not key then
+            if GLOG and GLOG.GetMode then
+                local gname = (GetGuildInfo and GetGuildInfo("player")) or nil
+                local base = (not gname or gname == "") and "__noguild__" or tostring(gname):gsub("%s+",""):gsub("'",""):lower()
+                local mode = GLOG.GetMode()
+                key = (base == "__noguild__") and base or ((mode == "standalone") and ("standalone_"..base) or base)
+            end
+        end
+        local uid = (UnitGUID and UnitGUID("player")) or ""
+        dbgInfoFS:SetText("|cff808080["..tostring(key or "?").."]("..(uid ~= "" and uid:sub(-6) or "no GUID")..")|r")
+    end
     if not lv or not lv.SetData then return end
     lv:SetData(_BuildItems())
     

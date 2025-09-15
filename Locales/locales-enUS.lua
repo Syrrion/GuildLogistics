@@ -742,3 +742,10 @@ L["lbl_equippable_only"] = "Equippable only"
 L["btn_expand"]          = "+"
 L["btn_collapse"]        = "-"
 L["value_empty"]         = "—"
+
+-- === Mode selection (dual-mode) ===
+L["mode_settings_header"]    = "Usage mode"
+L["mode_guild"]              = "Guild version"
+L["mode_standalone"]         = "Standalone version"
+L["mode_firstrun_title"]     = "Choose usage mode"
+L["mode_firstrun_body"]      = "\nPlease choose which mode to use for "..L["app_title"]..":\n\n|cffffd200Guild version|r\n Shares data with other addon users in your guild. A GM or editor usually configures and initiates sharing.\n\n|cffffd200Standalone version|r\n No communication with other players. All features remain local and usable without GM permissions; nothing is broadcast.\n\nYou can change this later in Settings - both modes can operate independently without data loss."

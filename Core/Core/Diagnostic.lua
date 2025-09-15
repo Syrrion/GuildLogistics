@@ -77,11 +77,11 @@ function GLOG.TestDB()
     print("GuildLogisticsDB_Char type:", type(GuildLogisticsDB_Char))
     
     -- Vérification des références
-    if GuildLogisticsDB == GuildLogisticsDB_Char then
-        print("✅ GuildLogisticsDB pointe vers GuildLogisticsDB_Char")
-    else
-        print("❌ GuildLogisticsDB ne pointe PAS vers GuildLogisticsDB_Char")
-    end
+        if GuildLogisticsDB == GuildLogisticsDB_Char then
+            print("ℹ️ Legacy alias still bound to per-character DB (unexpected)")
+        else
+            print("✅ GuildLogisticsDB pointe vers le bucket partagé actif (par guilde)")
+        end
     
     local db = GuildLogisticsDB or {}
     local dbChar = GuildLogisticsDB_Char or {}
