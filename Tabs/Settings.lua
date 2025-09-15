@@ -4,6 +4,8 @@ local GLOG, UI = ns.GLOG, ns.UI
 
 -- État local des contrôles (permet un refresh simple)
 local optPanel
+-- Scroll frame reference for Settings (for wheel/resize handling)
+local settingsScroll
 local themeRadios, autoRadios, debugRadios, scriptErrRadios = {}, {}, {}, {}
 -- Editors UI state
 local editorsLV, editorsInput, editorsGrantBtn
@@ -22,7 +24,34 @@ function Build(container)
     -- Création du conteneur
     panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
 
-    optionsPane = CreateFrame("Frame", nil, panel)
+    -- Contenu scrollable pour éviter tout débordement sur petites résolutions/échelles
+    local scroll
+    scroll, optionsPane = UI.CreateScroll(panel)
+    settingsScroll = scroll
+    scroll:ClearAllPoints()
+    scroll:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+    scroll:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", 0, 0)
+
+    -- Amélioration UX: roulette de souris et largeur du contenu synchronisée
+    if scroll.EnableMouseWheel then scroll:EnableMouseWheel(true) end
+    local function _wheel(self, delta)
+        local step = (self.scrollStep or 40)
+        local y = (self:GetVerticalScroll() or 0) - (delta * step)
+        if y < 0 then y = 0 end
+    local max = (self.GetVerticalScrollRange and self:GetVerticalScrollRange()) or 0
+        if y > max then y = max end
+        if self.SetVerticalScroll then self:SetVerticalScroll(y) end
+    end
+    if scroll.SetScript then scroll:SetScript("OnMouseWheel", _wheel) end
+    if scroll.SetClipsChildren then pcall(scroll.SetClipsChildren, scroll, true) end
+    if scroll.SetScript then
+        scroll:SetScript("OnSizeChanged", function(self, w, h)
+            -- Maintient la largeur du contenu alignée au viewport
+            if optionsPane and optionsPane.SetWidth and type(w) == "number" and w > 0 then
+                optionsPane:SetWidth(w)
+            end
+        end)
+    end
     
     local RADIO_V_SPACING = 8
     local y = 8
@@ -277,6 +306,13 @@ function Build(container)
         end
     )
 
+    -- Ajuste la hauteur du contenu pour le ScrollFrame
+    if optionsPane and optionsPane.SetHeight then
+        local baseH = math.max(1, y + 12)
+        optionsPane._baseContentH = baseH
+        optionsPane:SetHeight(baseH)
+    end
+
     -- État initial depuis la sauvegarde
     local saved = (GLOG.GetSavedWindow and GLOG.GetSavedWindow()) or {}
     _SetRadioGroupChecked(themeRadios, (saved.theme) or "AUTO")
@@ -313,22 +349,12 @@ end
 
 -- == Point d'extension future : l'agencement est géré par ancres == --
 local function Layout()
-    if not panel or not panel.GetWidth then return end
-    local W = panel:GetWidth() or 0
-    local H = panel:GetHeight() or 0
-    -- Si le panneau n'est pas encore dimensionné, on sort (évite les W/H=0 et les ancrages foireux)
-    if W <= 0 or H <= 0 then return end
-
-    local footerH = (footer and footer:GetHeight() or 0) + 6
-    local availH = math.max(0, H - footerH - (UI.OUTER_PAD*2))
-    local topH   = math.floor(availH * 0.60)
-
-    -- Zone joueurs (haut) : bornée entre le haut du panel et le haut de lotsPane
-    optionsPane:ClearAllPoints()
-    optionsPane:SetPoint("TOPLEFT",  panel,   "TOPLEFT",  UI.OUTER_PAD, -UI.OUTER_PAD)
-    optionsPane:SetPoint("TOPRIGHT", panel,   "TOPRIGHT", -UI.OUTER_PAD, -UI.OUTER_PAD)
-    optionsPane:SetPoint("BOTTOMLEFT", panel, "TOPLEFT",  0,  6)
-    optionsPane:SetPoint("BOTTOMRIGHT", panel, "TOPRIGHT", 0,  6)
+    -- Avec le ScrollFrame ancré aux bords du panel, aucun recalcul nécessaire ici
+    -- On peut toutefois ajuster la hauteur du contenu si besoin
+    if optionsPane and optionsPane.GetHeight and optionsPane.SetHeight then
+        local h = optionsPane:GetHeight() or 0
+        if h < 1 then optionsPane:SetHeight(1) end
+    end
 end
 
 -- == Déclenche un rafraîchissement manuel de la liste == --
