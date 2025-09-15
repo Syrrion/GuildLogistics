@@ -25,7 +25,18 @@ local function _ExtractLink(msg)
 end
 
 local function _IsEquippable(link)
-    return (link and IsEquippableItem and IsEquippableItem(link)) and true or false
+    if not link or link == "" then return false end
+    local itemID = tonumber(link:match("|Hitem:(%d+):"))
+    -- Heuristique rapide via emplacement d'équipement
+    if C_Item and C_Item.GetItemInventoryTypeByID and itemID then
+        local invType = C_Item.GetItemInventoryTypeByID(itemID)
+        -- 0 = non-équipable; >0 = un emplacement d'équipement
+        if tonumber(invType or 0) and tonumber(invType or 0) > 0 then
+            return true
+        end
+    end
+    -- Fallback conservateur: inconnu → non équipable
+    return false
 end
 
 -- Tente de déduire le looter depuis le message (self/groupe/raid)
@@ -101,6 +112,26 @@ local function _IsSelfLootMessage(msg)
     return false
 end
 
+-- Vérifie si une entrée (looter, link) existe déjà récemment dans le store
+local function _HasStoreEntry(link, looter, cutoffSec)
+    if not ns.LootTrackerState or not ns.LootTrackerState.GetStore then return false end
+    local store = ns.LootTrackerState.GetStore()
+    if type(store) ~= "table" then return false end
+    local who = tostring(looter or "")
+    local cutoff = (cutoffSec and tonumber(cutoffSec)) or 600 -- 10 minutes par défaut
+    local now = (GetServerTime and GetServerTime()) or _Now()
+    for i = 1, #store do
+        local e = store[i]
+        if e and e.link == link and tostring(e.looter or "") == who then
+            local ts = tonumber(e.ts or 0) or 0
+            if (now - ts) <= cutoff then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- Messages de loot à conserver : uniquement les messages "X reçoit du butin"
 local function _IsLootReceiptMessage(msg)
     if not msg or msg == "" then return false end
@@ -136,25 +167,57 @@ end
 -- GetItemInfo peut être async => petit retry
 local function _QueryItemInfo(link, cb, tries)
     tries = (tries or 0)
-    local name, _, quality, itemLevel, reqLevel, class, subclass, _, equipLoc, icon = GetItemInfo(link)
-    if name then
+    if not link or link == "" then return end
+    local itemID = tonumber(link:match("|Hitem:(%d+):"))
+    local function done()
+        local quality, icon
+        if itemID and C_Item then
+            if C_Item.GetItemQualityByID then
+                quality = tonumber(C_Item.GetItemQualityByID(itemID)) or nil
+            end
+            if C_Item.GetItemIconByID then
+                icon = C_Item.GetItemIconByID(itemID)
+            end
+        end
+        local ilvl = 0
+        if C_Item and C_Item.GetDetailedItemLevelInfo then
+            local ok, lvl = pcall(C_Item.GetDetailedItemLevelInfo, link)
+            if ok and tonumber(lvl) then ilvl = tonumber(lvl) or 0 end
+        end
+        local nameFromLink = link:match("%[(.-)%]")
         cb({
-            link = link, name = name,
-            quality = tonumber(quality or 0) or 0,
-            itemLevel = tonumber(itemLevel or 0) or 0,
-            reqLevel  = tonumber(reqLevel  or 0) or 0,
-            class = class, subclass = subclass, equipLoc = equipLoc, icon = icon,
+            link = link,
+            name = nameFromLink or "",
+            quality = quality or 0,
+            itemLevel = ilvl or 0,
+            reqLevel  = nil, -- inconnu sans GetItemInfo; le filtre le traitera prudemment
+            class = nil, subclass = nil, equipLoc = nil, icon = icon,
         })
+    end
+    if Item and Item.CreateFromItemLink then
+        local it = Item:CreateFromItemLink(link)
+        it:ContinueOnItemLoad(function()
+            done()
+        end)
         return
     end
+    -- Fallback sans API Item: essaye plus tard quelques fois (cache live)
     if tries < 5 and C_Timer and C_Timer.After then
         C_Timer.After(0.25 * (tries + 1), function() _QueryItemInfo(link, cb, tries + 1) end)
+    else
+        -- Dernier recours: renvoie un minimum
+        done()
     end
 end
 
 local function _AddIfEligible(link, looter)
     if not link then return end
     local who = tostring(looter or (UnitName and UnitName("player")) or "")
+
+    -- Déduplication forte: si une entrée existe déjà récemment pour (looter, link), on ignore
+    if _HasStoreEntry(link, who, 600) then
+        return
+    end
 
     -- If a roll session is active for this link, only accept the final winner; otherwise skip for now
     if ns.LootTrackerRolls and ns.LootTrackerRolls.HasActiveRollSession and ns.LootTrackerRolls.HasActiveRollSession(link) then
@@ -198,8 +261,8 @@ local function _AddIfEligible(link, looter)
         end
         if not cfg then return end
         
-        local quality   = tonumber(info.quality)  or 0
-        local reqLevel  = tonumber(info.reqLevel) or 0
+    local quality   = tonumber(info.quality)  or 0
+    local reqLevel  = (info.reqLevel ~= nil) and tonumber(info.reqLevel) or nil
         local minQ      = tonumber(cfg.lootMinQuality or 0) or 0
         local minReq    = tonumber(cfg.lootMinReqLevel or 0) or 0
         local minILvl   = tonumber(cfg.lootMinItemLevel or 0) or 0
@@ -212,7 +275,7 @@ local function _AddIfEligible(link, looter)
         -- 3) Les filtres "Niveau requis" et "iLvl" ne s'appliquent
         --    QUE si "Équippable uniquement" est coché
         if (cfg.lootEquippableOnly ~= false) then
-            if (minReq > 0) and (reqLevel < minReq) then return end
+            if (minReq > 0) and (reqLevel ~= nil) and (reqLevel < minReq) then return end
             if (minILvl > 0) and (ilvl < minILvl) then return end
         end
 
