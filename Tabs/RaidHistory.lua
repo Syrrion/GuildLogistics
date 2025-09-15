@@ -164,6 +164,50 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 { key="amt",  title=Tr("col_value"), vsep=true,  w=120, justify="RIGHT" },
             })
 
+            -- Petit cache local des noms pour éviter les recharges multiples
+            local _nameCache = {}
+            local function _resolveItemName(it, cell)
+                if not it then return "" end
+                -- 1) Prio: itemName direct
+                local nm = it.itemName
+                if nm and nm ~= "" then return nm end
+                -- 2) Bracket dans le lien complet
+                if type(it.itemLink) == "string" and it.itemLink ~= "" then
+                    local b = it.itemLink:match("%[(.-)%]")
+                    if b and b ~= "" then return b end
+                end
+                -- 3) Cache + récup via APIs
+                local iid = tonumber(it.itemID or 0) or 0
+                if iid > 0 then
+                    if _nameCache[iid] then return _nameCache[iid] end
+                    -- C_Item rapide si dispo
+                    if C_Item and C_Item.GetItemNameByID then
+                        local n = C_Item.GetItemNameByID(iid)
+                        if n and n ~= "" then _nameCache[iid] = n; return n end
+                    end
+                    -- Async: Item API, mettra à jour la cellule si toujours liée au même item
+                    if Item and Item.CreateFromItemID and cell and cell.btn then
+                        local obj = Item:CreateFromItemID(iid)
+                        obj:ContinueOnItemLoad(function()
+                            local n = (obj.GetItemName and obj:GetItemName()) or (C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(iid)) or nil
+                            if n and n ~= "" then
+                                _nameCache[iid] = n
+                                if cell.btn and cell.btn._itemID == iid and cell.text then
+                                    cell.text:SetText(n)
+                                end
+                            end
+                        end)
+                    end
+                    -- Fallback immédiat
+                    return "Objet #" .. tostring(iid)
+                end
+                return ""
+            end
+
+            local function _isNumericString(s)
+                return type(s) == "string" and s:match("^%d+$") ~= nil
+            end
+
             local lv = UI.ListView(dlg.content, cols, {
                 buildRow = function(r2)
                     local f2 = {}
@@ -194,7 +238,17 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                     f2.amt:SetText(amtText or UI.MoneyFromCopper(math.floor(tonumber(row.amtP or (exp and exp.copper) or 0))))
 
                     if exp then
+                        -- Si itemName est juste un nombre, ignorer et laisser le résolveur décider
+                        if exp.itemName and _isNumericString(exp.itemName) then exp.itemName = nil end
                         UI.SetItemCell(f2.item, exp)
+                        -- Remplace le libellé par le nom résolu (peut s’actualiser async)
+                        local disp = _resolveItemName(exp, f2.item)
+                        if disp and disp ~= "" then
+                            local cur = (f2.item.text and f2.item.text.GetText and f2.item.text:GetText()) or ""
+                            if cur == nil or cur == "" or _isNumericString(cur) or cur:match("^Objet #") then
+                                f2.item.text:SetText(disp)
+                            end
+                        end
                     else
                         -- Ligne synthétique (lot "or uniquement" ou lot sans dépenses listées)
                         f2.item.icon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")

@@ -901,6 +901,11 @@ function UI.SetItemCell(cell, item)
             if idstr then itemID = tonumber(idstr) end
         end
     end
+    -- Fallback pour anciens enregistrements: certains stockaient l'itemID dans 'id'
+    if not itemID and item.id then
+        local alt = tonumber(item.id)
+        if alt and alt > 5000 then itemID = alt end
+    end
 
     -- 2) Résolution du lien (préférer GetItemInfo; sinon garder un lien texte complet s'il existe)
     local link = nil
@@ -909,13 +914,26 @@ function UI.SetItemCell(cell, item)
     end
 
     -- 3) Nom affiché
+    local function _isNumericString(s)
+        return type(s) == "string" and s:match("^%d+$") ~= nil
+    end
+
     local name = item.itemName
+    if name and _isNumericString(name) then name = nil end
     if not name and type(link) == "string" then
         name = string.match(link, "%[(.-)%]") -- extrait le nom entre crochets
     end
-    -- don't call deprecated GetItemInfo here; keep fallback name below
+    local usedFallback = false
+    if not name then
+        -- Try fast C_Item name first (non-deprecated, instant if cached)
+        if itemID and C_Item and C_Item.GetItemNameByID then
+            local n = C_Item.GetItemNameByID(itemID)
+            if n and n ~= "" then name = n end
+        end
+    end
     if not name then
         name = "Objet #" .. tostring(itemID or "?")
+        usedFallback = true
     end
 
     -- 4) Icône (sélection sûre sans typer la variable)
@@ -931,6 +949,25 @@ function UI.SetItemCell(cell, item)
     cell.text:SetText(name or "")
     cell.btn._itemID = itemID           -- SetItemByID sera utilisé si présent
     cell.btn._link   = (type(link)=="string") and link or nil -- fallback Hyperlink si pas d'ID
+
+    -- If we had to fallback to a placeholder name, try to resolve asynchronously and update
+    if itemID and Item and Item.CreateFromItemID then
+        local btn = cell.btn
+        local obj = Item:CreateFromItemID(itemID)
+        obj:ContinueOnItemLoad(function()
+            -- Only update if the cell still represents the same itemID
+            if btn and btn._itemID == itemID and cell and cell.text then
+                local n
+                if obj.GetItemName then n = obj:GetItemName() end
+                if (not n or n == "") and C_Item and C_Item.GetItemNameByID then
+                    n = C_Item.GetItemNameByID(itemID)
+                end
+                if n and n ~= "" and not _isNumericString(n) then
+                    cell.text:SetText(n)
+                end
+            end
+        end)
+    end
 end
 
 -- == Badge cell (generic): colored badge with gloss + optional medal texture ==
