@@ -36,6 +36,19 @@ local function ShowParticipants(names)
     end
 end
 
+-- Reusable, shared popup columns for "Lots utilisés"
+local _usedLotsCols
+local function _ensureUsedLotsCols()
+    if _usedLotsCols then return _usedLotsCols end
+    _usedLotsCols = UI.NormalizeColumns({
+        { key="lot",  title=Tr("col_bundle"),    min=120 },
+        { key="qty",  title=Tr("col_qty_short"),    vsep=true,  w=60, justify="RIGHT" },
+        { key="item", title=Tr("col_item"),  vsep=true,  min=140, flex=1 },
+        { key="amt",  title=Tr("col_value"), vsep=true,  w=120, justify="RIGHT" },
+    })
+    return _usedLotsCols
+end
+
 local function BuildRow(r)
     local f = {}
     f.date  = UI.Label(r)
@@ -68,6 +81,9 @@ local function BuildRow(r)
 end
 
 local function UpdateRow(i, r, f, s)
+    -- Attach metadata for static handlers
+    r._index = i
+    r._data  = s
     local names = s.participants or {}
     local cnt   = (#names > 0 and #names) or (tonumber(s.count) or 0)
 
@@ -87,27 +103,22 @@ local function UpdateRow(i, r, f, s)
     f.state:SetText(s.refunded and "|cff40ff40"..Tr("lbl_refunded").."|r" or "|cffffd200"..Tr("lbl_closed").."|r")
 
     r.btnRefund:SetEnabled(true)
-    r.btnRefund:SetText(s.refunded and Tr("btn_remove_free") or Tr("btn_make_free"))
-    do
-        local idx = i  -- capture de l’index CORRECT
-        r.btnRefund:SetScript("OnClick", function()
-            local h = histNow()
-            local curr = h[idx]
-            local isUnrefund = curr and curr.refunded or false
-            local msg = isUnrefund
-                and Tr("confirm_cancel_free_session")
-                or  Tr("confirm_make_free_session")
-            UI.PopupConfirm(msg, function()
-                local ok = isUnrefund and GLOG.UnrefundSession(idx) or GLOG.RefundSession(idx)
-                if ok then
-                    -- Immediate local UI feedback without full rebuild
-                    _LightRefresh()
-                    -- Also trigger broader refresh if needed (other tabs/state)
-                    if ns and ns.RefreshAll then ns.RefreshAll() end
-                end
-            end)
+    r.btnRefund._ownerRow = r
+    r.btnRefund:SetScript("OnClick", nil)
+    r.btnRefund:SetScript("OnClick", function(self)
+        local row = self._ownerRow
+        if not row then return end
+        local idx = tonumber(row._index or 0) or 0
+        if idx <= 0 then return end
+        local h = histNow()
+        local curr = h[idx]
+        local isUnrefund = curr and curr.refunded or false
+        local msg = isUnrefund and Tr("confirm_cancel_free_session") or Tr("confirm_make_free_session")
+        UI.PopupConfirm(msg, function()
+            local ok = isUnrefund and GLOG.UnrefundSession(idx) or GLOG.RefundSession(idx)
+            if ok then _LightRefresh(); if ns and ns.RefreshAll then ns.RefreshAll() end end
         end)
-    end
+    end)
 
     r.btnDelete:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -119,19 +130,23 @@ local function UpdateRow(i, r, f, s)
 end)
 r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    do
-        local idx = i
-        r.btnDelete:SetScript("OnClick", function()
-            UI.PopupConfirm(Tr("confirm_delete_history_line_permanent"), function()
-                if GLOG.DeleteHistory and GLOG.DeleteHistory(idx) then
-                    -- Hard refresh: dataset size/order changed
-                    _LightRefresh("hard")
-                    if ns and ns.RefreshAll then ns.RefreshAll() end
-                end
-            end)
+    r.btnDelete._ownerRow = r
+    r.btnDelete:SetScript("OnClick", nil)
+    r.btnDelete:SetScript("OnClick", function(self)
+        local row = self._ownerRow
+        if not row then return end
+        local idx = tonumber(row._index or 0) or 0
+        if idx <= 0 then return end
+        UI.PopupConfirm(Tr("confirm_delete_history_line_permanent"), function()
+            if GLOG.DeleteHistory and GLOG.DeleteHistory(idx) then _LightRefresh("hard"); if ns and ns.RefreshAll then ns.RefreshAll() end end
         end)
+    end)
 
-        r.btnLots:SetOnClick(function()
+    r.btnLots._ownerRow = r
+    r.btnLots:SetOnClick(function(self)
+            local row = self._ownerRow
+            if not row then return end
+            local s = row._data or {}
             local lots = s.lots or {}
             if #lots == 0 then
                 UI.PopupText(Tr("lbl_used_bundles"), Tr("hint_no_bundle_for_raid"))
@@ -140,7 +155,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
             -- Résumé pour CETTE sortie : #lots & Σ charges utilisées (1 charge par lot et par raid)
             local nbLots, usedCharges = #lots, 0
-            for _ , _ in ipairs(lots) do
+            for _ in ipairs(lots) do
                 usedCharges = usedCharges + 1
             end
 
@@ -157,12 +172,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 fs:SetPoint("TOP", dlg.title, "BOTTOM", 0, -4)
             end
 
-            local cols = UI.NormalizeColumns({
-                { key="lot",  title=Tr("col_bundle"),    min=120 },
-                { key="qty",  title=Tr("col_qty_short"),    vsep=true,  w=60, justify="RIGHT" },
-                { key="item", title=Tr("col_item"),  vsep=true,  min=140, flex=1 },
-                { key="amt",  title=Tr("col_value"), vsep=true,  w=120, justify="RIGHT" },
-            })
+            local cols = _ensureUsedLotsCols()
 
             -- Petit cache local des noms pour éviter les recharges multiples
             local _nameCache = {}
@@ -260,7 +270,7 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
                 rowHeight = UI.ROW_H_SMALL,
             })
 
-            -- Reconstruit les lignes depuis la DB
+            -- Reconstruit les lignes depuis la DB (réutilisation d'un même table si rejoué)
             local rows = {}
             local dbLots = (GuildLogisticsDB and GuildLogisticsDB.lots and GuildLogisticsDB.lots.list) or {}
             local dbExp  = (GuildLogisticsDB and GuildLogisticsDB.expenses and GuildLogisticsDB.expenses.list) or {}
@@ -327,7 +337,6 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
             dlg:SetButtons({ { text = CLOSE, default = true } })
             dlg:Show()
         end)
-    end
 end
 
 local function Layout()

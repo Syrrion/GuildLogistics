@@ -66,87 +66,143 @@ local function resolveSourceLabel(it)
     return tostring(it and it.source or "")
 end
 
-local function resolveItemName(it)
-    if it.itemID then
-        local name = GetItemInfo and select(1, GetItemInfo(it.itemID))
-        if name and name ~= "" then return name end
-    end
-    if it.itemLink and it.itemLink ~= "" then
-        local name = GetItemInfo and select(1, GetItemInfo(it.itemLink))
-        if name and name ~= "" then return name end
-        local bracket = it.itemLink:match("%[(.-)%]")
-        if bracket and bracket ~= "" then return bracket end
-    end
-    if it.itemName and it.itemName ~= "" then return it.itemName end
-    if it.itemID then return "Objet #"..tostring(it.itemID) end
-    return ""
-end
-
-local function resolveItemIcon(it)
-    if it.itemID then
-        if GetItemIcon then local tex = GetItemIcon(it.itemID); if tex then return tex end end
-        if GetItemInfoInstant then local _,_,_,_,icon = GetItemInfoInstant(it.itemID); if icon then return icon end end
-    end
-    if it.itemLink and it.itemLink ~= "" then
-        if GetItemIcon then local tex = GetItemIcon(it.itemLink); if tex then return tex end end
-        if GetItemInfoInstant then local _,_,_,_,icon = GetItemInfoInstant(it.itemLink); if icon then return icon end end
-    end
-    return 134400
-end
+-- Deprecated item resolvers removed; rely on UI.SetItemCell (uses C_Item/Item async)
 
 -- =========================
--- === Gestionnaires BTN ===
+-- === Handlers & Columns ==
 -- =========================
-local function AttachSplitExpenseHandler(r, f, d)
-    if not r.btnSplit then return end
+-- Cached columns for lot content popup
+local _lotContentCols
+local function _ensureLotContentCols()
+    if _lotContentCols then return _lotContentCols end
+    _lotContentCols = UI.NormalizeColumns({
+        { key="qty",  title=Tr("col_qty_short"),   w=40,  justify="RIGHT" },
+        { key="item", title=Tr("col_item"), vsep=true,  min=240, flex=1 },
+        { key="src",  title=Tr("col_source"), vsep=true,  w=70 },
+        { key="amt",  title=Tr("col_amount"), vsep=true,  w=120, justify="RIGHT" },
+    })
+    return _lotContentCols
+end
+
+-- Static checkbox handler (selection)
+local function OnSelClick(self)
+    local row = self._ownerRow
+    if not row then return end
+    local abs = row._abs
+    if abs == nil then return end
+    selected[abs] = self:GetChecked() and true or false
+    if ns and ns.RefreshActive then ns.RefreshActive() end
+end
+
+-- Static split handler for free resources
+local function OnSplitClick(self)
+    local row = self._ownerRow
+    if not row then return end
+    local d = row._data or {}
     local qty = tonumber(d.qty or 1) or 1
     local canSplit = (not d.lotId) and (qty > 1)
-    r.btnSplit:SetEnabled(canSplit)
-    r.btnSplit:SetOnClick(function()
-        if not canSplit then return end
-        UI.PopupPromptNumber(Tr("popup_split_title"), Tr("lbl_split_qty"), function(v)
-            local qs = tonumber(v or 0) or 0
-            if qs <= 0 or qs >= qty then
-                UI.PopupConfirm(Tr("err_split_qty_invalid"))
-                return
-            end
-            -- ID solide depuis la ligne (renseigné lors de l'update visuelle)
-            local eid = tonumber(r._expenseId) or tonumber(d.id) or tonumber(r._abs) or tonumber(r._index)
-            if GLOG and GLOG.Debug then GLOG.Debug("CLICK","SPLIT","eid=",eid,"qs=",qs) end
-            if not eid or eid <= 0 then
-                UI.PopupConfirm(Tr("err_split_failed"))
-                return
-            end
-            local ok = (GLOG.SplitExpense and GLOG.SplitExpense(eid, qs)) and true or false
-            if not ok then
-                UI.PopupConfirm(Tr("err_split_failed"))
-                return
-            end
-            if ns and ns.RefreshAll then ns.RefreshAll() end
-        end)
+    if not canSplit then return end
+    UI.PopupPromptNumber(Tr("popup_split_title"), Tr("lbl_split_qty"), function(v)
+        local qs = tonumber(v or 0) or 0
+        if qs <= 0 or qs >= qty then
+            UI.PopupConfirm(Tr("err_split_qty_invalid"))
+            return
+        end
+        local eid = tonumber(row._expenseId) or tonumber(d.id) or tonumber(row._abs) or tonumber(row._index)
+        if GLOG and GLOG.Debug then GLOG.Debug("CLICK","SPLIT","eid=",eid,"qs=",qs) end
+        if not eid or eid <= 0 then
+            UI.PopupConfirm(Tr("err_split_failed"))
+            return
+        end
+        local ok = (GLOG.SplitExpense and GLOG.SplitExpense(eid, qs)) and true or false
+        if not ok then
+            UI.PopupConfirm(Tr("err_split_failed"))
+            return
+        end
+        if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 end
 
-local function AttachDeleteExpenseHandler(r, f, d)
-    r.btnDelete:SetEnabled(not d.lotId)
-    r.btnDelete:SetOnClick(function()
-        local abs = r._abs
-        local eid = tonumber(d.id or 0) or 0
-        UI.PopupConfirm(Tr("confirm_delete_resource_line"), function()
-            GLOG.DeleteExpense((eid > 0) and eid or abs)
-            if ns.RefreshAll then ns.RefreshAll() end
-        end)
+-- Static delete handler for free resources
+local function OnDeleteExpenseClick(self)
+    local row = self._ownerRow
+    if not row then return end
+    local d = row._data or {}
+    local abs = row._abs
+    local eid = tonumber(d.id or 0) or 0
+    local target = (eid > 0) and eid or abs
+    if not target then return end
+    UI.PopupConfirm(Tr("confirm_delete_resource_line"), function()
+        if GLOG.DeleteExpense then GLOG.DeleteExpense(target) end
+        if ns and ns.RefreshAll then ns.RefreshAll() end
     end)
 end
 
-local function AttachDeleteLotHandler(r, lot)
-    -- Sécurise l'appel si le bouton n'existe pas (non-GM)
-    if not r.btnDelete then return end
+-- Static delete handler for lots
+local function OnLotDeleteClick(self)
+    local row = self._ownerRow
+    if not row then return end
+    local lot = row._lot
+    if not lot then return end
     local canDelete = (tonumber(lot.used or 0) or 0) == 0
-    r.btnDelete:SetEnabled(canDelete)
-    r.btnDelete:SetOnClick(function()
-        if canDelete and GLOG.Lot_Delete then GLOG.Lot_Delete(lot.id) end
-    end)
+    if canDelete and GLOG and GLOG.Lot_Delete then
+        GLOG.Lot_Delete(lot.id)
+    end
+end
+
+-- Static content handler for lots
+local function OnLotContentClick(self)
+    local row = self._ownerRow
+    if not row then return end
+    local lot = row._lot
+    if not lot then return end
+    local title = Tr("lbl_bundle_contents") .. (lot.name or (Tr("lbl_lot") .. tostring(lot.id)))
+    local dlg = UI.CreatePopup({ title=title, width=580, height=440 })
+    local cols = _ensureLotContentCols()
+    local lv = UI.ListView(dlg.content, cols, {
+        buildRow = function(r2)
+            local ff = {}
+            ff.qty   = UI.Label(r2, { justify="RIGHT" })
+            ff.src   = UI.Label(r2)
+            ff.unit  = UI.Label(r2, { justify="RIGHT" })
+            ff.amt   = UI.Label(r2, { justify="RIGHT" })
+            ff.item  = UI.CreateItemCell(r2, { size=20, width=240 })
+            return ff
+        end,
+        updateRow = function(i2, r2, ff, exp)
+            local q  = tonumber(exp.qty or 1) or 1
+            local cp = tonumber(exp.copper or 0) or 0
+            local unitCopper = (q > 0) and math.floor((cp / q) + 0.5) or 0
+
+            ff.qty:SetText(q)
+            ff.src:SetText(resolveSourceLabel(exp))
+            ff.unit:SetText(moneyCopper(unitCopper))
+            ff.amt:SetText(moneyCopper(cp))
+            UI.SetItemCell(ff.item, exp)
+        end,
+    })
+
+    local rows = {}
+    if GLOG.GetExpenseById then
+        -- Normal path: from expense ids in the lot
+        for _, eid in ipairs(lot.itemIds or {}) do
+            local _, it = GLOG.GetExpenseById(eid)
+            if it then table.insert(rows, it) end
+        end
+        -- Fallback: if empty, scan all expenses and filter by lotId
+        if #rows == 0 and GLOG.GetExpenses then
+            local list = GLOG.GetExpenses()
+            for _, it in ipairs(list or {}) do
+                if tonumber(it.lotId or 0) == tonumber(lot.id or 0) then
+                    table.insert(rows, it)
+                end
+            end
+        end
+    end
+    lv:SetData(rows)
+
+    dlg:SetButtons({ { text=Tr("btn_close"), default=true } })
+    dlg:Show()
 end
 
 -- =========================
@@ -171,38 +227,44 @@ local function BuildRowFree(r)
     r.btnDelete:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData())
 
     UI.AttachRowRight(f.act, { r.btnDelete, r.btnSplit }, 8, -4, { leftPad=8, align="center" })
+    -- Static handlers binding
+    f.sel._ownerRow = r
+    f.sel:SetScript("OnClick", OnSelClick)
+    r.btnSplit._ownerRow = r
+    r.btnSplit:SetOnClick(OnSplitClick)
+    r.btnDelete._ownerRow = r
+    r.btnDelete:SetOnClick(OnDeleteExpenseClick)
     return f
 end
 
 
 local function UpdateRowFree(i, r, f, it)
     local d = it.data or it
+    -- Attach row metadata for handlers
     r._abs = it._abs or i
+    r._data = d
+    r._expenseId = tonumber(d.id or 0)
 
-    if GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
+    local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
+    if isGM then
         f.sel:Show()
         f.sel:SetChecked(selected[r._abs] or false)
-        f.sel:SetScript("OnClick", function(self)
-            selected[r._abs] = self:GetChecked()
-            if ns.RefreshActive then ns.RefreshActive() end
-        end)
     else
         f.sel:Hide()
-        f.sel:SetScript("OnClick", nil)
     end
-    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
-    if r.btnSplit  and r.btnSplit.SetShown  then r.btnSplit:SetShown(GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) end
+    if r.btnDelete and r.btnDelete.SetShown then r.btnDelete:SetShown(isGM) end
+    if r.btnSplit  and r.btnSplit.SetShown  then r.btnSplit:SetShown(isGM) end
+
+    -- Set enable state for actions (no closures)
+    local qty = tonumber(d.qty or 1) or 1
+    local canSplit = (not d.lotId) and (qty > 1)
+    if r.btnSplit and r.btnSplit.SetEnabled then r.btnSplit:SetEnabled(canSplit) end
+    if r.btnDelete and r.btnDelete.SetEnabled then r.btnDelete:SetEnabled(not d.lotId) end
 
     f.qty:SetText(tostring(d.qty or 1))
     f.source:SetText(resolveSourceLabel(d))
     f.amount:SetText(moneyCopper(d.copper))
     UI.SetItemCell(f.item, d)
-
-    -- Mémorise l'ID exact de la dépense pour les handlers
-    r._expenseId = tonumber(d.id or 0)
-
-    AttachSplitExpenseHandler(r, f, d)
-    AttachDeleteExpenseHandler(r, f, d)
 end
 
 -- =========================
@@ -225,11 +287,20 @@ local function BuildRowLots(r)
         r.btnDelete = UI.Button(f.act, Tr("btn_delete_short"), { size="sm", variant="danger", minWidth=30 })
         UI.AttachRowRight(f.act, { r.btnDelete }, 8, -4, { leftPad=8, align="center" })
     end
+    -- Static handlers binding
+    f.content._ownerRow = r
+    f.content:SetOnClick(OnLotContentClick)
+    if r.btnDelete then
+        r.btnDelete._ownerRow = r
+        r.btnDelete:SetOnClick(OnLotDeleteClick)
+    end
     return f
 end
 
 local function UpdateRowLots(i, r, f, it)
     local lot = it.data
+    -- Attach metadata
+    r._lot = lot
     local st  = GLOG.Lot_Status and GLOG.Lot_Status(lot) or "?"
     local N   = tonumber(lot.sessions or 1) or 1
     local used= tonumber(lot.used or 0) or 0
@@ -255,63 +326,19 @@ local function UpdateRowLots(i, r, f, it)
     end
 
     f.total:SetText(moneyCopper(totalCopper))
-
-    f.content:SetOnClick(function()
-        local dlg = UI.CreatePopup({ title=Tr("lbl_bundle_contents") .. (lot.name or (Tr("lbl_lot") .. tostring(lot.id))), width=580, height=440 })
-        local cols = UI.NormalizeColumns({
-            { key="qty",  title=Tr("col_qty_short"),   w=40,  justify="RIGHT" },
-            { key="item", title=Tr("col_item"), vsep=true,  min=240, flex=1 },
-            { key="src",  title=Tr("col_source"), vsep=true,  w=70 },
-            { key="amt",  title=Tr("col_amount"), vsep=true,  w=120, justify="RIGHT" },
-        })
-        local lv = UI.ListView(dlg.content, cols, {
-            buildRow = function(r2)
-                local ff = {}
-                ff.qty   = UI.Label(r2, { justify="RIGHT" })
-                ff.src   = UI.Label(r2)
-                ff.unit  = UI.Label(r2, { justify="RIGHT" })
-                ff.amt   = UI.Label(r2, { justify="RIGHT" })
-                ff.item  = UI.CreateItemCell(r2, { size=20, width=240 })
-                return ff
-            end,
-            updateRow = function(i2, r2, ff, exp)
-                local q  = tonumber(exp.qty or 1) or 1
-                local cp = tonumber(exp.copper or 0) or 0
-                local unitCopper = (q > 0) and math.floor((cp / q) + 0.5) or 0
-
-                ff.qty:SetText(q)
-                ff.src:SetText(resolveSourceLabel(exp))
-                ff.unit:SetText(moneyCopper(unitCopper))
-                ff.amt:SetText(moneyCopper(cp))
-                UI.SetItemCell(ff.item, exp)
-            end,
-        })
-
-        local rows = {}
-        if GLOG.GetExpenseById then
-            -- Chemin normal : à partir des expenseIds du lot
-            for _, eid in ipairs(lot.itemIds or {}) do
-                local _, it = GLOG.GetExpenseById(eid)
-                if it then table.insert(rows, it) end
-            end
-            -- Fallback : si la liste est vide, balayer les dépenses et filtrer par lotId
-            if #rows == 0 and GLOG.GetExpenses then
-                local list = GLOG.GetExpenses()  -- renvoie list,total : ici Lua garde le 1er retour
-                for _, it in ipairs(list or {}) do
-                    if tonumber(it.lotId or 0) == tonumber(lot.id or 0) then
-                        table.insert(rows, it)
-                    end
-                end
-            end
-        end
-        lv:SetData(rows)
-
-        dlg:SetButtons({ { text=Tr("btn_close"), default=true } })
-        dlg:Show()
-    end)
-
-    AttachDeleteLotHandler(r, lot)
+    -- Delete button enable state
+    if r.btnDelete and r.btnDelete.SetEnabled then
+        r.btnDelete:SetEnabled((tonumber(lot.used or 0) or 0) == 0)
+    end
 end
+
+-- =========================
+-- ====== POOLS/BUFFERS ====
+-- =========================
+-- Reuse tables to reduce GC churn in hot paths
+local _pool_rows_lotContent = {}
+local _pool_rows_freeItems  = {}
+local _pool_rows_lots       = {}
 
 -- =========================
 -- ====== LAYOUT/REF =======

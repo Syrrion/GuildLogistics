@@ -379,6 +379,17 @@ function UI.SyncIndicatorHide() _stopSyncAnim() end
 -- Coupe l’animation si la fenêtre est masquée
 Main:HookScript("OnHide", function()
     if UI.SyncIndicatorHide then UI.SyncIndicatorHide() end
+    -- 🧹 Purge mémoire lors de la fermeture de la fenêtre principale
+    if UI and UI._MemClean_TabOpen then
+        -- Déférer pour laisser WoW terminer l'animation/fermeture
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.05, function()
+                UI._MemClean_TabOpen()
+            end)
+        else
+            UI._MemClean_TabOpen()
+        end
+    end
 end)
 
 -- Branchements : affichage dès réception du 1er fragment, arrêt à la fin
@@ -567,6 +578,18 @@ local function ShowPanel(idx)
             elseif b.SetNormalFontObject then
                 b:SetNormalFontObject(isSel and "GameFontHighlightLarge" or "GameFontHighlight")
             end
+        end
+    end
+
+    -- 🧹 Nettoyage mémoire à l'ouverture d'onglet (configurable)
+    if UI._MemClean_TabOpen then
+        -- Déféré légèrement pour ne pas impacter le clic ni l'affichage initial
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.05, function()
+                UI._MemClean_TabOpen()
+            end)
+        else
+            UI._MemClean_TabOpen()
         end
     end
 end
@@ -794,6 +817,29 @@ function UI.GetTabButton(label)
     local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
     local def = idx and Registered[idx] or nil
     return def and def._btn, idx
+end
+
+-- ===================== Mémoire: nettoyage à l'ouverture =====================
+-- Hook configurable: assigner UI._MemClean_TabOpen à une fonction custom si besoin
+-- Implémentation par défaut: GC léger et option de log (si Debug actif)
+do
+    local lastGC = 0
+    local MIN_INTERVAL = 2.0  -- secondes; évite de lancer trop souvent si on change d’onglet rapidement
+    local function DefaultTabOpenGC()
+        local now = GetTime and GetTime() or 0
+        if now - lastGC < MIN_INTERVAL then return end
+        lastGC = now
+        local before
+        if collectgarbage and collectgarbage("count") then
+            before = collectgarbage("count") -- Ko
+        end
+        if collectgarbage then collectgarbage("collect") end
+        if GLOG and GLOG.Debug and before then
+            local after = collectgarbage and collectgarbage("count") or before
+            GLOG.Debug("MEM", "TabOpenGC", string.format("%.1f -> %.1f Ko", before, after))
+        end
+    end
+    UI._MemClean_TabOpen = UI._MemClean_TabOpen or DefaultTabOpenGC
 end
 
 -- ➕ Reflow des onglets visibles
