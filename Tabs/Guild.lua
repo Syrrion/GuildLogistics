@@ -220,7 +220,13 @@ end
 -- ===== Colonnes (dynamiques : ajout de la version en mode debug) =====
 local function _BuildColumns()
     local base = {
-        { key="alias",  title=Tr("col_alias"),          w=90,  justify="LEFT"   },
+        -- Optional ping column on the far left (hidden in standalone mode)
+        (function()
+            local isStandalone = (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
+            if not isStandalone then return { key = "ping", title = "", w = 28, justify = "CENTER" } end
+            return nil
+        end)(),
+        { key="alias",  title=Tr("col_alias"),          vsep=true,  w=90,  justify="LEFT"   },
         { key="lvl",    title=Tr("col_level_short"),    vsep=true,  w=44,  justify="CENTER" },
         { key="name",   title=Tr("col_name"),           vsep=true,  min=50, flex=1         },
         { key="last",   title=Tr("col_attendance"),     vsep=true,  w=200,  justify="LEFT" },
@@ -262,12 +268,52 @@ local function FindGuildInfo(playerName)
     return (GLOG.GetMainAggregatedInfo and GLOG.GetMainAggregatedInfo(playerName)) or {}
 end
 
+-- Ping cooldown state (per recipient, keyed by normalized full name) and helpers
+local _pingCooldown = {}
+local function _normalizeName(full)
+    local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+    local s = nf(full or "")
+    return s:lower()
+end
+local function _pingRemaining(full)
+    local key = _normalizeName(full)
+    local t = (GetTimePreciseSec and GetTimePreciseSec()) or (GetTime and GetTime()) or 0
+    local untilT = tonumber(_pingCooldown[key] or 0) or 0
+    local left = math.ceil(math.max(0, untilT - t))
+    return left
+end
+local function _setPingCooldown(full, seconds)
+    local key = _normalizeName(full)
+    local t = (GetTimePreciseSec and GetTimePreciseSec()) or (GetTime and GetTime()) or 0
+    _pingCooldown[key] = t + (seconds or 90)
+end
+
+-- Cached current player full name for self-comparisons
+local _meFull
+local function _GetMeFull()
+    if _meFull ~= nil then return _meFull end
+    local name = UnitName and UnitName("player") or nil
+    local realm = GetRealmName and GetRealmName() or nil
+    if name and name ~= "" then
+        if ns and ns.Util and ns.Util.NormalizeFull then
+            _meFull = ns.Util.NormalizeFull(name, realm)
+        else
+            _meFull = (realm and realm ~= "") and (name.."-"..realm) or name
+        end
+    else
+        _meFull = ""
+    end
+    return _meFull
+end
+
 
 -- Construction d’une ligne
 function BuildRow(r)
     local f = {}
 
     -- Widgets pour "data"
+    -- Host for ping button if column exists
+    f.ping = CreateFrame("Frame", nil, r)
     f.alias = UI.Label(r, { justify = "LEFT"   })
     f.lvl   = UI.Label(r, { justify = "CENTER" })
     f.name  = UI.CreateNameTag(r)
@@ -310,6 +356,41 @@ function BuildRow(r)
     f.sepLabel = r:CreateFontString(nil, "OVERLAY", "GameFontNormal"); f.sepLabel:Hide()
     f.sepLabel:SetTextColor(1, 0.95, 0.3)
 
+    -- Ping icon button (only when ping column is present)
+    do
+        local isStandalone = (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
+        if not isStandalone and f.ping then
+            local ICON = "Interface\\ICONS\\INV_Misc_Bell_01"
+            local btn = UI.IconButton(f.ping, ICON, { size = 18, tooltip = Tr and Tr("tip_ping") or "Ping" })
+            btn:SetPoint("CENTER", f.ping, "CENTER", 0, 0)
+            btn._isPing = true
+            r._pingBtn = btn
+
+            -- Allow hover scripts to run even when disabled (so tooltip still appears)
+            if btn.SetMotionScriptsWhileDisabled then btn:SetMotionScriptsWhileDisabled(true) end
+            btn:EnableMouse(true)
+            btn:SetScript("OnEnter", function(self)
+                local data = r._lastItemRef or r._itemData or r._data or r._item
+                local name = data and data.name
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                if name and name ~= "" then
+                    local left = _pingRemaining(name)
+                    if not self:IsEnabled() then
+                        if left > 0 then
+                            GameTooltip:SetText((Tr and Tr("tip_disabled_ping_cd_fmt") or "On cooldown: %ds remaining"):format(left))
+                        else
+                            GameTooltip:SetText((Tr and Tr("tip_disabled_offline_group")) or "Disabled: none of this player's characters are online")
+                        end
+                    else
+                        GameTooltip:SetText((Tr and Tr("tip_ping")) or "Ping this player")
+                    end
+                end
+                GameTooltip:Show()
+            end)
+            btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+    end
+
     return f
 end
 
@@ -339,6 +420,9 @@ function UpdateRow(i, r, f, it)
         if f.ilvlMedal then f.ilvlMedal:Hide() end
         if f.mplusMedal then f.mplusMedal:Hide() end
 
+        -- Hide ping button on separator rows
+        if r._pingBtn then r._pingBtn:Hide() end
+
         -- 🔒 Nettoyage visuel
         if f.name and f.name.icon then
             f.name.icon:SetTexture(nil)
@@ -361,6 +445,85 @@ function UpdateRow(i, r, f, it)
     local data = it -- pour lisibilité
     -- Cache guild info per item to avoid repeated lookups
     local gi = data._gi or FindGuildInfo(data.name or "")
+    -- Ping button state (online + cooldown) and click handler (only for data rows)
+    do
+        local btn = r._pingBtn
+        if btn then
+            -- Hide on separators or when the row represents the current player
+            local isSelf = false
+            local me = _GetMeFull()
+            if me and me ~= "" then
+                if ns and ns.Util and ns.Util.SamePlayer then
+                    isSelf = ns.Util.SamePlayer(data.name, me)
+                else
+                    local nf = (ns and ns.Util and ns.Util.NormalizeFull) and ns.Util.NormalizeFull or tostring
+                    local a = nf(data.name or "")
+                    local b = nf(me)
+                    isSelf = (tostring(a):lower() == tostring(b):lower())
+                end
+            end
+
+            if isSep or isSelf then
+                btn:Hide()
+            else
+                -- Determine recipient: prefer an online alt full name if present
+                local online = gi and gi.online and true or false
+                local recipient = (gi and gi.onlineAltFull) or data.name
+                -- Hide when offline (no tooltip noise for offline targets)
+                if not online then
+                    btn:Hide()
+                else
+                    btn:Show()
+                    -- Bypass cooldown for authorized editors/GM cluster and officers
+                    -- Keep editor rights check (CanModifyGuildData) and add officers via new GLOG.IsOfficer()
+                    local isPrivileged = false
+                    if GLOG then
+                        if GLOG.CanModifyGuildData and GLOG.CanModifyGuildData() then
+                            isPrivileged = true
+                        elseif GLOG.IsOfficer and GLOG.IsOfficer() then
+                            isPrivileged = true
+                        end
+                    end
+                    local cdLeft = isPrivileged and 0 or _pingRemaining(recipient)
+                    local enabled = online and (cdLeft <= 0)
+                    if btn.SetEnabled then btn:SetEnabled(enabled) end
+                    btn:SetAlpha(enabled and 1 or 0.45)
+                    btn:SetOnClick(function()
+                        if not enabled then return end
+                        local target = recipient
+                        if not (GLOG and GLOG.Comm_Whisper and target and target ~= "") then return end
+
+                        -- Ask for an optional message to accompany the ping
+                        local function send(msg)
+                            local payload = { ts = (GetTime and GetTime()) or 0 }
+                            if type(msg) == "string" then
+                                -- Properly trim leading/trailing whitespace
+                                local trimmed = (msg:gsub("^%s+", "")):gsub("%s+$", "")
+                                if trimmed ~= "" then payload.msg = trimmed end
+                            end
+                            GLOG.Comm_Whisper(target, "PING", payload)
+                            if not isPrivileged then _setPingCooldown(recipient, 90) end
+                            if lv and lv.UpdateVisibleRows then lv:InvalidateVisibleRowsCache(); lv:UpdateVisibleRows() end
+                        end
+
+                        if UI and UI.PopupPromptText then
+                            UI.PopupPromptText(Tr and Tr("popup_ping_title") or "Ping", Tr and Tr("lbl_ping_message") or "Message (optionnel)", function(text)
+                                -- Défense: trim + coupe à 120 caractères
+                                local t = type(text) == "string" and text or ""
+                                t = (t:gsub("^%s+", "")):gsub("%s+$", "")
+                                if #t > 120 then t = string.sub(t, 1, 120) end
+                                send(t)
+                            end, { width = 420, placeholder = Tr and Tr("ph_ping_message") or "Ex: besoin d'un coup de main?", maxLen = 120 })
+                        else
+                            -- Fallback: send without extra message
+                            send(nil)
+                        end
+                    end)
+                end
+            end
+        end
+    end
+
 
     -- Nom (sans royaume) + ajout éventuel du reroll connecté (icône + nom)
     UI.SetNameTagShort(f.name, data.name or "")

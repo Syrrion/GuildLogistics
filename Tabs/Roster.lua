@@ -36,6 +36,7 @@ local function _UpdateNoGuildUI()
 end
 
 
+-- Colonnes sans ping (le ping est désormais dans l'onglet Membres de la guilde)
 local cols = UI.NormalizeColumns({
     { key="alias",  title=Tr("col_alias"),          w=90, justify="LEFT" },
     { key="lvl",    title=Tr("col_level_short"),    vsep=true,  w=44, justify="CENTER" },
@@ -116,8 +117,11 @@ end
 
 -- BuildRow
 -- Construit une ligne de la ListView (actifs/réserve)
+-- Suppression de la mécanique de ping dans cet onglet
+
 local function BuildRow(r, context)
     local f = {}
+    -- Pas de bouton ping dans cet onglet
     f.lvl   = UI.Label(r, { justify = "CENTER" })
     f.alias = UI.Label(r, { justify = "LEFT"  })
     f.name  = UI.CreateNameTag(r)
@@ -135,6 +139,8 @@ local function BuildRow(r, context)
 
     -- Alignement des actions à droite
     UI.AttachRowRight(f.act, {  r.btnDeposit, r.btnWithdraw }, 8, -4, { leftPad = 8, align = "center" })
+
+    -- (Ping button removed)
 
     return f
 end
@@ -222,6 +228,8 @@ local function UpdateRow(i, r, f, data)
         r.btnWithdraw:SetShown(canAct)
         AttachWithdrawHandler(r.btnWithdraw, data.name, canAct, isMaster)
     end
+
+    -- (Ping logic removed)
 
     -- Recalage du container d’actions
     if f and f.act and f.act._applyRowActionsLayout then

@@ -139,7 +139,7 @@ L["btn_force_version_gm"] = "Force my version (GM)"
 L["btn_approve"]          = "Approve"
 L["btn_refuse"]           = "Refuse"
 L["btn_make_free"]        = "Make free"
-L["btn_remove_free"]      = "Remove free"
+L["btn_cancel_free"]      = "Cancel free"
 L["btn_back"]             = "< Back"
 L["btn_add_to_roster"]    = "Add to Roster"
 L["btn_remove_from_roster"] = "Remove from Roster"
@@ -174,6 +174,18 @@ L["col_alias"]            = "Alias"
 L["btn_set_alias"]        = "Alias…"
 L["popup_set_alias_title"]= "Set alias"
 L["lbl_alias"]            = "Alias:"
+
+-- Ping button and toast
+L["tip_ping"]                    = "Ping this player"
+L["tip_disabled_ping_cd_fmt"]    = "On cooldown: %ds remaining"
+L["toast_ping_title"]            = "Ping"
+L["toast_ping_text_fmt"]         = "You were pinged by %s"
+-- With custom message support
+L["toast_ping_text_with_msg_fmt"] = "You were pinged by %s :\n|cffffd200%s|r"
+-- Ping prompt
+L["popup_ping_title"]   = "Ping"
+L["lbl_ping_message"]   = "Message (optional)"
+L["ph_ping_message"]    = "E.g., need a hand?"
 
 
 -- ============================================== --
@@ -385,7 +397,7 @@ L["weekday_sun"] = "Sunday"
 L["options_notifications_title"] = "Popup display"
 L["opt_popup_calendar_invite"]   = "Calendar invite notification"
 L["opt_popup_raid_participation"]= "Raid participation notification"
-L["opt_popup_gchat_mention"]      = "Guild chat mention notification"
+L["opt_popup_gchat_mention"]      = "Guild chat mention & Ping notification"
 
 
 -- ============================================== --
@@ -694,8 +706,8 @@ L["toast_error_title"] = "New Lua Error"
 -- Personal credit/debit toasts
 L["toast_credit_title"]      = "Gold credited"
 L["toast_debit_title"]       = "Gold debited"
-L["toast_credit_text_fmt"]   = "You were credited %s. New balance: %s."
-L["toast_debit_text_fmt"]    = "You were debited %s. New balance: %s."
+L["toast_credit_text_fmt"]   = "You were credited %s.\nNew balance: %s."
+L["toast_debit_text_fmt"]    = "You were debited %s.\nNew balance: %s."
 L["instance_outdoor"] = "Outdoor"
 
 -- Guild chat mention
@@ -745,6 +757,9 @@ L["lbl_equippable_only"] = "Equippable only"
 L["btn_expand"]          = "+"
 L["btn_collapse"]        = "-"
 L["value_empty"]         = "—"
+
+-- Toast/footer hint
+L["toast_hint_click_close"] = "Click to dismiss the notification"
 
 -- === Mode selection (dual-mode) ===
 L["mode_settings_header"]    = "Usage mode"

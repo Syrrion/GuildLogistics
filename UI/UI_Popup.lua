@@ -394,7 +394,8 @@ function UI.ShowParticipantsPopup(names, showState)
         local s = tostring(tok or "")
         local full = nil
         if s ~= "" then
-            if s:find("%-%") then
+            -- Detect FullName-Realm using plain search (no patterns)
+            if s:find("-", 1, true) then
                 -- Already a FullName-Realm
                 full = s
             else
@@ -446,7 +447,8 @@ function UI.ShowParticipants2Popup(names)
         local s = tostring(tok or "")
         local full = nil
         if s ~= "" then
-            if s:find("%-%") then
+            -- Detect FullName-Realm using plain search (no patterns)
+            if s:find("-", 1, true) then
                 full = s
             else
                 for fname, prec in pairs(pdb) do
@@ -781,6 +783,14 @@ function UI.PopupPromptText(title, label, onAccept, opts)
     local eb = CreateFrame("EditBox", nil, stack, "InputBoxTemplate")
     eb:SetAutoFocus(true); eb:SetSize(260, 28)
     eb:SetPoint("TOP", l, "BOTTOM", 0, -8)
+
+    -- Limite de longueur optionnelle
+    do
+        local maxLen = tonumber(opts and opts.maxLen)
+        if maxLen and maxLen > 0 and eb.SetMaxLetters then
+            eb:SetMaxLetters(maxLen)
+        end
+    end
 
     -- Applique la police à l'EditBox de saisie de texte
     if UI and UI.ApplyFontRecursively then

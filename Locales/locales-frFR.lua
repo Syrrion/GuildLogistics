@@ -108,7 +108,7 @@ L["btn_force_version_gm"] = "Forcer ma version (GM)"
 L["btn_approve"]          = "Approuver"
 L["btn_refuse"]           = "Refuser"
 L["btn_make_free"]        = "Rendre gratuit"
-L["btn_remove_free"]      = "Annuler gratuité"
+L["btn_cancel_free"]      = "Annuler la gratuité"
 L["btn_back"]             = "< Retour"
 L["btn_add_to_roster"]    = "Ajouter au Roster"
 L["btn_remove_from_roster"] = "Retirer du Roster"
@@ -144,6 +144,18 @@ L["col_alias"]            = "Alias"
 L["btn_set_alias"]        = "Alias…"
 L["popup_set_alias_title"]= "Définir un alias"
 L["lbl_alias"]            = "Alias :"
+
+-- Bouton Ping et toast
+L["tip_ping"]                    = "Pinger ce joueur"
+L["tip_disabled_ping_cd_fmt"]    = "En recharge : %ds restantes"
+L["toast_ping_title"]            = "Ping"
+L["toast_ping_text_fmt"]         = "Vous avez été ping par %s"
+-- Avec message personnalisé
+L["toast_ping_text_with_msg_fmt"] = "Vous avez été ping par %s :\n|cffffd200%s|r"
+-- Invite de saisie pour Ping
+L["popup_ping_title"]   = "Ping"
+L["lbl_ping_message"]   = "Message (optionnel)"
+L["ph_ping_message"]    = "Ex : besoin d’un coup de main ?"
 
 
 -- ============================================== --
@@ -353,7 +365,7 @@ L["weekday_sun"] = "dimanche"
 L["options_notifications_title"] = "Affichage des popups"
 L["opt_popup_calendar_invite"]   = "Notification d'invitation dans le calendrier"
 L["opt_popup_raid_participation"]= "Notification de participation à un raid"
-L["opt_popup_gchat_mention"]      = "Notification de mention dans le chat de guilde"
+L["opt_popup_gchat_mention"]      = "Notification de ping & mentions dans le chat de guilde"
 
 
 -- ============================================== --
@@ -664,8 +676,8 @@ L["toast_error_title"] = "Nouvelle erreur Lua"
 -- Notifications personnelles de crédit/débit
 L["toast_credit_title"]      = "Crédit reçu"
 L["toast_debit_title"]       = "Débit appliqué"
-L["toast_credit_text_fmt"]   = "Vous avez été crédité de %s. Nouveau solde : %s."
-L["toast_debit_text_fmt"]    = "Vous avez été débité de %s. Nouveau solde : %s."
+L["toast_credit_text_fmt"]   = "Vous avez été crédité de %s.\nNouveau solde : %s."
+L["toast_debit_text_fmt"]    = "Vous avez été débité de %s.\nNouveau solde : %s."
 L["instance_outdoor"] = "Extérieur"
 
 -- Mention dans le chat de guilde
@@ -715,6 +727,8 @@ L["lbl_equippable_only"]   = "Équippable seulement"
 L["btn_expand"]          = "+"
 L["btn_collapse"]        = "-"
 L["value_empty"]         = "—"
+-- Indice pied de toast
+L["toast_hint_click_close"] = "Cliquer pour fermer la notification"
 -- === Sélection de mode (dual-mode) ===
 L["mode_settings_header"]    = "Mode d'utilisation"
 L["mode_guild"]              = "Version de guilde"

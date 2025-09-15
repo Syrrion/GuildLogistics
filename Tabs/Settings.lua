@@ -273,7 +273,11 @@ function Build(container)
 
     -- Cases à cocher : calendrier / participation raid / mention chat guilde
     makeCheck("calendarInvite",    "opt_popup_calendar_invite")
-    makeCheck("raidParticipation", "opt_popup_raid_participation")
+    -- Masquer l'option de notification de participation raid en mode standalone
+    local isStandalone = (GLOG and GLOG.IsStandaloneMode and GLOG.IsStandaloneMode()) or false
+    if not isStandalone then
+        makeCheck("raidParticipation", "opt_popup_raid_participation")
+    end
     makeCheck("guildChatMention",  "opt_popup_gchat_mention")
 
     -- === Section 5 : Activer le débug ===

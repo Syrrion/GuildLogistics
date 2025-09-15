@@ -102,6 +102,12 @@ local function UpdateRow(i, r, f, s)
 
     f.state:SetText(s.refunded and "|cff40ff40"..Tr("lbl_refunded").."|r" or "|cffffd200"..Tr("lbl_closed").."|r")
 
+    -- Toggle refund button label based on state
+    local isRefunded = not not s.refunded
+    if r.btnRefund and r.btnRefund.SetText then
+        r.btnRefund:SetText(isRefunded and Tr("btn_cancel_free") or Tr("btn_make_free"))
+    end
+
     r.btnRefund:SetEnabled(true)
     r.btnRefund._ownerRow = r
     r.btnRefund:SetScript("OnClick", nil)

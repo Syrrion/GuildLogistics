@@ -60,7 +60,8 @@
         "DEFAULT_CHAT_FRAME",
         "GameTooltip",
         "AddonCompartmentFrame",
-        "GuildBankFrame"
+        "GuildBankFrame",
+        "SOUNDKIT"
     ],
     "Lua.type.weakUnionCheck": true,
     "Lua.diagnostics.disable": [

@@ -1515,6 +1515,53 @@ local function handleHistDel(sender, kv)
     end
 end
 
+-- ===== Simple Ping Handler (addon whisper) =====
+local function handlePing(sender, kv)
+    -- Safety: ignore if no sender or self (global guard already skips self for non-SYNC)
+    sender = tostring(sender or "")
+    if sender == "" then return end
+    -- Option: respect a minimal debounce per sender to avoid spam
+    GLOG._pingSpam = GLOG._pingSpam or {}
+    local nowTs = now()
+    local nextAt = tonumber(GLOG._pingSpam[sender] or 0)
+    if nowTs < nextAt then return end
+    GLOG._pingSpam[sender] = nowTs + 2
+
+    local UI = ns and ns.UI
+    if UI and UI.Toast then
+        local Tr = ns.Tr or function(s) return s end
+        local title = Tr("toast_ping_title") or "Ping"
+        local baseT = Tr("toast_ping_text_fmt") or "You were pinged by %s"
+        local extraT = Tr("toast_ping_text_with_msg_fmt") or "You were pinged by %s: %s"
+        local custom = kv and tostring(kv.msg or "") or ""
+        local text
+        if custom ~= "" then
+            -- Trim overly long messages to keep UI concise
+            if #custom > 200 then custom = custom:sub(1, 200) .. "…" end
+            text = string.format(extraT, sender, custom)
+        else
+            text = string.format(baseT, sender)
+        end
+        -- Reuse guild chat mention timing; use achievement earned sound for notification
+        UI.Toast({
+            title = title,
+            text = text,
+            icon = "Interface\\ICONS\\INV_Misc_Bell_01",
+            variant = "info",
+            duration = 60,
+            sound = 12891, -- Achievement earned sound
+        })
+
+        -- Also echo to the chat frame for visibility (strip newlines for single-line output)
+        if type(print) == "function" then
+            local line = string.format("%s : %s", title, text)
+            line = line:gsub("[\r\n]+", " ")
+            line = line:match("^%s*(.-)%s*$") or line -- trim
+            print(line)
+        end
+    end
+end
+
 -- ===== Table des handlers =====
 local MESSAGE_HANDLERS = {
     -- Synchronisation
@@ -1555,6 +1602,9 @@ local MESSAGE_HANDLERS = {
     ["HIST_ADD"]    = handleHistAdd,
     ["HIST_REFUND"] = handleHistRefund,
     ["HIST_DEL"]    = handleHistDel,
+
+    -- Interactions légères
+    ["PING"] = handlePing,
 
     -- Main/Alt
     ["MA_FULL"]        = handleMAFull,

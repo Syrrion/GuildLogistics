@@ -98,8 +98,8 @@ local function _emitPersonalDeltaToastByMainUID(targetMu, delta)
     local afterBal = (GLOG.GetSolde and GLOG.GetSolde(meFull)) or 0
     local money = (ns.UI and ns.UI.MoneyText and ns.UI.MoneyText(amt, { h = 11, y = -2 })) or tostring(amt)
     local moneyAfter = (ns.UI and ns.UI.MoneyText and ns.UI.MoneyText(afterBal, { h = 11, y = -2 })) or tostring(afterBal)
-    local text = isCredit and ((Tr("toast_credit_text_fmt") or "You were credited %s. New balance: %s."):format(money, moneyAfter))
-                           or ((Tr("toast_debit_text_fmt")  or "You were debited %s. New balance: %s."):format(money, moneyAfter))
+    local text = isCredit and ((Tr("toast_credit_text_fmt") or "You were credited %s.\nNew balance: %s."):format(money, moneyAfter))
+                           or ((Tr("toast_debit_text_fmt")  or "You were debited %s.\nNew balance: %s."):format(money, moneyAfter))
 
     ns.UI.Toast({
         title = title,

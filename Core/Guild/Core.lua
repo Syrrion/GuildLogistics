@@ -548,6 +548,26 @@ function GLOG.IsGM()
     return false
 end
 
+-- True if player is an officer (has officer-like rights) but not necessarily GM.
+-- Does NOT change semantics of IsGM(); provided for finer-grained checks.
+function GLOG.IsOfficer()
+    if not (IsInGuild and IsInGuild()) then return false end
+    local _, _, ri = GetGuildInfo("player")
+    -- Officers are anyone with meaningful guild permissions; GM (rank 0) is also an officer for many flows,
+    -- but here we keep it inclusive to simplify callers that want GM or officer: they can test IsGM() or IsOfficer().
+    local function has(fn) return type(fn) == "function" and fn() end
+    -- Some clients may not expose officer note APIs; guard via _G/rawget
+    local canEditOfficerNote = _G and rawget(_G, "CanEditOfficerNote") or nil
+    local canViewOfficerNote = _G and rawget(_G, "CanViewOfficerNote") or nil
+    if has(CanGuildPromote) or has(CanGuildDemote) or has(CanGuildRemove)
+    or has(CanGuildInvite) or has(CanEditMOTD) or has(CanEditGuildInfo)
+    or has(CanEditPublicNote) or has(canEditOfficerNote) or has(canViewOfficerNote) then
+        -- Optionally, if callers want strictly non-GM officers, they can combine with not GLOG.IsMaster().
+        return true
+    end
+    return false
+end
+
 -- Robustly keep _isMaster in sync with the game state
 do
     local function _recomputeIsMaster()
