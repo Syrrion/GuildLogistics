@@ -97,6 +97,56 @@ local function _collectData()
         return na:lower() < nb:lower()
     end)
 
+    -- Build per-dungeon ranking (gold/silver/bronze) based on score then key level (best), descending
+    -- We only compute ranks for non-zero scores.
+    local ranking = {}  -- ranking[mapName] = { {rowIndex=idx, score=.., best=..}, ... sorted }
+    for mi = 1, #mapOrder do
+        local m = mapOrder[mi]
+        local bucket = {}
+        for idx, rec in ipairs(rows) do
+            local v = rec[m]
+            if v and type(v)=="table" then
+                local sc = tonumber(v.score or 0) or 0
+                local lvl = tonumber(v.best or 0) or 0
+                if sc > 0 or lvl > 0 then
+                    bucket[#bucket+1] = { rowIndex = idx, score = sc, best = lvl }
+                end
+            end
+        end
+        if #bucket > 0 then
+            table.sort(bucket, function(a,b)
+                if a.score ~= b.score then return a.score > b.score end
+                if a.best ~= b.best then return a.best > b.best end
+                return a.rowIndex < b.rowIndex
+            end)
+            ranking[m] = bucket
+        end
+    end
+    -- Assign rank (1..n) but we only care about 1..3; tie handling: identical (score,best) => same rank, skip next ranks accordingly.
+    for mapName, bucket in pairs(ranking) do
+        local lastScore, lastBest, lastRank
+        local used = 0
+        for i, entry in ipairs(bucket) do
+            local rk
+            if lastScore and entry.score == lastScore and entry.best == lastBest then
+                rk = lastRank
+            else
+                rk = (used + 1)
+            end
+            if not (lastScore and entry.score == lastScore and entry.best == lastBest) then
+                used = rk
+            end
+            lastScore, lastBest, lastRank = entry.score, entry.best, rk
+            if rk <= 3 then
+                local rec = rows[entry.rowIndex]
+                rec._ranks = rec._ranks or {}
+                rec._ranks[mapName] = rk
+            else
+                break -- we don't need further ranks beyond 3 for medal display
+            end
+        end
+    end
+
     return rows, mapOrder
 end
 
@@ -162,6 +212,11 @@ local function updateRow(i, r, f, item)
                 cell:SetHeight(UI.ROW_H)
                 cell.top = UI.Label(cell, { justify = "CENTER" })
                 cell.bot = UI.Label(cell, { justify = "CENTER" })
+                -- Medal texture (hidden by default)
+                cell.medal = cell:CreateTexture(nil, "ARTWORK")
+                cell.medal:SetSize(18, 18)
+                cell.medal:SetPoint("TOPLEFT", cell, "TOPLEFT", 0, 0)
+                cell.medal:Hide()
                 -- Apply a persistent font delta immediately so first open shows the larger size
                 if UI and UI.SetFontDeltaForFrame then UI.SetFontDeltaForFrame(cell.top, 3, false) end
                 if UI and UI.ApplyFont then UI.ApplyFont(cell.top) end
@@ -241,6 +296,14 @@ local function updateRow(i, r, f, item)
                     L.bot:SetTextColor(1, 1, 1)
                     L._valueForTip = nil
                 end
+            end
+            -- Medal handling
+            if L.medal then
+                local rk = item._ranks and item._ranks[c.key]
+                if rk == 1 then L.medal:SetAtlas("challenges-medal-gold")
+                elseif rk == 2 then L.medal:SetAtlas("challenges-medal-silver")
+                elseif rk == 3 then L.medal:SetAtlas("challenges-medal-bronze") end
+                L.medal:SetShown(rk == 1 or rk == 2 or rk == 3)
             end
         end
         x = x + w

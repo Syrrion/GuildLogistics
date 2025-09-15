@@ -425,7 +425,8 @@ function UI.DecorateRow(r)
         acc:SetPoint("TOPLEFT",    r, "TOPLEFT",    0, 0)
         acc:SetPoint("BOTTOMLEFT", r, "BOTTOMLEFT", 0, 0)
     end
-    UI.SetPixelThickness(acc, 2)
+    -- Liseré gauche (accent) : réduit à 3px (au lieu de 2px précédemment)
+    UI.SetPixelThickness(acc, 3)
     acc:SetVertexColor(st.accent.r, st.accent.g, st.accent.b, st.accent.a)
     acc:Hide()
     r._accentLeft = acc
@@ -1760,12 +1761,48 @@ end
 -- Récupère un nom de spé à partir du specID seul (indépendant du joueur)
 function UI.SpecNameBySpecID(specID)
     local sid = tonumber(specID)
+    local fallback = (Tr and Tr("lbl_spec")) or "Specialization"
     if not sid or sid == 0 then
-        return (Tr and Tr("lbl_spec")) or "Specialization"
+        return fallback
     end
     local cache = _BuildSpecCache()
     local e = cache[sid]
-    return (e and e.name) or ((Tr and Tr("lbl_spec")) or "Specialization")
+    if not e then
+        local name, classID
+        -- 1. Direct API by specID if available (Retail has GetSpecializationInfoByID)
+        if not name and type(GetSpecializationInfoByID) == "function" then
+            local ok, idOrName, specName = pcall(GetSpecializationInfoByID, sid)
+            -- Some client builds return (id, name, _, _, classID) others just name; normalize
+            if ok then
+                if type(idOrName) == "number" and type(specName) == "string" then
+                    name = specName
+                elseif type(idOrName) == "string" then
+                    name = idOrName
+                end
+            end
+        end
+        -- 2. Fallback: brute-force scan all class specializations
+        if (not name) and (C_ClassTalents and C_ClassTalents.GetSpecIDs and C_ClassTalents.GetSpecializationInfo) then
+            for cid = 1, 30 do
+                local specIDs = C_ClassTalents.GetSpecIDs(cid)
+                if specIDs and #specIDs > 0 then
+                    for _, id in ipairs(specIDs) do
+                        if id == sid then
+                            local info = C_ClassTalents.GetSpecializationInfo(id)
+                            local specName = info and info.name
+                            if specName and specName ~= "" then name = specName; classID = cid; break end
+                        end
+                    end
+                    if name then break end
+                end
+            end
+        end
+        if name and name ~= "" then
+            cache[sid] = { name = name, classID = classID }
+            e = cache[sid]
+        end
+    end
+    return (e and e.name) or fallback
 end
 
 -- ⚙️ Human-readable specialization name; robuste pour n'importe quelle classe

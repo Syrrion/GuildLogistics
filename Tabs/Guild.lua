@@ -463,7 +463,22 @@ function UpdateRow(i, r, f, it)
                 end
             end
 
-            if isSep or isSelf then
+            -- ✅ Masquer la cloche si : séparateur, soi-même, ou version addon absente / trop ancienne (< 4.2.4)
+            local hideForVersion = false
+            if not isSep and not isSelf then
+                local key = _DBKey(data.name)
+                local ver = (GLOG.GetPlayerAddonVersion and GLOG.GetPlayerAddonVersion(key)) or ""
+                if ver == "" then
+                    hideForVersion = true
+                else
+                    local cmp = (ns and ns.Util and ns.Util.CompareVersions) or nil
+                    if cmp and cmp(ver, "4.2.4") < 0 then
+                        hideForVersion = true
+                    end
+                end
+            end
+
+            if isSep or isSelf or hideForVersion then
                 btn:Hide()
             else
                 -- Determine recipient: prefer an online alt full name if present
