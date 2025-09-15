@@ -593,6 +593,27 @@ do
     end
 end
 
+-- Proactively warm-up the guild roster/cache at login so rights are known early
+do
+    local _bootstrapDone = false
+    local function _bootstrapRoster()
+        if _bootstrapDone then return end
+        _bootstrapDone = true
+        if IsInGuild and IsInGuild() and GLOG and GLOG.RefreshGuildCache then
+            -- One-shot request; internal scanner will coalesce
+            pcall(GLOG.RefreshGuildCache)
+        end
+    end
+    if ns and ns.Events and ns.Events.Register then
+        -- Use both events to cover various load orders
+        ns.Events.Register("PLAYER_LOGIN", GLOG, _bootstrapRoster)
+        ns.Events.Register("PLAYER_ENTERING_WORLD", GLOG, function()
+            -- Slight delay to let the client initialize, then request roster
+            if C_Timer and C_Timer.After then C_Timer.After(0.05, _bootstrapRoster) else _bootstrapRoster() end
+        end)
+    end
+end
+
 -- ===== Guild Bank balance (local snapshot) =====
 do
     local function _ensure()

@@ -416,6 +416,49 @@ end
 local Registered, Panels, Tabs = {}, {}, {}
 UI._tabIndexByLabel = {}
 
+-- Helper: snapshot of current rights (GM and CanModify)
+local function _CurrentRights()
+    local isGM = (ns.GLOG and ((ns.GLOG.CanGrantEditor and ns.GLOG.CanGrantEditor()) or (ns.GLOG.IsMaster and ns.GLOG.IsMaster()))) or false
+    local canModify = (ns.GLOG and ns.GLOG.CanModifyGuildData and ns.GLOG.CanModifyGuildData()) or false
+    return isGM, canModify
+end
+
+-- Rebuild a specific tab's panel (to reflect new rights-dependent UI)
+function UI.RebuildTab(index)
+    local def = Registered and Registered[index]
+    if not def then return end
+    local oldPanel = Panels[index]
+    if oldPanel then oldPanel:Hide() end
+    local panel = CreateFrame("Frame", nil, Main.Content, "BackdropTemplate")
+    panel:SetAllPoints(Main.Content)
+    Panels[index] = panel
+    def.panel = panel
+
+    local bg = panel:CreateTexture(nil, "BACKGROUND")
+    bg:SetColorTexture(1,1,1,0.03)
+    bg:SetAllPoints()
+
+    panel:HookScript("OnShow", function(self)
+        if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(self) end
+    end)
+
+    -- Build anew with current rights
+    if def.build then def.build(panel) end
+    if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(panel) end
+
+    -- Update rights-at-build snapshot
+    local isGM, canModify = _CurrentRights()
+    def._rightsAtBuild = { isGM = isGM, canModify = canModify }
+    def._needsRebuild = false
+
+    -- If this is the currently visible tab, show the rebuilt panel and refresh/layout
+    if UI._current == index then
+        UI.ShowPanel(index)
+        if def.refresh then def.refresh() end
+        if def.layout then def.layout() end
+    end
+end
+
 -- Couleur du menu de navigation (alignée sur le thème comme les headers)
 local function _NavRGB()
     if UI and UI.Colors and UI.Colors.GetHeaderRGB then
@@ -664,11 +707,20 @@ function UI.Finalize()
             end
         end
 
+        -- Snapshot des droits au moment du build (pour détecter une montée de droits plus tard)
+        do
+            local isGM, canModify = _CurrentRights()
+            def._rightsAtBuild = { isGM = isGM, canModify = canModify }
+            def._needsRebuild = false
+        end
+
         if not def.hidden then
             local btn = CreateTabButton(lastBtn, def.label)
             btn:SetScript("OnClick", function()
                 -- Bascule auto de catégorie si besoin
                 if UI.SelectCategoryForLabel then UI.SelectCategoryForLabel(def.label) end
+                -- Si cette tab a été construite avec moins de droits que maintenant, reconstruire une fois
+                if def._needsRebuild and UI.RebuildTab then UI.RebuildTab(i) end
                 ShowPanel(i)
                 if def.refresh then def.refresh() end
             end)
@@ -988,6 +1040,10 @@ function UI.ApplyTabsForGuildMembership(inGuild)
                 local isStandalone = (ns and ns.GLOG and ns.GLOG.IsStandaloneMode and ns.GLOG.IsStandaloneMode()) or false
                 if isStandalone then shown = false end
             end
+            -- Onglet Base de données: restreint au GM uniquement
+            if lab == keepDebugDB then
+                shown = shown and isGM
+            end
 
         elseif lab == reqLabel then
             -- ⚠️ Jamais visible pour un joueur ; visible pour le GM seulement s'il existe des demandes
@@ -1029,7 +1085,13 @@ function UI.SetDebugEnabled(enabled)
             showPackets = false
         end
         UI.SetTabVisible(Tr("tab_debug"),         showPackets)
-        UI.SetTabVisible(Tr("tab_debug_db"),      GuildLogisticsUI.debugEnabled)
+        -- Base de données: visible seulement si debug ON et GM uniquement
+        local canViewDB = false
+        do
+            local isGM = (ns.GLOG and ((ns.GLOG.CanGrantEditor and ns.GLOG.CanGrantEditor()) or (ns.GLOG.IsMaster and ns.GLOG.IsMaster()))) or false
+            canViewDB = (GuildLogisticsUI.debugEnabled and isGM) and true or false
+        end
+        UI.SetTabVisible(Tr("tab_debug_db") or "Base de donnée", canViewDB)
         UI.SetTabVisible(Tr("tab_debug_events"),  GuildLogisticsUI.debugEnabled)
         UI.SetTabVisible(Tr("tab_debug_errors"),  GuildLogisticsUI.debugEnabled)
     end
@@ -1208,11 +1270,34 @@ function UI.RefreshActive()
         UI.SafeUpdateRequestsBadge()
     end
 
+    -- Marque les onglets potentiellement sensibles aux droits pour reconstruction si droits montent
+    do
+        for idx, def in ipairs(Registered or {}) do
+            if def and def._rightsAtBuild then
+                local rb = def._rightsAtBuild
+                -- Si on a plus de droits maintenant qu'au build, alors marquer pour rebuild
+                if (isGM and (not rb.isGM)) or (canModify and (not rb.canModify)) then
+                    def._needsRebuild = true
+                end
+            end
+        end
+        -- Si l’onglet actif nécessite une reconstruction, applique-la immédiatement
+        if UI._current and Registered[UI._current] and Registered[UI._current]._needsRebuild and UI.RebuildTab then
+            UI.RebuildTab(UI._current)
+        end
+    end
+
     -- Cycle de rafraîchissement global
     if ns.RefreshAll then
         ns.RefreshAll()
     elseif UI.RefreshAll then
         UI.RefreshAll()
+    end
+
+    -- Assure la visibilité de l’onglet "Base de données" selon droits (GM only, réactif au gm:changed)
+    if UI.SetTabVisible then
+        local dbgOn = (GuildLogisticsUI and GuildLogisticsUI.debugEnabled) and true or false
+        UI.SetTabVisible(Tr("tab_debug_db") or "Base de donnée", dbgOn and isGM)
     end
 end
 
@@ -1294,20 +1379,22 @@ do
             local shouldAutoOpen = (saved and saved.autoOpen) ~= false -- par défaut true si non défini
             
             if shouldAutoOpen and not Main:IsShown() then
-                if ns and ns.ToggleUI then
-                    -- Utilise la logique standard (restaure l'onglet précédent si possible)
-                    ns.ToggleUI()
-                else
+                -- Defer auto-open until guild roster is warmed or after a short grace period
+                local function _openNow()
+                    -- Recompute rights one last time
+                    if ns and ns.Emit then ns.Emit("gm:changed", (GLOG and GLOG.IsMaster and GLOG.IsMaster()) or false) end
+                    if ns and ns.ToggleUI then
+                        ns.ToggleUI()
+                        return
+                    end
                     -- Fallback ultra défensif si ToggleUI indisponible
                     Main:Show()
-
                     -- 1) Essaye de restaurer le dernier onglet actif
                     local restored = false
                     local savedLabel = GLOG and GLOG.GetLastActiveTabLabel and GLOG.GetLastActiveTabLabel() or nil
                     if type(savedLabel) == "string" and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[savedLabel] then
                         if UI.ShowTabByLabel then UI.ShowTabByLabel(savedLabel); restored = true end
                     end
-
                     -- 2) Sinon, premier onglet visible
                     if not restored then
                         for i, def in ipairs(Registered or {}) do
@@ -1319,13 +1406,24 @@ do
                             end
                         end
                     end
-
                     -- 3) Fallback ultime sur l'index 1
                     if not restored then
                         ShowPanel(1)
                         if Registered[1] and Registered[1].refresh then Registered[1].refresh() end
                     end
                 end
+
+                local wait = 0
+                local function _tryOpen()
+                    wait = wait + 1
+                    local ready = (GLOG and GLOG.IsGuildCacheReady and GLOG.IsGuildCacheReady()) or false
+                    if ready or wait >= 10 then
+                        _openNow()
+                    else
+                        if C_Timer and C_Timer.After then C_Timer.After(0.15, _tryOpen) else _openNow() end
+                    end
+                end
+                _tryOpen()
             end
         end)
     end

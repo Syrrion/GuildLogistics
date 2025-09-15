@@ -489,11 +489,23 @@ local function UpdateRowMains(i, r, f, it)
             UI.SetTooltip(r.btnDel, Tr("tip_remove_main"))
         end
         r.btnDel:SetOnClick(function()
-            if selectedMainName and GLOG.SamePlayer and GLOG.SamePlayer(selectedMainName, data.name) then
-                selectedMainName = nil
+            local bal = (GLOG and GLOG.GetSolde and tonumber(GLOG.GetSolde(data.name))) or 0
+            local function doRemove()
+                if selectedMainName and GLOG.SamePlayer and GLOG.SamePlayer(selectedMainName, data.name) then
+                    selectedMainName = nil
+                end
+                GLOG.RemoveMain(data.name)
+                _refreshAll()
             end
-            GLOG.RemoveMain(data.name)
-            _refreshAll()
+            if bal ~= 0 and UI and UI.PopupConfirm then
+                local amt = (UI and UI.MoneyText and UI.MoneyText(bal)) or tostring(bal)
+                local body = (Tr("msg_remove_main_balance_body")):format(amt)
+                UI.PopupConfirm(body, function()
+                    doRemove()
+                end, nil, { title = Tr("msg_remove_main_balance_title") or "Remove main with balance?", height = 260 })
+            else
+                doRemove()
+            end
         end)
     end
     if r.btnAlias then

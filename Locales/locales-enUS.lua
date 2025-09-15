@@ -46,6 +46,9 @@ L["tip_editor_status_demoted"]  = "Non-editor"
 -- Merge balance popup
 L["msg_merge_balance_title"] = "Merge balance?"
 L["msg_merge_balance_body"]  = "Transfer %s from %s to %s and set %s to 0?"
+-- Remove main confirmation (non-zero balance)
+L["msg_remove_main_balance_title"] = "Remove main with balance?"
+L["msg_remove_main_balance_body"]  = "This main currently has a balance of %s.\nDeleting the main will reset this balance to 0 and also clear roster membership if present.\n\nProceed?"
 L["lbl_equippable_only"]   = "Equippable only"
 L["tab_guild_members"]    = "Guild members"
 L["tab_mythic_plus"]      = "Mythic+ Rotation"
