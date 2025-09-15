@@ -9,8 +9,85 @@ local selectedMainName -- full name
 local selectedMainRow -- row frame for immediate selection highlight
 local Layout -- forward decl for local function used in callbacks
 local buildPoolData, buildMainsData, buildAltsData -- forward decl for data builders
+
+-- Perf: suppression window to avoid heavy pool rebuilds right after local lightweight updates
+local _poolSuppressUntil = 0
+local function _Now()
+    if GetTime then return GetTime() end
+    return (ns and ns.Time and ns.Time.Now and ns.Time.Now()) or 0
+end
+local function _ShouldSuppressPoolRebuild()
+    return _Now() < (_poolSuppressUntil or 0)
+end
+
+-- Perf: cache for suggestions per selected main, invalidated on guild cache ts change
+local _suggCache = { key=nil, ts=0, set=nil }
+local function _GetSuggestionsForSelectedMain()
+    local key = nil
+    if selectedMainName and selectedMainName ~= "" then
+        key = (GLOG and GLOG.NormName and GLOG.NormName(selectedMainName)) or string.lower(selectedMainName)
+    end
+    local ts  = (GLOG and GLOG.GetGuildCacheTimestamp and GLOG.GetGuildCacheTimestamp()) or 0
+    if key and _suggCache.key == key and _suggCache.ts == ts and _suggCache.set then
+        return _suggCache.set
+    end
+    local set = {}
+    if key and GLOG and GLOG.SuggestAltsForMain then
+        local list = GLOG.SuggestAltsForMain(selectedMainName) or {}
+        for i = 1, #list do
+            local r = list[i]
+            local nk = (GLOG and GLOG.NormName and GLOG.NormName(r.name)) or string.lower(r.name or "")
+            if nk and nk ~= "" then set[nk] = true end
+        end
+    end
+    _suggCache.key = key; _suggCache.ts = ts; _suggCache.set = set
+    return set
+end
 -- forward decl for columns/rows builders used by recreation
 local poolDataCache -- incremental cache for left list
+
+-- Reorder pool so that suggested entries appear first, then others (both alpha within groups)
+local function _ResortPoolForCurrentSelection()
+    if not (poolDataCache and lvPool) then return end
+    local suggSet = _GetSuggestionsForSelectedMain() or {}
+    if not suggSet or (next(suggSet) == nil) then return end
+
+    local suggested, others = {}, {}
+    for i = 1, #poolDataCache do
+        local it = poolDataCache[i]
+        local nk = (GLOG and GLOG.NormName and GLOG.NormName(it.name)) or string.lower(it.name or "")
+        if nk ~= "" and suggSet[nk] then
+            suggested[#suggested+1] = it
+        else
+            others[#others+1] = it
+        end
+    end
+    if #suggested == 0 then return end
+
+    local function alpha(a,b) return (a.name or ""):lower() < (b.name or ""):lower() end
+    table.sort(suggested, alpha)
+    table.sort(others, alpha)
+
+    local new = {}
+    for i=1,#suggested do new[#new+1] = suggested[i] end
+    for i=1,#others do new[#new+1] = others[i] end
+    poolDataCache = new
+    lvPool._data = poolDataCache
+end
+
+-- Scroll pool to top only if there are suggestions for the current selection
+local function _ScrollPoolToTopIfSuggestions()
+    if not (lvPool and lvPool.scroll) then return end
+    local suggSet = _GetSuggestionsForSelectedMain() or {}
+    if next(suggSet) == nil then return end -- no suggestions: keep current position
+    local off = (lvPool.scroll.GetVerticalScroll and lvPool.scroll:GetVerticalScroll()) or 0
+    if off and off > 0 then
+        if lvPool.scroll.SetVerticalScroll then lvPool.scroll:SetVerticalScroll(0) end
+        if lvPool._UpdateVisibleWindow then lvPool:_UpdateVisibleWindow() end
+        if lvPool.Layout then lvPool:Layout() end
+        if UI and UI.ListView_SyncScrollbar then UI.ListView_SyncScrollbar(lvPool, false) end
+    end
+end
 
 -- ===== Online helpers (strict full-name + guild cache) =====
 local function _ResolveFull(name)
@@ -94,7 +171,14 @@ local function _schedulePoolRebuild()
         if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
     end
     if ns and ns.Util and ns.Util.Debounce then
-        ns.Util.Debounce("Roster_MainAlt.poolRebuild", 0.05, fn)
+        -- Si on est dans une fenêtre de suppression, attendre sa fin avant de reconstruire
+        if _ShouldSuppressPoolRebuild() then
+            local delay = math.max(0.02, (_poolSuppressUntil - _Now()))
+            ns.Util.Debounce("Roster_MainAlt.poolRebuild.wait", delay, fn)
+        else
+            -- Légèrement augmenté pour mieux regrouper des actions en rafale
+            ns.Util.Debounce("Roster_MainAlt.poolRebuild", 0.08, fn)
+        end
     else
         if UI and UI.NextFrame then UI.NextFrame(fn) else fn() end
     end
@@ -119,6 +203,45 @@ local function _refreshAll()
     if lvAlts and lvAlts.Refresh then lvAlts:RefreshData(nil) end
 end
 
+-- Incremental add to pool by name (immediate feedback), with later coalesced resort
+local function _addToPoolByName(name)
+    if not name or name == "" then return end
+    local full = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(name)) or name
+    local note = (GLOG and GLOG.GetGuildNoteByName and GLOG.GetGuildNoteByName(full)) or ""
+    local classTag = (GLOG and GLOG.GetGuildClassTag and GLOG.GetGuildClassTag(full)) or nil
+    local suggSet = _GetSuggestionsForSelectedMain() or {}
+    local fnk = (GLOG and GLOG.NormName and GLOG.NormName(full)) or string.lower(full)
+    local suggested = (fnk and fnk ~= "" and suggSet[fnk]) and true or false
+    local row = { name = full, note = note, classTag = classTag, suggested = suggested }
+    poolDataCache = poolDataCache or {}
+    -- Heuristic insert: top if suggested, else append
+    if suggested then
+        table.insert(poolDataCache, 1, row)
+    else
+        poolDataCache[#poolDataCache+1] = row
+    end
+    -- Inject compacted data without heavy SetData
+    if lvPool then
+        lvPool._data = poolDataCache
+        -- Invalidate cache refs near the insertion zone
+        local start = suggested and 1 or math.max(1, #poolDataCache - 2)
+        if lvPool.rows then
+            for i = start, math.min(#lvPool.rows, #poolDataCache) do
+                local rowf = lvPool.rows[i]
+                if rowf then rowf._lastItemRef = nil end
+            end
+        end
+        if lvPool._windowed and lvPool._UpdateVisibleWindow then
+            lvPool:_UpdateVisibleWindow()
+        else
+            if lvPool.UpdateVisibleRows then lvPool:UpdateVisibleRows() end
+            if lvPool.Layout then lvPool:Layout() end
+        end
+    end
+    -- Plan a proper rebuild (sorting) slightly later
+    if _schedulePoolRebuild then _schedulePoolRebuild() end
+end
+
 -- Incremental removal from pool cache by name
 local function _removeFromPoolByName(name)
     if not (poolDataCache and name and name ~= "") then return false end
@@ -127,7 +250,28 @@ local function _removeFromPoolByName(name)
         local it = poolDataCache[idx]
         local nk2 = (GLOG and GLOG.NormName and GLOG.NormName(it.name)) or string.lower(it.name or "")
         if nk == nk2 then
+            -- Compacte immédiatement le dataset pour éviter une ligne vide
             table.remove(poolDataCache, idx)
+            if lvPool then
+                -- Met à jour la data du ListView sans SetData lourd
+                lvPool._data = poolDataCache
+                -- Invalide les refs pour forcer updateRow sur la zone impactée
+                if lvPool.rows then
+                    for i = idx, math.min(#lvPool.rows, #poolDataCache + 1) do
+                        local row = lvPool.rows[i]
+                        if row then row._lastItemRef = nil end
+                    end
+                end
+                -- Met à jour la fenêtre visible (mode virtual) ou fait un refresh léger
+                if lvPool._windowed and lvPool._UpdateVisibleWindow then
+                    lvPool:_UpdateVisibleWindow()
+                else
+                    if lvPool.UpdateVisibleRows then lvPool:UpdateVisibleRows() end
+                    if lvPool.Layout then lvPool:Layout() end
+                end
+            end
+            -- Fenêtre d’anti-rebuild pour coalescer les bursts
+            _poolSuppressUntil = _Now() + 0.30
             return true
         end
     end
@@ -177,7 +321,14 @@ local function UpdateRowPool(i, r, f, it)
             UI.SetNameTagShort(f.name, data.name or "")
         end
         -- Append suggestion tag to player name (green), not in note column
-        if data.suggested and f.name and f.name.text then
+        -- Compute dynamically from current selection to avoid full SetData on selection change
+        local isSuggested = false
+        do
+            local suggSet = _GetSuggestionsForSelectedMain() or {}
+            local nk = (GLOG and GLOG.NormName and GLOG.NormName(data.name)) or string.lower(data.name or "")
+            if nk ~= "" and suggSet[nk] then isSuggested = true end
+        end
+        if isSuggested and f.name and f.name.text then
             local raw = (GLOG and GLOG.ResolveFullName and GLOG.ResolveFullName(data.name)) or tostring(data.name or "")
             local display = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(raw)) or raw
             f.name.text:SetText(string.format("%s |cff00ff00(%s)|r", display, Tr("lbl_suggested")))
@@ -221,9 +372,8 @@ local function UpdateRowPool(i, r, f, it)
         r.btnCrown:SetOnClick(function()
             if not gm then return end
             GLOG.SetAsMain(data.name)
-            if _removeFromPoolByName(data.name) then
-                if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
-            end
+            -- Remove from pool lazily: hide row + light layout, no SetData here
+            if _removeFromPoolByName(data.name) then end
             -- update mains list; alts unaffected
             if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
         end)
@@ -253,9 +403,8 @@ local function UpdateRowPool(i, r, f, it)
                     GLOG.AdjustSolde(altFull, -altBal)
                 end
                 GLOG.AssignAltToMain(altFull, fullMain)
-                if _removeFromPoolByName(altFull) then
-                    if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
-                end
+                -- Remove from pool lazily: hide row + light layout, no SetData here
+                if _removeFromPoolByName(altFull) then end
                 -- update current main's alts incrementally
                 if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
             end
@@ -470,8 +619,21 @@ local function UpdateRowMains(i, r, f, it)
         if rightPane and rightPane._sectionHeaderFS then
             rightPane._sectionHeaderFS:SetText(Tr("lbl_main_prefix") .. (selectedMainName or ""))
         end
-        -- Rebuild pool (for suggestions ordering) lightly after a short delay
-        _schedulePoolRebuild()
+        -- Suggestions depend on selected main; reorder pool to put suggestions on top, then refresh lightly
+        if lvPool then
+            _ResortPoolForCurrentSelection()
+            _ScrollPoolToTopIfSuggestions()
+            if lvPool.InvalidateAllRowsCache and lvPool.UpdateVisibleRows then
+                lvPool:InvalidateAllRowsCache()
+                lvPool:UpdateVisibleRows()
+                if lvPool.Layout then lvPool:Layout() end
+            elseif lvPool.SetData then
+                -- Fallback: full SetData
+                poolDataCache = buildPoolData(); lvPool:SetData(poolDataCache)
+            end
+        elseif _schedulePoolRebuild then
+            _schedulePoolRebuild()
+        end
     end
     r:SetScript("OnMouseDown", function(btn)
         if r.btnDel and r.btnDel:IsMouseOver() then return end
@@ -640,7 +802,9 @@ local function UpdateRowAlts(i, r, f, it)
     if r.btnDel then
         r.btnDel:SetOnClick(function()
             GLOG.UnassignAlt(data.name)
-            _refreshAll()
+            -- Immediately reinsert into pool for instant feedback, and refresh current alts list
+            _addToPoolByName(data.name)
+            if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
         end)
     end
     if r.btnAlias then
@@ -660,24 +824,10 @@ end
 function buildPoolData()
     local rows = {}
     local pool = (GLOG.GetUnassignedPool and GLOG.GetUnassignedPool()) or {}
-    -- Build robust suggestions lookup by normalized name
-    local suggestions = {}
-    if selectedMainName and GLOG.SuggestAltsForMain then
-        for _, r in ipairs(GLOG.SuggestAltsForMain(selectedMainName) or {}) do
-            local nk = (GLOG and GLOG.NormName and GLOG.NormName(r.name)) or string.lower(r.name or "")
-            if nk and nk ~= "" then suggestions[nk] = true end
-        end
-    end
+    -- Suggestions en cache pour le main sélectionné
+    local suggestions = _GetSuggestionsForSelectedMain() or {}
 
-    -- Build a fast lookup: normalized player name -> original guild note (remark)
-    local grs = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
-    local noteByNameKey = {}
-    for _, gr in ipairs(grs) do
-        local key = gr.name_key or (GLOG.NormName and GLOG.NormName(gr.name_amb or gr.name_raw)) or nil
-        if key and key ~= "" then
-            noteByNameKey[key] = (gr.remark and strtrim(gr.remark)) or ""
-        end
-    end
+    -- Évite un scan coûteux du roster: privilégie les accès directs
 
     -- Read class info from cache (by normalized name)
     local guildBy = (GLOG._guildCache and GLOG._guildCache.byName) or {}
@@ -686,7 +836,7 @@ function buildPoolData()
             local k = GLOG.NormName and GLOG.NormName(p.name)
             local gr = k and guildBy[k] or nil
             -- Use original note text, not normalized key
-            local note = (GLOG.GetGuildNoteByName and GLOG.GetGuildNoteByName(p.name)) or (k and noteByNameKey[k]) or ""
+            local note = (GLOG.GetGuildNoteByName and GLOG.GetGuildNoteByName(p.name)) or ""
             local classTag = (GLOG.GetGuildClassTag and GLOG.GetGuildClassTag(p.name)) or (gr and (gr.classFile or gr.classTag or gr.class) or nil)
             local pnk = (GLOG and GLOG.NormName and GLOG.NormName(p.name)) or string.lower(p.name or "")
             rows[#rows+1] = { name = p.name, note = note, classTag = classTag, suggested = (pnk ~= "" and suggestions[pnk] or false) and true or false }
@@ -698,6 +848,7 @@ function buildPoolData()
         if selectedMainName and selectedMainName ~= "" then
             targetNk = (GLOG and GLOG.NormName and GLOG.NormName(selectedMainName)) or string.lower(selectedMainName)
         end
+        local grs = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
         for _, gr in ipairs(grs) do
             local full = gr.name_amb or gr.name_raw
             if full and full ~= "" then
@@ -750,7 +901,7 @@ local function Build(container)
     rightPane= CreateFrame("Frame", nil, panel)
 
     UI.SectionHeader(leftPane, Tr("lbl_available_pool"))
-    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26, maxCreatePerFrame = 60 })
+    lvPool  = UI.ListView(leftPane,  _BuildPoolCols(),  { buildRow = BuildRowPool,  updateRow = UpdateRowPool, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26, maxCreatePerFrame = 60, virtualWindow = true })
 
     UI.SectionHeader(midPane,  Tr("lbl_mains"))
     lvMains = UI.ListView(midPane,  _BuildMainsCols(), { buildRow = BuildRowMains, updateRow = UpdateRowMains, rowHeight = UI.ROW_H_SMALL, topOffset = UI.SECTION_HEADER_H or 26, maxCreatePerFrame = 60 })
@@ -776,18 +927,27 @@ local function Build(container)
     -- React to cache refreshes
     if ns and ns.Events and ns.Events.Register then
         ns.Events.Register("GUILD_ROSTER_UPDATE", lvPool, function()
-            poolDataCache = buildPoolData()
-            if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
+            -- Évite les rebuilds lourds immédiats; planifie une MAJ compacte
+            if _schedulePoolRebuild then _schedulePoolRebuild() end
         end)
     end
     -- Internal event (addon bus)
     if GLOG and GLOG.On then
         GLOG.On("mainalt:changed", function()
-            poolDataCache = buildPoolData()
-            if lvPool and lvPool.SetData then lvPool:SetData(poolDataCache) end
-            if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
-            if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
-            if Layout then Layout() end
+            -- Coalesce les changements provenant du bus interne
+            local function apply()
+                -- Mains/Alts sont des petites listes: MAJ directe
+                if lvMains and lvMains.SetData then lvMains:SetData(buildMainsData()) end
+                if lvAlts and lvAlts.SetData then lvAlts:SetData(buildAltsData()) end
+                -- Le pool est volumineux: planifie une MAJ compacte
+                if _schedulePoolRebuild then _schedulePoolRebuild() end
+                if Layout then Layout() end
+            end
+            if ns and ns.Util and ns.Util.Debounce then
+                ns.Util.Debounce("Roster_MainAlt.changed", 0.08, apply)
+            else
+                apply()
+            end
         end)
         -- Dropped dynamic UI rebuilds on rights changes per new UX: show a popup and let user /reload manually
         -- Keep the tab stable until a reload, avoiding column structure churn at runtime.

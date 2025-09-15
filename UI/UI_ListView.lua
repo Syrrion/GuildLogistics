@@ -23,6 +23,11 @@ function UI.ListView(parent, cols, opts)
     lv.header, lv.hLabels = UI.CreateHeader(parent, lv.cols)
     lv.scroll, lv.list    = UI.CreateScroll(parent)
 
+    -- Virtual window mode (only render visible rows)
+    lv._windowed = (opts.virtualWindow == true)
+    lv._shownFirst, lv._shownLast = nil, nil
+    lv._baseRowHWithPad = nil
+
     -- Hook CreateFontString sur la liste pour capturer toutes les créations
     if lv.list and lv.list.CreateFontString then
         local originalCreateFontString = lv.list.CreateFontString
@@ -73,6 +78,7 @@ function UI.ListView(parent, cols, opts)
             local owner = sf._ownerListView
             if owner and UI and UI.ListView_SyncScrollbar then
                 UI.ListView_SyncScrollbar(owner, false)
+                if owner._windowed and owner._UpdateVisibleWindow then owner:_UpdateVisibleWindow() end
             end
         end)
     end
@@ -80,7 +86,18 @@ function UI.ListView(parent, cols, opts)
         lv.list:HookScript("OnSizeChanged", function()
             if UI and UI.ListView_SyncScrollbar then
                 UI.ListView_SyncScrollbar(lv, false)
+                if lv._windowed and lv._UpdateVisibleWindow then lv:_UpdateVisibleWindow() end
             end
+        end)
+    end
+
+    -- Suivi du scroll vertical pour mettre à jour la fenêtre visible
+    if lv.scroll and lv.scroll.SetScript then
+        local prev = lv.scroll:GetScript("OnVerticalScroll")
+        lv.scroll:SetScript("OnVerticalScroll", function(sf, offset)
+            if prev then pcall(prev, sf, offset) end
+            local owner = sf._ownerListView
+            if owner and owner._windowed and owner._UpdateVisibleWindow then owner:_UpdateVisibleWindow() end
         end)
     end
 
@@ -172,12 +189,22 @@ function UI.ListView(parent, cols, opts)
         for i, c in ipairs(resolved) do if c.key == "act" then actIndex = i break end end
         if actIndex then
             local need = resolved[actIndex].w or resolved[actIndex].min or 120
-            for _, r in ipairs(self.rows) do
-                if r:IsShown() then
-                    local a = r._fields and r._fields.act
-                    local n = a and a._actionsNaturalW
-                    if n and n > need then need = n end
+            -- Cache le besoin max si déjà calculé et pas marqué comme sale
+            if not self._actWidthDirty and self._cachedActWidth and self._cachedActWidth > need then
+                need = self._cachedActWidth
+            else
+                local maxW = need
+                for i = 1, #self.rows do
+                    local r = self.rows[i]
+                    if r and r.IsShown and r:IsShown() then
+                        local a = r._fields and r._fields.act
+                        local n = a and a._actionsNaturalW
+                        if n and n > maxW then maxW = n end
+                    end
                 end
+                self._cachedActWidth = maxW
+                self._actWidthDirty = false
+                need = maxW
             end
             local current = resolved[actIndex].w or resolved[actIndex].min or 0
             if need > current then
@@ -244,21 +271,45 @@ function UI.ListView(parent, cols, opts)
         end
         local _layoutSig = table.concat(sigParts, "|")
 
-        for _, r in ipairs(self.rows) do
-            if r:IsShown() then
-                r:SetWidth(cW)
-                r:ClearAllPoints()
-                r:SetPoint("TOPLEFT", self.list, "TOPLEFT", 0, -y)
-                y = y + r:GetHeight()
+        if not self._windowed then
+            for _, r in ipairs(self.rows) do
+                if r:IsShown() then
+                    r:SetWidth(cW)
+                    r:ClearAllPoints()
+                    r:SetPoint("TOPLEFT", self.list, "TOPLEFT", 0, -y)
+                    y = y + r:GetHeight()
 
-                -- Ne réaligne les champs + v-seps que si la géométrie des colonnes a changé
-                if r._layoutSig ~= _layoutSig then
-                    UI.LayoutRow(r, resolved, r._fields or {})
-                    r._layoutSig = _layoutSig
+                    -- Ne réaligne les champs + v-seps que si la géométrie des colonnes a changé
+                    if r._layoutSig ~= _layoutSig then
+                        UI.LayoutRow(r, resolved, r._fields or {})
+                        r._layoutSig = _layoutSig
+                    end
                 end
             end
+            self.list:SetHeight(y)
+        else
+            -- Windowed: positionne uniquement les lignes visibles et fixe une hauteur totale logique
+            local first = tonumber(self._shownFirst) or 1
+            local last  = tonumber(self._shownLast) or 0
+            local rowH  = tonumber(self._baseRowHWithPad or (UI.ROW_H or 30) + 2) or 1
+            if last < first then last = first - 1 end
+            for i = first, last do
+                local r = self.rows[i]
+                if r and r:IsShown() then
+                    r:SetWidth(cW)
+                    r:ClearAllPoints()
+                    r:SetPoint("TOPLEFT", self.list, "TOPLEFT", 0, -((i-1) * rowH))
+                    -- Ne réaligne que si nécessaire
+                    if r._layoutSig ~= _layoutSig then
+                        UI.LayoutRow(r, resolved, r._fields or {})
+                        r._layoutSig = _layoutSig
+                    end
+                end
+            end
+            -- Hauteur totale = nb lignes * hauteur de base (approximation uniforme)
+            local totalH = math.max(0, (self._data and #self._data or 0) * rowH)
+            self.list:SetHeight(totalH)
         end
-        self.list:SetHeight(y)
 
 
         -- Force le recalcul immédiat de la plage de scroll (sinon elle arrive parfois au frame suivant)
@@ -506,6 +557,8 @@ end
         data = data or {}
         -- Conserve une référence aux données courantes pour MAJ ciblées
         self._data = data
+        -- Marque la largeur d'actions comme potentiellement à recalculer sur nouveau dataset
+        self._actWidthDirty = true; self._cachedActWidth = nil
 
         -- Hauteur paramétrable (fallback = UI.ROW_H)
         local baseRowH = tonumber(self.opts and self.opts.rowHeight) or (UI.ROW_H or 30)
@@ -517,6 +570,10 @@ end
         local have = #self.rows
         local need = #data
         local step = tonumber(self.opts and self.opts.maxCreatePerFrame) or 0
+        -- Valeur par défaut intelligente pour éviter les freezes sur de grandes listes
+        if (not step or step == 0) and need >= 250 then
+            step = 150 -- crée 150 lignes par frame pour limiter le travail
+        end
         local createUntil = need
         if step > 0 and have < need then
             createUntil = math.min(need, have + step)
@@ -527,6 +584,8 @@ end
             UI.DecorateRow(r)
             r._fields = (self.opts.buildRow and self.opts.buildRow(r)) or {}
             self.rows[i] = r
+            r._lastItemRef = nil -- forcera updateRow
+            if self._windowed and r.Hide then r:Hide() end
 
             -- Applique immédiatement la police aux nouvelles lignes
             if UI and UI.ApplyFontRecursively then
@@ -548,13 +607,14 @@ end
         for i = 1, #data do if data[i] then firstVisible = i break end end
 
         local shown = 0
-        for i = 1, #self.rows do
-            local r  = self.rows[i]
-            local it = data[i]
+        if not self._windowed then
+            for i = 1, #self.rows do
+                local r  = self.rows[i]
+                local it = data[i]
 
-            if it then
-                r:Show()
-                shown = shown + 1
+                if it then
+                    r:Show()
+                    shown = shown + 1
 
                 -- Dégradé vertical pair/impair
                 if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
@@ -588,10 +648,10 @@ end
 
                 -- Mise à jour spécifique à la liste (cellules, textes, etc.)
                 if self.opts.updateRow then
-                    self.opts.updateRow(i, r, r._fields, it)
-                    -- Applique la police après mise à jour du contenu
-                    if UI and UI.ApplyFontRecursively then
-                        UI.ApplyFontRecursively(r)
+                    -- Évite les mises à jour redondantes: n'update que si l'item a changé
+                    if r._lastItemRef ~= it then
+                        self.opts.updateRow(i, r, r._fields, it)
+                        r._lastItemRef = it
                     end
                 end
 
@@ -693,29 +753,117 @@ end
                     end
 
                 end
-            else
-                r:Hide()
-                r._isSep = false
-                if r._sepTop then r._sepTop:Hide() end
+                else
+                    r:Hide()
+                    r._isSep = false
+                    if r._sepTop then r._sepTop:Hide() end
+                end
             end
+            self:Layout()
+            self:_SetEmptyShown(shown == 0)
+        else
+            -- Windowed: ne montre pas toutes les lignes; fixe la hauteur de base et ouvre une fenêtre visible
+            self._baseRowHWithPad = baseHWithPad
+            -- Ajuste la hauteur totale immédiatement pour des scrollbars correctes
+            local totalH = math.max(0, (#data) * baseHWithPad)
+            if self.list and self.list.SetHeight then self.list:SetHeight(totalH) end
+            self:_UpdateVisibleWindow()
+            self:_SetEmptyShown(#data == 0)
         end
-
-        self:Layout()
-        self:_SetEmptyShown(shown == 0)
     end
 
     -- Mise à jour légère: ré-appelle updateRow uniquement pour les lignes visibles avec les données courantes
     function lv:UpdateVisibleRows()
         if not (self and self.rows and self.opts and self.opts.updateRow and self._data) then return end
-        local n = math.min(#self.rows, #self._data)
-        for i = 1, n do
-            local r = self.rows[i]
-            local it = self._data[i]
-            if r and r.IsShown and r:IsShown() and it then
-                self.opts.updateRow(i, r, r._fields, it)
-                if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(r) end
+        if not self._windowed then
+            local n = math.min(#self.rows, #self._data)
+            for i = 1, n do
+                local r = self.rows[i]
+                local it = self._data[i]
+                if r and r.IsShown and r:IsShown() and it then
+                    -- Update léger uniquement si contenu changé
+                    if r._lastItemRef ~= it then
+                        self.opts.updateRow(i, r, r._fields, it)
+                        r._lastItemRef = it
+                    end
+                end
+            end
+        else
+            local first = tonumber(self._shownFirst) or 1
+            local last  = math.min(#self._data, tonumber(self._shownLast) or 0)
+            for i = first, last do
+                local r = self.rows[i]
+                local it = self._data[i]
+                if r and r.IsShown and r:IsShown() and it then
+                    if r._lastItemRef ~= it then
+                        self.opts.updateRow(i, r, r._fields, it)
+                        r._lastItemRef = it
+                    end
+                end
             end
         end
+    end
+
+    -- Invalidation ciblée du cache d'items pour forcer updateRow au prochain rafraîchissement
+    function lv:InvalidateVisibleRowsCache()
+        if not (self and self.rows) then return end
+        if not self._windowed then
+            for i = 1, #self.rows do
+                local r = self.rows[i]
+                if r and r.IsShown and r:IsShown() then r._lastItemRef = nil end
+            end
+        else
+            local first = tonumber(self._shownFirst) or 1
+            local last  = tonumber(self._shownLast) or 0
+            for i = first, last do
+                local r = self.rows[i]
+                if r then r._lastItemRef = nil end
+            end
+        end
+    end
+
+    function lv:InvalidateAllRowsCache()
+        if not (self and self.rows) then return end
+        for i = 1, #self.rows do
+            local r = self.rows[i]
+            if r then r._lastItemRef = nil end
+        end
+    end
+
+    -- Calcule et applique la fenêtre visible (indices de lignes à afficher)
+    function lv:_UpdateVisibleWindow()
+        if not (self and self._windowed and self._data and self.scroll and self.list) then return end
+        local rowH = tonumber(self._baseRowHWithPad or (UI.ROW_H or 30) + 2) or 1
+        if rowH < 1 then rowH = 1 end
+        local total = #self._data
+        local viewH = (self.scroll.GetHeight and self.scroll:GetHeight()) or 0
+        local offset = (self.scroll.GetVerticalScroll and self.scroll:GetVerticalScroll()) or 0
+        local buffer = 4
+        local first = math.max(1, math.floor(offset / rowH) + 1 - buffer)
+        local visibleCount = math.ceil(viewH / rowH) + (buffer * 2)
+        local last  = math.min(total, first + visibleCount - 1)
+
+        if self._shownFirst == first and self._shownLast == last then
+            return -- rien à faire
+        end
+
+        -- Cache l'ancien intervalle
+        if self._shownFirst and self._shownLast then
+            for i = self._shownFirst, self._shownLast do
+                local r = self.rows[i]
+                if r and r.Hide then r:Hide() end
+            end
+        end
+        -- Montre le nouveau
+        for i = first, last do
+            local r = self.rows[i]
+            if r and r.Show then r:Show() end
+        end
+        self._shownFirst, self._shownLast = first, last
+        -- Met à jour uniquement les lignes visibles
+        if self.UpdateVisibleRows then self:UpdateVisibleRows() end
+        -- Relayout léger pour placer les lignes visibles
+        if self.Layout then self:Layout() end
     end
 
     -- Relayout public
