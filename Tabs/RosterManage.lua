@@ -367,10 +367,15 @@ local function Build(container)
         -- Vérification GM au moment du clic (évite l'effet cache obsolète)
     local isGM = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
         if not isGM then return end
-        UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
-            name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
-            if name == "" then return end
-            if GLOG.AddPlayer and GLOG.AddPlayer(name) then
+            UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
+                name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+                if name == "" then return end
+                -- Ajoute automatiquement le suffixe externe si aucun royaume n'est fourni (suffixe localisé)
+                if not string.find(name, "-", 1, true) then
+                    local ext = (Tr and Tr("realm_external")) or "External"
+                    name = name .. "-" .. tostring(ext or "External")
+                end
+                if GLOG.AddPlayer and GLOG.AddPlayer(name) then
                 if RefreshAllViews then RefreshAllViews() end
             end
         end, { width = 460 })
@@ -476,8 +481,13 @@ function UI.ShowGuildRosterPopup()
             close   = false, -- ne pas fermer la popup
             onClick = function()
                 UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
-                    name = tostring(name or ""):gsub("^%s+",""):gsub("%s+$","")
+                    name = tostring(name or ""):gsub("^%s+"," "):gsub("%s+$","")
                     if name == "" then return end
+                    -- Ajoute automatiquement le suffixe externe si aucun royaume n'est fourni (suffixe localisé)
+                    if not string.find(name, "-", 1, true) then
+                        local ext = (Tr and Tr("realm_external")) or "External"
+                        name = name .. "-" .. tostring(ext or "External")
+                    end
                     if GLOG.AddPlayer and GLOG.AddPlayer(name) then
                         -- Rafraîchir la popup + l'UI globale
                         if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end

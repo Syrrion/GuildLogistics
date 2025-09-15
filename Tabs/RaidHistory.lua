@@ -3,7 +3,7 @@ local Tr = ns and ns.Tr
 local GLOG, UI, F = ns.GLOG, ns.UI, ns.Format
 local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
 
-local panel, lv, footer, histPane
+local panel, lv, footer, histPane, footerH
 local cols = UI.NormalizeColumns({
     { key="date",  title=Tr("col_date"),         w=140 },
     { key="total", title=Tr("col_total"),        vsep=true,  w=100 },
@@ -15,6 +15,19 @@ local cols = UI.NormalizeColumns({
 
 local function histNow()
     return (GLOG.GetHistory and GLOG.GetHistory()) or ((GuildLogisticsDB and GuildLogisticsDB.history) or {})
+end
+
+-- Refresh helpers: prefer a lightweight visible-rows refresh to avoid heavy rebuilds
+local function _LightRefresh(kind)
+    if not lv then return end
+    if kind == "hard" then
+        -- Rebind dataset (e.g., after delete) to ensure row count/ordering updates
+        lv:SetData(histNow())
+        return
+    end
+    if lv.InvalidateVisibleRowsCache then lv:InvalidateVisibleRowsCache() end
+    if lv.UpdateVisibleRows       then lv:UpdateVisibleRows()       end
+    if lv.Layout                  then lv:Layout()                  end
 end
 
 local function ShowParticipants(names)
@@ -86,7 +99,12 @@ local function UpdateRow(i, r, f, s)
                 or  Tr("confirm_make_free_session")
             UI.PopupConfirm(msg, function()
                 local ok = isUnrefund and GLOG.UnrefundSession(idx) or GLOG.RefundSession(idx)
-                if ok and ns.RefreshAll then ns.RefreshAll() end
+                if ok then
+                    -- Immediate local UI feedback without full rebuild
+                    _LightRefresh()
+                    -- Also trigger broader refresh if needed (other tabs/state)
+                    if ns and ns.RefreshAll then ns.RefreshAll() end
+                end
             end)
         end)
     end
@@ -105,7 +123,11 @@ r.btnDelete:SetScript("OnLeave", function() GameTooltip:Hide() end)
         local idx = i
         r.btnDelete:SetScript("OnClick", function()
             UI.PopupConfirm(Tr("confirm_delete_history_line_permanent"), function()
-                if GLOG.DeleteHistory and GLOG.DeleteHistory(idx) and ns.RefreshAll then ns.RefreshAll() end
+                if GLOG.DeleteHistory and GLOG.DeleteHistory(idx) then
+                    -- Hard refresh: dataset size/order changed
+                    _LightRefresh("hard")
+                    if ns and ns.RefreshAll then ns.RefreshAll() end
+                end
             end)
         end)
 
