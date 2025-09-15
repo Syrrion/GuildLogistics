@@ -357,92 +357,140 @@ local function Refresh()
     end
 
     local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
-
-    -- ➕ Masque par défaut les réserves inactives sans solde ;
-    --    si le GM a cliqué "Afficher joueurs masqués", on lève le filtre
     local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve({
-        showHidden = _showHiddenReserve,  -- false par défaut → masque
+        showHidden = _showHiddenReserve,
         cutoffDays = 30
     })) or {}
 
     _SortOnlineFirst(active)
     _SortOnlineFirst(reserve)
 
-    if lvActive then
-        local wrappedA = {}
-        for i, it in ipairs(active) do wrappedA[i] = { data = it, fromActive = true } end
-        lvActive:SetData(wrappedA)
-    end
-    if lvReserve then
-        local wrappedR = {}
-        for i, it in ipairs(reserve) do wrappedR[i] = { data = it, fromReserve = true } end
-        lvReserve:SetData(wrappedR)
-    end
+    local totalEntries = (#active) + (#reserve)
+    local CHUNK = 300 -- threshold to start chunking
+    local APPLY_BATCH = 150
 
-    local total = 0
-    for _, it in ipairs(active)  do total = total + (tonumber(it.solde) or 0) end
-    for _, it in ipairs(reserve) do total = total + (tonumber(it.solde) or 0) end
-    if totalFS then
-        local txt = (UI and UI.MoneyText) and UI.MoneyText(total) or (tostring(total).." po")
-        totalFS:SetText("|cffffd200"..Tr("lbl_total_balance").." :|r " .. txt)
-    end
-    -- Total ressources (en cuivre -> arrondi à l'or comme les soldes)
-    local rcopper = 0
-    if GLOG and GLOG.Resources_TotalAvailableCopper then
-        rcopper = GLOG.Resources_TotalAvailableCopper() or 0
-    end
-
-    if resourceFS then
-        local rtxt = (UI and UI.MoneyText) and UI.MoneyText(rcopper / 10000) or (tostring(math.floor(rcopper / 10000 + 0.5)).." po")
-        resourceFS:SetText("|cffffd200"..Tr("lbl_total_resources").." :|r " .. rtxt)
-    end
-
-    -- Total cumulé = soldes (en or) + ressources (converties en or), même arrondi que MoneyText
-    if bothFS then
-        local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
-        local ctxt = (UI and UI.MoneyText) and UI.MoneyText(combinedGold) or (tostring(math.floor(combinedGold + 0.5)).." po")
-        bothFS:SetText("|cffffd200"..Tr("lbl_total_both").." :|r " .. ctxt)
-    end
-
-    -- Banque et Équilibre (alignés à droite, labels orange, séparateur gris comme à gauche)
-    if bankRightFS and bankLeftFS then
-        local bankCopper = GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
-        local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
-        local xTxt, yTxt
-        if bankCopper == nil then
-            -- Bank unknown: show grey 'No data' and tooltip for both X and Y
-            local nd = "|cffaaaaaa"..(Tr("no_data") or "Aucune données").."|r"
-            xTxt = nd
-            yTxt = nd
-        else
-            local bankGold   = bankCopper / 10000
-            local equilibrium = (bankGold or 0) - (combinedGold or 0)
-            xTxt = (UI and UI.MoneyText and UI.MoneyText(bankGold))
-                or tostring(math.floor(bankGold + 0.5)).." po"
-            do
+    local function applyTotals(total, rcopper)
+        if totalFS then
+            local txt = (UI and UI.MoneyText) and UI.MoneyText(total) or (tostring(total).." po")
+            totalFS:SetText("|cffffd200"..Tr("lbl_total_balance").." :|r " .. txt)
+        end
+        rcopper = rcopper or (GLOG and GLOG.Resources_TotalAvailableCopper and (GLOG.Resources_TotalAvailableCopper() or 0)) or 0
+        if resourceFS then
+            local rtxt = (UI and UI.MoneyText) and UI.MoneyText(rcopper / 10000) or (tostring(math.floor(rcopper / 10000 + 0.5)).." po")
+            resourceFS:SetText("|cffffd200"..Tr("lbl_total_resources").." :|r " .. rtxt)
+        end
+        if bothFS then
+            local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
+            local ctxt = (UI and UI.MoneyText) and UI.MoneyText(combinedGold) or (tostring(math.floor(combinedGold + 0.5)).." po")
+            bothFS:SetText("|cffffd200"..Tr("lbl_total_both").." :|r " .. ctxt)
+        end
+        if bankRightFS and bankLeftFS then
+            local bankCopper = GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
+            local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
+            local xTxt, yTxt
+            if bankCopper == nil then
+                local nd = "|cffaaaaaa"..(Tr("no_data") or "Aucune données").."|r"
+                xTxt, yTxt = nd, nd
+            else
+                local bankGold   = bankCopper / 10000
+                local equilibrium = (bankGold or 0) - (combinedGold or 0)
+                xTxt = (UI and UI.MoneyText and UI.MoneyText(bankGold)) or tostring(math.floor(bankGold + 0.5)).." po"
                 local base = (UI and UI.MoneyText) and UI.MoneyText(equilibrium) or (tostring(math.floor(equilibrium + 0.5)).." po")
-                if equilibrium and equilibrium > 0 then
-                    -- Positive equilibrium in green; negative already red via MoneyText
-                    yTxt = "|cff40ff40"..base.."|r"
-                else
-                    yTxt = base
+                if equilibrium and equilibrium > 0 then yTxt = "|cff40ff40"..base.."|r" else yTxt = base end
+            end
+            local orange, reset = "|cffffd200", "|r"
+            bankLeftFS:SetText(orange..(Tr("lbl_bank_balance") or "Solde Banque").." :"..reset.." "..xTxt)
+            if (bankCopper == nil) and UI and UI.SetTooltip then
+                local hint = Tr("hint_open_gbank_to_update") or "Ouvrir la banque de guilde pour mettre à jour cette donnée"
+                UI.SetTooltip(bankLeftFS, hint); UI.SetTooltip(bankRightFS, hint)
+            else
+                if bankLeftFS.SetScript then bankLeftFS:SetScript("OnEnter", nil); bankLeftFS:SetScript("OnLeave", nil) end
+                if bankRightFS.SetScript then bankRightFS:SetScript("OnEnter", nil); bankRightFS:SetScript("OnLeave", nil) end
+            end
+            bankRightFS:SetText(orange..(Tr("lbl_equilibrium") or "Équilibre").." :"..reset.." "..yTxt)
+        end
+    end
+
+    if totalEntries <= CHUNK then
+        -- Synchronous path
+        if lvActive then
+            local wrappedA = {}
+            for i, it in ipairs(active) do wrappedA[i] = { data = it, fromActive = true } end
+            lvActive:SetData(wrappedA)
+        end
+        if lvReserve then
+            local wrappedR = {}
+            for i, it in ipairs(reserve) do wrappedR[i] = { data = it, fromReserve = true } end
+            lvReserve:SetData(wrappedR)
+        end
+        local total = 0
+        for _, it in ipairs(active)  do total = total + (tonumber(it.solde) or 0) end
+        for _, it in ipairs(reserve) do total = total + (tonumber(it.solde) or 0) end
+        applyTotals(total)
+        return
+    end
+
+    -- Async / chunked path for large rosters
+    if lvActive then lvActive:SetData({}) end
+    if lvReserve then lvReserve:SetData({}) end
+    local accTotal = 0
+    local idxA, idxR = 1, 1
+
+    local function pushActiveBatch()
+        if not lvActive then return end
+        local batch = {}
+        local added = 0
+        while idxA <= #active and added < APPLY_BATCH do
+            local it = active[idxA]
+            batch[#batch+1] = { data = it, fromActive = true }
+            accTotal = accTotal + (tonumber(it.solde) or 0)
+            idxA = idxA + 1
+            added = added + 1
+        end
+        if #batch > 0 then
+            lvActive:AppendData(batch) -- assumes ListView has AppendData; fallback if not
+        elseif lvActive.SetData and idxA == 1 then
+            lvActive:SetData({})
+        end
+        if idxA <= #active then
+            if C_Timer and C_Timer.After then C_Timer.After(0, pushActiveBatch) else pushActiveBatch() end
+        else
+            -- move to reserve
+            if C_Timer and C_Timer.After then C_Timer.After(0, pushReserveBatch) else pushReserveBatch() end
+        end
+    end
+    function pushReserveBatch()
+        if not lvReserve then return end
+        local batch = {}
+        local added = 0
+        while idxR <= #reserve and added < APPLY_BATCH do
+            local it = reserve[idxR]
+            batch[#batch+1] = { data = it, fromReserve = true }
+            accTotal = accTotal + (tonumber(it.solde) or 0)
+            idxR = idxR + 1
+            added = added + 1
+        end
+        if #batch > 0 then
+            if lvReserve.AppendData then
+                lvReserve:AppendData(batch)
+            else
+                -- Fallback: on first batch set, then append by concatenation
+                if idxR - added == 1 and lvReserve.SetData then
+                    lvReserve:SetData(batch)
+                elseif lvReserve.rows then
+                    -- naive fallback not exposing internal API; skip
                 end
             end
         end
-        local orange = "|cffffd200"; local reset = "|r"
-        bankLeftFS:SetText(orange..(Tr("lbl_bank_balance") or "Solde Banque").." :"..reset.." "..xTxt)
-        -- Tooltip on values when data is missing
-        if (bankCopper == nil) and UI and UI.SetTooltip then
-            local hint = Tr("hint_open_gbank_to_update") or "Ouvrir la banque de guilde pour mettre à jour cette donnée"
-            UI.SetTooltip(bankLeftFS, hint)
-            UI.SetTooltip(bankRightFS, hint)
+        if idxR <= #reserve then
+            if C_Timer and C_Timer.After then C_Timer.After(0, pushReserveBatch) else pushReserveBatch() end
         else
-            -- Remove tooltips if previously set (safe no-op)
-            if bankLeftFS.SetScript then bankLeftFS:SetScript("OnEnter", nil); bankLeftFS:SetScript("OnLeave", nil) end
-            if bankRightFS.SetScript then bankRightFS:SetScript("OnEnter", nil); bankRightFS:SetScript("OnLeave", nil) end
+            applyTotals(accTotal)
         end
-        bankRightFS:SetText(orange..(Tr("lbl_equilibrium") or "Équilibre").." :"..reset.." "..yTxt)
     end
+
+    -- Kick off
+    pushActiveBatch()
 end
 
 -- Footer

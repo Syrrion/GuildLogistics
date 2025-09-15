@@ -440,7 +440,81 @@ function UI.ListView(parent, cols, opts)
 
             return lv
         end
+
+            -- (This return above is part of original function chain; code below will not execute)
     end
+
+        -- Inject incremental append capability for list views (called after wrappers redefine UI.ListView)
+        do
+            local _Old = UI.ListView
+            ---@diagnostic disable-next-line: duplicate-set-field
+            UI.ListView = function(...)
+                local lv = _Old(...)
+                if lv and not lv.AppendData then
+                    function lv:AppendData(batch)
+                        if not batch or #batch == 0 then return end
+                        self._data = self._data or {}
+                        local startIndex = #self._data
+                        for i = 1, #batch do
+                            self._data[startIndex + i] = batch[i]
+                        end
+                        local baseRowH = tonumber(self.opts and self.opts.rowHeight) or (UI.ROW_H or 30)
+                        if baseRowH < 1 then baseRowH = 1 end
+                        local baseHWithPad = baseRowH + 2
+                        -- Create only missing rows
+                        local have = #self.rows
+                        local need = #self._data
+                        for i = have + 1, need do
+                            local r = CreateFrame("Frame", nil, self.list)
+                            r:SetHeight(baseHWithPad)
+                            UI.DecorateRow(r)
+                            r._fields = (self.opts.buildRow and self.opts.buildRow(r)) or {}
+                            self.rows[i] = r
+                            r._lastItemRef = nil
+                            if self._windowed and r.Hide then r:Hide() end
+                            if UI and UI.ApplyFontRecursively then UI.ApplyFontRecursively(r) end
+                        end
+                        -- If windowed, just update window; else update only newly added rows
+                        if self._windowed then
+                            if self.list and self.list.SetHeight then
+                                local totalH = math.max(0, (#self._data) * baseHWithPad)
+                                self.list:SetHeight(totalH)
+                            end
+                            if self._UpdateVisibleWindow then self:_UpdateVisibleWindow() end
+                        else
+                            local firstVisible
+                            for i = 1, #self._data do if self._data[i] then firstVisible = i break end end
+                            for i = startIndex + 1, #self._data do
+                                local r  = self.rows[i]
+                                local it = self._data[i]
+                                if r and it then
+                                    r:Show()
+                                    if UI.ApplyRowGradient then UI.ApplyRowGradient(r, (i % 2 == 0)) end
+                                    local extraTop = 0
+                                    if it.kind == "sep" and not it.extraTop then
+                                        extraTop = (UI.GetSeparatorTopPadding and UI.GetSeparatorTopPadding()) or 0
+                                        if extraTop < 0 then extraTop = 0 end
+                                    end
+                                    r._isSep = (it.kind == "sep")
+                                    local targetH = baseHWithPad + extraTop
+                                    if r._targetH ~= targetH then r._targetH = targetH; r:SetHeight(targetH) end
+                                    if r._sepTop then
+                                        if firstVisible and i == firstVisible then r._sepTop:Hide() else r._sepTop:Show() end
+                                    end
+                                    if self.opts.updateRow and r._lastItemRef ~= it then
+                                        self.opts.updateRow(i, r, r._fields, it)
+                                        r._lastItemRef = it
+                                    end
+                                end
+                            end
+                            if self.Layout then self:Layout() end
+                            if self._SetEmptyShown then self:_SetEmptyShown(#self._data == 0) end
+                        end
+                    end
+                end
+                return lv
+            end
+        end
     
     -- Étend le hook de Layout pour quantifier lignes et séparateurs à la fin du layout.
 -- UI/UI_ListView.lua
