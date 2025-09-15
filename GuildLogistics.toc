@@ -2,7 +2,7 @@
 ## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 4.2.8s
+## Version: 4.2.8
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariables: GuildLogisticsShared
