@@ -303,6 +303,7 @@ Le projet suit un pattern d'architecture modulaire avec séparation des responsa
 - **`Class.lua`** : Gestion des classes de personnages
 - **`Name.lua`** : Normalisation et gestion des noms
 - **`Status.lua`** : États des joueurs
+- **`MythicProgress.lua`** : Capture des scores Mythique+ par donjon (mains uniquement) via C_PlayerInfo.GetPlayerMythicPlusRatingSummary; stockage sous `players[main].mplusMaps`
 - **`MainAlt.lua`** : Lien main/alt et regroupement des personnages
 
 #### **Core/Game/** - Intégration WoW
@@ -378,6 +379,7 @@ Les onglets sont organisés en catégories avec sidebar :
 
 **Guilde (`cat_guild`)**
 - **`Guild.lua`** : Membres de guilde, zones, statuts en ligne
+- **`Guild_MythicProgress.lua`** : Onglet « Progression Mythique » listant les scores par donjon pour les mains de la guilde
 
 **Raids (`cat_raids`)**
 - **`RaidStart.lua`** : Démarrage de raids (GM uniquement)

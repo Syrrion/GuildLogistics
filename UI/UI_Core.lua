@@ -310,7 +310,18 @@ function UI.LayoutRow(row, cols, fields)
             if f.SetJustifyH and c.justify then f:SetJustifyH(c.justify) end
             -- Empêche le débordement visuel/interaction hors cellule
             if f.SetClipsChildren then pcall(f.SetClipsChildren, f, true) end
-            if UI.ApplyCellTruncation then UI.ApplyCellTruncation(f, w - 8) end
+            -- Option de colonne: autoriser le multi-ligne et/ou désactiver la troncature
+            if c.wrapLines or c.noTruncate then
+                -- Désactive la troncature automatique pour cette cellule
+                f._noTruncation = true
+                if c.wrapLines then
+                    if f.SetWordWrap then pcall(f.SetWordWrap, f, true) end
+                    if f.SetMaxLines then pcall(f.SetMaxLines, f, tonumber(c.wrapLines) or 2) end
+                    if f.SetJustifyV then pcall(f.SetJustifyV, f, "MIDDLE") end
+                end
+            else
+                if UI.ApplyCellTruncation then UI.ApplyCellTruncation(f, w - 8) end
+            end
         end
 
         if allowVSeps and c.vsep then
@@ -734,7 +745,8 @@ end
 
 -- Applique la troncature à une "cellule" (FontString direct, ou frame avec .text)
 function UI.ApplyCellTruncation(cell, availWidth)
-    if cell and cell._noTruncation then return end
+    -- Respect explicit flags to disable truncation (wrap/multi-line cells)
+    if cell and (cell._noTruncation or cell._allowWrap) then return end
     if not cell or not availWidth or availWidth <= 0 then return end
 
     -- Trouve la cible texte
@@ -751,7 +763,17 @@ function UI.ApplyCellTruncation(cell, availWidth)
     end
     if not target then return end
 
-    -- Désactive le word wrap et limite à 1 ligne
+    -- Si la cible est déjà configurée pour wrap multi-ligne, ne pas tronquer
+    if target._allowWrap then return end
+    if target.GetMaxLines and target:GetMaxLines() and target:GetMaxLines() > 1 then
+        return
+    end
+    local existingText = (target.GetText and target:GetText()) or ""
+    if type(existingText) == "string" and existingText:find("\n") then
+        return
+    end
+
+    -- Désactive le word wrap et limite à 1 ligne (mode troncature)
     if target.SetWordWrap then pcall(target.SetWordWrap, target, false) end
     if target.SetMaxLines then pcall(target.SetMaxLines, target, 1) end
 
@@ -765,6 +787,15 @@ function UI.ApplyCellTruncation(cell, availWidth)
     end
 
     local full = target._fullText or (target.GetText and target:GetText()) or ""
+    -- Si le contenu contient une nouvelle ligne, ne pas tronquer
+    if type(full) == "string" and full:find("\n") then
+        if target._origSetText then
+            target:_origSetText(full)
+        else
+            target:SetText(full)
+        end
+        return
+    end
     local show = UI.TruncateTextToWidth(target, full, availWidth)
     if target._origSetText then
         target:_origSetText(show)

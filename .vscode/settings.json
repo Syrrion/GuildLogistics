@@ -66,5 +66,6 @@
     "Lua.type.weakUnionCheck": true,
     "Lua.diagnostics.disable": [
         "assign-type-mismatch"
-    ]
+    ],
+    "stylua.targetReleaseVersion": "latest"
 }

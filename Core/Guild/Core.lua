@@ -453,8 +453,10 @@ end
 function GLOG.IsConnectedMain()
     local me = (ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName())
             or (UnitName and UnitName("player")) or "?"
-    local myKey   = GLOG.NormName and GLOG.NormName(me)
-    local mainKey = GLOG.GetMainOf and GLOG.GetMainOf(me) or myKey
+    -- Compare normalized keys for both self and resolved main
+    local myKey     = (GLOG.NormName and GLOG.NormName(me)) or (tostring(me or "")):lower()
+    local mainName  = (GLOG.GetMainOf and GLOG.GetMainOf(me)) or me
+    local mainKey   = (GLOG.NormName and GLOG.NormName(mainName)) or (tostring(mainName or "")):lower()
     return (mainKey == myKey)
 end
 

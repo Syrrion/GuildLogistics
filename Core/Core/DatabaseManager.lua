@@ -53,6 +53,10 @@ end
 GLOG.GetActiveGuildBucketKey = GLOG.GetActiveGuildBucketKey or _getActiveGuildBucketKey
 
 local function EnsureDB()
+    -- Re-entrancy / long-frame safeguard
+    if GLOG._ensureDBRunning then return end
+    GLOG._ensureDBRunning = true
+    local _startT = debugprofilestop and debugprofilestop() or nil
     -- Legacy version-gated wipe (pre-4.0.0): now marker-only to avoid destroying data before shared migration
     do
         local cur = (ns and ns.GLOG and ns.GLOG.GetAddonVersion and ns.GLOG.GetAddonVersion()) or (ns and ns.Version) or ""
@@ -187,6 +191,19 @@ local function EnsureDB()
     end
 
     -- Note: no runtime migrations here; data model now natively stores UID participants
+
+    -- Basic instrumentation (debug only) to detect unusually long init
+    if _startT and (GLOG and GLOG.IsDebugEnabled and GLOG.IsDebugEnabled()) and debugprofilestop then
+        local dt = (debugprofilestop() - _startT)
+        if dt > 50 then -- >50ms considered heavy
+            if GLOG.pushLog then
+                GLOG.pushLog("warn", "db:init:slow", "EnsureDB took long", { ms = dt })
+            elseif print then
+                print("[GLOG] EnsureDB slow init:", dt, "ms")
+            end
+        end
+    end
+    GLOG._ensureDBRunning = nil
 end
 
 -- Fonction de nettoyage (utilisée par Core.lua)
