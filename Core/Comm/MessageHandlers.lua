@@ -831,7 +831,101 @@ local function handleStatusUpdate(sender, kv)
         end
     end
 
-    -- 1.bis) Banque de guilde: appliquer la valeur la plus récente si fournie
+    -- 1.bis) Mythic+ per-dungeon maps (compact MP) with timestamp freshness
+    do
+        local function _applyMPByUID(uid, line)
+            uid = tostring(uid or "")
+            if uid == "" then return end
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if not name or name == "" then return end
+            -- Do not create entries here; apply only if player exists locally
+            GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+            local p = GuildLogisticsDB.players[name]
+            if not p then return end
+            -- Respect alt/main guard: ignore for ALTs
+            local isAlt = false
+            do
+                local puid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name)) or "")
+                if puid ~= "" then
+                    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+                    local t = GuildLogisticsDB.account
+                    local mu = t.altToMain and t.altToMain[puid]
+                    if mu and mu ~= puid then isAlt = true end
+                end
+            end
+            if isAlt then return end
+
+            -- Parse compact string: "uid:ts|mid,s,b,t,d;mid,..." (MPv=2)
+            -- Backward-compat: also accepts MPv=1 with an extra 'runs' field (mid,s,b,r,t,d) and ignores it
+            local tsStr, rest = tostring(line or ""):match("^[^:]+:([%-%d]+)|(.+)$")
+            if not tsStr then return end
+            local ts = safenum(tsStr, 0)
+            local prev = safenum(p.mplusMapsTs, 0)
+            if ts <= prev then return end
+            local newMap = {}
+            for tok in tostring(rest or ""):gmatch("([^;]+)") do
+                -- Try MPv=2 (5 fields)
+                local mid,s,b,t,d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+                local ok = false
+                if mid then ok = true
+                else
+                    -- Fallback MPv=1 (6 fields, includes 'runs' we ignore)
+                    local _mid,_s,_b,_r,_t,_d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+                    if _mid then mid,s,b,t,d = _mid,_s,_b,_t,_d; ok = true end
+                end
+                if ok and mid then
+                    local id = tonumber(mid) or 0
+                    if id > 0 then
+                        newMap[id] = {
+                            score = safenum(s,0),
+                            best  = safenum(b,0),
+                            timed = (safenum(t,0) ~= 0),
+                            durMS = safenum(d,0),
+                        }
+                    end
+                end
+            end
+            if next(newMap) then
+                p.mplusMaps = newMap
+                p.mplusMapsTs = ts
+                if ns.Emit then ns.Emit("mplus:maps-updated", name) end
+            end
+        end
+        -- Accept MP either as compact strings array or table entries with fields
+        if type(kv.MP) == "table" then
+            for _, item in ipairs(kv.MP) do
+                if type(item) == "string" then
+                    local uid = item:match("^([^:]+):")
+                    if uid then _applyMPByUID(uid, item) end
+                elseif type(item) == "table" then
+                    -- Object form: { uid=, ts=, M={ {mid=,score=,best=,timed=,durMS=}... } }
+                    local uid = tostring(item.uid or item.u or "")
+                    local ts  = safenum(item.ts or item.t, 0)
+                    if uid ~= "" and ts > 0 then
+                        -- Reconstruct compact line and reuse parser for uniformity
+                        local parts = {}
+                        if type(item.M) == "table" then
+                            for _, r in ipairs(item.M) do
+                                local mid = safenum(r.mid or r.id, 0)
+                                if mid > 0 then
+                                    local s = safenum(r.score or r.s, 0)
+                                    local b = safenum(r.best or r.b, 0)
+                                    local t = (r.timed and 1 or safenum(r.t, 0))
+                                    local d = safenum(r.durMS or r.d or 0)
+                                    -- MPv=2 compact entry (no runs)
+                                    parts[#parts+1] = table.concat({ tostring(mid), tostring(s), tostring(b), tostring(t), tostring(d) }, ",")
+                                end
+                            end
+                        end
+                        local line = uid..":"..tostring(ts).."|"..table.concat(parts, ";")
+                        _applyMPByUID(uid, line)
+                    end
+                end
+            end
+        end
+    end
+
+    -- 1.c) Banque de guilde: appliquer la valeur la plus récente si fournie
     do
         local c   = tonumber(kv.gbc)
         local ts  = tonumber(kv.gbts)

@@ -15,12 +15,19 @@ local function _collectData()
     if not (GLOG and GLOG.GetGuildMainsAggregatedCached) then return rows end
 
     local mains = GLOG.GetGuildMainsAggregatedCached() or {}
-    -- Determine all dungeon names encountered to create dynamic columns
+    -- Determine all dungeon IDs encountered to create dynamic columns (with resolved names)
     local mapIndex, mapOrder = {}, {}
+    local nameById, idByName = {}, {}
 
-    local function addMap(name)
-        if not name or name == "" then return end
-        if not mapIndex[name] then mapIndex[name] = #mapOrder + 1; mapOrder[#mapOrder+1] = name end
+    local function addMap(id)
+        if not id or type(id) ~= "number" or id <= 0 then return end
+        if not mapIndex[id] then
+            mapIndex[id] = #mapOrder + 1
+            mapOrder[#mapOrder+1] = id
+            local nm = (GLOG and GLOG.ResolveMKeyMapName and GLOG.ResolveMKeyMapName(id)) or tostring(id)
+            nameById[id] = nm
+            if nm and nm ~= "" then idByName[nm] = id end
+        end
     end
 
     -- Precompute key -> fullName map once (avoids nested scans)
@@ -46,7 +53,7 @@ local function _collectData()
         if GLOG.EnsureDB then GLOG.EnsureDB() end
         local p = GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[fullName]
         if p and p.mplusMaps then
-            for mapName, _ in pairs(p.mplusMaps) do addMap(mapName) end
+            for mapID, _ in pairs(p.mplusMaps) do addMap(tonumber(mapID) or 0) end
         end
     end
 
@@ -67,17 +74,17 @@ local function _collectData()
         local p = GuildLogisticsDB and GuildLogisticsDB.players and GuildLogisticsDB.players[fullName]
         if p and p.mplusMaps then
             for i = 1, #mapOrder do
-                local m = mapOrder[i]
-                local s = p.mplusMaps[m]
+                local mid = mapOrder[i]
+                local s = p.mplusMaps[mid]
                 if s then
-                    rec[m] = {
+                    rec[mid] = {
                         score = math.floor(tonumber(s.score or 0) + 0.5),
                         best  = tonumber(s.best or 0) or 0,
                         timed = (s.timed == true) and true or false,
                         durMS = tonumber(s.durMS or 0) or 0,
                     }
                 else
-                    rec[m] = nil
+                    rec[mid] = nil
                 end
             end
         end
@@ -99,7 +106,7 @@ local function _collectData()
 
     -- Build per-dungeon ranking (gold/silver/bronze) based on score then key level (best), descending
     -- We only compute ranks for non-zero scores.
-    local ranking = {}  -- ranking[mapName] = { {rowIndex=idx, score=.., best=..}, ... sorted }
+    local ranking = {}  -- ranking[mapID] = { {rowIndex=idx, score=.., best=..}, ... sorted }
     for mi = 1, #mapOrder do
         local m = mapOrder[mi]
         local bucket = {}
@@ -123,7 +130,7 @@ local function _collectData()
         end
     end
     -- Assign rank (1..n) but we only care about 1..3; tie handling: identical (score,best) => same rank, skip next ranks accordingly.
-    for mapName, bucket in pairs(ranking) do
+    for mapID, bucket in pairs(ranking) do
         local lastScore, lastBest, lastRank
         local used = 0
         for i, entry in ipairs(bucket) do
@@ -140,17 +147,17 @@ local function _collectData()
             if rk <= 3 then
                 local rec = rows[entry.rowIndex]
                 rec._ranks = rec._ranks or {}
-                rec._ranks[mapName] = rk
+                rec._ranks[mapID] = rk
             else
                 break -- we don't need further ranks beyond 3 for medal display
             end
         end
     end
 
-    return rows, mapOrder
+    return rows, mapOrder, nameById
 end
 
-local function _buildColumns(mapOrder)
+local function _buildColumns(mapOrder, nameById)
     -- Header font size: reduce by 1px to squeeze more columns
     if UI and UI.SetFontDeltaForFrame and lv and lv.header then
         UI.SetFontDeltaForFrame(lv.header, -1, true)
@@ -160,8 +167,9 @@ local function _buildColumns(mapOrder)
         { key = "overall", title = Tr("col_mplus_overall") or "Score mythique", w = 90, justify = "CENTER", vsep = true },
     })
     -- Target narrower cells and enable wrapping for 2 lines (level + score)
-    for _, m in ipairs(mapOrder or {}) do
-        cols[#cols+1] = { key = m, title = m, w = 100, justify = "CENTER", vsep = true, wrapLines = 2 }
+    for _, mid in ipairs(mapOrder or {}) do
+        local title = (nameById[mid] and tostring(nameById[mid])) or tostring(mid)
+        cols[#cols+1] = { key = mid, title = title, w = 100, justify = "CENTER", vsep = true, wrapLines = 2 }
     end
     return cols
 end
@@ -297,13 +305,15 @@ local function updateRow(i, r, f, item)
                     L._valueForTip = nil
                 end
             end
-            -- Medal handling
+            -- Medal handling: show only GOLD; hide silver/bronze
             if L.medal then
                 local rk = item._ranks and item._ranks[c.key]
-                if rk == 1 then L.medal:SetAtlas("challenges-medal-gold")
-                elseif rk == 2 then L.medal:SetAtlas("challenges-medal-silver")
-                elseif rk == 3 then L.medal:SetAtlas("challenges-medal-bronze") end
-                L.medal:SetShown(rk == 1 or rk == 2 or rk == 3)
+                if rk == 1 then
+                    L.medal:SetAtlas("challenges-medal-gold")
+                    L.medal:Show()
+                else
+                    L.medal:Hide()
+                end
             end
         end
         x = x + w
@@ -312,8 +322,8 @@ end
 
 local function Build(container)
     panel = UI.CreateMainContainer(container, { footer = false })
-    local data, maps = _collectData()
-    local cols = _buildColumns(maps)
+    local data, maps, names = _collectData()
+    local cols = _buildColumns(maps, names)
 
     lv = UI.ListView(panel, cols, {
         topOffset = 0,
@@ -327,8 +337,8 @@ end
 
 local function Refresh()
     if not lv then return end
-    local data, maps = _collectData()
-    lv.cols = _buildColumns(maps)
+    local data, maps, names = _collectData()
+    lv.cols = _buildColumns(maps, names)
     if lv.header and lv.header.Hide then lv.header:Hide() end
     lv.header, lv.hLabels = UI.CreateHeader(lv.parent, lv.cols)
     -- Reduce header font size slightly to fit more columns

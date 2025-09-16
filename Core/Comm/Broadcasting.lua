@@ -697,6 +697,38 @@ function GLOG.CreateStatusUpdatePayload(overrides)
     
     if #_statusCacheData > 0 then payload.S = _statusCacheData end
 
+    -- ➕ Include my Mythic+ per-dungeon map snapshot (compact) with timestamp
+    -- Format (MPv=2): MP = { "uid:ts|mid,score,best,timed,durMS;mid,..." }
+    do
+        GuildLogisticsDB = GuildLogisticsDB or {}
+        GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+        local meRec = GuildLogisticsDB.players[me]
+        local uid = myUID or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(me)) or nil
+        if meRec and uid and type(meRec.mplusMaps) == "table" then
+            local tsmp = safenum(meRec.mplusMapsTs, 0)
+            local count = 0
+            for _ in pairs(meRec.mplusMaps) do count = count + 1 end
+            if tsmp > 0 and count > 0 then
+                local mids = {}
+                for mid, _ in pairs(meRec.mplusMaps) do mids[#mids+1] = tonumber(mid) or 0 end
+                table.sort(mids)
+                local parts = {}
+                for i = 1, #mids do
+                    local mid = mids[i]
+                    local r = meRec.mplusMaps[mid] or {}
+                    local s  = safenum(r.score, 0)
+                    local b  = safenum(r.best, 0)
+                    local t  = (r.timed and 1 or 0)
+                    local d  = safenum(r.durMS or r.durMs, 0)
+                    parts[#parts+1] = table.concat({ tostring(mid), tostring(s), tostring(b), tostring(t), tostring(d) }, ",")
+                end
+                local line = tostring(uid)..":"..tostring(tsmp).."|"..table.concat(parts, ";")
+                payload.MPv = 2
+                payload.MP  = { line }
+            end
+        end
+    end
+
     -- ➕ Ajoute l'état Banque de guilde (instantané local) avec timestamp
     -- NOTE: encodeur KV ne supporte pas les objets imbriqués → utiliser des champs plats
     do

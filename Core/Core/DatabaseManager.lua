@@ -165,6 +165,159 @@ local function EnsureDB()
     GuildLogisticsDB = active
     GuildLogisticsUI = GuildLogisticsUI_Char
 
+    -- One-time data hygiene: remove legacy 'medal' fields from saved Mythic+ maps
+    do
+        active.meta = active.meta or {}
+        local migKey = "migr:drop_mplus_medal"
+        if not active.meta[migKey] then
+            local removed = 0
+            if type(active.players) == "table" then
+                for _, p in pairs(active.players) do
+                    local maps = p and p.mplusMaps
+                    if type(maps) == "table" then
+                        for _, s in pairs(maps) do
+                            if type(s) == "table" and s.medal ~= nil then
+                                s.medal = nil
+                                removed = removed + 1
+                            end
+                        end
+                    end
+                end
+            end
+            active.meta[migKey] = time and time() or true
+            if removed > 0 and GLOG and GLOG.pushLog then
+                GLOG.pushLog("info", "db:migration", "Dropped legacy medal fields", { count = removed })
+            end
+        end
+    end
+
+    -- One-time migration: key mplusMaps by mapID instead of map name
+    do
+        active.meta = active.meta or {}
+        local migKey = "migr:mplus_maps_key_to_id"
+        if not active.meta[migKey] then
+            local converted = 0
+            if type(active.players) == "table" then
+                for _, p in pairs(active.players) do
+                    local maps = p and p.mplusMaps
+                    if type(maps) == "table" then
+                        local needs = false
+                        for k, _ in pairs(maps) do
+                            if type(k) ~= "number" then needs = true; break end
+                        end
+                        if needs then
+                            local out = {}
+                            for k, v in pairs(maps) do
+                                local entry = (type(v) == "table") and v or {}
+                                local mid = tonumber(entry.mapID or 0) or 0
+                                if mid == 0 then
+                                    -- Try to resolve from key string if possible
+                                    if type(k) == "number" then mid = k
+                                    elseif type(k) == "string" then
+                                        -- No robust reverse lookup by name here; keep as 0 which will be dropped
+                                        mid = tonumber(entry.mapChallengeModeID or 0) or 0
+                                    end
+                                end
+                                if mid and mid > 0 then
+                                    local prev = out[mid]
+                                    if prev then
+                                        -- Merge: keep the better (higher score, then best level)
+                                        local sc1 = tonumber(prev.score or 0) or 0
+                                        local sc2 = tonumber(entry.score or 0) or 0
+                                        if sc2 > sc1 or (sc2 == sc1 and (entry.best or 0) > (prev.best or 0)) then
+                                            out[mid] = entry
+                                        end
+                                    else
+                                        out[mid] = entry
+                                    end
+                                end
+                            end
+                            -- Replace only if we produced some numeric keys
+                            if next(out) ~= nil then p.mplusMaps = out; converted = converted + 1 end
+                        end
+                    end
+                end
+            end
+            active.meta[migKey] = time and time() or true
+            if converted > 0 and GLOG and GLOG.pushLog then
+                GLOG.pushLog("info", "db:migration", "Converted mplusMaps to ID keys", { players = converted })
+            end
+        end
+    end
+
+    -- One-time data hygiene: drop redundant mapID field inside mplusMaps values (keys are already mapID)
+    do
+        active.meta = active.meta or {}
+        local migKey = "migr:drop_mplus_inner_mapid"
+        if not active.meta[migKey] then
+            local dropped = 0
+            if type(active.players) == "table" then
+                for _, p in pairs(active.players) do
+                    local maps = p and p.mplusMaps
+                    if type(maps) == "table" then
+                        for _, s in pairs(maps) do
+                            if type(s) == "table" and s.mapID ~= nil then
+                                s.mapID = nil
+                                dropped = dropped + 1
+                            end
+                        end
+                    end
+                end
+            end
+            active.meta[migKey] = time and time() or true
+            if dropped > 0 and GLOG and GLOG.pushLog then
+                GLOG.pushLog("info", "db:migration", "Dropped inner mapID fields from mplusMaps", { count = dropped })
+            end
+        end
+    end
+
+    -- One-time data hygiene: remove legacy overall Mythic+ fields (mplusOverall/mplusOverallTS)
+    do
+        active.meta = active.meta or {}
+        local migKey = "migr:drop_mplus_overall_fields_v1"
+        if not active.meta[migKey] then
+            local removed = 0
+            if type(active.players) == "table" then
+                for _, p in pairs(active.players) do
+                    if type(p) == "table" then
+                        if p.mplusOverall ~= nil then p.mplusOverall = nil; removed = removed + 1 end
+                        if p.mplusOverallTS ~= nil then p.mplusOverallTS = nil; removed = removed + 1 end
+                    end
+                end
+            end
+            active.meta[migKey] = time and time() or true
+            if removed > 0 and GLOG and GLOG.pushLog then
+                GLOG.pushLog("info", "db:migration", "Dropped legacy mplusOverall fields", { count = removed })
+            end
+        end
+    end
+
+    -- One-time data hygiene: drop deprecated 'runs' from mplusMaps entries
+    do
+        active.meta = active.meta or {}
+        local migKey = "migr:drop_mplus_runs_v1"
+        if not active.meta[migKey] then
+            local removed = 0
+            if type(active.players) == "table" then
+                for _, p in pairs(active.players) do
+                    local maps = p and p.mplusMaps
+                    if type(maps) == "table" then
+                        for _, s in pairs(maps) do
+                            if type(s) == "table" and s.runs ~= nil then
+                                s.runs = nil
+                                removed = removed + 1
+                            end
+                        end
+                    end
+                end
+            end
+            active.meta[migKey] = time and time() or true
+            if removed > 0 and GLOG and GLOG.pushLog then
+                GLOG.pushLog("info", "db:migration", "Dropped deprecated 'runs' from mplusMaps", { count = removed })
+            end
+        end
+    end
+
     -- Initialize schemas (legacy stores kept for compatibility, but no longer used at runtime)
     if not wipedLegacyChar then _InitSchema(GuildLogisticsDB_Char) end -- keep initialized for potential future reads when not wiped
     if GuildLogisticsStandalone_Char and not wipedLegacyStandalone then _InitSchema(GuildLogisticsStandalone_Char) end

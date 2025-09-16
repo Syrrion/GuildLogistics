@@ -169,6 +169,42 @@ function GLOG.SnapshotExport()
         if #list > 0 then EDR = list end
     end
 
+    -- ===== Mythic+ per-dungeon maps (compact per player) =====
+    -- MP entries formatted as: "uid:ts|mid,score,best,timed,durMS;mid,..." (MPv=2)
+    local MP
+    do
+        local pdb = GuildLogisticsDB.players or {}
+        local items = {}
+        for full, rec in pairs(pdb) do
+            local maps = rec and rec.mplusMaps
+            local ts   = rec and rec.mplusMapsTs
+            local uid  = tostring(rec and rec.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(full)) or "")
+            if uid ~= "" and type(maps) == "table" then
+                local count = 0; for _ in pairs(maps) do count = count + 1 end
+                if count > 0 and safenum(ts,0) > 0 then
+                    local mids = {}
+                    for mid,_ in pairs(maps) do mids[#mids+1] = tonumber(mid) or 0 end
+                    table.sort(mids)
+                    local parts = {}
+                    for i=1,#mids do
+                        local mid = mids[i]
+                        local r = maps[mid] or {}
+                        parts[#parts+1] = table.concat({
+                            tostring(mid),
+                            tostring(safenum(r.score,0)),
+                            tostring(safenum(r.best,0)),
+                            tostring((r.timed and 1 or 0)),
+                            tostring(safenum(r.durMS or r.durMs,0)),
+                        }, ",")
+                    end
+                    items[#items+1] = tostring(uid)..":"..tostring(ts).."|"..table.concat(parts, ";")
+                end
+            end
+        end
+        table.sort(items)
+        if #items > 0 then MP = items end
+    end
+
     -- ===== KV final =====
     return {
         sv = 4,
@@ -190,6 +226,9 @@ function GLOG.SnapshotExport()
         P  = P,
         -- Editors allowlist
         EDR = EDR,
+        -- Mythic+ per-dungeon maps
+        MP  = MP,
+        MPv = 2,
     }
 end
 
@@ -539,6 +578,78 @@ function GLOG.SnapshotApply(kv)
         acc.editors = ed
         GuildLogisticsDB.account = acc
         if ns and ns.Emit then ns.Emit("editors:changed", "sync") end
+    end
+
+    -- 10) Mythic+ per-dungeon maps (if present)
+    do
+        local function _applyMPLine(line)
+            local uid, rest = tostring(line or ""):match("^([^:]+):(.+)$")
+            if not uid then return end
+            local tsStr, body = tostring(rest or ""):match("^([%-%d]+)|(.+)$")
+            if not tsStr then return end
+            local ts = safenum(tsStr, 0)
+            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+            if not name or name == "" then return end
+            GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+            local p = GuildLogisticsDB.players[name]
+            if not p then return end
+            local prev = safenum(p.mplusMapsTs, 0)
+            if ts <= prev then return end
+            local newMap = {}
+            for tok in tostring(body or ""):gmatch("([^;]+)") do
+                -- Try MPv=2 first (no runs)
+                local mid,s,b,t,d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+                local ok = false
+                if mid then ok = true else
+                    -- Fallback MPv=1 (includes runs we ignore)
+                    local _mid,_s,_b,_r,_t,_d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+                    if _mid then mid,s,b,t,d = _mid,_s,_b,_t,_d; ok = true end
+                end
+                if ok and mid then
+                    local id = tonumber(mid) or 0
+                    if id > 0 then
+                        newMap[id] = {
+                            score = safenum(s,0),
+                            best  = safenum(b,0),
+                            timed = (safenum(t,0) ~= 0),
+                            durMS = safenum(d,0),
+                        }
+                    end
+                end
+            end
+            if next(newMap) then
+                p.mplusMaps = newMap
+                p.mplusMapsTs = ts
+                if ns.Emit then ns.Emit("mplus:maps-updated", name) end
+            end
+        end
+        if type(kv.MP) == "table" then
+            for _, item in ipairs(kv.MP) do
+                if type(item) == "string" then
+                    _applyMPLine(item)
+                elseif type(item) == "table" then
+                    -- Allow object form if ever used in future
+                    local uid = tostring(item.uid or item.u or "")
+                    local ts  = safenum(item.ts or item.t, 0)
+                    if uid ~= "" and ts > 0 then
+                        local parts = {}
+                        if type(item.M) == "table" then
+                            for _, r in ipairs(item.M) do
+                                local mid = safenum(r.mid or r.id, 0)
+                                if mid > 0 then
+                                    local s = safenum(r.score or r.s, 0)
+                                    local b = safenum(r.best or r.b, 0)
+                                    local t = (r.timed and 1 or safenum(r.t, 0))
+                                    local d = safenum(r.durMS or r.d or 0)
+                                    parts[#parts+1] = table.concat({ tostring(mid), tostring(s), tostring(b), tostring(t), tostring(d) }, ",")
+                                end
+                            end
+                        end
+                        _applyMPLine(uid..":"..tostring(ts).."|"..table.concat(parts, ";"))
+                    end
+                end
+            end
+        end
     end
 
     -- No migration step: DB now uses ShortId strings natively

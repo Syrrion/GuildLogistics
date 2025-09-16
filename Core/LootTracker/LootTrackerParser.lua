@@ -39,6 +39,18 @@ local function _IsEquippable(link)
     return false
 end
 
+-- Normalized link key compatible with LootTrackerRolls (itemID + lowercased name)
+local function _NormLinkKey(link)
+    if ns.LootTrackerRolls and ns.LootTrackerRolls.NormalizeLink then
+        local ok, key = pcall(ns.LootTrackerRolls.NormalizeLink, link)
+        if ok and key then return key end
+    end
+    if not link or link == "" then return nil end
+    local itemID = link:match("|Hitem:(%d+):") or "?"
+    local name = link:match("%[(.-)%]") or "?"
+    return itemID .. "::" .. tostring(name):lower()
+end
+
 -- Tente de déduire le looter depuis le message (self/groupe/raid)
 local function _NameInGroupFromMessage(msg)
     if not msg or msg == "" then return UnitName("player") end
@@ -120,12 +132,15 @@ local function _HasStoreEntry(link, looter, cutoffSec)
     local who = tostring(looter or "")
     local cutoff = (cutoffSec and tonumber(cutoffSec)) or 600 -- 10 minutes par défaut
     local now = (GetServerTime and GetServerTime()) or _Now()
+    local targetKey = _NormLinkKey(link)
     for i = 1, #store do
         local e = store[i]
-        if e and e.link == link and tostring(e.looter or "") == who then
+        if e and tostring(e.looter or "") == who then
+            if targetKey and _NormLinkKey(e.link) == targetKey then
             local ts = tonumber(e.ts or 0) or 0
             if (now - ts) <= cutoff then
                 return true
+            end
             end
         end
     end
@@ -157,7 +172,8 @@ end
 -- Anti-doublon court : (looter|link) vu dans les 3s => on ignore
 local _recentLoot = {}
 local function _IsRecentLoot(looter, link)
-    local k = tostring(looter or "") .. "|" .. tostring(link or "")
+    local lk = _NormLinkKey(link) or tostring(link or "")
+    local k = tostring(looter or "") .. "|" .. lk
     local now = _Now()
     local last = _recentLoot[k]
     _recentLoot[k] = now
@@ -218,7 +234,7 @@ local function _AddIfEligible(link, looter)
     -- Without this, two near-simultaneous _AddIfEligible calls (e.g. MarkAsWon then chat loot message)
     -- can both schedule _QueryItemInfo before the store contains the entry, producing duplicates.
     ns.__lootPendingAdds = ns.__lootPendingAdds or {}
-    local _pendingKey = _NormName(who) .. "|" .. link
+    local _pendingKey = _NormName(who) .. "|" .. (_NormLinkKey(link) or link)
     local nowPending = _Now()
     local pend = ns.__lootPendingAdds[_pendingKey]
     if pend and (nowPending - pend) < 10 then
@@ -354,12 +370,15 @@ local function _AddIfEligible(link, looter)
         -- Sauvegarde
         if ns.LootTrackerState and ns.LootTrackerState.GetStore then
             local store = ns.LootTrackerState.GetStore()
-            -- Final safety: scan a few recent entries to ensure no duplicate (who,link)
+            -- Final safety: scan a few recent entries to ensure no duplicate (who, normalized link)
             local dup = false
+            local targetKey = _NormLinkKey(entry.link)
             for i = 1, math.min(25, #store) do
                 local e = store[i]
-                if e and e.link == entry.link and _NormName(e.looter) == _NormName(entry.looter) then
-                    dup = true; break
+                if e and _NormName(e.looter) == _NormName(entry.looter) then
+                    if targetKey and _NormLinkKey(e.link) == targetKey then
+                        dup = true; break
+                    end
                 end
             end
             if not dup then
@@ -448,14 +467,19 @@ ns.LootTrackerParser = {
         -- If no entry yet (likely skipped due to gating), add it now
         if not idxFound then
             -- Avoid racing with a pending async insert already scheduled
-            local _pendKey = _NormName(playerName) .. "|" .. itemLink
+            local _pendKey = _NormName(playerName) .. "|" .. (_NormLinkKey(itemLink) or itemLink)
             local pend = ns.__lootPendingAdds and ns.__lootPendingAdds[_pendKey]
             if not pend or ((_Now() - pend) > 10) then
                 _AddIfEligible(itemLink, playerName)
             end
             for i, entry in ipairs(store) do
-                if entry.link == itemLink and _NormName(entry.looter) == _NormName(playerName) and entry.ts >= cutoffTime then
+                local same = (_NormName(entry.looter) == _NormName(playerName))
+                if same then
+                    local k1 = _NormLinkKey(entry.link)
+                    local k2 = _NormLinkKey(itemLink)
+                    if k1 and k2 and k1 == k2 and entry.ts >= cutoffTime then
                     idxFound = i; break
+                    end
                 end
             end
         end

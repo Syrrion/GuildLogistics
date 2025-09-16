@@ -7,7 +7,7 @@ local GLOG, U = ns.GLOG, ns.Util
 -- Contract
 -- - On group/raid changes (and at login), read player's own Mythic+ rating summary via
 --   C_PlayerInfo.GetPlayerMythicPlusRatingSummary("player").currentSeasonBestMapScores
--- - Persist only for MAIN characters (not alts), under GuildLogisticsDB.players[main].mplusMaps = { [mapName] = { score=number, best=number, medal=string, runs=number, mapID=number } }
+-- - Persist only for MAIN characters (not alts), under GuildLogisticsDB.players[main].mplusMaps = { [mapID:number] = { score=number, best=number, timed=boolean, durMS=number } }
 -- - Later UI will read this aggregated per-main map score table.
 -- - Throttled and very lightweight to respect performance guidance.
 
@@ -31,8 +31,8 @@ local function setMainMapScores(mainFullName, scores)
     if next(dest) ~= nil then wipe(dest) end
 
     for _, it in ipairs(scores or {}) do
-        local mapName = tostring(it.mapName or it.name or "")
-        if mapName ~= "" then
+        local mid = tonumber(it.mapChallengeModeID or it.mapID or 0) or 0
+        if mid and mid > 0 then
             local timed = nil
             -- Prefer finishedSuccess from the Blizzard API when available
             if type(it.finishedSuccess) == "boolean" then
@@ -47,12 +47,9 @@ local function setMainMapScores(mainFullName, scores)
                 local tier = tostring(it.tier or ""):lower()
                 if tier == "d" or tier == "depleted" then timed = false end
             end
-            dest[mapName] = {
+            dest[mid] = {
                 score = tonumber(it.mapScore or it.score or 0) or 0,
                 best  = tonumber(it.bestRunLevel or it.level or 0) or 0,
-                medal = tostring(it.runScoreInfo and it.runScoreInfo.tier or it.tier or ""),
-                runs  = tonumber(it.numRuns or 0) or 0,
-                mapID = tonumber(it.mapChallengeModeID or it.mapID or 0) or 0,
                 timed = (timed == true) and true or false,
                 durMS = tonumber(it.bestRunDurationMS or it.bestRunDurationMs or it.durationMS or it.durationMs or 0) or 0,
             }

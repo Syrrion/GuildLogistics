@@ -37,6 +37,11 @@ local _versionLookupCache = {} -- [normalizedName] = { v = "1.2.3", ts = now }
 local _versionLookupTTL = 5 -- secondes
 GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
 
+-- Ingestion par lots pour éviter "script ran too long" lors de grosses rafales
+local _verQ = {}        -- map: key -> { version, timestamp, by }
+local _verKeys = {}     -- insertion order to process deterministically
+local _verProcessing = false
+
 -- Renvoie le titre officiel de l'addon (métadonnée TOC), codes couleur retirés.
 -- Fallback possible via système de traduction 'ns.Tr'.
 function GLOG.GetAddonTitle()
@@ -71,12 +76,22 @@ end
 
 -- Compare deux versions sémantiques "a.b.c" ; retourne -1 / 0 / 1.
 function U.CompareVersions(a, b)
+    -- Normalize and hard-cap inputs to avoid pathological costs
+    local sa = tostring(a or ""):sub(1, 64)
+    local sb = tostring(b or ""):sub(1, 64)
+    local MAX_SEG = 6
+
     local function parse(s)
-        local out = {}
-        for n in tostring(s or ""):gmatch("(%d+)") do out[#out + 1] = tonumber(n) or 0 end
+        local out, c = {}, 0
+        for n in s:gmatch("(%d+)") do
+            out[#out + 1] = tonumber(n) or 0
+            c = c + 1
+            if c >= MAX_SEG then break end
+        end
         return out
     end
-    local A, B = parse(a), parse(b)
+
+    local A, B = parse(sa), parse(sb)
     local n = math.max(#A, #B)
     for i = 1, n do
         local x, y = A[i] or 0, B[i] or 0
@@ -108,88 +123,116 @@ GLOG._playerVersions = GLOG._playerVersions or {}
 -- @param version: string - version de l'addon 
 -- @param timestamp: number - timestamp de la dernière vue
 -- @param reportedBy: string - joueur qui a rapporté cette version
-function GLOG.SetPlayerAddonVersion(name, version, timestamp, reportedBy)
-    if not name or name == "" or not version or version == "" then return end
-    
-    local key = tostring(name)
-    local ts = tonumber(timestamp) or time()
-    local by = tostring(reportedBy or "")
-    
-    -- Ne mettre à jour que si la version est plus récente
-    local existing = GLOG._playerVersions[key]
-    if existing and tonumber(existing.timestamp or 0) > ts then
-        return -- Version existante plus récente
-    end
-    
-    -- Vérifier si cette version est plus récente que la nôtre
-    local myVersion = GLOG.GetAddonVersion() or ""
-    local theirVersion = tostring(version)
-    
-    if myVersion ~= "" and theirVersion ~= "" and U.CompareVersions then
-        local comparison = U.CompareVersions(myVersion, theirVersion)
-        if comparison < 0 then -- Notre version est plus ancienne
-            -- Vérifier si on a déjà affiché cette notification récemment
-            local notifKey = "version_notif_" .. theirVersion
-            local lastNotif = GLOG._lastVersionNotifications and GLOG._lastVersionNotifications[notifKey] or 0
-            local now = time()
-            
-            -- Afficher maximum une fois par heure pour une version donnée
-            if (now - lastNotif) > 3600 then
-                GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
-                GLOG._lastVersionNotifications[notifKey] = now
-                
-                -- Vérifier que le joueur n'est pas en combat ou en instance
-                local inCombat = InCombatLockdown and InCombatLockdown() or false
-                local inInstance = IsInInstance and IsInInstance() or false
-                
-                if not inCombat and not inInstance then
-                    -- Afficher la popup de version obsolète immédiatement
-                    if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
-                        ns.UI.ShowOutdatedAddonPopup(myVersion, theirVersion, name)
-                    end
-                else
-                    -- Reporter l'affichage de la popup quand le joueur sortira de combat/instance
-                    GLOG._pendingVersionNotification = {
-                        myVersion = myVersion,
-                        theirVersion = theirVersion,
-                        fromPlayer = name
-                    }
-                    
-                    -- Créer un timer pour vérifier périodiquement si on peut afficher la popup
-                    if not GLOG._versionNotificationTimer then
-                        GLOG._versionNotificationTimer = C_Timer.NewTicker(60, function()
-                            local stillInCombat = InCombatLockdown and InCombatLockdown() or false
-                            local stillInInstance = IsInInstance and IsInInstance() or false
-                            
-                            if not stillInCombat and not stillInInstance and GLOG._pendingVersionNotification then
-                                local pending = GLOG._pendingVersionNotification
-                                GLOG._pendingVersionNotification = nil
-                                
-                                if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
-                                    ns.UI.ShowOutdatedAddonPopup(pending.myVersion, pending.theirVersion, pending.fromPlayer)
+do
+    local function processOne(name, version, ts, by)
+        local key = tostring(name)
+        local theirVersion = tostring(version)
+
+        -- Ne mettre à jour que si la version est plus récente que celle qu'on a déjà mémorisée pour ce joueur
+        local existing = GLOG._playerVersions[key]
+        if existing and tonumber(existing.timestamp or 0) > ts then
+            return -- plus récente déjà connue
+        end
+
+        -- Notification éventuelle (chunk-safe)
+        local myVersion = GLOG.GetAddonVersion() or ""
+        if myVersion ~= "" and theirVersion ~= "" and U.CompareVersions and (not U.Throttle or U.Throttle("ver_notif_chk", 0.25)) then
+            local comparison = U.CompareVersions(myVersion, theirVersion)
+            if comparison < 0 then -- Notre version est plus ancienne
+                local notifKey = "version_notif_" .. theirVersion
+                local lastNotif = GLOG._lastVersionNotifications and GLOG._lastVersionNotifications[notifKey] or 0
+                local nowT = time()
+                if (nowT - lastNotif) > 3600 then
+                    GLOG._lastVersionNotifications = GLOG._lastVersionNotifications or {}
+                    GLOG._lastVersionNotifications[notifKey] = nowT
+                    local inCombat = InCombatLockdown and InCombatLockdown() or false
+                    local inInstance = IsInInstance and IsInInstance() or false
+                    if not inCombat and not inInstance then
+                        if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                            ns.UI.ShowOutdatedAddonPopup(myVersion, theirVersion, name)
+                        end
+                    else
+                        GLOG._pendingVersionNotification = {
+                            myVersion = myVersion,
+                            theirVersion = theirVersion,
+                            fromPlayer = name
+                        }
+                        if not GLOG._versionNotificationTimer and C_Timer and C_Timer.NewTicker then
+                            GLOG._versionNotificationTimer = C_Timer.NewTicker(60, function()
+                                local stillInCombat = InCombatLockdown and InCombatLockdown() or false
+                                local stillInInstance = IsInInstance and IsInInstance() or false
+                                if not stillInCombat and not stillInInstance and GLOG._pendingVersionNotification then
+                                    local pending = GLOG._pendingVersionNotification
+                                    GLOG._pendingVersionNotification = nil
+                                    if ns and ns.UI and ns.UI.ShowOutdatedAddonPopup then
+                                        ns.UI.ShowOutdatedAddonPopup(pending.myVersion, pending.theirVersion, pending.fromPlayer)
+                                    end
+                                    if GLOG._versionNotificationTimer then
+                                        GLOG._versionNotificationTimer:Cancel()
+                                        GLOG._versionNotificationTimer = nil
+                                    end
                                 end
-                                
-                                -- Arrêter le timer
-                                if GLOG._versionNotificationTimer then
-                                    GLOG._versionNotificationTimer:Cancel()
-                                    GLOG._versionNotificationTimer = nil
-                                end
-                            end
-                        end)
+                            end)
+                        end
                     end
                 end
             end
         end
+
+        -- Mémorisation
+        GLOG._playerVersions[key] = {
+            version = theirVersion,
+            timestamp = ts,
+            seenBy = tostring(by or "")
+        }
+        -- Invalider le cache lookup
+        local norm = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name)
+        if norm and _versionLookupCache[norm] then _versionLookupCache[norm] = nil end
     end
-    
-    GLOG._playerVersions[key] = {
-        version = tostring(version),
-        timestamp = ts,
-        seenBy = by
-    }
-    -- Invalide le cache de lookup pour ce joueur pour refléter immédiatement la nouvelle valeur
-    local norm = (ns.Util and ns.Util.NormalizeFull and ns.Util.NormalizeFull(name)) or tostring(name)
-    if norm and _versionLookupCache[norm] then _versionLookupCache[norm] = nil end
+
+    local function processQueue()
+        if _verProcessing then return end
+        _verProcessing = true
+        local BUDGET = 40 -- éléments par tranche
+        local i = 1
+        while i <= #_verKeys and BUDGET > 0 do
+            local k = _verKeys[i]
+            local rec = _verQ[k]
+            -- compact: remove from order array now, keep map cleanup below
+            _verKeys[i] = _verKeys[#_verKeys]
+            _verKeys[#_verKeys] = nil
+            -- process and cleanup map entry
+            if rec then processOne(rec.name, rec.version, rec.ts, rec.by) end
+            _verQ[k] = nil
+            BUDGET = BUDGET - 1
+        end
+        _verProcessing = false
+        if #_verKeys > 0 then
+            -- yield to next frame
+            if U.After then U.After(0, processQueue) end
+        end
+    end
+
+    function GLOG.SetPlayerAddonVersion(name, version, timestamp, reportedBy)
+        if not name or name == "" or not version or version == "" then return end
+        local key = tostring(name)
+        local ts = tonumber(timestamp) or time()
+        local by = tostring(reportedBy or "")
+        local qrec = _verQ[key]
+        if qrec then
+            -- keep the newest timestamp/version
+            if ts >= (tonumber(qrec.ts) or 0) then
+                qrec.version = tostring(version)
+                qrec.ts = ts
+                qrec.by = by
+            end
+        else
+            _verQ[key] = { name = key, version = tostring(version), ts = ts, by = by }
+            _verKeys[#_verKeys+1] = key
+        end
+        -- schedule processing very soon
+        if U.After then U.After(0, processQueue) else processQueue() end
+    end
 end
 
 -- Obtenir la version d'un autre joueur
