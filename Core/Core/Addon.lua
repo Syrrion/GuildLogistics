@@ -193,7 +193,8 @@ do
     local function processQueue()
         if _verProcessing then return end
         _verProcessing = true
-        local BUDGET = 40 -- éléments par tranche
+        local BUDGET = 10 -- éléments par tranche (petit pour éviter long frame)
+        local startT = debugprofilestop and debugprofilestop() or nil
         local i = 1
         while i <= #_verKeys and BUDGET > 0 do
             local k = _verKeys[i]
@@ -205,6 +206,10 @@ do
             if rec then processOne(rec.name, rec.version, rec.ts, rec.by) end
             _verQ[k] = nil
             BUDGET = BUDGET - 1
+            -- Time budget: yield if we spent > ~8ms this slice
+            if startT and debugprofilestop and ((debugprofilestop() - startT) > 8) then
+                break
+            end
         end
         _verProcessing = false
         if #_verKeys > 0 then

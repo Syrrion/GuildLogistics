@@ -165,29 +165,28 @@ local function EnsureDB()
     GuildLogisticsDB = active
     GuildLogisticsUI = GuildLogisticsUI_Char
 
-    -- One-time data hygiene: remove legacy 'medal' fields from saved Mythic+ maps
-    do
+    -- Lightweight helpers for potentially heavy cleanups (can be deferred if init runs long)
+    local function _migr_drop_medal()
         active.meta = active.meta or {}
         local migKey = "migr:drop_mplus_medal"
-        if not active.meta[migKey] then
-            local removed = 0
-            if type(active.players) == "table" then
-                for _, p in pairs(active.players) do
-                    local maps = p and p.mplusMaps
-                    if type(maps) == "table" then
-                        for _, s in pairs(maps) do
-                            if type(s) == "table" and s.medal ~= nil then
-                                s.medal = nil
-                                removed = removed + 1
-                            end
+        if active.meta[migKey] then return end
+        local removed = 0
+        if type(active.players) == "table" then
+            for _, p in pairs(active.players) do
+                local maps = p and p.mplusMaps
+                if type(maps) == "table" then
+                    for _, s in pairs(maps) do
+                        if type(s) == "table" and s.medal ~= nil then
+                            s.medal = nil
+                            removed = removed + 1
                         end
                     end
                 end
             end
-            active.meta[migKey] = time and time() or true
-            if removed > 0 and GLOG and GLOG.pushLog then
-                GLOG.pushLog("info", "db:migration", "Dropped legacy medal fields", { count = removed })
-            end
+        end
+        active.meta[migKey] = time and time() or true
+        if removed > 0 and GLOG and GLOG.pushLog then
+            GLOG.pushLog("info", "db:migration", "Dropped legacy medal fields", { count = removed })
         end
     end
 
@@ -245,29 +244,27 @@ local function EnsureDB()
         end
     end
 
-    -- One-time data hygiene: drop redundant mapID field inside mplusMaps values (keys are already mapID)
-    do
+    local function _migr_drop_inner_mapid()
         active.meta = active.meta or {}
         local migKey = "migr:drop_mplus_inner_mapid"
-        if not active.meta[migKey] then
-            local dropped = 0
-            if type(active.players) == "table" then
-                for _, p in pairs(active.players) do
-                    local maps = p and p.mplusMaps
-                    if type(maps) == "table" then
-                        for _, s in pairs(maps) do
-                            if type(s) == "table" and s.mapID ~= nil then
-                                s.mapID = nil
-                                dropped = dropped + 1
-                            end
+        if active.meta[migKey] then return end
+        local dropped = 0
+        if type(active.players) == "table" then
+            for _, p in pairs(active.players) do
+                local maps = p and p.mplusMaps
+                if type(maps) == "table" then
+                    for _, s in pairs(maps) do
+                        if type(s) == "table" and s.mapID ~= nil then
+                            s.mapID = nil
+                            dropped = dropped + 1
                         end
                     end
                 end
             end
-            active.meta[migKey] = time and time() or true
-            if dropped > 0 and GLOG and GLOG.pushLog then
-                GLOG.pushLog("info", "db:migration", "Dropped inner mapID fields from mplusMaps", { count = dropped })
-            end
+        end
+        active.meta[migKey] = time and time() or true
+        if dropped > 0 and GLOG and GLOG.pushLog then
+            GLOG.pushLog("info", "db:migration", "Dropped inner mapID fields from mplusMaps", { count = dropped })
         end
     end
 
@@ -292,30 +289,43 @@ local function EnsureDB()
         end
     end
 
-    -- One-time data hygiene: drop deprecated 'runs' from mplusMaps entries
-    do
+    local function _migr_drop_runs()
         active.meta = active.meta or {}
         local migKey = "migr:drop_mplus_runs_v1"
-        if not active.meta[migKey] then
-            local removed = 0
-            if type(active.players) == "table" then
-                for _, p in pairs(active.players) do
-                    local maps = p and p.mplusMaps
-                    if type(maps) == "table" then
-                        for _, s in pairs(maps) do
-                            if type(s) == "table" and s.runs ~= nil then
-                                s.runs = nil
-                                removed = removed + 1
-                            end
+        if active.meta[migKey] then return end
+        local removed = 0
+        if type(active.players) == "table" then
+            for _, p in pairs(active.players) do
+                local maps = p and p.mplusMaps
+                if type(maps) == "table" then
+                    for _, s in pairs(maps) do
+                        if type(s) == "table" and s.runs ~= nil then
+                            s.runs = nil
+                            removed = removed + 1
                         end
                     end
                 end
             end
-            active.meta[migKey] = time and time() or true
-            if removed > 0 and GLOG and GLOG.pushLog then
-                GLOG.pushLog("info", "db:migration", "Dropped deprecated 'runs' from mplusMaps", { count = removed })
-            end
         end
+        active.meta[migKey] = time and time() or true
+        if removed > 0 and GLOG and GLOG.pushLog then
+            GLOG.pushLog("info", "db:migration", "Dropped deprecated 'runs' from mplusMaps", { count = removed })
+        end
+    end
+
+    -- Decide whether to defer heavy cleanups based on elapsed time to avoid long frames
+    local _elapsedMs = (_startT and debugprofilestop) and (debugprofilestop() - _startT) or 0
+    local _shouldDefer = _elapsedMs and (_elapsedMs > 20) -- if EnsureDB already used >20ms, defer the remaining heavy loops
+    if _shouldDefer and U and U.After then
+        -- Stagger across frames to spread the cost
+        U.After(0.00, _migr_drop_inner_mapid)
+        U.After(0.05, _migr_drop_medal)
+        U.After(0.10, _migr_drop_runs)
+    else
+        -- Run immediately if we're still within budget
+        _migr_drop_inner_mapid()
+        _migr_drop_medal()
+        _migr_drop_runs()
     end
 
     -- Initialize schemas (legacy stores kept for compatibility, but no longer used at runtime)
