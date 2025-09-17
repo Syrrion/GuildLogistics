@@ -107,12 +107,23 @@ local function _HasActiveRollSession(link)
     if not key then return false end
     local m = _rollByItem[key]
     if not m then return false end
-    -- ensure at least one recent entry (< 5 min)
+    -- Treat presence of sentinel _session entry as active
     local now = _Now()
-    for _, r in pairs(m) do
+    for p, r in pairs(m) do
+        if p == "_session" and (now - (r.ts or 0)) <= 300 then return true end
         if (now - (r.ts or 0)) <= 300 then return true end
     end
     return false
+end
+
+-- Start a roll session early (called on START_LOOT_ROLL) so that loot receipt logging waits for winner
+local function _StartRollSession(link)
+    if not link or link == "" then return end
+    local key = _LinkKey(link)
+    if not key then return end
+    _rollByItem[key] = _rollByItem[key] or {}
+    -- Sentinel entry just to mark activity; ts refreshed each call
+    _rollByItem[key]["_session"] = { ts = _Now() }
 end
 
 -- Winner helpers
@@ -234,6 +245,7 @@ ns.LootTrackerRolls = {
     NormalizeLink = _LinkKey,
     HasActiveRollSession = _HasActiveRollSession,
     GetWinner = _GetWinner,
+    StartRollSession = _StartRollSession,
     
     -- Parsing des messages de roll
     ParseRollMessage = _ParseRollMessage,

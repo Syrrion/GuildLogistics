@@ -202,14 +202,13 @@ local function EnsureDB()
         local needsMedalDrop = not active.meta["migr:drop_mplus_medal"]
 
         if needsMapsKey or needsInnerDrop or needsOverall or needsRunsDrop or needsMedalDrop then
-            -- Build stable player list
-            local list = {}
-            for _, p in pairs(active.players or {}) do list[#list+1] = p end
-            local total = #list
-            local idx = 1
+            -- Incremental iteration using next() to avoid building a large intermediate list.
+            local playersTable = active.players or {}
+            local nextKey = nil
             local converted, droppedInner, removedOverall, droppedRuns, removedMedals = 0,0,0,0,0
-            local BATCH_BUDGET_MS = 6   -- approx time slice per frame
-            local BATCH_MIN = 20        -- minimum players per frame to avoid very small batches overhead
+            local processedOverall = 0
+            local BATCH_BUDGET_MS = 6    -- target time slice per frame
+            local BATCH_MIN = 10         -- minimum items before checking time (lowered for smoother frames)
 
             local function processPlayer(p)
                 if not p or type(p) ~= "table" then return end
@@ -272,16 +271,23 @@ local function EnsureDB()
 
             local function step()
                 local start = debugprofilestop and debugprofilestop() or 0
-                local processed = 0
-                while idx <= total do
-                    processPlayer(list[idx])
-                    idx = idx + 1
-                    processed = processed + 1
-                    if processed >= BATCH_MIN and debugprofilestop and (debugprofilestop() - start) > BATCH_BUDGET_MS then
+                local processedThisFrame = 0
+                repeat
+                    nextKey = next(playersTable, nextKey)
+                    if nextKey == nil then break end
+                    processPlayer(playersTable[nextKey])
+                    processedOverall = processedOverall + 1
+                    processedThisFrame = processedThisFrame + 1
+                    if processedThisFrame >= BATCH_MIN and debugprofilestop and (debugprofilestop() - start) > BATCH_BUDGET_MS then
                         break
                     end
-                end
-                if idx <= total then
+                until false
+
+                if nextKey ~= nil then
+                    -- Adaptive tweak: if we consistently blow budget early, reduce BATCH_MIN slightly
+                    if processedThisFrame <= BATCH_MIN and processedThisFrame > 0 and debugprofilestop and (debugprofilestop() - start) > (BATCH_BUDGET_MS * 1.25) then
+                        BATCH_MIN = math.max(5, math.floor(BATCH_MIN * 0.8))
+                    end
                     if U and U.After then U.After(0, step) else step() end
                 else
                     local ts = time and time() or true
@@ -292,7 +298,7 @@ local function EnsureDB()
                     if needsMedalDrop then active.meta["migr:drop_mplus_medal"] = ts end
                     if GLOG and GLOG.pushLog then
                         GLOG.pushLog("info", "db:migration:chunk", "Completed chunked migrations", {
-                            players = total,
+                            players = processedOverall,
                             mapsConverted = converted,
                             innerDropped = droppedInner,
                             overallRemoved = removedOverall,
@@ -302,7 +308,6 @@ local function EnsureDB()
                     end
                 end
             end
-            -- Kick off after initial EnsureDB frame to keep initial latency low if many players
             if U and U.After then U.After(0, step) else step() end
         end
     end

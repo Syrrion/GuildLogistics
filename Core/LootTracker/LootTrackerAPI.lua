@@ -139,37 +139,56 @@ ns.LootTrackerAPI = {
             if GLOG and GLOG.LootTracker_HandleEncounterLoot then
                 GLOG.LootTracker_HandleEncounterLoot(...)
             end
-            -- Opportunistic: show per-player rank popup when an equippable trinket drops
-            local encounterID, itemID, itemLink, quantity, player, difficultyID = ...
-            if ns and ns.LootTrackerParser and ns.LootTrackerParser.IsEquippable then
-                -- Fast type check via inventory type or link parse
-                local isEquip = ns.LootTrackerParser.IsEquippable(itemLink)
-                -- Respect Settings toggle (default ON when nil)
-                local showPopup = true
-                if GLOG and GLOG.GetSavedWindow then
-                    local saved = GLOG.GetSavedWindow() or {}
-                    local pop = saved.popups or {}
-                    if pop.trinketRankPopup == false then showPopup = false end
-                end
-                if isEquip and showPopup and ns.UI and ns.UI.ShowTrinketRankPopupForGroup then
-                    -- Determine if trinket (INVTYPE_TRINKET = 12); prefer C_Item API if available
-                    local invType
-                    if C_Item and C_Item.GetItemInventoryTypeByID and itemID then
-                        invType = C_Item.GetItemInventoryTypeByID(itemID)
-                    end
-                    -- No deprecated API fallback; if inventory type is unknown, skip popup
-                    if invType == 12 then
-                        -- Extract actual ilvl for the dropped item
-                        local ilvl = 0
-                        if C_Item and C_Item.GetDetailedItemLevelInfo then
-                            local ok, lvl = pcall(C_Item.GetDetailedItemLevelInfo, itemLink)
-                            if ok and tonumber(lvl) then ilvl = tonumber(lvl) or 0 end
-                        end
-                        if ilvl <= 0 then ilvl = ns.LootTrackerInstance and ns.LootTrackerInstance.GetEquippedIlvl and ns.LootTrackerInstance.GetEquippedIlvl() or 0 end
-                        local group = ns.LootTrackerInstance and ns.LootTrackerInstance.SnapshotGroup and ns.LootTrackerInstance.SnapshotGroup() or nil
-                        ns.UI.ShowTrinketRankPopupForGroup(tonumber(itemID), ilvl, { group = group, targets = 1 })
-                    end
-                end
+        end)
+
+        -- Trinket ranking popup now driven by START_LOOT_ROLL instead of ENCOUNTER_LOOT_RECEIVED
+        -- Rationale: user wants popup context only when a roll window appears (player decision moment)
+        local _lastTrinketPopup = { ts = 0, itemID = nil }
+        ns.Events.Register("START_LOOT_ROLL", function(_, _, rollID, rollTime)
+            if not rollID then return end
+            local link = (GetLootRollItemLink and GetLootRollItemLink(rollID)) or nil
+            if link and ns.LootTrackerRolls and ns.LootTrackerRolls.StartRollSession then
+                ns.LootTrackerRolls.StartRollSession(link)
+            end
+            -- Settings toggle (default ON when nil)
+            local showPopup = true
+            if GLOG and GLOG.GetSavedWindow then
+                local saved = GLOG.GetSavedWindow() or {}
+                local pop = saved.popups or {}
+                if pop.trinketRankPopup == false then showPopup = false end
+            end
+            if not showPopup then return end
+            local itemID = tonumber(string.match(link, "item:(%d+):"))
+            if not itemID then return end
+            -- Quick capability / type filtering
+            if not (ns and ns.LootTrackerParser and ns.LootTrackerParser.IsEquippable and ns.LootTrackerParser.IsEquippable(link)) then
+                return
+            end
+            -- Determine inventory type (INVTYPE_TRINKET = 12)
+            local invType
+            if C_Item and C_Item.GetItemInventoryTypeByID then
+                invType = C_Item.GetItemInventoryTypeByID(itemID)
+            end
+            if invType ~= 12 then return end
+            -- Dedupe: avoid spamming if same trinket rolls multiple times very fast (e.g., edge cases)
+            local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime() or 0
+            if _lastTrinketPopup.itemID == itemID and (now - _lastTrinketPopup.ts) < 8 then
+                return
+            end
+            _lastTrinketPopup.itemID = itemID
+            _lastTrinketPopup.ts = now
+            -- Determine actual item level
+            local ilvl = 0
+            if C_Item and C_Item.GetDetailedItemLevelInfo then
+                local ok, lvl = pcall(C_Item.GetDetailedItemLevelInfo, link)
+                if ok and tonumber(lvl) then ilvl = tonumber(lvl) or 0 end
+            end
+            if ilvl <= 0 and ns.LootTrackerInstance and ns.LootTrackerInstance.GetEquippedIlvl then
+                ilvl = ns.LootTrackerInstance.GetEquippedIlvl() or 0
+            end
+            local group = ns.LootTrackerInstance and ns.LootTrackerInstance.SnapshotGroup and ns.LootTrackerInstance.SnapshotGroup() or nil
+            if ns.UI and ns.UI.ShowTrinketRankPopupForGroup then
+                ns.UI.ShowTrinketRankPopupForGroup(itemID, ilvl, { group = group, targets = 1, reason = "roll" })
             end
         end)
         
