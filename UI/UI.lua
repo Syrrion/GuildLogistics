@@ -344,7 +344,7 @@ close:SetPoint("TOPRIGHT", Main, "TOPRIGHT", 2, 2)
 
 -- ➕ Bouton Reload au même niveau que la croix (dans la barre titre)
 local reloadBtn = CreateFrame("Button", ADDON.."ReloadButton", Main, "UIPanelButtonTemplate")
-reloadBtn:SetSize(60, 20)
+reloadBtn:SetSize(100, 20)
 reloadBtn:SetText(Tr("btn_reload"))
 -- S'assure d'être au-dessus du contenu, comme le bouton X
 reloadBtn:SetFrameStrata(close:GetFrameStrata())
