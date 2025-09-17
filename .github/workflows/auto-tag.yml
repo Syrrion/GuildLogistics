@@ -55,9 +55,11 @@ jobs:
           python-version: '3.x'
 
       - name: Refresh SimulationCraft datasets
+        if: steps.check-version.outputs.version_changed == 'true'
         run: python Tools/update_simc_data.py
 
       - name: Commit SimCraft updates
+        if: steps.check-version.outputs.version_changed == 'true'
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
