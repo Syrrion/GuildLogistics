@@ -160,8 +160,7 @@ local function Layout()
 end
 
 local function Refresh()
-    if not lv then return end
-    lv:RefreshData((DATA and DATA.rows) or {})
+    UI.RefreshListData(lv, DATA and DATA.rows)
 end
 
 -- Enregistrement (catégorie Helpers)

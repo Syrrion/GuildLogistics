@@ -197,14 +197,11 @@ local function Build(container)
     local y = 0
     y = y + (UI.SectionHeader(panel, Tr("tab_dungeons_loot"), { topPad = 0 }) or 26) + 8
 
-    wipe(_notesFS)
-    local texts = (DATA and DATA.text) or {}
-    for i, line in ipairs(texts) do
-        local fs = UI.Label(panel, { justify = "LEFT" })
-        fs:SetText(line or "")
-        fs:SetSpacing(1)
-        _notesFS[#_notesFS+1] = fs
+    for _, fs in ipairs(_notesFS or {}) do
+        if fs and fs.Hide then fs:Hide() end
     end
+    local texts = (DATA and DATA.text) or {}
+    _notesFS = UI.CreateNoteLines(panel, texts, { justify = "LEFT" })
 
     lv = UI.ListView(panel, cols, {
         topOffset = y,
@@ -228,17 +225,7 @@ end
 local function Layout()
     if not panel then return end
 
-    local padL, padR = 10, 10
-    local y = (UI.SECTION_HEADER_H or 22) + 8
-    local width = math.max(100, (panel:GetWidth() or UI.DEFAULT_W or 800) - padL - padR)
-    for _, fs in ipairs(_notesFS) do
-        fs:ClearAllPoints()
-        fs:SetPoint("TOPLEFT",  panel, "TOPLEFT",  padL, -y)
-        fs:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -padR, -y)
-        fs:SetWidth(width)
-        local h = math.max(14, fs:GetStringHeight() or 14)
-        y = y + h + 6
-    end
+    local y = UI.LayoutNoteLines(panel, _notesFS, { startY = (UI.SECTION_HEADER_H or 22) + 8 })
 
     if lv then
         lv.opts.topOffset = y
@@ -247,9 +234,7 @@ local function Layout()
 end
 
 local function Refresh()
-    if lv then
-        lv:RefreshData((DATA and DATA.rows) or {})
-    end
+    UI.RefreshListData(lv, DATA and DATA.rows)
 end
 
 UI.RegisterTab(Tr("tab_dungeons_loot") or "Donjons (paliers)", Build, Refresh, Layout, {
