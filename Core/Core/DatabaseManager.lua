@@ -190,142 +190,121 @@ local function EnsureDB()
         end
     end
 
-    -- One-time migration: key mplusMaps by mapID instead of map name
+    ------------------------------------------------------------------
+    -- Incremental migration scheduler (chunked to avoid long frames) --
+    ------------------------------------------------------------------
     do
         active.meta = active.meta or {}
-        local migKey = "migr:mplus_maps_key_to_id"
-        if not active.meta[migKey] then
-            local converted = 0
-            if type(active.players) == "table" then
-                for _, p in pairs(active.players) do
-                    local maps = p and p.mplusMaps
-                    if type(maps) == "table" then
-                        local needs = false
-                        for k, _ in pairs(maps) do
-                            if type(k) ~= "number" then needs = true; break end
-                        end
-                        if needs then
-                            local out = {}
-                            for k, v in pairs(maps) do
-                                local entry = (type(v) == "table") and v or {}
-                                local mid = tonumber(entry.mapID or 0) or 0
-                                if mid == 0 then
-                                    -- Try to resolve from key string if possible
-                                    if type(k) == "number" then mid = k
-                                    elseif type(k) == "string" then
-                                        -- No robust reverse lookup by name here; keep as 0 which will be dropped
-                                        mid = tonumber(entry.mapChallengeModeID or 0) or 0
-                                    end
-                                end
-                                if mid and mid > 0 then
-                                    local prev = out[mid]
-                                    if prev then
-                                        -- Merge: keep the better (higher score, then best level)
-                                        local sc1 = tonumber(prev.score or 0) or 0
-                                        local sc2 = tonumber(entry.score or 0) or 0
-                                        if sc2 > sc1 or (sc2 == sc1 and (entry.best or 0) > (prev.best or 0)) then
-                                            out[mid] = entry
-                                        end
-                                    else
-                                        out[mid] = entry
-                                    end
+        local needsMapsKey   = not active.meta["migr:mplus_maps_key_to_id"]
+        local needsInnerDrop = not active.meta["migr:drop_mplus_inner_mapid"]
+        local needsOverall   = not active.meta["migr:drop_mplus_overall_fields_v1"]
+        local needsRunsDrop  = not active.meta["migr:drop_mplus_runs_v1"]
+        local needsMedalDrop = not active.meta["migr:drop_mplus_medal"]
+
+        if needsMapsKey or needsInnerDrop or needsOverall or needsRunsDrop or needsMedalDrop then
+            -- Build stable player list
+            local list = {}
+            for _, p in pairs(active.players or {}) do list[#list+1] = p end
+            local total = #list
+            local idx = 1
+            local converted, droppedInner, removedOverall, droppedRuns, removedMedals = 0,0,0,0,0
+            local BATCH_BUDGET_MS = 6   -- approx time slice per frame
+            local BATCH_MIN = 20        -- minimum players per frame to avoid very small batches overhead
+
+            local function processPlayer(p)
+                if not p or type(p) ~= "table" then return end
+                local maps = p.mplusMaps
+                -- Key conversion
+                if needsMapsKey and type(maps) == "table" then
+                    local needs = false
+                    for k,_ in pairs(maps) do if type(k) ~= "number" then needs = true; break end end
+                    if needs then
+                        local out = {}
+                        for k,v in pairs(maps) do
+                            local entry = (type(v)=="table") and v or {}
+                            local mid = tonumber(entry.mapID or 0) or 0
+                            if mid == 0 then
+                                if type(k) == "number" then mid = k
+                                elseif type(k) == "string" then
+                                    mid = tonumber(entry.mapChallengeModeID or 0) or 0
                                 end
                             end
-                            -- Replace only if we produced some numeric keys
-                            if next(out) ~= nil then p.mplusMaps = out; converted = converted + 1 end
+                            if mid and mid > 0 then
+                                local prev = out[mid]
+                                if prev then
+                                    local sc1 = tonumber(prev.score or 0) or 0
+                                    local sc2 = tonumber(entry.score or 0) or 0
+                                    if sc2 > sc1 or (sc2 == sc1 and (entry.best or 0) > (prev.best or 0)) then
+                                        out[mid] = entry
+                                    end
+                                else
+                                    out[mid] = entry
+                                end
+                            end
                         end
+                        if next(out) ~= nil then p.mplusMaps = out; converted = converted + 1; maps = p.mplusMaps end
+                    end
+                end
+                -- Drop inner mapID
+                if needsInnerDrop and type(p.mplusMaps) == "table" then
+                    for _, s in pairs(p.mplusMaps) do
+                        if type(s)=="table" and s.mapID ~= nil then s.mapID=nil; droppedInner = droppedInner + 1 end
+                    end
+                end
+                -- Drop overall fields
+                if needsOverall then
+                    if p.mplusOverall ~= nil then p.mplusOverall=nil; removedOverall=removedOverall+1 end
+                    if p.mplusOverallTS ~= nil then p.mplusOverallTS=nil; removedOverall=removedOverall+1 end
+                end
+                -- Drop runs
+                if needsRunsDrop and type(p.mplusMaps)=="table" then
+                    for _, s in pairs(p.mplusMaps) do
+                        if type(s)=="table" and s.runs ~= nil then s.runs=nil; droppedRuns=droppedRuns+1 end
+                    end
+                end
+                -- Drop medal fields
+                if needsMedalDrop and type(p.mplusMaps)=="table" then
+                    for _, s in pairs(p.mplusMaps) do
+                        if type(s)=="table" and s.medal ~= nil then s.medal=nil; removedMedals=removedMedals+1 end
                     end
                 end
             end
-            active.meta[migKey] = time and time() or true
-            if converted > 0 and GLOG and GLOG.pushLog then
-                GLOG.pushLog("info", "db:migration", "Converted mplusMaps to ID keys", { players = converted })
-            end
-        end
-    end
 
-    local function _migr_drop_inner_mapid()
-        active.meta = active.meta or {}
-        local migKey = "migr:drop_mplus_inner_mapid"
-        if active.meta[migKey] then return end
-        local dropped = 0
-        if type(active.players) == "table" then
-            for _, p in pairs(active.players) do
-                local maps = p and p.mplusMaps
-                if type(maps) == "table" then
-                    for _, s in pairs(maps) do
-                        if type(s) == "table" and s.mapID ~= nil then
-                            s.mapID = nil
-                            dropped = dropped + 1
-                        end
+            local function step()
+                local start = debugprofilestop and debugprofilestop() or 0
+                local processed = 0
+                while idx <= total do
+                    processPlayer(list[idx])
+                    idx = idx + 1
+                    processed = processed + 1
+                    if processed >= BATCH_MIN and debugprofilestop and (debugprofilestop() - start) > BATCH_BUDGET_MS then
+                        break
+                    end
+                end
+                if idx <= total then
+                    if U and U.After then U.After(0, step) else step() end
+                else
+                    local ts = time and time() or true
+                    if needsMapsKey   then active.meta["migr:mplus_maps_key_to_id"] = ts end
+                    if needsInnerDrop then active.meta["migr:drop_mplus_inner_mapid"] = ts end
+                    if needsOverall   then active.meta["migr:drop_mplus_overall_fields_v1"] = ts end
+                    if needsRunsDrop  then active.meta["migr:drop_mplus_runs_v1"] = ts end
+                    if needsMedalDrop then active.meta["migr:drop_mplus_medal"] = ts end
+                    if GLOG and GLOG.pushLog then
+                        GLOG.pushLog("info", "db:migration:chunk", "Completed chunked migrations", {
+                            players = total,
+                            mapsConverted = converted,
+                            innerDropped = droppedInner,
+                            overallRemoved = removedOverall,
+                            runsDropped = droppedRuns,
+                            medalsRemoved = removedMedals,
+                        })
                     end
                 end
             end
+            -- Kick off after initial EnsureDB frame to keep initial latency low if many players
+            if U and U.After then U.After(0, step) else step() end
         end
-        active.meta[migKey] = time and time() or true
-        if dropped > 0 and GLOG and GLOG.pushLog then
-            GLOG.pushLog("info", "db:migration", "Dropped inner mapID fields from mplusMaps", { count = dropped })
-        end
-    end
-
-    -- One-time data hygiene: remove legacy overall Mythic+ fields (mplusOverall/mplusOverallTS)
-    do
-        active.meta = active.meta or {}
-        local migKey = "migr:drop_mplus_overall_fields_v1"
-        if not active.meta[migKey] then
-            local removed = 0
-            if type(active.players) == "table" then
-                for _, p in pairs(active.players) do
-                    if type(p) == "table" then
-                        if p.mplusOverall ~= nil then p.mplusOverall = nil; removed = removed + 1 end
-                        if p.mplusOverallTS ~= nil then p.mplusOverallTS = nil; removed = removed + 1 end
-                    end
-                end
-            end
-            active.meta[migKey] = time and time() or true
-            if removed > 0 and GLOG and GLOG.pushLog then
-                GLOG.pushLog("info", "db:migration", "Dropped legacy mplusOverall fields", { count = removed })
-            end
-        end
-    end
-
-    local function _migr_drop_runs()
-        active.meta = active.meta or {}
-        local migKey = "migr:drop_mplus_runs_v1"
-        if active.meta[migKey] then return end
-        local removed = 0
-        if type(active.players) == "table" then
-            for _, p in pairs(active.players) do
-                local maps = p and p.mplusMaps
-                if type(maps) == "table" then
-                    for _, s in pairs(maps) do
-                        if type(s) == "table" and s.runs ~= nil then
-                            s.runs = nil
-                            removed = removed + 1
-                        end
-                    end
-                end
-            end
-        end
-        active.meta[migKey] = time and time() or true
-        if removed > 0 and GLOG and GLOG.pushLog then
-            GLOG.pushLog("info", "db:migration", "Dropped deprecated 'runs' from mplusMaps", { count = removed })
-        end
-    end
-
-    -- Decide whether to defer heavy cleanups based on elapsed time to avoid long frames
-    local _elapsedMs = (_startT and debugprofilestop) and (debugprofilestop() - _startT) or 0
-    local _shouldDefer = _elapsedMs and (_elapsedMs > 20) -- if EnsureDB already used >20ms, defer the remaining heavy loops
-    if _shouldDefer and U and U.After then
-        -- Stagger across frames to spread the cost
-        U.After(0.00, _migr_drop_inner_mapid)
-        U.After(0.05, _migr_drop_medal)
-        U.After(0.10, _migr_drop_runs)
-    else
-        -- Run immediately if we're still within budget
-        _migr_drop_inner_mapid()
-        _migr_drop_medal()
-        _migr_drop_runs()
     end
 
     -- Initialize schemas (legacy stores kept for compatibility, but no longer used at runtime)

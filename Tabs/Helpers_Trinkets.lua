@@ -11,6 +11,35 @@ local classDD, specDD, targetsDD, ilvlDD
 local selectedClass, selectedSpec, selectedTargets, selectedIlvl
 local Refresh
 
+-- Item levels explicitly excluded from user selection (UI filtering only).
+-- Requirement: remove 681, 688, 694, 701, 707, 714, 720 from selectable iLvls.
+-- We do NOT mutate the underlying generated dataset; we filter at presentation time.
+local EXCLUDED_ILVLS = {
+    [681] = true, [688] = true, [694] = true, [701] = true, [707] = true, [714] = true, [720] = true,
+}
+
+-- Returns a cached filtered list of steps for a target entry, excluding unwanted ilvls.
+local function getFilteredSteps(targetEntry)
+    if not targetEntry then return nil end
+    if targetEntry._filteredSteps then return targetEntry._filteredSteps end
+    local src = targetEntry.steps
+    if not (src and #src > 0) then
+        targetEntry._filteredSteps = {}
+        return targetEntry._filteredSteps
+    end
+    -- Build filtered list once; keep ordering.
+    local filtered = {}
+    for i = 1, #src do
+        local v = src[i]
+        local num = tonumber(v)
+        if not (num and EXCLUDED_ILVLS[num]) then
+            filtered[#filtered + 1] = v
+        end
+    end
+    targetEntry._filteredSteps = filtered
+    return filtered
+end
+
 -- ====== Helpers ======
 local function resolveRegistry()
     if Simc and Simc.GetRegistry then
@@ -115,20 +144,21 @@ local function ensureSelections(reg)
     selectedTargets = targetMatch
 
     local targetEntry = selectedTargets and specEntry.targets[selectedTargets] or nil
-    if not targetEntry or not (targetEntry.steps and #targetEntry.steps > 0) then
+    local filteredSteps = getFilteredSteps(targetEntry)
+    if not targetEntry or not (filteredSteps and #filteredSteps > 0) then
         selectedIlvl = nil
         return
     end
 
     local wanted = selectedIlvl and tostring(selectedIlvl) or nil
     local found
-    for _, step in ipairs(targetEntry.steps) do
+    for _, step in ipairs(filteredSteps) do
         if tostring(step) == wanted then
             found = step
             break
         end
     end
-    selectedIlvl = found or targetEntry.steps[#targetEntry.steps]
+    selectedIlvl = found or filteredSteps[#filteredSteps]
 end
 
 local function currentDatasetMeta()
@@ -399,12 +429,13 @@ end
 
 local function ilvlMenu()
     local entry = currentDatasetMeta()
-    if not entry or not (entry.steps and #entry.steps > 0) then
+    local steps = getFilteredSteps(entry)
+    if not entry or not (steps and #steps > 0) then
         return { makeDropdownEntry(Tr("msg_no_data") or "No data", nil, nil, true) }
     end
 
     local entries = {}
-    for _, step in ipairs(entry.steps) do
+    for _, step in ipairs(steps) do
         entries[#entries + 1] = makeDropdownEntry(string.format("ilvl %s", step), step == selectedIlvl, function()
             selectedIlvl = step
             Refresh()

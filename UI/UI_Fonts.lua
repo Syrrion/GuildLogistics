@@ -5,7 +5,7 @@ local UI = ns.UI
 -- =========================
 --   Configuration police
 -- =========================
-UI.GLOBAL_FONT_ENABLED = true
+UI.GLOBAL_FONT_ENABLED = true -- Will be conditionally ignored for ruRU locale
 -- Laisse UI.GLOBAL_FONT_PATH nil pour auto-détection.
 UI.GLOBAL_FONT_PATH    = "Interface\\AddOns\\GuildLogistics\\Ressources\\Fonts\\vixar.ttf" or nil
 UI.GLOBAL_FONT_SCALE   = UI.GLOBAL_FONT_SCALE or 1.00
@@ -43,6 +43,8 @@ end
 
 local function _apply(fs)
     if not (fs and fs.SetFont) then return end
+    -- ruRU: keep Blizzard default fonts (custom ttf lacks Cyrillic glyphs)
+    if GetLocale and GetLocale() == "ruRU" then return end
     _ensureBase(fs)
 
     local baseSize = fs.__glog_baseFontSize or select(2, fs:GetFont())
@@ -66,6 +68,7 @@ function UI.ApplyFontRecursively(frame, maxDepth)
     maxDepth = maxDepth or 10
     if maxDepth < 1 then return end
     if not (UI.GLOBAL_FONT_ENABLED and frame and frame.GetRegions) then return end
+    if GetLocale and GetLocale() == "ruRU" then return end
 
     for _, r in ipairs({ frame:GetRegions() }) do
         if r and r.GetObjectType and r:GetObjectType() == "FontString" then
@@ -154,7 +157,9 @@ local function _applyAllGLOGFrames()
     while f do
         local n = (f.GetName and f:GetName()) or nil
         if n and (n:find("^GLOG_") or n:find("^GLOG_Popup_")) then
-            UI.ApplyFontRecursively(f)
+            if not (GetLocale and GetLocale() == "ruRU") then
+                UI.ApplyFontRecursively(f)
+            end
         end
         f = EnumerateFrames(f)
     end
@@ -165,6 +170,7 @@ local function _applyNow(debugPrint)
     if debugPrint and DEFAULT_CHAT_FRAME then
         DEFAULT_CHAT_FRAME:AddMessage("|cffffd200GuildLogistics|r: Application police sur frames GLOG_*")
     end
+    if GetLocale and GetLocale() == "ruRU" then return end
     _applyAllGLOGFrames()
     if C_Timer and C_Timer.After then
         C_Timer.After(0.10, _applyAllGLOGFrames)
@@ -176,12 +182,15 @@ end
 UI.ApplyFontNow = _applyNow
 
 -- Hook sélectif uniquement pour nos frames GLOG_
+-- Fallback tracking table to avoid adding custom fields to Frame objects (lint-safe)
+local _HOOKED = setmetatable({}, { __mode = "k" })
+
 local function hookGLOGFrames()
     if not EnumerateFrames then return end
     local f = EnumerateFrames()
     while f do
         local name = (f.GetName and f:GetName()) or ""
-        if (name:find("^GLOG_") or name:find("^GLOG_Popup_")) and f.CreateFontString and not f.__glog_fontHooked then
+        if (name:find("^GLOG_") or name:find("^GLOG_Popup_")) and f.CreateFontString and not _HOOKED[f] then
             local originalCreateFontString = f.CreateFontString
             f.CreateFontString = function(self, ...)
                 local fs = originalCreateFontString(self, ...)
@@ -190,7 +199,7 @@ local function hookGLOGFrames()
                 end
                 return fs
             end
-            f.__glog_fontHooked = true
+            _HOOKED[f] = true
         end
         f = EnumerateFrames(f)
     end
@@ -205,10 +214,14 @@ _evt:SetScript("OnEvent", function(_, evt, arg1)
     -- On applique à ADDON_LOADED uniquement pour notre addon
     if evt == "ADDON_LOADED" then
         if tostring(arg1) ~= tostring(ADDON) then return end
-        _applyNow(false)
-        hookGLOGFrames()
+        if not (GetLocale and GetLocale() == "ruRU") then
+            _applyNow(false)
+            hookGLOGFrames()
+        end
     else
-        _applyNow(false)
-        hookGLOGFrames()
+        if not (GetLocale and GetLocale() == "ruRU") then
+            _applyNow(false)
+            hookGLOGFrames()
+        end
     end
 end)
