@@ -16,8 +16,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -47,20 +49,36 @@ def build_lua_block(class_slug: str, spec_slug: str, target: str, payload: dict)
     return f"{HEADER}{key} = [[\n{json_blob}\n]]\n"
 
 
-def fetch_payload(url: str) -> dict:
-    try:
-        with urllib.request.urlopen(url) as response:  # nosec B310 - trusted endpoint
-            charset = response.headers.get_content_charset() or "utf-8"
-            raw = response.read().decode(charset)
-    except urllib.error.HTTPError as exc:  # pragma: no cover - network errors
-        raise RuntimeError(f"HTTP {exc.code} while fetching {url}") from exc
-    except urllib.error.URLError as exc:  # pragma: no cover
-        raise RuntimeError(f"Failed to reach {url}: {exc.reason}") from exc
+def fetch_payload(url: str, *, retries: int = 3, backoff: float = 1.5) -> dict:
+    headers = {
+        "User-Agent": "GuildLogistics-DataFetcher/1.0 (+https://github.com/Ysendril/GuildLogistics)",
+        "Accept": "application/json",
+    }
 
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"Invalid JSON returned by {url}: {exc}") from exc
+    for attempt in range(1, retries + 1):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:  # nosec B310 - trusted endpoint
+                charset = response.headers.get_content_charset() or "utf-8"
+                raw = response.read().decode(charset)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(f"Invalid JSON returned by {url}: {exc}") from exc
+        except urllib.error.HTTPError as exc:  # pragma: no cover - network errors
+            if attempt < retries and exc.code in {403, 429, 500, 502, 503, 504}:
+                delay = backoff ** attempt + random.uniform(0, 0.5)
+                print(f"[retry] HTTP {exc.code} for {url}, retrying in {delay:.2f}s (attempt {attempt}/{retries})")
+                time.sleep(delay)
+                continue
+            raise RuntimeError(f"HTTP {exc.code} while fetching {url}") from exc
+        except urllib.error.URLError as exc:  # pragma: no cover
+            if attempt < retries:
+                delay = backoff ** attempt + random.uniform(0, 0.5)
+                print(f"[retry] URLError for {url}: {exc.reason}, retrying in {delay:.2f}s (attempt {attempt}/{retries})")
+                time.sleep(delay)
+                continue
+            raise RuntimeError(f"Failed to reach {url}: {exc.reason}") from exc
 
 
 def update_spec(class_slug: str, spec_path: Path, url_template: str, dry_run: bool = False) -> None:
