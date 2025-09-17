@@ -1,4 +1,4 @@
-name: Mise à jour du tag et création de la release
+name: Tag & Simcraft & Release
 
 permissions:
   contents: write
@@ -48,6 +48,32 @@ jobs:
             echo "ℹ️ Version inchangée: $CURRENT_VERSION"
             echo "version_changed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Setup Python
+        if: steps.check-version.outputs.version_changed == 'true'
+        uses: actions/setup-python@v5.1.0
+        with:
+          python-version: '3.x'
+
+      - name: Refresh SimulationCraft datasets
+        run: python Tools/update_simc_data.py
+
+      - name: Commit SimCraft updates
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if git diff --quiet -- Data/SimCraft; then
+            echo "No SimCraft changes detected."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config url."https://${PAT_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+          git add Data/SimCraft
+          git commit -m "chore(data): refresh SimCraft trinkets"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       # Créer et pusher le tag Git si la version a changé
       - name: Create and Push Git Tag
