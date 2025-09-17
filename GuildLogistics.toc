@@ -18,6 +18,7 @@ Ressources/Libs/LibDeflate/LibDeflate.lua
 # Ressources
 Locales/locales-enUS.lua
 Locales/locales-frFR.lua
+Locales/locales-ruRU.lua
 
 Core/Debug/EarlyErrorHandler.lua
 

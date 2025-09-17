@@ -1,4 +1,4 @@
--- Tabs/Helpers_Trinkets.lua
+﻿-- Tabs/Helpers_Trinkets.lua
 local ADDON, ns = ...
 local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
@@ -136,7 +136,10 @@ local function updateMetadataLabel(entry)
 
     local parts = {}
     if selectedTargets then parts[#parts + 1] = formatTargetsLabel(selectedTargets) end
-    if selectedIlvl then parts[#parts + 1] = string.format("ilvl %d", tonumber(selectedIlvl) or selectedIlvl) end
+    if selectedIlvl then
+        local fmt = Tr("lbl_ilvl_value") or "ilvl %d"
+        parts[#parts + 1] = string.format(fmt, tonumber(selectedIlvl) or selectedIlvl)
+    end
     if entry.timestamp and entry.timestamp ~= "" then
         parts[#parts + 1] = entry.timestamp
     end
@@ -464,3 +467,4 @@ end
 UI.RegisterTab(Tr("tab_trinkets") or "Trinkets", Build, Refresh, Layout, {
     category = Tr("cat_info"),
 })
+

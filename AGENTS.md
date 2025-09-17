@@ -4,7 +4,11 @@
 
 GuildLogistics is a sophisticated World of Warcraft addon for guild raid management, featuring guild economics, automated loot tracking, cross-player data synchronization, and comprehensive raid analytics. Built with Lua for WoW Retail (Interface 110200).
 
-**⚡ Performance Priority**: Always optimize for memory and CPU efficiency. WoW addons share limited resources - every function call, event handler, and memory allocation matters. When modifying existing code, look for optimization opportunities even if the feature works.
+** Performance Priority**: Always optimize for memory and CPU efficiency. WoW addons share limited resources - every function call, event handler, and memory allocation matters. When modifying existing code, look for optimization opportunities even if the feature works.
+
+** Encodage ** : La langue principale du code est l'anglais. Cependant, certaines parties de la documentation et des commentaires sont en français. Veuillez maintenir cette convention.
+
+** Traductions ** : Utiliser `ns.Tr("key")` pour toutes les chaînes visibles par l'utilisateur. Ne pas coder en dur des chaînes en anglais. Attention aux accents et caractères spéciaux dans les traductions. Il faut toujours penser a modifier les fichiers de traduction dans `Locales/` en conséquence.
 
 ## Architecture Patterns
 

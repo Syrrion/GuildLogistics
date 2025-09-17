@@ -766,3 +766,16 @@ L["msg_merge_balance_body"]  = "Transférer %s de %s vers %s et mettre %s à 0 ?
 -- Suppression d'un main avec solde (popup)
 L["msg_remove_main_balance_title"] = "Supprimer le main avec solde ?"
 L["msg_remove_main_balance_body"]  = "Ce main dispose actuellement d'un solde de %s.\nLa suppression du main remettra ce solde à 0 et supprimera également son appartenance au Roster s’il en fait partie.\n\nContinuer ?"
+
+-- Helpers Trinkets
+L["tab_trinkets"]        = "Bijoux"
+L["lbl_targets"]         = "Cibles"
+L["lbl_target_single"]   = "1 cible"
+L["lbl_target_plural"]   = "%d cibles"
+L["lbl_ilvl"]            = "Niveau d'objet"
+L["lbl_ilvl_value"]      = "ilvl %d"
+L["lbl_trinket"]         = "Bijou"
+L["lbl_score"]           = "Score"
+L["lbl_diff"]            = "Écart"
+L["lbl_source"]          = "Source"
+L["label_legendary"]     = "Légendaire"

@@ -1,4 +1,4 @@
-local ADDON, ns = ...
+﻿local ADDON, ns = ...
 local UI = ns.UI or {}; ns.UI = UI
 UI.Colors = UI.Colors or {}
 
@@ -135,9 +135,17 @@ function UI.SetBadgeCellFromPalette(cell, spec)
     end
 
     if key then addCandidate(key) end
+    local function resolveAliases(source)
+        if not source or not key then return nil end
+        if type(source) == 'function' then
+            return source(key, spec)
+        end
+        return source[key]
+    end
+
     if palette then
-        if spec.aliases and key then addCandidate(type(spec.aliases) == 'function' and spec.aliases(key, spec) or spec.aliases[key]) end
-        if spec.fallbackAliases and key then addCandidate(type(spec.fallbackAliases) == 'function' and spec.fallbackAliases(key, spec) or spec.fallbackAliases[key]) end
+        addCandidate(resolveAliases(spec.aliases))
+        addCandidate(resolveAliases(spec.fallbackAliases))
         if spec.extraKeys then addCandidate(spec.extraKeys) end
         if spec.fallbackKeys then addCandidate(spec.fallbackKeys) end
     end
