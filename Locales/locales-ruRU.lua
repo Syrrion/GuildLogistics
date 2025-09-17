@@ -122,6 +122,7 @@ L["col_last_seen"]        = "Последний вход"
 L["col_rerolls"]          = "Перебросы"
 L["col_mplus_score"]      = "Очки М+\rот основного"
 L["col_mplus_key"]        = "Основной ключ Эпох+"
+L["col_mplus_overall"]    = "Общий"
 L["col_state"]            = "Состояние"
 L["col_request"]          = "Запрос"
 L["col_version"]          = "Версия аддона"
@@ -714,6 +715,7 @@ L["instance_outdoor"] = "Открытый мир"
 -- Guild chat mention
 L["toast_gmention_title"]      = "Упоминание в чате гильдии"
 L["toast_gmention_text_fmt"]   = "Вас упомянул %s: %s"
+L["opt_popup_trinket_ranking"] = "Показывать всплывающее окно ранга аксессуара при добыче"
 
 -- ============================================== --
 -- ===              BACKUP/RESTORE            === --

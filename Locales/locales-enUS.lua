@@ -123,6 +123,7 @@ L["col_last_seen"]        = "Last seen"
 L["col_rerolls"]          = "Rerolls"
 L["col_mplus_score"]      = "M+ Score\rfrom main"
 L["col_mplus_key"]        = "Main Mythic+ Key"
+L["col_mplus_overall"]    = "Overall"
 L["col_state"]            = "State"
 L["col_request"]          = "Request"
 L["col_version"]          = "Addon version"
@@ -714,6 +715,7 @@ L["instance_outdoor"] = "Outdoor"
 -- Guild chat mention
 L["toast_gmention_title"]      = "Guild chat mention"
 L["toast_gmention_text_fmt"]   = "You were mentioned by %s: %s"
+L["opt_popup_trinket_ranking"] = "Show trinket ranking popup on loot"
 
 -- ============================================== --
 -- ===              BACKUP/RESTORE            === --
