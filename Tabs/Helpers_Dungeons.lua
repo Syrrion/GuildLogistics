@@ -9,7 +9,6 @@ local UPG  = ns and ns.Data and ns.Data.UpgradeTracks  -- palette des paliers (t
 
 -- État local
 local panel, lv
-local _headerBGs
 local _notesFS = {}
 
 -- Colonnes
@@ -20,39 +19,10 @@ local cols = UI.NormalizeColumns({
     { key="crests",  title = (DATA and DATA.headers and DATA.headers.crests)     , vsep=true,  w=300, justify="CENTER" },
 })
 
--- ==== Header background helpers ====
-local function _CreateHeaderBGs()
-    if not lv or not lv.header then return end
-    _headerBGs = _headerBGs or {}
-    for i = 1, #cols do
-        if not _headerBGs[i] then
-            local t = lv.header:CreateTexture(nil, "BACKGROUND", nil, -8)
-            t:SetColorTexture(0.12, 0.12, 0.12, 1)
-            _headerBGs[i] = t
-        end
-    end
-end
 
-local function _LayoutHeaderBGs()
-    if not lv or not lv.header or not _headerBGs then return end
-    local x = 0
-    -- Utilise uniquement la couleur de la 1ère colonne (activity) pour toutes les colonnes
-    local base = (DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.activity) or {0.12, 0.12, 0.12}
-    for i, c in ipairs(cols) do
-        local w = c.w or c.min or 80
-        local t = _headerBGs[i]
-        if t then
-            t:ClearAllPoints()
-            t:SetPoint("TOPLEFT",    lv.header, "TOPLEFT",  x, 0)
-            t:SetPoint("BOTTOMLEFT", lv.header, "BOTTOMLEFT", x, 0)
-            t:SetWidth(w)
-            t:SetColorTexture(base[1], base[2], base[3], 1) -- même couleur partout
-        end
-        x = x + w
-    end
-end
 
 -- ==== Détection du palier ====
+
 local function _DetectTrackKey(text)
     if not text or text == "" then return nil end
     local L = ns and ns.L or {}
@@ -111,28 +81,30 @@ local function buildRow(r)
 end
 
 local function updateRow(i, r, f, item)
-    -- Activité
-    f.label:SetText(item.label or "")
+    if not (r and f) then return end
 
-    -- Couleurs loot/vault
+    f.label:SetText(item and item.label or "")
+
     local palCells = (UPG and UPG.palette and UPG.palette.cells) or {}
-    local lootKey  = _DetectTrackKey(item.loot)
-    local vaultKey = _DetectTrackKey(item.vault)
-    local colLoot  = lootKey  and palCells[lootKey]
-    local colVault = vaultKey and palCells[vaultKey]
+    local crestPal = (DATA and DATA.palette and DATA.palette.crests) or {}
 
-    -- Écus
+    local lootKey  = _DetectTrackKey(item and item.loot)
+    local vaultKey = _DetectTrackKey(item and item.vault)
+
     local crestCount, crestKey
-    if type(item.crest) == "table" then
+    if item and type(item.crest) == "table" then
         crestCount = tonumber(item.crest.count or 0) or 0
         crestKey   = tostring(item.crest.key or "")
     else
-        local s = tostring(item.crests or item.crest or "")
+        local s = tostring(item and (item.crests or item.crest) or "")
         crestCount = tonumber(string.match(s, "(%d+)") or 0) or 0
         crestKey   = _DetectCrestKey(s)
     end
-    local crestPal = (DATA and DATA.palette and DATA.palette.crests) or {}
-    local crestRGB = crestKey and crestPal[crestKey]
+
+    if crestKey then
+        crestKey = string.lower(tostring(crestKey))
+    end
+
     local crestLabelByKey = {
         valor  = (ns.L and ns.L["crest_valor"])  or "Valor",
         worn   = (ns.L and ns.L["crest_worn"])   or "Worn",
@@ -140,6 +112,11 @@ local function updateRow(i, r, f, item)
         runic  = (ns.L and ns.L["crest_runic"])  or "Runic",
         golden = (ns.L and ns.L["crest_golden"]) or "Golden",
     }
+
+    local crestText
+    if crestKey and crestCount and crestCount > 0 then
+        crestText = string.format("%d x %s", crestCount, crestLabelByKey[crestKey] or crestKey)
+    end
 
     local resolved = UI.ResolveColumns(r:GetWidth() or (UI.SumWidths(cols)), cols)
     local x = 0
@@ -157,11 +134,17 @@ local function updateRow(i, r, f, item)
             f.lootBadge:SetPoint("CENTER", r, "LEFT", x + w/2, 0)
             f.lootBadge:SetWidth(w - 20)
 
-            if lootKey and colLoot then
-                UI.SetBadgeCell(f.lootBadge, colLoot, item.loot or "")
-                f.lootBadge:Show()
+            if lootKey then
+                UI.SetBadgeCellFromPalette(f.lootBadge, {
+                    palette = palCells,
+                    key = lootKey,
+                    text = item and item.loot,
+                    requireColor = true,
+                    hideWhenEmpty = true,
+                })
             else
-                f.lootBadge:Hide()
+                if f.lootBadge.Hide then f.lootBadge:Hide() end
+                if f.lootBadge.txt then f.lootBadge.txt:SetText("") end
             end
 
         elseif c.key == "vault" then
@@ -169,11 +152,17 @@ local function updateRow(i, r, f, item)
             f.vaultBadge:SetPoint("CENTER", r, "LEFT", x + w/2, 0)
             f.vaultBadge:SetWidth(w - 20)
 
-            if vaultKey and colVault then
-                UI.SetBadgeCell(f.vaultBadge, colVault, item.vault or "")
-                f.vaultBadge:Show()
+            if vaultKey then
+                UI.SetBadgeCellFromPalette(f.vaultBadge, {
+                    palette = palCells,
+                    key = vaultKey,
+                    text = item and item.vault,
+                    requireColor = true,
+                    hideWhenEmpty = true,
+                })
             else
-                f.vaultBadge:Hide()
+                if f.vaultBadge.Hide then f.vaultBadge:Hide() end
+                if f.vaultBadge.txt then f.vaultBadge.txt:SetText("") end
             end
 
         elseif c.key == "crests" then
@@ -181,18 +170,24 @@ local function updateRow(i, r, f, item)
             f.crestBadge:SetPoint("CENTER", r, "LEFT", x + w/2, 0)
             f.crestBadge:SetWidth(w - 20)
 
-            if crestKey and crestRGB and crestCount and crestCount > 0 then
-                local label = string.format("%d x %s", crestCount, crestLabelByKey[crestKey] or crestKey)
-                UI.SetBadgeCell(f.crestBadge, crestRGB, label)
-                f.crestBadge:Show()
+            if crestKey and crestText then
+                UI.SetBadgeCellFromPalette(f.crestBadge, {
+                    palette = crestPal,
+                    key = crestKey,
+                    text = crestText,
+                    requireColor = true,
+                    hideWhenEmpty = true,
+                })
             else
-                f.crestBadge:Hide()
+                if f.crestBadge.Hide then f.crestBadge:Hide() end
+                if f.crestBadge.txt then f.crestBadge.txt:SetText("") end
             end
         end
 
         x = x + w
     end
 end
+
 
 -- == BUILD ==
 local function Build(container)
@@ -217,7 +212,16 @@ local function Build(container)
         updateRow = updateRow,
     })
 
-    _CreateHeaderBGs()
+    UI.ListView_SetHeaderBackgrounds(lv, {
+        cols = cols,
+        colors = {
+            label = ((DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.activity) or {0.12, 0.12, 0.12}),
+            loot  = ((DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.activity) or {0.12, 0.12, 0.12}),
+            vault = ((DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.activity) or {0.12, 0.12, 0.12}),
+            crests= ((DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.activity) or {0.12, 0.12, 0.12}),
+        },
+        defaultColor = ((DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.activity) or {0.12, 0.12, 0.12}),
+    })
 end
 
 -- == LAYOUT ==
@@ -240,8 +244,6 @@ local function Layout()
         lv.opts.topOffset = y
         lv:Layout()
     end
-
-    _LayoutHeaderBGs()
 end
 
 local function Refresh()

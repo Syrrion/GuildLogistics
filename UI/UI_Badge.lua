@@ -97,6 +97,78 @@ function UI.SetTierBadge(cell, tierBase, mod, labelOverride, palette)
 end
 
 -- Parse un label de rang type "S", "S+", "A-", etc. -> (base, mod, pretty)
+
+-- Applique un texte avec résolution automatique d'une couleur depuis une palette
+-- spec: { text=string, palette=table, key=string, aliases=table|fn, fallbackAliases=table, fallbackKeys={...}, defaultColor={r,g,b},
+--         hideWhenEmpty=true, keyNormalizer=fn(key,spec)->key, textTransform=fn(text,spec)->text, badgeOpts=table }
+function UI.SetBadgeCellFromPalette(cell, spec)
+    if not cell then return end
+    spec = spec or {}
+
+    local text = spec.text
+    if text == nil and type(spec.textFn) == 'function' then
+        text = spec.textFn(spec)
+    end
+    if text ~= nil then
+        text = tostring(text)
+    end
+    if not text or text == '' then
+        if spec.hideWhenEmpty ~= false and cell.Hide then cell:Hide() end
+        if cell.txt then cell.txt:SetText('') end
+        return
+    end
+
+    local palette = spec.palette
+    local key = spec.key
+    if type(spec.keyNormalizer) == 'function' then
+        key = spec.keyNormalizer(key, spec)
+    end
+
+    local candidates = {}
+    local function addCandidate(v)
+        if not v then return end
+        if type(v) == 'table' then
+            for _, alt in ipairs(v) do addCandidate(alt) end
+        else
+            candidates[#candidates+1] = v
+        end
+    end
+
+    if key then addCandidate(key) end
+    if palette then
+        if spec.aliases and key then addCandidate(type(spec.aliases) == 'function' and spec.aliases(key, spec) or spec.aliases[key]) end
+        if spec.fallbackAliases and key then addCandidate(type(spec.fallbackAliases) == 'function' and spec.fallbackAliases(key, spec) or spec.fallbackAliases[key]) end
+        if spec.extraKeys then addCandidate(spec.extraKeys) end
+        if spec.fallbackKeys then addCandidate(spec.fallbackKeys) end
+    end
+
+    local color
+    if palette then
+        for _, candidate in ipairs(candidates) do
+            if candidate and palette[candidate] then
+                color = palette[candidate]
+                break
+            end
+        end
+    end
+
+    if not color then
+        if spec.requireColor then
+            if cell.Hide then cell:Hide() end
+            if cell.txt then cell.txt:SetText('') end
+            return
+        end
+        color = spec.defaultColor or {0.5, 0.5, 0.5}
+    end
+
+    if type(spec.textTransform) == 'function' then
+        text = spec.textTransform(text, spec)
+    end
+
+    if cell.Show then cell:Show() end
+    UI.SetBadgeCell(cell, color, text, spec.badgeOpts or spec)
+end
+
 function UI.ParseTierLabel(label)
     local s = tostring(label or "")
     local base = s:match("([SAFBEDCsa fbedc])") -- lettre S..F (insensible à la casse)
