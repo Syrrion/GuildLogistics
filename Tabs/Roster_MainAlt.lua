@@ -193,8 +193,21 @@ local ICON_EDITOR_GRANT_TEX = "auctionhouse-icon-favorite-off"
 local ICON_EDITOR_REVOKE_TEX = "auctionhouse-icon-favorite"
 
 -- Helper: get the character's own class tag from guild cache (ignores main's class)
+-- Resolve a class tag for a character with progressive fallbacks.
+-- 1) Fast guild cache lookup (cheap, no iteration)
+-- 2) Derived name class (may look at main mapping)
+-- 3) Last resort: style helper (returns class plus color) – we only use the class token
 local function _SelfClassTag(name)
-    return (GLOG and GLOG.GetGuildClassTag and GLOG.GetGuildClassTag(name)) or nil
+    if not name or name == "" then return nil end
+    local cls = (GLOG and GLOG.GetGuildClassTag and GLOG.GetGuildClassTag(name)) or nil
+    if (not cls or cls == "") and GLOG and GLOG.GetNameClass then
+        cls = GLOG.GetNameClass(name)
+    end
+    if (not cls or cls == "") and GLOG and GLOG.GetNameStyle then
+        local s = select(1, GLOG.GetNameStyle(name))
+        if s and s ~= "" then cls = s end
+    end
+    return cls
 end
 
 local function _refreshAll()
@@ -865,15 +878,41 @@ function buildPoolData()
         end
     end
     -- sort: suggestions first then alpha
-    table.sort(rows, function(a,b)
-        if a.suggested ~= b.suggested then return a.suggested end
-        return (a.name or ""):lower() < (b.name or ""):lower()
-    end)
+    -- Skip tri si dataset déjà trié (signature simple)
+    local needsSort = true
+    do
+        local prevSug, prevNameLower = true, ""
+        for i=1,#rows do
+            local r = rows[i]
+            local sug = r.suggested and true or false
+            local nm = (r.name or ""):lower()
+            -- Ordre souhaité: suggested d'abord (true), puis alpha
+            if i == 1 then
+                prevSug, prevNameLower = sug, nm
+            else
+                if (not prevSug and sug) then
+                    needsSort = true; break
+                end
+                if (prevSug == sug) and (prevNameLower > nm) then
+                    needsSort = true; break
+                end
+                needsSort = false
+                prevSug, prevNameLower = sug, nm
+            end
+        end
+    end
+    if needsSort then
+        table.sort(rows, function(a,b)
+            if a.suggested ~= b.suggested then return a.suggested end
+            return (a.name or ""):lower() < (b.name or ""):lower()
+        end)
+    end
     return rows
 end
 
 function buildMainsData()
     local arr = (GLOG.GetConfirmedMains and GLOG.GetConfirmedMains()) or {}
+    -- Défensif: dataset déjà trié par GetConfirmedMains; pas de tri supplémentaire ici.
     return arr
 end
 
@@ -919,6 +958,17 @@ local function Build(container)
         ns.Events.Register("GUILD_ROSTER_UPDATE", lvPool, function()
             -- Évite les rebuilds lourds immédiats; planifie une MAJ compacte
             if _schedulePoolRebuild then _schedulePoolRebuild() end
+        end)
+        -- When the roster cache refreshes we may have gained class info: just invalidate and redraw mains/alts.
+        ns.Events.Register("GUILD_ROSTER_UPDATE", lvMains, function()
+            if lvMains then
+                if lvMains.InvalidateAllRowsCache then lvMains:InvalidateAllRowsCache() end
+                if lvMains.UpdateVisibleRows then lvMains:UpdateVisibleRows() end
+            end
+            if lvAlts then
+                if lvAlts.InvalidateAllRowsCache then lvAlts:InvalidateAllRowsCache() end
+                if lvAlts.UpdateVisibleRows then lvAlts:UpdateVisibleRows() end
+            end
         end)
     end
     -- Internal event (addon bus)

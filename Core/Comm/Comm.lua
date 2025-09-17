@@ -220,6 +220,63 @@ local function delayedInit()
     end
 end
 
+-- ===== Batching (low-priority messages) =====
+do
+    -- Types considérés faible priorité (peuvent être coalescés)
+    local LOW_PRI_TYPES = {
+        STATUS_UPDATE = true,
+    }
+    local queue = {}
+    local scheduled = false
+    local FLUSH_INTERVAL = 0.8 -- secondes (throttle)
+
+    local _rawBroadcast = GLOG.Comm_Broadcast -- sera défini après init transport
+
+    function GLOG._SetRawBroadcast(fn)
+        _rawBroadcast = fn
+    end
+
+    local function flush()
+        scheduled = false
+        if not _rawBroadcast or #queue == 0 then
+            for i=#queue,1,-1 do queue[i]=nil end
+            return
+        end
+        -- Coalesce: si plusieurs STATUS_UPDATE, ne garder que la dernière (payload la plus récente)
+        local out = {}
+        local lastStatus
+        for i = 1, #queue do
+            local item = queue[i]
+            if item.t == 'STATUS_UPDATE' then
+                lastStatus = item -- overwrite
+            else
+                out[#out+1] = item
+            end
+        end
+        if lastStatus then out[#out+1] = lastStatus end
+        for i = 1, #out do
+            local it = out[i]
+            _rawBroadcast(it.t, it.p)
+        end
+        for i=#queue,1,-1 do queue[i]=nil end
+    end
+
+    -- Wrapper public conservant la signature existante
+    function GLOG.Comm_Broadcast(t, payload)
+        if LOW_PRI_TYPES[t] then
+            queue[#queue+1] = { t = t, p = payload }
+            if not scheduled then
+                scheduled = true
+                C_Timer.After(FLUSH_INTERVAL, flush)
+            end
+            return
+        end
+        if _rawBroadcast then
+            _rawBroadcast(t, payload)
+        end
+    end
+end
+
 -- Initialiser selon le statut de connexion
 if IsLoggedIn and IsLoggedIn() then
     C_Timer.After(0.1, delayedInit) -- Délai très court si déjà connecté

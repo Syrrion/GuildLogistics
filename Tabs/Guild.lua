@@ -72,7 +72,13 @@ local function _EnsureLiveZoneEvents()
                 if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
             end
         else
-            if UI and UI.RefreshAll then UI.RefreshAll() else if Refresh then Refresh() end end
+            if ns and ns.RefreshAll then
+                ns.RefreshAll()
+            elseif UI and UI.RefreshAll then
+                UI.RefreshAll()
+            elseif Refresh then
+                Refresh()
+            end
         end
     end
 
@@ -858,7 +864,11 @@ local function _DoRefresh()
     if need and GLOG.RefreshGuildCache then
         if lv then lv:SetData({}) end
         GLOG.RefreshGuildCache(function()
-            if UI.RefreshAll then UI.RefreshAll() end
+            if ns and ns.RefreshAll then
+                ns.RefreshAll()
+            elseif UI and UI.RefreshAll then
+                UI.RefreshAll()
+            end
         end)
         return
     end

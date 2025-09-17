@@ -389,7 +389,11 @@ local function _AddIfEligible(link, looter)
             end
         end
 
-        if ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
+        if ns and ns.RefreshAll then
+            ns.RefreshAll()
+        elseif ns.UI and ns.UI.RefreshAll then
+            ns.UI.RefreshAll()
+        end
 
         -- Backfill asynchrone : si c'est une M+ sans niveau au moment T, on réessaye un peu plus tard
         if tonumber(entry.diffID or 0) == 8 and tonumber(entry.mplus or 0) == 0 and ns.LootTrackerState then
@@ -495,7 +499,11 @@ ns.LootTrackerParser = {
                     if wVal then entry.rollV = tonumber(wVal) end
                 end
             end
-            if ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
+            if ns and ns.RefreshAll then
+                ns.RefreshAll()
+            elseif ns.UI and ns.UI.RefreshAll then
+                ns.UI.RefreshAll()
+            end
         end
     end,
 }

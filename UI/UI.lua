@@ -228,6 +228,11 @@ end
 function UI.RefreshListData(listView, rows)
     if not listView or not listView.RefreshData then return end
     listView:RefreshData(rows or {})
+    -- NOTE: Do NOT call ns.RefreshAll() here; RefreshData is often used inside
+    -- existing coalesced refresh cycles. Forcing a global refresh after every
+    -- list data update caused redundant scheduling and risked recursion once
+    -- UI.RefreshAll itself began invoking ns.RefreshAll. Keeping this local
+    -- prevents storm refreshes during batch operations.
 end
 
 
@@ -845,7 +850,12 @@ function UI.RefreshAll()
     if i and Registered[i] and Registered[i].refresh then Registered[i].refresh() end
     -- Rafraîchit les indicateurs globaux (pastilles, icônes d'état, etc.)
     if UI.RefreshTopIndicators then UI.RefreshTopIndicators() end
-    -- Force un relayout des ListViews visibles (scrollbars, largeurs dynamiques, snap)
+    -- IMPORTANT: Do NOT call ns.RefreshAll() from inside UI.RefreshAll().
+    -- ns.RefreshAll is an alias to the coalesced scheduler (UI.ScheduleRefreshAll)
+    -- which itself ultimately triggers UI.RefreshAll(). Calling it here would
+    -- create an infinite scheduling loop. External callers should invoke
+    -- ns.RefreshAll() instead of UI.RefreshAll() directly to benefit from
+    -- coalescing and visibility gating.
     if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end
 end
 -- ⏳ Regroupe les refresh pour éviter les rafales pendant les évènements réseau
@@ -872,7 +882,11 @@ function UI.ScheduleRefreshAll(delay)
         UI._refreshPending = false
         -- ⏸️ Pause globale : ne rafraîchit que si l'UI est ouverte ou si on a des popups/zones always-on
         if UI.ShouldRefreshUI and UI.ShouldRefreshUI() then
-            if UI.RefreshAll then UI.RefreshAll() end
+            if ns and ns.RefreshAll then
+                ns.RefreshAll()
+            elseif UI.RefreshAll then
+                UI.RefreshAll()
+            end
         else
             -- UI fermée: on met tout de même à jour les ListViews des zones always-on/popups
             if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end
@@ -1230,7 +1244,11 @@ function UI.SetDebugEnabled(enabled)
     end
 
     -- Rafraîchit l'UI courante pour refléter le changement
-    if UI.RefreshAll then UI.RefreshAll() end
+    if ns and ns.RefreshAll then
+        ns.RefreshAll()
+    elseif UI.RefreshAll then
+        UI.RefreshAll()
+    end
 end
 
 -- ➕ Pastille sur un onglet
@@ -1409,6 +1427,8 @@ function UI.RefreshActive()
 
     -- Cycle de rafraîchissement global
     if ns.RefreshAll then
+        ns.RefreshAll()
+    elseif ns and ns.RefreshAll then
         ns.RefreshAll()
     elseif UI.RefreshAll then
         UI.RefreshAll()

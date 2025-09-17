@@ -629,6 +629,28 @@ end
     -- SetData ne touche qu'au gradient & séparateurs, JAMAIS au SetColorTexture du fond
     function lv:SetData(data)
         data = data or {}
+        -- 🔍 Diff rapide: si la signature du dataset n'a pas changé, on évite tout le travail
+        if ns and ns.Util and ns.Util.FastSigArray then
+            local sigParts = {}
+            local maxPreview = math.min(#data, 32) -- on inclut un échantillon de tête pour réduire collisions sur tailles similaires
+            for i = 1, maxPreview do
+                local it = data[i]
+                if type(it) == 'table' then
+                    -- Incorporer quelques champs stables (kind, id, name, uid) si présents
+                    local k = it.kind or it.id or it.name or it.uid or i
+                    sigParts[#sigParts+1] = tostring(k)
+                else
+                    sigParts[#sigParts+1] = tostring(it)
+                end
+            end
+            sigParts[#sigParts+1] = tostring(#data)
+            local sig = table.concat(sigParts, '|')
+            if self._lastDataSig == sig then
+                -- Dataset identique -> on ne refait pas la construction des lignes; on peut toutefois invalider layout si nécessaire
+                return
+            end
+            self._lastDataSig = sig
+        end
         -- Conserve une référence aux données courantes pour MAJ ciblées
         self._data = data
         -- Marque la largeur d'actions comme potentiellement à recalculer sur nouveau dataset

@@ -2,12 +2,20 @@ local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
+-- Localize frequently accessed globals for micro performance wins
+local pairs, type, pcall, tostring, tonumber = pairs, type, pcall, tostring, tonumber
+local select, time, wipe = select, time, wipe
+local CreateFrame, C_Timer = CreateFrame, C_Timer
+local GetTimePreciseSec, GetTime = GetTimePreciseSec, GetTime
+local collectgarbage, print = collectgarbage, print
+local IsInGuild, ReloadUI = IsInGuild, ReloadUI
+local geterrorhandler = geterrorhandler
+
 -- ===== Bus d'événements internes pour GuildLogistics =====
 -- Structure : { [eventName] = { callback1, callback2, ... } }
 GLOG.__evt = GLOG.__evt or {}
 GLOG.DELAY_AUTO_STATUS = 180
-
--- S'abonner à un événem-- ➕ Throttle + garde-fou : on ne refresh que si l'UI doit être rafraîchie
+-- Deduplicated refresh flag (only one definition in file)
 local _pendingUIRefresh = false
 
 -- @param callback: function - fonction appelée quand l'événement est émis
@@ -51,10 +59,9 @@ end
 function GLOG.Emit(event, ...)
     local L = GLOG.__evt and GLOG.__evt[event]
     if not L then return end
-    
     for i = 1, #L do
-        local ok = pcall(L[i], ...)
-        -- Ignorer les erreurs pour ne pas casser la chaîne de traitement
+        -- pcall to isolate errors; ignore return
+        pcall(L[i], ...)
     end
 end
 
@@ -134,18 +141,30 @@ end
 do
     local E = ns.Events
     if E and not E._loggerHooked then
-        E._log        = {}
-        E._logMax     = 1000
+    E._log        = {}
+    E._logMax     = 1000
+    E._logHead    = 1   -- index of oldest element (ring buffer)
+    E._logSize    = 0   -- number of valid elements
         E._logEnabled = false   -- ⬅️ pause par défaut (aucun log tant qu’on ne reprend pas)
         E._logRev     = E._logRev or 0
         E._logNewCnt  = 0
         E._lastRevTs  = 0
         E._maxArgs    = 6
 
-        function E.GetDebugLog() return E._log end
+        function E.GetDebugLog()
+            -- Return a compact linearized snapshot without reallocating the ring
+            local out, sz, log, head, max = {}, E._logSize or 0, E._log, E._logHead or 1, E._logMax or 1000
+            if sz == 0 then return out end
+            for i = 0, sz - 1 do
+                local idx = head + i
+                if idx > max then idx = idx - max end
+                out[#out+1] = log[idx]
+            end
+            return out
+        end
         function E.ClearDebugLog()
-            local log = E._log
-            for i = #log, 1, -1 do log[i] = nil end
+            wipe(E._log)
+            E._logHead, E._logSize = 1, 0
             E._logRev = (E._logRev or 0) + 1
         end
         function E.SetDebugLogging(on) E._logEnabled = (on ~= false) end
@@ -201,9 +220,9 @@ do
 
         E._frame:SetScript("OnEvent", function(self, event, ...)
             if E._logEnabled and _shouldLog(event, ...) then
-                local ts = (GetTimePreciseSec and GetTimePreciseSec())
-                        or (GetTime and GetTime())
-                        or (time and time()) or 0
+        local ts = (GetTimePreciseSec and GetTimePreciseSec())
+            or (GetTime and GetTime())
+            or (time and time()) or 0
                 -- Copie bornée des args (max 6)
                 local argsN = select("#", ...)
                 local maxN  = E._maxArgs or 6
@@ -212,10 +231,23 @@ do
                     argsT[i] = select(i, ...)
                 end
 
-                local entry = { ts = ts, event = event, args = argsT }
                 local log = E._log
-                log[#log+1] = entry
-                if #log > (E._logMax or 1000) then table.remove(log, 1) end
+                local cap = E._logMax or 1000
+                local head = E._logHead or 1
+                local size = E._logSize or 0
+                local writeIndex
+                if size < cap then
+                    writeIndex = head + size - 1
+                    if writeIndex < 1 then writeIndex = writeIndex + cap end
+                    if writeIndex > cap then writeIndex = writeIndex - cap end
+                    size = size + 1
+                else
+                    -- overwrite oldest (head) then advance head
+                    writeIndex = head
+                    head = head + 1; if head > cap then head = 1 end
+                end
+                log[writeIndex] = { ts = ts, event = event, args = argsT }
+                E._logHead, E._logSize = head, size
 
                 -- Coalescing des révisions : au plus ~1/sec ou sur burst≥25
                 E._logNewCnt = (E._logNewCnt or 0) + 1
@@ -256,7 +288,6 @@ f:RegisterEvent("CHALLENGE_MODE_RESET")
 
 
 -- ➕ Throttle + garde-fou : on ne refresh que si l’UI est visible
-local _pendingUIRefresh = false
 local function _ScheduleActiveTabRefresh()
     if _pendingUIRefresh then return end
     _pendingUIRefresh = true
@@ -447,7 +478,6 @@ f:SetScript("OnEvent", function(self, event, name)
     elseif event == "PLAYER_AVG_ITEM_LEVEL_UPDATE"
         or event == "PLAYER_EQUIPMENT_CHANGED" then
         -- Coalescer: un seul UpdateOwnStatusIfMain au bout de 3s si plusieurs événements surviennent
-        GLOG._pendingStatusTimer = GLOG._pendingStatusTimer or nil
         if not GLOG._pendingStatusTimer then
             GLOG._pendingStatusTimer = true
             C_Timer.After(3, function()
@@ -474,7 +504,20 @@ f:SetScript("OnEvent", function(self, event, name)
         
     elseif event == "GUILD_ROSTER_UPDATE" then
 
-        -- ➕ Demande une mise à jour du roster côté serveur
+        -- Throttle guard: évite un traitement complet trop fréquent
+        local nowTs = GetTime and GetTime() or time()
+        GLOG._lastGuildRosterEvt = GLOG._lastGuildRosterEvt or 0
+        GLOG._guildRosterEvtCount = (GLOG._guildRosterEvtCount or 0) + 1
+        local delta = nowTs - (GLOG._lastGuildRosterEvt or 0)
+        local allow = false
+        -- Autorise si >2s depuis dernier traitement ou toutes les 6 occurrences pour garder fraicheur
+        if delta >= 2 or (GLOG._guildRosterEvtCount % 6) == 0 then
+            allow = true
+        end
+        if not allow then return end
+        GLOG._lastGuildRosterEvt = nowTs
+
+        -- ➕ Demande une mise à jour du roster côté serveur (coalescée)
         if C_GuildInfo and C_GuildInfo.GuildRoster then
             C_GuildInfo.GuildRoster()
         end
@@ -501,27 +544,7 @@ if ns and ns.On then
 end
 
 -- === Dispatch hub + conservation du handler existant ================
-do
-    local prev = f:GetScript("OnEvent") -- handler déjà défini plus haut
-    f:SetScript("OnEvent", function(self, event, ...)
-        -- 1) Appel des handlers enregistrés via ns.Events
-        local E = ns.Events
-        local list = E and E._handlers and E._handlers[event]
-        if list then
-            for i = 1, #list do
-                local h = list[i]
-                local ok, err = pcall(h.fn, h.owner, event, ...)
-                if not ok then geterrorhandler()(err) end
-            end
-        end
-        -- 2) Re-broadcast interne si votre bus d'events est utilisé
-        if ns.Emit then ns.Emit("evt:" .. event, ...) end
-        -- 3) Appel du handler d’origine pour ne rien casser
-        if type(prev) == "function" then
-            return prev(self, event, ...)
-        end
-    end)
-end
+-- Removed duplicate dispatch wrapper: original f OnEvent already handles addon logic & ns.Events hub
 -- ===================================================================
 -- === App state (centralisé) : écran de chargement ===
 ns.App = ns.App or {}

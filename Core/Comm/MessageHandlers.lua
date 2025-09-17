@@ -13,21 +13,59 @@ local truthy = U.truthy
 local playerFullName = U.playerFullName
 
 -- ===== File complète → traitement ordonné =====
-local CompleteQ = {}
+-- CompleteQ: trié par (lm asc, rv asc, insertion). Utilise insertion binaire + pop tête O(1) via indices.
+local CompleteQ = { _data = {}, _head = 1, _tail = 0 }
+local function _cqSize() return CompleteQ._tail - CompleteQ._head + 1 end
+local function _cqClear() CompleteQ._data = {}; CompleteQ._head=1; CompleteQ._tail=0 end
+local function _cmp(a,b)
+    if a._lm ~= b._lm then return a._lm < b._lm end
+    if a._rv ~= b._rv then return a._rv < b._rv end
+    return a._seq < b._seq
+end
+local _enqSeq = 0
+local function _cqInsert(rec)
+    local data = CompleteQ._data
+    local n = _cqSize()
+    if n <= 0 then
+        CompleteQ._head = 1; CompleteQ._tail = 1; data[1] = rec; return
+    end
+    -- Binary search position
+    local lo, hi = CompleteQ._head, CompleteQ._tail
+    local pos = hi + 1
+    while lo <= hi do
+        local mid = math.floor((lo+hi)/2)
+        if _cmp(rec, data[mid]) then
+            pos = mid; hi = mid - 1
+        else
+            lo = mid + 1
+        end
+    end
+    -- Shift right
+    for i = CompleteQ._tail, pos, -1 do
+        data[i+1] = data[i]
+    end
+    data[pos] = rec
+    CompleteQ._tail = CompleteQ._tail + 1
+end
+local function _cqPop()
+    if _cqSize() <= 0 then return nil end
+    local idx = CompleteQ._head
+    local v = CompleteQ._data[idx]
+    CompleteQ._data[idx] = nil
+    CompleteQ._head = idx + 1
+    if CompleteQ._head > CompleteQ._tail then _cqClear() end
+    return v
+end
 local function enqueueComplete(sender, t, kv)
-    -- Tri d'application : lm ↑, puis rv ↑, puis ordre d'arrivée
     kv._sender = sender
     kv._t = t
     kv._lm = safenum(kv.lm, now())
     kv._rv = safenum(kv.rv, -1)
-    CompleteQ[#CompleteQ+1] = kv
-    table.sort(CompleteQ, function(a,b)
-        if a._lm ~= b._lm then return a._lm < b._lm end
-        if a._rv ~= b._rv then return a._rv < b._rv end
-        return false
-    end)
+    _enqSeq = _enqSeq + 1
+    kv._seq = _enqSeq
+    _cqInsert(kv)
     while true do
-        local item = table.remove(CompleteQ, 1)
+        local item = _cqPop()
         if not item then break end
         GLOG.HandleMessage(item._sender, item._t, item)
     end

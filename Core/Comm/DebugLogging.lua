@@ -16,8 +16,33 @@ local playerFullName = (U and U.playerFullName) or function()
     return (rn ~= "" and (n.."-"..rn)) or n
 end
 
--- Journalisation (onglet Debug)
-local DebugLog = {} -- { {dir,type,size,chan,channel,dist,target,from,sender,emitter,seq,part,total,raw,state,status,stateText} ... }
+-- Journalisation (onglet Debug) via ring buffer O(1) append + bounded memory
+local DebugLog = {} -- ring storage (slots reused)
+local _dbgCap  = 400
+local _dbgHead = 1     -- slot of oldest entry (valid only if _dbgSize == _dbgCap)
+local _dbgSize = 0     -- number of valid entries (<= _dbgCap)
+local function _dbgPush(entry)
+    local slot
+    if _dbgSize < _dbgCap then
+        slot = (_dbgHead + _dbgSize - 1) % _dbgCap + 1
+        DebugLog[slot] = entry
+        _dbgSize = _dbgSize + 1
+    else
+        slot = _dbgHead
+        DebugLog[slot] = entry  -- overwrite oldest
+        _dbgHead = (_dbgHead % _dbgCap) + 1
+    end
+    return slot
+end
+local function _dbgLinear()
+    if _dbgSize == 0 then return {} end
+    local out = {}
+    for i = 1, _dbgSize do
+        local idx = (_dbgHead + i - 2) % _dbgCap + 1
+        out[i] = DebugLog[idx]
+    end
+    return out
+end
 local SendLogIndexBySeq = {}  -- index "pending" ENVOI par seq
 local RecvLogIndexBySeq = {}  -- index RECU par seq
 
@@ -95,27 +120,8 @@ local function pushLog(dir, t, size, channel, peerOrSender, seq, part, total, ra
         stateText = stText,  -- texte prêt à afficher
     }
 
-    DebugLog[#DebugLog+1] = r
-
-    -- Limite douce du journal (ring ~400). On coupe par paquet pour amortir.
-    local MAX = 400
-    if #DebugLog > (MAX + 40) then
-        local drop = #DebugLog - MAX
-        -- compactage manuel (plus rapide que remove(1) en boucle)
-        local new = {}
-        for i = drop+1, #DebugLog do new[#new+1] = DebugLog[i] end
-        DebugLog = new
-        -- Répare les index après compactage
-        for s, idx in pairs(RecvLogIndexBySeq or {}) do
-            local ni = idx - drop; RecvLogIndexBySeq[s] = (ni > 0) and ni or nil
-        end
-        for s, idx in pairs(SendLogIndexBySeq or {}) do
-            local ni = idx - drop; SendLogIndexBySeq[s] = (ni > 0) and ni or nil
-        end
-        if ns.Emit then ns.Emit("debug:changed") end
-    end
-
-    if #DebugLog > 400 then table.remove(DebugLog, 1) end
+    local slot = _dbgPush(r)
+    -- Indexation initiale si message déjà considéré comme événement clé (géré plus bas aussi)
     if ns.Emit then ns.Emit("debug:changed") end
 end
 
@@ -123,47 +129,49 @@ end
 local function _updateSendLog(item)
     _updateIndexes() -- S'assurer que les index sont dans le bon état
     
-    local idx = SendLogIndexBySeq[item.seq]
-    local function findPendingRow()
-        for i = #DebugLog, 1, -1 do
-            local r = DebugLog[i]
-            if r.dir == "send" and r.seq == item.seq and safenum(r.part, 0) == 0 then
-                return i
+    local idxSlot = SendLogIndexBySeq[item.seq]
+    local function slotToEntry(slot)
+        if not slot then return nil end
+        local e = DebugLog[slot]
+        if not e or e.seq ~= item.seq then return nil end
+        return e
+    end
+    local entry = slotToEntry(idxSlot)
+    if not entry then
+        -- recherche arrière dans le ring (ordre temporel inversé)
+        for i = _dbgSize, 1, -1 do
+            local slot = (_dbgHead + i - 2) % _dbgCap + 1
+            local r = DebugLog[slot]
+            if r and r.dir == "send" and r.seq == item.seq and safenum(r.part,0) == 0 then
+                entry = r; SendLogIndexBySeq[item.seq] = slot; break
             end
         end
-        return nil
     end
-    -- Si l'index ne pointe pas (ou plus) sur la bonne ligne, cherche d'abord la ligne part==0
-    if not idx or not DebugLog[idx] or DebugLog[idx].seq ~= item.seq then
-        idx = findPendingRow() or idx
-    end
-    -- Dernière chance : une ligne d'envoi quelconque pour ce seq (éviter de ne rien mettre à jour)
-    if (not idx) or (not DebugLog[idx]) or (DebugLog[idx].seq ~= item.seq) then
-        for i = #DebugLog, 1, -1 do
-            local r = DebugLog[i]
-            if r.dir == "send" and r.seq == item.seq then
-                idx = i; break
+    if not entry then
+        for i = _dbgSize, 1, -1 do
+            local slot = (_dbgHead + i - 2) % _dbgCap + 1
+            local r = DebugLog[slot]
+            if r and r.dir == "send" and r.seq == item.seq then
+                entry = r; SendLogIndexBySeq[item.seq] = slot; break
             end
         end
     end
     local ts = _nowPrecise()
-    if idx and DebugLog[idx] then
-        local r = DebugLog[idx]
-        r.ts      = ts
-        r.type    = item.type
-        r.size    = #item.payload
-        r.channel = item.channel
-        r.peer    = item.target or ""
-        r.part    = item.part
-        r.total   = item.total
-        r.raw     = item.payload
-        -- Met à jour l'état/text en fonction de la progression
-        r.state   = "sent"
-        r.status  = "sent"
+    if entry then
+        entry.ts      = ts
+        entry.type    = item.type
+        entry.size    = #item.payload
+        entry.channel = item.channel
+        entry.peer    = item.target or ""
+        entry.part    = item.part
+        entry.total   = item.total
+        entry.raw     = item.payload
+        entry.state   = "sent"
+        entry.status  = "sent"
         if tonumber(item.part or 0) >= tonumber(item.total or 0) and tonumber(item.total or 0) > 0 then
-            r.stateText = "Transmis"
+            entry.stateText = "Transmis"
         else
-            r.stateText = "En cours"
+            entry.stateText = "En cours"
         end
         if ns.Emit then ns.Emit("debug:changed") end
     else
@@ -174,15 +182,33 @@ end
 
 -- ===== API publiques =====
 function GLOG.PushLog(dir, msgType, size, channel, peer, seq, part, total, raw, state)
-    pushLog(dir, msgType, size, channel, peer, seq, part, total, raw, state)
-    
-    -- Gérer les index pour les envois
+    local entry = {
+        -- prebuild entry to get slot for index mapping
+        ts        = _nowPrecise(),
+        dir       = dir,
+        type      = msgType,
+        size      = size,
+        chan      = channel or "",
+        channel   = channel or "",
+        dist      = channel or "",
+        target    = peer or "",
+        from      = peer or "",
+        sender    = peer or "",
+        emitter   = peer or "",
+        seq       = seq,
+        part      = part,
+        total     = total,
+        raw       = raw,
+        state     = state,
+        status    = state,
+        stateText = nil,
+    }
+    local slot = _dbgPush(entry)
+    if ns.Emit then ns.Emit("debug:changed") end
     if dir == "send" and part == 0 then
-        _updateIndexes()
-        SendLogIndexBySeq[seq] = #DebugLog
+        _updateIndexes(); SendLogIndexBySeq[seq] = slot
     elseif dir == "recv" and part == 1 then
-        _updateIndexes()
-        RecvLogIndexBySeq[seq] = #DebugLog
+        _updateIndexes(); RecvLogIndexBySeq[seq] = slot
     end
 end
 
@@ -190,14 +216,12 @@ function GLOG.UpdateSendLog(item)
     return _updateSendLog(item)
 end
 
-function GLOG.GetDebugLogs() 
-    return DebugLog 
-end
+function GLOG.GetDebugLogs() return _dbgLinear() end
 
 function GLOG.PurgeDebug()
-    wipe(DebugLog)
-    wipe(SendLogIndexBySeq)
-    wipe(RecvLogIndexBySeq)
+    for i=1,_dbgCap do DebugLog[i] = nil end
+    _dbgHead = 1; _dbgSize = 0
+    wipe(SendLogIndexBySeq); wipe(RecvLogIndexBySeq)
     if ns.Emit then ns.Emit("debug:changed") end
 end
 
@@ -210,12 +234,7 @@ end
 function GLOG.Debug_GetMemStats()
     local function len(t) local n=0; for _ in pairs(t or {}) do n=n+1 end; return n end
     local mem = (collectgarbage and collectgarbage("count")) or 0
-    return {
-        mem = mem,           -- en KiB
-        debugLog = #DebugLog,
-        sendIdx = len(SendLogIndexBySeq),
-        recvIdx = len(RecvLogIndexBySeq),
-    }
+    return { mem = mem, debugLog = _dbgSize, sendIdx = len(SendLogIndexBySeq), recvIdx = len(RecvLogIndexBySeq) }
 end
 
 function GLOG.Debug_PrintMemStats()
@@ -245,7 +264,7 @@ function GLOG.DebugLocal(event, fields)
 
     local me = (playerFullName and playerFullName()) or ""
 
-    DebugLog[#DebugLog+1] = {
+    _dbgPush({
         ts        = _nowPrecise() or time(),
         dir       = "send",            -- s'affiche dans la liste « Envoyés »
         type      = tname,
@@ -257,34 +276,21 @@ function GLOG.DebugLocal(event, fields)
         seq       = 0, part = 1, total = 1,
         raw       = raw,               -- ✅ exploité par groupLogs() → fullPayload
         state     = "sent", status = "sent", stateText = "|cffffd200Debug|r",
-    }
+    })
     if ns.Emit then ns.Emit("debug:changed") end
 end
 
 -- ===== Nettoyage périodique =====
 function GLOG.CleanupDebugLogs()
-    -- Purge les index de réception orphelins (ligne supprimée du ring-buffer ou mismatch)
-    for s, idx in pairs(RecvLogIndexBySeq) do
-        local r = DebugLog[idx]
-        if not r or r.seq ~= s then
-            RecvLogIndexBySeq[s] = nil
-        end
-    end
-    
-    -- Purge les index d'envoi orphelins
-    for s, idx in pairs(SendLogIndexBySeq) do
-        local r = DebugLog[idx]
-        if not r or r.seq ~= s then
-            SendLogIndexBySeq[s] = nil
-        end
-    end
-
-    -- Allègement des vieux logs : on retire le payload 'raw' > 15s
+    -- Purge index orphelins
+    for s, slot in pairs(RecvLogIndexBySeq) do local r = DebugLog[slot]; if not r or r.seq ~= s then RecvLogIndexBySeq[s] = nil end end
+    for s, slot in pairs(SendLogIndexBySeq) do local r = DebugLog[slot]; if not r or r.seq ~= s then SendLogIndexBySeq[s] = nil end end
+    -- Strip payloads older than 15s
     local stripBefore = now() - 15
-    for _, r in ipairs(DebugLog or {}) do
-        if (r.ts or 0) < stripBefore and r.raw ~= nil then 
-            r.raw = nil 
-        end
+    for i=1,_dbgSize do
+        local slot = (_dbgHead + i - 2) % _dbgCap + 1
+        local r = DebugLog[slot]
+        if r and (r.ts or 0) < stripBefore and r.raw ~= nil then r.raw = nil end
     end
 end
 

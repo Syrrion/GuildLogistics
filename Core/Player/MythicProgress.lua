@@ -77,9 +77,20 @@ local function setMainScore(mainFullName, score)
 end
 
 -- Read current player's season best map scores from Blizzard API (Retail 11.x)
+local _mplusCache = { data = {}, ts = {} }
+local SELF_CACHE = 60   -- seconds for self
+local OTHER_CACHE = 120 -- seconds for group members
+
 local function readBestMapScores(unit)
     unit = unit or "player"
     if not C_PlayerInfo or not C_PlayerInfo.GetPlayerMythicPlusRatingSummary then return nil end
+    local nowTs = (GetTime and GetTime()) or (time and time()) or 0
+    local cacheKey = unit
+    local ttl = (unit == 'player') and SELF_CACHE or OTHER_CACHE
+    local lastTs = _mplusCache.ts[cacheKey]
+    if lastTs and (nowTs - lastTs) < ttl then
+        return _mplusCache.data[cacheKey]
+    end
     local ok, summary = pcall(C_PlayerInfo.GetPlayerMythicPlusRatingSummary, unit)
     if not ok or type(summary) ~= "table" then return nil end
     -- Expected shapes vary by client; try known keys first, then a generic scan
@@ -159,7 +170,10 @@ local function readBestMapScores(unit)
     end
     -- (silenced) previously: print("[GLOG] M+ API summary entries:", #out)
     local overall = tonumber(rawget(summary, "currentSeasonScore") or rawget(summary, "seasonScore") or rawget(summary, "overall") or 0) or 0
-    return { list = out, overall = overall }
+    local payload = { list = out, overall = overall }
+    _mplusCache.data[cacheKey] = payload
+    _mplusCache.ts[cacheKey] = nowTs
+    return payload
 end
 
 -- Determine current player's MAIN full name

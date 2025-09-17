@@ -227,27 +227,6 @@ function GLOG.GetMode()
         end
     end
 
-    -- Fallback 3: global per-UID mode (guild-agnostic) saved when choice happened while guild was unresolved
-    if m == nil then
-        Shared.uiModeByUID_Global = Shared.uiModeByUID_Global or {}
-        local gprev = Shared.uiModeByUID_Global[guid] or Shared.uiModeByUID_Global[nameKey]
-        if gprev == "guild" or gprev == "standalone" then
-            if guid and guid ~= "" then bucket.uiModeByUID[guid] = gprev end
-            bucket.uiModeByUID[nameKey] = gprev
-            m = gprev
-        end
-    end
-
-    -- Fallback 4: back-compat migration from legacy per-character store
-    if m == nil then
-        local src = _G.GuildLogisticsUI_Char or _G.GuildLogisticsUI or {}
-        local legacy = tostring((src and src.mode) or "")
-        if legacy == "guild" or legacy == "standalone" then
-            if guid and guid ~= "" then bucket.uiModeByUID[guid] = legacy end
-            bucket.uiModeByUID[nameKey] = legacy
-            m = legacy
-        end
-    end
     if m == "guild" or m == "standalone" then return m end
     return nil
 end
@@ -278,20 +257,13 @@ function GLOG.SetMode(mode)
     end
     if uid and uid ~= "" then
         bucket.uiModeByUID[uid] = mode
-        -- If we don't yet know the guild at selection time, also persist a global per-UID fallback
-        if guildKey == "__noguild__" then
-            _G.GuildLogisticsShared.uiModeByUID_Global = _G.GuildLogisticsShared.uiModeByUID_Global or {}
-            _G.GuildLogisticsShared.uiModeByUID_Global[uid] = mode
-        end
     else
         -- Fallback if uid cannot be computed; store a shorthand and a global fallback
         bucket.uiMode = mode
-        _G.GuildLogisticsShared.uiModeByUID_Global = _G.GuildLogisticsShared.uiModeByUID_Global or {}
         -- Use name-realm as best-effort key for global map if available
         local n = (UnitName and UnitName("player")) or "?"
         local rn = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or ""
         local key = (rn ~= "" and (n.."-"..rn)) or n
-        if key and key ~= "" then _G.GuildLogisticsShared.uiModeByUID_Global[key] = mode end
     end
     return true
 end
@@ -306,3 +278,151 @@ function GLOG.ShouldEnableComm()
     local m = GLOG.GetMode and GLOG.GetMode()
     return m == "guild"
 end
+
+-- =========================
+-- === FastSig (lightweight signature) ===
+-- Génère une signature numérique rapide pour un tableau séquentiel OU associatif.
+-- Usage: comparer deux datasets (ex: ListView) sans faire un deep compare coûteux.
+-- Non cryptographique, collisions possibles mais rares sur petits ensembles.
+function U.FastSig(t)
+    if type(t) ~= "table" then return tostring(t) end
+    local acc, c = 0, 1
+    for k, v in pairs(t) do
+        local vk = type(k)
+        if vk == "number" then
+            acc = acc + k * 3
+        elseif vk == "string" then
+            acc = acc + #k * 7
+        else
+            acc = acc + 11
+        end
+        local tv = type(v)
+        if tv == "number" then
+            acc = acc + (v * c)
+        elseif tv == "string" then
+            acc = acc + (#v * (c + 13))
+        elseif tv == "boolean" then
+            acc = acc + (v and 97 or 41)
+        elseif tv == "table" then
+            -- shallow incorporate (no recursion to remain fast)
+            local ln = 0
+            if v[1] ~= nil then ln = #v end
+            acc = acc + ln * 5
+        else
+            acc = acc + 19
+        end
+        c = (c + 3) % 17 + 1
+    end
+    return tostring(acc)
+end
+
+-- Signature d'une liste ordonnée (préserve l'ordre)
+function U.FastSigArray(arr)
+    if type(arr) ~= "table" then return tostring(arr) end
+    local acc = 0
+    for i = 1, #arr do
+        local v = arr[i]
+        local tv = type(v)
+        if tv == "number" then
+            acc = acc * 33 + v
+        elseif tv == "string" then
+            acc = acc * 33 + #v * 7
+        elseif tv == "boolean" then
+            acc = acc * 33 + (v and 1 or 0)
+        elseif tv == "table" then
+            local ln = 0
+            if v[1] ~= nil then ln = #v end
+            acc = acc * 33 + ln
+        else
+            acc = acc * 33 + 5
+        end
+        if acc > 2^53 then acc = acc % 10^9 end -- clamp pour rester dans plage int sûre
+    end
+    return tostring(acc)
+end
+
+-- Combine plusieurs signatures (concat protégée)
+function U.CombineSig(...)
+    local n = select('#', ...)
+    if n == 0 then return '0' end
+    local parts = {}
+    for i = 1, n do
+        parts[i] = tostring(select(i, ...))
+    end
+    return table.concat(parts, ':')
+end
+
+-- =========================
+-- == RingQueue (O(1) FIFO) ==
+-- Evite table.remove(1) O(n). Politique: overwrite le plus ancien si plein.
+function U.NewRingQueue(cap)
+    cap = tonumber(cap) or 128
+    if cap < 8 then cap = 8 end
+    local q = { _cap = cap, _head = 0, _tail = 0, _size = 0, _data = {} }
+    function q:clear()
+        self._head, self._tail, self._size = 0, 0, 0
+    end
+    function q:push(v)
+        local cap = self._cap
+        if self._size >= cap then
+            self._head = (self._head + 1) % cap
+            self._size = self._size - 1
+        end
+        self._data[self._tail] = v
+        self._tail = (self._tail + 1) % cap
+        self._size = self._size + 1
+    end
+    function q:pop()
+        if self._size == 0 then return nil end
+        local v = self._data[self._head]
+        self._data[self._head] = nil
+        self._head = (self._head + 1) % self._cap
+        self._size = self._size - 1
+        return v
+    end
+    function q:size() return self._size end
+    function q:isEmpty() return self._size == 0 end
+    function q:iter()
+        local idx, remaining = self._head, self._size
+        local cap = self._cap
+        return function()
+            if remaining <= 0 then return nil end
+            local v = self._data[idx]
+            idx = (idx + 1) % cap
+            remaining = remaining - 1
+            return v
+        end
+    end
+    return q
+end
+
+-- =========================
+-- == Temp Table Pool ==
+local _tempPool = {}
+function U.AcquireTemp()
+    local t = _tempPool[#_tempPool]
+    if t then _tempPool[#_tempPool] = nil; return t end
+    return {}
+end
+function U.ReleaseTemp(t)
+    if type(t) ~= 'table' then return end
+    for k in pairs(t) do t[k] = nil end
+    _tempPool[#_tempPool+1] = t
+end
+function U.PoolStats() return #_tempPool end
+
+-- =========================
+-- == Payload Signature (cache hint) ==
+function U.PayloadSig(tbl)
+    if type(tbl) ~= 'table' then return tostring(tbl) end
+    local acc, n = 0, 0
+    for k,v in pairs(tbl) do
+        n = n + 1
+        local tk = type(k)
+        if tk == 'string' then acc = acc + #k * 7 elseif tk == 'number' then acc = acc + k * 3 else acc = acc + 11 end
+        local tv = type(v)
+        if tv == 'string' then acc = acc + #v * 13 elseif tv == 'number' then acc = acc + v * 5 elseif tv == 'boolean' then acc = acc + (v and 97 or 41) else acc = acc + 19 end
+    end
+    return tostring(acc) .. ':' .. tostring(n)
+end
+

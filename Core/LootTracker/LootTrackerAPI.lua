@@ -24,7 +24,11 @@ function GLOG.LootTracker_Delete(index)
     index = tonumber(index)
     if not index or index < 1 or index > #store then return end
     table.remove(store, index)
-    if ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
+    if ns and ns.RefreshAll then
+        ns.RefreshAll()
+    elseif ns.UI and ns.UI.RefreshAll then
+        ns.UI.RefreshAll()
+    end
 end
 
 -- Getter public pour l'UI et les fallbacks Core

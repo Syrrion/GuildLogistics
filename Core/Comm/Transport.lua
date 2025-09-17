@@ -54,7 +54,8 @@ local OUT_BURST_CAP = 1
 
 -- ===== État du transport =====
 -- File d'envoi temporisée
-local OutQ      = {}
+-- File d'envoi: remplacée par une RingQueue O(1) (evite table.remove(1)).
+local OutQ      = (ns.Util and ns.Util.NewRingQueue and ns.Util.NewRingQueue(256)) or {}
 local OutTicker = nil
 
 -- Boîtes aux lettres (réassemblage fragments)
@@ -90,7 +91,12 @@ local function _ensureTicker()
             end
         end
 
-        local item = table.remove(OutQ, 1)
+        local item
+        if OutQ.pop then
+            item = OutQ:pop()
+        else
+            item = table.remove(OutQ, 1)
+        end
         if not item then
             idle = idle + 1
             -- Éteint le ticker après ~3s sans travail (30 ticks)
@@ -161,10 +167,11 @@ local function _send(typeName, channel, target, kv)
     for idx, chunk in ipairs(parts) do
         local header = string.format("v=1|t=%s|s=%d|p=%d|n=%d|", typeName, Seq, idx, #parts)
         local msg = header .. chunk
-        OutQ[#OutQ+1] = {
+        local rec = {
             prefix = PREFIX, payload = msg, channel = channel, target = target,
             type = typeName, seq = Seq, part = idx, total = #parts
         }
+        if OutQ.push then OutQ:push(rec) else OutQ[#OutQ+1] = rec end
     end
     -- Cas extrême (payload vide) : finaliser la ligne pending pour éviter un état bloqué
     if #parts == 0 and GLOG.UpdateSendLog then
@@ -447,7 +454,7 @@ end
 function GLOG.GetTransportStats()
     local function len(t) local n=0; for _ in pairs(t or {}) do n=n+1 end; return n end
     return {
-        outq = #OutQ,
+    outq = (OutQ.size and OutQ:size()) or #OutQ,
         inbox = len(Inbox),
         processed = len(Processed),
         activeFullSync = len(ActiveFullSync),

@@ -143,6 +143,12 @@ ns.LootTrackerState = {
                 end
             end
         end
-        if changed and ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
+        if changed then
+            if ns and ns.RefreshAll then
+                ns.RefreshAll()
+            elseif ns.UI and ns.UI.RefreshAll then
+                ns.UI.RefreshAll()
+            end
+        end
     end,
 }

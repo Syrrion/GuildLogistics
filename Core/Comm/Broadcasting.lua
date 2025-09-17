@@ -874,6 +874,26 @@ function GLOG.BroadcastStatusUpdate(overrides)
     local payload = GLOG.CreateStatusUpdatePayload({ ts = ts, by = by })
     if not payload then return end -- Pas de payload si pas dans le roster
 
+    -- 🔁 Coalescing : éviter d'envoyer si la signature n'a pas changé (iLvl / clé / score / version / MP snapshot)
+    do
+        local U = ns.Util or {}
+        local sigParts = {}
+        sigParts[#sigParts+1] = tostring(payload.ilvl or ilvl or "")
+        sigParts[#sigParts+1] = tostring(payload.ilvlMax or ilvlMax or "")
+        sigParts[#sigParts+1] = tostring(mid or "")
+        sigParts[#sigParts+1] = tostring(lvl or "")
+        sigParts[#sigParts+1] = tostring(score or "")
+        if payload.MP and payload.MP[1] then sigParts[#sigParts+1] = tostring(#payload.MP[1]) end
+        if payload.S then sigParts[#sigParts+1] = tostring(#payload.S) end
+        if payload.gbc then sigParts[#sigParts+1] = tostring(payload.gbc) end
+        local sig = table.concat(sigParts, ";")
+        if GLOG._lastStatusSig == sig and (GetTime() - (GLOG._lastStatusSigTs or 0)) < 30 then
+            return -- rien de nouveau de pertinent
+        end
+        GLOG._lastStatusSig = sig
+        GLOG._lastStatusSigTs = GetTime()
+    end
+
     if GLOG.Comm_Broadcast then
         GLOG.Comm_Broadcast("STATUS_UPDATE", payload)
     end

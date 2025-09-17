@@ -347,7 +347,11 @@ local function Refresh()
         lv:SetData({ {kind="sep", label=Tr("lbl_scan_roster_progress")} })
         GLOG.RefreshGuildCache(function()
             if ns and ns.UI and ns.UI._rosterPopupUpdater then ns.UI._rosterPopupUpdater() end
-            if ns and ns.UI and ns.UI.RefreshAll then ns.UI.RefreshAll() end
+            if ns and ns.RefreshAll then
+                ns.RefreshAll()
+            elseif ns and ns.UI and ns.UI.RefreshAll then
+                ns.UI.RefreshAll()
+            end
         end)
         return
     end

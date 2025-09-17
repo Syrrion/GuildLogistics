@@ -11,6 +11,43 @@ local LD = assert(LibStub and LibStub:GetLibrary("LibDeflate"), "LibDeflate requ
 -- Seuil de compression : ne pas compresser les tout petits messages
 local COMPRESS_MIN_SIZE = 200
 
+-- ===== Petit cache LRU pour payloads déjà compressés/encodés =====
+-- Clé: signature simple (FastSig si dispo) + taille brute.
+local _SER_CACHE = {}
+local _SER_ORDER = {}
+local _SER_CAP = 64
+local function _serMakeKey(tblOrStr)
+    if type(tblOrStr) == 'table' then
+        local U = ns.Util
+        if U and U.PayloadSig then return 'T:'..U.PayloadSig(tblOrStr) end
+        return 'T:'..tostring(#tblOrStr)
+    end
+    local s = tostring(tblOrStr or '')
+    return 'S:'..tostring(#s)..':'..(s:sub(1,8))
+end
+local function _serCacheGet(key)
+    local e = _SER_CACHE[key]
+    if not e then return nil end
+    e.hits = (e.hits or 0) + 1
+    e.ts = (GetTimePreciseSec and GetTimePreciseSec()) or (time and time()) or 0
+    return e.payload
+end
+local function _serCachePut(key, payload)
+    if not key or not payload then return end
+    if _SER_CACHE[key] then
+        _SER_CACHE[key].payload = payload
+        _SER_CACHE[key].ts = (GetTimePreciseSec and GetTimePreciseSec()) or (time and time()) or 0
+        return
+    end
+    if #_SER_ORDER >= _SER_CAP then
+        -- Expulse l'entrée la plus ancienne (ordre d'insertion simple)
+        local old = table.remove(_SER_ORDER, 1)
+        if old then _SER_CACHE[old] = nil end
+    end
+    _SER_ORDER[#_SER_ORDER+1] = key
+    _SER_CACHE[key] = { payload = payload, ts = (GetTimePreciseSec and GetTimePreciseSec()) or (time and time()) or 0 }
+end
+
 -- ===== Fonctions de compression =====
 local function _compressStr(s)
     if not s or #s < COMPRESS_MIN_SIZE then return nil end
@@ -142,10 +179,17 @@ function GLOG.PackPayloadStr(kv_or_str)
     else
         plain = tostring(kv_or_str or "")
     end
+    -- Lookup cache sur la version brute (non compressée) : si renvoie déjà un wrapper compressé, réutiliser
+    local key = _serMakeKey(kv_or_str)
+    local cached = _serCacheGet(key)
+    if cached then return cached end
     local comp = _compressStr(plain)
     if comp and #comp < #plain then
-        return "c=z|" .. comp
+        local out = "c=z|" .. comp
+        _serCachePut(key, out)
+        return out
     end
+    _serCachePut(key, plain)
     return plain
 end
 
