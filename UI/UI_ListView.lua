@@ -1333,3 +1333,156 @@ if ns and ns.Events and ns.Events.Register then
     ns.Events.Register("DISPLAY_SIZE_CHANGED", UI, function() if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end end)
     ns.Events.Register("CVAR_UPDATE",          UI, function(_, cvar) if cvar=="uiScale" or cvar=="useUIScale" then if UI.ListView_RelayoutAll then UI.ListView_RelayoutAll() end end end)
 end
+
+
+-- === Shared header background helpers ===
+local function _GL_CopyTableShallow(src)
+    if type(src) ~= 'table' then return nil end
+    local out = {}
+    for k, v in pairs(src) do out[k] = v end
+    return out
+end
+
+local function _GL_NormalizeColor(color, fallback)
+    fallback = fallback or {0.12, 0.12, 0.12, 1}
+    local fr = fallback.r or fallback[1] or 0.12
+    local fg = fallback.g or fallback[2] or 0.12
+    local fb = fallback.b or fallback[3] or 0.12
+    local fa = fallback.a or fallback[4] or 1
+    if type(color) == 'table' then
+        local r = color.r or color[1]
+        local g = color.g or color[2]
+        local b = color.b or color[3]
+        local a = color.a or color[4]
+        if r or g or b then
+            return r or fr, g or fg, b or fb, a or fa
+        end
+    end
+    return fr, fg, fb, fa
+end
+
+function UI.ListView_EnsureHeaderBackgrounds(lv, opts)
+    if not (lv and lv.header) then return nil end
+    local cols = (opts and opts.cols) or lv.cols or {}
+    if #cols == 0 then return nil end
+
+    lv._headerBGs = lv._headerBGs or {}
+    local parent   = (opts and opts.parent) or lv.header
+    local layer    = (opts and opts.layer) or 'BACKGROUND'
+    local subLayer = opts and opts.subLayer
+
+    for i = 1, #cols do
+        local tex = lv._headerBGs[i]
+        if not tex or tex:GetParent() ~= parent then
+            tex = parent:CreateTexture(nil, layer)
+            tex:SetTexture('Interface\Buttons\WHITE8x8')
+            lv._headerBGs[i] = tex
+        end
+        if tex.SetDrawLayer and subLayer then
+            tex:SetDrawLayer(layer, subLayer)
+        end
+        tex:Show()
+    end
+
+    if #lv._headerBGs > #cols then
+        for i = #cols + 1, #lv._headerBGs do
+            local tex = lv._headerBGs[i]
+            if tex then tex:Hide() end
+        end
+    end
+
+    return lv._headerBGs
+end
+
+function UI.ListView_LayoutHeaderBackgrounds(lv, opts)
+    if not (lv and lv.header) then return end
+    opts = opts or lv._headerBGOptions or {}
+    local cols = opts.cols or lv.cols or {}
+    if #cols == 0 then return end
+
+    local textures = UI.ListView_EnsureHeaderBackgrounds(lv, {
+        cols = cols,
+        parent = opts.parent,
+        layer = opts.layer,
+        subLayer = opts.subLayer,
+    })
+    if not textures then return end
+
+    local defaultColor = opts.defaultColor
+    if type(defaultColor) ~= 'table' then
+        defaultColor = {0.12, 0.12, 0.12, 1}
+    else
+        defaultColor = {
+            defaultColor.r or defaultColor[1] or 0.12,
+            defaultColor.g or defaultColor[2] or 0.12,
+            defaultColor.b or defaultColor[3] or 0.12,
+            defaultColor.a or defaultColor[4] or 1,
+        }
+    end
+
+    local palette     = opts.palette
+    local paletteMap  = opts.paletteMap
+    local paletteKeyResolver = opts.paletteKeyResolver
+    local aliases     = opts.paletteAliases
+    local custom      = opts.colors
+    local colorFn     = opts.colorForColumn
+    local overrideAlpha = opts.alpha
+
+    local x = 0
+    for idx, col in ipairs(cols) do
+        local tex = textures[idx]
+        if tex then
+            tex:ClearAllPoints()
+            tex:SetPoint('TOPLEFT', lv.header, 'TOPLEFT', x, 0)
+            tex:SetPoint('BOTTOMLEFT', lv.header, 'BOTTOMLEFT', x, 0)
+            local width = col.w or col.min or 80
+            tex:SetWidth(width)
+
+            local color
+            local key = col.key or idx
+            if type(colorFn) == 'function' then
+                color = colorFn(col, idx, opts)
+            elseif custom and custom[key] then
+                color = custom[key]
+            elseif palette then
+                local palKey = key
+                if paletteKeyResolver then
+                    palKey = paletteKeyResolver(col, idx, opts)
+                elseif paletteMap and paletteMap[palKey] then
+                    palKey = paletteMap[palKey]
+                end
+                if aliases and palKey and not palette[palKey] and aliases[palKey] then
+                    palKey = aliases[palKey]
+                end
+                if palKey and palette[palKey] then
+                    color = palette[palKey]
+                end
+            end
+
+            local r, g, b, a = _GL_NormalizeColor(color, defaultColor)
+            if overrideAlpha ~= nil then a = overrideAlpha end
+            if tex.SetColorTexture then
+                tex:SetColorTexture(r, g, b, a)
+            else
+                tex:SetVertexColor(r, g, b, a)
+            end
+            tex:Show()
+        end
+        x = x + (col.w or col.min or 80)
+    end
+end
+
+function UI.ListView_SetHeaderBackgrounds(lv, opts)
+    if not lv then return end
+    lv._headerBGOptions = opts and _GL_CopyTableShallow(opts) or nil
+    if lv.Layout and not lv._headerBGLayoutHooked then
+        local _orig = lv.Layout
+        function lv:Layout(...)
+            local res = _orig(self, ...)
+            UI.ListView_LayoutHeaderBackgrounds(self)
+            return res
+        end
+        lv._headerBGLayoutHooked = true
+    end
+    UI.ListView_LayoutHeaderBackgrounds(lv, lv._headerBGOptions)
+end

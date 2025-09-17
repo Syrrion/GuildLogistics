@@ -7,7 +7,6 @@ local DATA = ns and ns.Data and ns.Data.Crests
 
 -- État
 local panel, lv
-local _headerBGs
 
 -- Colonnes (structure ListView standard)
 local cols = UI.NormalizeColumns({
@@ -133,43 +132,10 @@ local function UpdateRow(i, r, f, item)
     f.outdoor:SetText(  joinBlocks(item.outdoor)  )
 end
 
--- Fond coloré sous chaque entête (comme Helpers_Upgrades)
-local function _EnsureHeaderBGs()
-    _headerBGs = _headerBGs or {}
-    for i = 1, #cols do
-        if not _headerBGs[i] and lv and lv.header then
-            local t = lv.header:CreateTexture(nil, "BACKGROUND")
-            t:SetDrawLayer("BACKGROUND", 0)
-            t:SetColorTexture(0,0,0,1)
-            t:Show()
-            _headerBGs[i] = t
-        end
-    end
-end
 
-local function _LayoutHeaderBGs()
-    if not (lv and lv.header) then return end
-    _EnsureHeaderBGs()
-    local pal = (DATA and DATA.palette and DATA.palette.headers) or {}
-    local baseCol = pal.crest or {0.12, 0.12, 0.12}
-    local x = 0
-    for i, c in ipairs(cols) do
-        local w = c.w or c.min or 80
-        local t = _headerBGs[i]
-        if t then
-            t:ClearAllPoints()
-            t:SetPoint("TOPLEFT",    lv.header, "TOPLEFT",  x, 0)
-            t:SetPoint("BOTTOMLEFT", lv.header, "BOTTOMLEFT", x, 0)
-            t:SetWidth(w)
-
-            local col = baseCol
-            t:SetColorTexture(col[1], col[2], col[3], 1)
-        end
-        x = x + w
-    end
-end
 
 -- == BUILD ==
+
 local function Build(container)
     -- Création du conteneur
     panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
@@ -180,18 +146,21 @@ local function Build(container)
         updateRow = UpdateRow,
         rowHeight = 88,
     })
+
+    UI.ListView_SetHeaderBackgrounds(lv, {
+        cols = cols,
+        palette = (DATA and DATA.palette and DATA.palette.headers) or {},
+        defaultColor = ((DATA and DATA.palette and DATA.palette.headers and DATA.palette.headers.crest) or {0.12, 0.12, 0.12}),
+    })
 end
 
 -- == LAYOUT ==
 local function Layout()
     if lv then lv:Layout() end
-    _LayoutHeaderBGs()
 end
 
 local function Refresh()
-    if not lv then return end
-    lv:RefreshData((DATA and DATA.rows) or {})
-    _LayoutHeaderBGs()
+    UI.RefreshListData(lv, DATA and DATA.rows)
 end
 
 -- Enregistrement (catégorie Helpers)

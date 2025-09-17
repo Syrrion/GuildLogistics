@@ -157,6 +157,80 @@ function UI.ColorizeLevel(level)
 end
 
 
+-- ===== Notes helpers (texte simple affiché en pile) =====
+function UI.CreateNoteLines(parent, lines, opts)
+    opts = opts or {}
+    local frames = {}
+    if not parent then return frames end
+    local count = (type(lines) == "table") and #lines or 0
+    if count == 0 then return frames end
+
+    local justify = opts.justify or "LEFT"
+    local template = opts.template
+    local layer = opts.layer or "OVERLAY"
+    local spacing = opts.spacing
+    if spacing == nil then spacing = 1 end
+
+    for i = 1, count do
+        local text = lines[i]
+        local fs
+        if opts.factory then
+            fs = opts.factory(parent, text, i)
+        elseif UI and UI.Label then
+            fs = UI.Label(parent, { justify = justify, template = template, layer = layer })
+        else
+            fs = parent:CreateFontString(nil, layer, template or "GameFontHighlight")
+            if fs and justify and fs.SetJustifyH then fs:SetJustifyH(justify) end
+        end
+        if fs then
+            if spacing and fs.SetSpacing then fs:SetSpacing(spacing) end
+            if fs.SetText then fs:SetText(text ~= nil and text or "") end
+            frames[#frames+1] = fs
+        end
+    end
+
+    return frames
+end
+
+function UI.LayoutNoteLines(parent, fontStrings, opts)
+    opts = opts or {}
+    local startY = opts.startY or 0
+    if not parent then return startY end
+
+    local frames = (type(fontStrings) == "table") and fontStrings or {}
+    local padL = (opts.padL ~= nil) and opts.padL or 10
+    local padR = (opts.padR ~= nil) and opts.padR or 10
+    local gap = (opts.gap ~= nil) and opts.gap or 6
+    local minWidth = (opts.minWidth ~= nil) and opts.minWidth or 100
+    local minHeight = (opts.minHeight ~= nil) and opts.minHeight or 14
+
+    local widthSource = (parent.GetWidth and parent:GetWidth()) or UI.DEFAULT_W or 800
+    local width = math.max(minWidth, widthSource - padL - padR)
+
+    local y = startY
+    for i = 1, #frames do
+        local fs = frames[i]
+        if fs and fs.ClearAllPoints and fs.SetPoint then
+            fs:ClearAllPoints()
+            fs:SetPoint("TOPLEFT", parent, "TOPLEFT", padL, -y)
+            fs:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -padR, -y)
+            if fs.SetWidth then fs:SetWidth(width) end
+            local h = (fs.GetStringHeight and fs:GetStringHeight()) or 0
+            if h <= 0 and fs.GetHeight then h = fs:GetHeight() end
+            if h <= 0 then h = minHeight end
+            y = y + math.max(minHeight, h) + gap
+        end
+    end
+
+    return y
+end
+
+function UI.RefreshListData(listView, rows)
+    if not listView or not listView.RefreshData then return end
+    listView:RefreshData(rows or {})
+end
+
+
 function UI.GetPopupAmountFromSelf(popupSelf)
     if not popupSelf then return 0 end
     local eb = popupSelf.editBox or popupSelf.EditBox

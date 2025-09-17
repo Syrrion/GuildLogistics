@@ -7,7 +7,8 @@ local DATA = ns and ns.Data and ns.Data.UpgradeTracks
 
 -- État local
 local panel, lv
-local _headerBGs -- textures de fond colorées par colonne (header)
+
+local BADGE_DEFAULT_COLOR = {0.5, 0.5, 0.5}
 
 -- Colonnes (structure standard ListView)
 local cols = UI.NormalizeColumns({
@@ -51,62 +52,25 @@ local function UpdateRow(i, r, f, it)
     local pal = (DATA and DATA.palette and DATA.palette.cells) or {}
     local function setBadge(cell, keyLabel, labelText)
         if not cell then return end
-        if labelText and labelText ~= "" then
-            local c = pal[keyLabel] or {0.5,0.5,0.5,0.25}
-            -- UI.SetBadgeCell attend {r,g,b} sans alpha
-            UI.SetBadgeCell(cell, { c[1], c[2], c[3] }, labelText)
-            cell:Show()
-        else
-            cell:Hide()
-        end
+        UI.SetBadgeCellFromPalette(cell, {
+            palette = pal,
+            key = keyLabel,
+            text = labelText,
+            defaultColor = BADGE_DEFAULT_COLOR,
+        })
     end
-    setBadge(f.aventurier, "aventurier", it.aventurier)
-    setBadge(f.veteran,    "veteran",    it.veteran)
-    setBadge(f.champion,   "champion",   it.champion)
-    setBadge(f.heros,      "heros",      it.heros)
-    setBadge(f.mythe,      "mythe",      it.mythe)
+
+    setBadge(f.aventurier, 'aventurier', it.aventurier)
+    setBadge(f.veteran,    'veteran',    it.veteran)
+    setBadge(f.champion,   'champion',   it.champion)
+    setBadge(f.heros,      'heros',      it.heros)
+    setBadge(f.mythe,      'mythe',      it.mythe)
 end
 
--- == Header : teinte colorée par colonne (resté local à l’onglet) ==
-local function _EnsureHeaderBGs()
-    if _headerBGs then return end
-    _headerBGs = {}
-    if not (lv and lv.header) then return end
-    for i = 1, #cols do
-        local t = lv.header:CreateTexture(nil, "BACKGROUND")
-        t:SetTexture("Interface\\Buttons\\WHITE8x8")
-        _headerBGs[i] = t
-    end
-end
 
-local function _LayoutHeaderBGs()
-    if not (lv and lv.header and cols) then return end
-    _EnsureHeaderBGs()
-
-    -- Positionnement identique au header standard
-    local x = 0
-    local pal = (DATA and DATA.palette and DATA.palette.headers) or {}
-    for i, c in ipairs(cols) do
-        local w = c.w or c.min or 80
-        local t = _headerBGs[i]
-        if t then
-            t:ClearAllPoints()
-            t:SetPoint("TOPLEFT",     lv.header, "TOPLEFT",  x, 0)
-            t:SetPoint("BOTTOMLEFT",  lv.header, "BOTTOMLEFT", x, 0)
-            t:SetWidth(w)
-
-            local palKey =
-                (c.key == "ilvl" and "itemLevel")
-                or (c.key == "crest" and "crests")
-                or c.key
-            local col = pal[palKey] or {0.12,0.12,0.12}
-            t:SetColorTexture(col[1], col[2], col[3], 1)
-        end
-        x = x + w
-    end
-end
 
 -- == BUILD (structure standard) ==
+
 local function Build(container)
     -- Création du conteneur
     panel, footer, footerH = UI.CreateMainContainer(container, {footer = false})
@@ -115,18 +79,22 @@ local function Build(container)
         buildRow = BuildRow,
         updateRow= UpdateRow,
     })
+
+    UI.ListView_SetHeaderBackgrounds(lv, {
+        cols = cols,
+        palette = (DATA and DATA.palette and DATA.palette.headers) or {},
+        paletteMap = { ilvl = 'itemLevel', crest = 'crests' },
+        defaultColor = {0.12, 0.12, 0.12},
+    })
 end
 
 -- == LAYOUT (structure standard) ==
 local function Layout()
     if lv then lv:Layout() end
-    _LayoutHeaderBGs()
 end
 
 local function Refresh()
-    if not lv then return end
-    lv:RefreshData((DATA and DATA.rows) or {})
-    _LayoutHeaderBGs()
+    UI.RefreshListData(lv, DATA and DATA.rows)
 end
 
 -- Enregistrement dans la catégorie "Helpers"
