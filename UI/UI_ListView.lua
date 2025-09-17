@@ -1375,7 +1375,7 @@ function UI.ListView_EnsureHeaderBackgrounds(lv, opts)
         local tex = lv._headerBGs[i]
         if not tex or tex:GetParent() ~= parent then
             tex = parent:CreateTexture(nil, layer)
-            tex:SetTexture('Interface\Buttons\WHITE8x8')
+            tex:SetTexture('Interface\\Buttons\\WHITE8x8')
             lv._headerBGs[i] = tex
         end
         if tex.SetDrawLayer and subLayer then

@@ -2,7 +2,7 @@
 ## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 4.2.11
+## Version: 4.3.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariables: GuildLogisticsShared
@@ -192,6 +192,7 @@ UI/UI_Skin.lua
 UI/UI.lua
 UI/UI_ListView.lua
 UI/UI_Popup.lua
+UI/UI_LootRanks.lua
 UI/UI_Buttons.lua
 UI/UI_Dropdown.lua
 UI/UI_Colors.lua
@@ -210,6 +211,7 @@ Tabs/RaidHistory.lua
 Tabs/RaidStart.lua
 Tabs/Resources.lua
 Tabs/Requests.lua
+Tabs/Helpers_Trinkets.lua
 Tabs/BiS.lua
 Tabs/Helpers_MythicPlus.lua
 Tabs/Helpers_Upgrades.lua
@@ -217,7 +219,6 @@ Tabs/Helpers_Delves.lua
 Tabs/Helpers_Dungeons.lua
 Tabs/Helpers_Raids.lua
 Tabs/Helpers_Crests.lua
-Tabs/Helpers_Trinkets.lua
 Tabs/Helpers_GroupTracker.lua
 Tabs/Tracker_Custom.lua
 Tabs/Tracker_Loots.lua

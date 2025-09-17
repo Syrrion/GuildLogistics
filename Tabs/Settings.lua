@@ -279,6 +279,8 @@ function Build(container)
         makeCheck("raidParticipation", "opt_popup_raid_participation")
     end
     makeCheck("guildChatMention",  "opt_popup_gchat_mention")
+    -- Popup classement bijou (au drop)
+    makeCheck("trinketRankPopup",  "opt_popup_trinket_ranking")
 
     -- === Section 5 : Activer le débug ===
     local headerH4 = UI.SectionHeader(optionsPane, Tr("btn_enable_debug"), { topPad = y + 10 }) or (UI.SECTION_HEADER_H or 26)

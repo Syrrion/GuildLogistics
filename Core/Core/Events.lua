@@ -356,6 +356,13 @@ f:SetScript("OnEvent", function(self, event, name)
                     print("GLOG: TestLootRolls indisponible")
                 end
                 return
+            elseif txt == "testranks" or txt == "testtrinket" or txt == "testtrinkets" then
+                if GLOG and GLOG.TestTrinketRanks then
+                    GLOG.TestTrinketRanks()
+                else
+                    print("GLOG: TestTrinketRanks indisponible")
+                end
+                return
             end
 
             -- Comportement par défaut : ouvrir/afficher l’UI principale

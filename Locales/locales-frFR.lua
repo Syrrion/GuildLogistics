@@ -367,12 +367,13 @@ L["options_notifications_title"] = "Affichage des popups"
 L["opt_popup_calendar_invite"]   = "Notification d'invitation dans le calendrier"
 L["opt_popup_raid_participation"]= "Notification de participation à un raid"
 L["opt_popup_gchat_mention"]      = "Notification de ping & mentions dans le chat de guilde"
+L["opt_popup_trinket_ranking"]    = "Afficher la popup de classement du bijou au loot"
 
 
 -- ============================================== --
 -- ===           Onglet BiS (Trinkets)        === --
 -- ============================================== --
-L["tab_bis"]         = "Bijoux BiS"
+L["tab_bis"]         = "Bijoux BiS (Wowhead)"
 L["col_tier"]        = "Rang"
 L["col_owned"]       = "Possédé"
 L["lbl_class"]       = "Classe"
@@ -381,6 +382,7 @@ L["lbl_bis_filters"] = "Filtres"
 L["msg_no_data"]     = "Aucune donnée"
 L["footer_source_wowhead"] = "Source : wowhead.com"
 L["bis_intro"] = "Cet onglet liste les bijoux (trinkets) BiS par classe et spécialisation.\nLes rangs S à F indiquent la priorité (S étant le meilleur). Utilisez les listes déroulantes pour changer la classe et la spécialisation."
+L["simc_intro"] = "Cet onglet affiche le classement des bijoux simulés par classe/spécialisation et nombre de cibles. Utilisez les filtres pour changer la classe, la spé, le nombre de cibles et le niveau d'objet. Source : bloodmallet.com"
 L["col_useful_for"]        = "Utile pour"
 L["btn_useful_for"]        = "Utile pour..."
 L["popup_useful_for"]      = "Autres classes ayant cet objet dans sa Tier-List"
@@ -388,6 +390,7 @@ L["col_rank"]              = "Rang"
 L["col_class"]             = "Classe"
 L["col_spec"]              = "Spécialisation"
 L["msg_no_usage_for_item"] = "Aucune classe/spécialisation ne référence cet objet dans les tableaux BiS."
+L["loot_rank_disclaimer"] = "Classement indicatif. À adapter selon la composition actuelle du raid et les butins déjà obtenus."
 
 -- ============================================== --
 -- ===    CATEGORIES (navigation latérale)       ===
@@ -768,7 +771,7 @@ L["msg_remove_main_balance_title"] = "Supprimer le main avec solde ?"
 L["msg_remove_main_balance_body"]  = "Ce main dispose actuellement d'un solde de %s.\nLa suppression du main remettra ce solde à 0 et supprimera également son appartenance au Roster s’il en fait partie.\n\nContinuer ?"
 
 -- Helpers Trinkets
-L["tab_trinkets"]        = "Bijoux"
+L["tab_trinkets"]        = "Bijoux BiS (SimCraft)"
 L["lbl_targets"]         = "Cibles"
 L["lbl_target_single"]   = "1 cible"
 L["lbl_target_plural"]   = "%d cibles"
@@ -779,3 +782,8 @@ L["lbl_score"]           = "Score"
 L["lbl_diff"]            = "Écart"
 L["lbl_source"]          = "Source"
 L["label_legendary"]     = "Légendaire"
+L["footer_source_bloodmallet"] = "Source : https://bloodmallet.com/"
+
+-- Popup de classement de butin
+L["loot_rank_title"] = "Classement de l'objet"
+L["col_score"] = "Score"

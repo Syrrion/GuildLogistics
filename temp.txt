@@ -1,4 +1,4 @@
-﻿-- Core/Core/Simc.lua
+-- Core/Core/Simc.lua
 -- SimCraft dataset registry with on-demand JSON decoding.
 local ADDON, ns = ...
 ns.Data = ns.Data or {}
@@ -56,14 +56,7 @@ end
 local function parseClassID(raw)
     local cid = raw and raw:match("\"class_id\"%s*:%s*(%d+)")
     return cid and tonumber(cid) or nil
-end
-
-local function parseSpecID(raw)
-    local sid = raw and raw:match("\"spec_id\"%s*:%s*(%d+)")
-    return sid and tonumber(sid) or nil
-end
-
-local function parseSpecLabel(raw, fallback)
+end`r`n`r`nlocal function parseSpecID(raw)`r`n    local sid = raw and raw:match(""spec_id""%s*:%s*(%d+)")`r`n    return sid and tonumber(sid) or nil`r`nend`r`n`r`nlocal function parseSpecLabel(raw, fallback)
     local spec = raw and raw:match("\"spec\"%s*:%s*\"([^\"]+)\"") or fallback
     return normalizeLabel(spec or fallback or "")
 end
@@ -78,20 +71,10 @@ local function registerDataset(nsKey, raw, className, specName, targetCount)
     local dataset = Simc._datasets[nsKey]
     local targetKey = tonumber(targetCount) or targetCount
 
-    -- Prefer a canonical Blizzard class token (classFile) when class_id is available
-    local parsedCID = parseClassID(raw)
-    local canonicalToken = tostring(className or ""):upper()
-    if parsedCID and C_CreatureInfo and C_CreatureInfo.GetClassInfo then
-        local ok, info = pcall(C_CreatureInfo.GetClassInfo, parsedCID)
-        if ok and info and info.classFile then
-            canonicalToken = tostring(info.classFile):upper()
-        end
-    end
-
     if not dataset then
         dataset = {
             nsKey      = nsKey,
-            classToken = canonicalToken,
+            classToken = className:upper(),
             className  = className,
             specKey    = specName,
             targetKey  = targetKey,
@@ -103,18 +86,14 @@ local function registerDataset(nsKey, raw, className, specName, targetCount)
         dataset.raw = raw
     end
 
-    dataset.classID   = dataset.classID   or parsedCID
-    dataset.specID    = dataset.specID    or parseSpecID(raw)
+    dataset.classID   = dataset.classID   or parseClassID(raw)
     dataset.specLabel = dataset.specLabel or parseSpecLabel(raw, specName)
     dataset.steps     = dataset.steps     or parseSteps(raw) or {}
     dataset.timestamp = dataset.timestamp or parseTimestamp(raw)
 
-    -- Ensure index uses the canonical token even if dataset.classToken was set earlier
-    local idxToken = canonicalToken or dataset.classToken
-    dataset.classToken = idxToken
-    Simc._index[idxToken] = Simc._index[idxToken] or {}
-    Simc._index[idxToken][dataset.specKey] = Simc._index[idxToken][dataset.specKey] or {}
-    Simc._index[idxToken][dataset.specKey][targetKey] = dataset
+    Simc._index[dataset.classToken] = Simc._index[dataset.classToken] or {}
+    Simc._index[dataset.classToken][dataset.specKey] = Simc._index[dataset.classToken][dataset.specKey] or {}
+    Simc._index[dataset.classToken][dataset.specKey][targetKey] = dataset
 end
 
 local function bootstrap()
@@ -159,17 +138,11 @@ local function buildRegistry()
             specEntry = {
                 key         = specKey,
                 label       = dataset.specLabel or normalizeLabel(specKey),
-                specID      = dataset.specID,
                 targets     = {},
                 targetOrder = {},
             }
             classEntry.specs[specKey] = specEntry
             classEntry.specOrder[#classEntry.specOrder + 1] = specKey
-        else
-            -- Enrich spec entry with specID when first encountered or missing
-            if (not specEntry.specID) and dataset.specID then
-                specEntry.specID = dataset.specID
-            end
         end
 
         specEntry.targets[dataset.targetKey] = dataset
@@ -218,60 +191,6 @@ local function buildRegistry()
             end)
             specEntry.targetOrder = orderedTarget
         end
-    end
-
-    -- Merge any duplicate classes that share the same classID (canonicalize)
-    do
-        local byCID = {}
-        local newOrder = {}
-        for _, token in ipairs(registry.classOrder) do
-            local ce = registry.classes[token]
-            local cid = ce and ce.classID or nil
-            if cid and byCID[cid] and byCID[cid] ~= token then
-                local primaryToken = byCID[cid]
-                local primary = registry.classes[primaryToken]
-                if primary and ce then
-                    -- Merge specs
-                    for sk, se in pairs(ce.specs or {}) do
-                        if not primary.specs[sk] then
-                            primary.specs[sk] = se
-                            table.insert(primary.specOrder, sk)
-                        end
-                    end
-                    -- Dedup and sort specOrder of primary
-                    local seen, order = {}, {}
-                    for _, sk in ipairs(primary.specOrder or {}) do
-                        if not seen[sk] then seen[sk] = true; order[#order+1] = sk end
-                    end
-                    table.sort(order, function(a, b)
-                        local sa = primary.specs[a] and primary.specs[a].label or a
-                        local sb = primary.specs[b] and primary.specs[b].label or b
-                        return tostring(sa) < tostring(sb)
-                    end)
-                    primary.specOrder = order
-
-                    -- Remove duplicate class entry
-                    registry.classes[token] = nil
-                end
-            else
-                if cid then byCID[cid] = token end
-                newOrder[#newOrder+1] = token
-            end
-        end
-        registry.classOrder = {}
-        -- Rebuild classOrder with only tokens that still exist
-        for _, token in ipairs(newOrder) do
-            if registry.classes[token] then
-                registry.classOrder[#registry.classOrder+1] = token
-            end
-        end
-        -- Final stable sort by label after merges
-        table.sort(registry.classOrder, function(a, b)
-            local ca, cb = registry.classes[a], registry.classes[b]
-            local la = ca and ca.label or a
-            local lb = cb and cb.label or b
-            return tostring(la) < tostring(lb)
-        end)
     end
 
     Simc._cache.registry = registry
@@ -367,6 +286,5 @@ function Simc.Flush()
 end
 
 return Simc
-
 
 

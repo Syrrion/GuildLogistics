@@ -5,6 +5,8 @@ local GLOG, UI = ns.GLOG, ns.UI
 local Simc = ns and ns.Data and ns.Data.Simc
 
 local panel, lv, filtersArea, metaFS
+local introArea, introFS, headerArea, headerH, listArea
+local footerBar, sourceFS
 local classDD, specDD, targetsDD, ilvlDD
 local selectedClass, selectedSpec, selectedTargets, selectedIlvl
 local Refresh
@@ -31,6 +33,15 @@ end
 
 local function specLabel(entry)
     if not entry then return "" end
+    -- Prefer localized specialization name via specID when available
+    if UI and UI.SpecName and entry.specID then
+        local classID = entry.classID or (UI.GetClassIDForToken and UI.GetClassIDForToken(selectedClass))
+        local ok = pcall(UI.SpecName, classID, entry.specID)
+        if ok then
+            local name = UI.SpecName(classID, entry.specID)
+            if name and name ~= "" then return name end
+        end
+    end
     return entry.label or entry.key or ""
 end
 
@@ -45,6 +56,33 @@ end
 
 local function ensureSelections(reg)
     reg = reg or resolveRegistry()
+
+    -- Prefer current player's class/spec when available
+    if UI and UI.ResolvePlayerClassSpec then
+        local pClassID, pClassTag, pSpecID = UI.ResolvePlayerClassSpec()
+        -- Class: if not set or invalid, use player class when present in registry
+        if (not selectedClass) or (not reg.classes[selectedClass]) then
+            if pClassTag and reg.classes[pClassTag] then
+                selectedClass = pClassTag
+            else
+                selectedClass = reg.classOrder[1]
+            end
+        end
+        -- Spec: if invalid or not set, try to use the player's spec key for the selected class
+        local classEntryTmp = selectedClass and reg.classes[selectedClass] or nil
+        if classEntryTmp then
+            if (not selectedSpec) or (not classEntryTmp.specs[selectedSpec]) then
+                -- try to find specKey whose specID matches player's specID
+                local picked
+                if pSpecID then
+                    for sk, se in pairs(classEntryTmp.specs or {}) do
+                        if se and se.specID == pSpecID then picked = sk; break end
+                    end
+                end
+                selectedSpec = picked or classEntryTmp.specOrder[1]
+            end
+        end
+    end
 
     if not (selectedClass and reg.classes[selectedClass]) then
         selectedClass = reg.classOrder[1]
@@ -153,7 +191,7 @@ local function buildRows(entry)
     local ilvlKey = selectedIlvl and tostring(selectedIlvl)
     if not ilvlKey or ilvlKey == "" then return {} end
 
-    local rows, best = {}, nil
+    local rows, best, worst = {}, nil, nil
     for name, values in pairs(dataset.data or {}) do
         local score = values and values[ilvlKey]
         local numeric = tonumber(score)
@@ -161,6 +199,9 @@ local function buildRows(entry)
             rows[#rows + 1] = { name = name, score = numeric }
             if not best or numeric > best then
                 best = numeric
+            end
+            if not worst or numeric < worst then
+                worst = numeric
             end
         end
     end
@@ -175,9 +216,11 @@ local function buildRows(entry)
 
     for idx, item in ipairs(rows) do
         item.rank = idx
-        item.bestScore = best or item.score or 0
-        if item.bestScore > 0 and item.score then
-            item.diffPct = ((item.score / item.bestScore) - 1) * 100
+        -- Ecart vs LAST entry: last is 0.00%, first is biggest positive
+        local base = worst or item.score or 0
+        item.baseScore = base
+        if base and base > 0 and item.score then
+            item.diffPct = ((item.score / base) - 1) * 100
         else
             item.diffPct = 0
         end
@@ -191,11 +234,11 @@ end
 
 -- ====== UI wiring ======
 local cols = UI.NormalizeColumns({
-    { key = "rank",    title = "#",            w = 40,  justify = "CENTER" },
-    { key = "trinket", title = Tr("lbl_trinket") or "Trinket", flex = 1, min = 220, justify = "LEFT" },
-    { key = "score",   title = Tr("lbl_score") or "Score",   w = 120, justify = "RIGHT" },
-    { key = "delta",   title = Tr("lbl_diff")  or "Diff",    w = 90,  justify = "RIGHT" },
-    { key = "source",  title = Tr("lbl_source") or "Source", w = 180, justify = "LEFT" },
+    { key = "rank",    title = "#",            w = 36,  justify = "CENTER", vsep = true },
+    { key = "trinket", title = Tr("lbl_trinket") or "Trinket", flex = 1, min = 220, justify = "LEFT", vsep = true },
+    { key = "score",   title = Tr("lbl_score") or "Score",   w = 120, justify = "CENTER", vsep = true },
+    { key = "delta",   title = Tr("lbl_diff")  or "Diff",    w = 90,  justify = "CENTER", vsep = true },
+    { key = "source",  title = Tr("lbl_source") or "Source", w = 200, justify = "CENTER", vsep = true },
 })
 
 local function buildRow(row)
@@ -203,18 +246,17 @@ local function buildRow(row)
     f.rank = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.rank:SetJustifyH("CENTER")
 
-    f.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    f.name:SetJustifyH("LEFT")
-    f.name:SetWordWrap(false)
+    -- Use standard item cell to get icon + localized name + tooltip
+    f.item = UI.CreateItemCell(row, { size = 18, width = 300 })
 
     f.score = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.score:SetJustifyH("RIGHT")
+    f.score:SetJustifyH("CENTER")
 
     f.delta = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.delta:SetJustifyH("RIGHT")
+    f.delta:SetJustifyH("CENTER")
 
     f.source = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    f.source:SetJustifyH("LEFT")
+    f.source:SetJustifyH("CENTER")
     f.source:SetWordWrap(false)
 
     return f
@@ -237,17 +279,19 @@ local function updateRow(_, row, f, item)
             f.rank:SetText(txt)
 
         elseif c.key == "trinket" then
-            f.name:ClearAllPoints()
-            f.name:SetPoint("LEFT", row, "LEFT", x + 8, 0)
-            f.name:SetWidth(w - 12)
-            local label = item and item.name or ""
-            if item and item.legendary then
-                label = label .. " |cffc69b6d★|r"
-            end
-            if item and item.rank == 1 then
-                label = "|cff33ff33" .. label .. "|r"
-            end
-            f.name:SetText(label)
+            local cell = f.item
+            cell:ClearAllPoints()
+            cell:SetPoint("LEFT", row, "LEFT", x + 4, 0)
+            if cell.SetWidth then cell:SetWidth(w - 6) end
+            -- Fill with itemID to localize name + show icon/tooltip
+            local iid = (item and tonumber(item.itemID)) or nil
+            UI.SetItemCell(cell, {
+                itemID = iid,
+                itemName = item and item.name or nil,
+                itemLevel = selectedIlvl, -- propagate selected ilvl for tooltip display
+            })
+            -- Color all items as epic (purple)
+            if cell.text and cell.text.SetTextColor then cell.text:SetTextColor(0.64, 0.21, 0.93) end
 
         elseif c.key == "score" then
             f.score:ClearAllPoints()
@@ -398,12 +442,40 @@ Refresh = doRefresh
 
 -- ====== Build ======
 local function Build(container)
-    panel, _, _ = UI.CreateMainContainer(container, { footer = false })
+    panel, footerBar, _ = UI.CreateMainContainer(container, { footer = true })
+
+    -- Intro text (adapted to SimCraft context)
+    introArea = CreateFrame("Frame", nil, panel)
+    introArea:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
+    introArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, 0)
+    introArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
+
+    introFS = introArea:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    introFS:SetPoint("TOPLEFT", introArea, "TOPLEFT", 0, 0)
+    introFS:SetPoint("TOPRIGHT", introArea, "TOPRIGHT", 0, 0)
+    introFS:SetJustifyH("LEFT"); introFS:SetJustifyV("TOP")
+    if introFS.SetWordWrap then introFS:SetWordWrap(true) end
+    if introFS.SetNonSpaceWrap then introFS:SetNonSpaceWrap(true) end
+    introFS:SetText(Tr("simc_intro") or "This tab shows trinket rankings simulated by class/spec and number of targets. Use the filters below to change class, spec, targets, and item level. Source data: bloodmallet.com")
+    do
+        local fontPath, fontSize, fontFlags = introFS:GetFont()
+        if fontPath and fontSize then introFS:SetFont(fontPath, (fontSize + 2), fontFlags) end
+        introFS:SetTextColor(1,1,1)
+        if introFS.SetShadowOffset then introFS:SetShadowOffset(1, -1) end
+    end
+    introArea:SetHeight(math.max(24, (introFS:GetStringHeight() or 16)))
+
+    -- Subheader: Filters
+    headerArea = CreateFrame("Frame", nil, panel)
+    headerArea:SetPoint("TOPLEFT", introArea, "BOTTOMLEFT", 0, -10)
+    headerArea:SetPoint("TOPRIGHT", introArea, "BOTTOMRIGHT", 0, -10)
+    headerH = UI.SectionHeader(headerArea, Tr("lbl_bis_filters") or "Filters", { topPad = 0 }) or (UI.SECTION_HEADER_H or 26)
+    headerArea:SetHeight(headerH)
 
     filtersArea = CreateFrame("Frame", nil, panel)
     filtersArea:SetHeight(44)
-    filtersArea:SetPoint("TOPLEFT", panel, "TOPLEFT", UI.LEFT_PAD, -UI.TOP_PAD)
-    filtersArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.RIGHT_PAD, -UI.TOP_PAD)
+    filtersArea:SetPoint("TOPLEFT", headerArea, "BOTTOMLEFT", 0, -8)
+    filtersArea:SetPoint("TOPRIGHT", headerArea, "BOTTOMRIGHT", 0, -8)
     filtersArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
     local lblClass = UI.Label(filtersArea, { template = "GameFontNormal" })
@@ -411,7 +483,7 @@ local function Build(container)
     lblClass:SetPoint("TOP", filtersArea, "TOP", 0, -4)
     lblClass:SetText(Tr("lbl_class") or "Classe")
 
-    classDD = UI.Dropdown(filtersArea, { width = 180, placeholder = Tr("lbl_class") or "Classe" })
+    classDD = UI.Dropdown(filtersArea, { width = 160, placeholder = Tr("lbl_class") or "Classe" })
     classDD:SetPoint("LEFT", lblClass, "RIGHT", 8, -2)
     classDD:SetBuilder(classMenu)
     attachZFix(classDD)
@@ -420,7 +492,7 @@ local function Build(container)
     lblSpec:SetPoint("LEFT", classDD, "RIGHT", 24, 4)
     lblSpec:SetText(Tr("lbl_spec") or "Spécialisation")
 
-    specDD = UI.Dropdown(filtersArea, { width = 200, placeholder = Tr("lbl_spec") or "Spécialisation" })
+    specDD = UI.Dropdown(filtersArea, { width = 120, placeholder = Tr("lbl_spec") or "Spécialisation" })
     specDD:SetPoint("LEFT", lblSpec, "RIGHT", 8, -2)
     specDD:SetBuilder(specMenu)
     attachZFix(specDD)
@@ -429,7 +501,7 @@ local function Build(container)
     lblTargets:SetPoint("LEFT", specDD, "RIGHT", 24, 4)
     lblTargets:SetText(Tr("lbl_targets") or "Cibles")
 
-    targetsDD = UI.Dropdown(filtersArea, { width = 140, placeholder = Tr("lbl_targets") or "Cibles" })
+    targetsDD = UI.Dropdown(filtersArea, { width = 80, placeholder = Tr("lbl_targets") or "Cibles" })
     targetsDD:SetPoint("LEFT", lblTargets, "RIGHT", 8, -2)
     targetsDD:SetBuilder(targetsMenu)
     attachZFix(targetsDD)
@@ -438,19 +510,42 @@ local function Build(container)
     lblIlvl:SetPoint("LEFT", targetsDD, "RIGHT", 24, 4)
     lblIlvl:SetText(Tr("lbl_ilvl") or "ilvl")
 
-    ilvlDD = UI.Dropdown(filtersArea, { width = 140, placeholder = Tr("lbl_ilvl") or "ilvl" })
+    ilvlDD = UI.Dropdown(filtersArea, { width = 80, placeholder = Tr("lbl_ilvl") or "ilvl" })
     ilvlDD:SetPoint("LEFT", lblIlvl, "RIGHT", 8, -2)
     ilvlDD:SetBuilder(ilvlMenu)
     attachZFix(ilvlDD)
 
-    metaFS = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    metaFS:SetPoint("TOPLEFT", filtersArea, "BOTTOMLEFT", 0, -6)
-    metaFS:SetText("")
+    -- Footer: left = source, right = meta (targets • ilvl • date)
+    if footerBar then
+        sourceFS = footerBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        sourceFS:SetPoint("LEFT", footerBar, "LEFT", UI.LEFT_PAD or 12, 0)
+        sourceFS:SetText(Tr("footer_source_bloodmallet") or "Source: https://bloodmallet.com/")
 
-    lv = UI.ListView(panel, cols, {
-        topOffset = (filtersArea:GetHeight() or 44) + 24,
+        metaFS = footerBar:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        metaFS:SetPoint("RIGHT", footerBar, "RIGHT", -(UI.RIGHT_PAD or 12), 0)
+        metaFS:SetJustifyH("RIGHT")
+        metaFS:SetText("")
+        if metaFS.SetWordWrap then metaFS:SetWordWrap(false) end
+    else
+        -- Fallback (should not happen): place meta under filters
+        metaFS = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        metaFS:SetPoint("TOPLEFT", filtersArea, "BOTTOMLEFT", 0, -6)
+        metaFS:SetText("")
+        if metaFS.SetWordWrap then metaFS:SetWordWrap(true) end
+    end
+
+    -- Dedicated list area between filters and footer for robust layout
+    listArea = CreateFrame("Frame", nil, panel)
+    listArea:SetPoint("TOPLEFT", filtersArea, "BOTTOMLEFT", 0, 0)
+    listArea:SetPoint("TOPRIGHT", filtersArea, "BOTTOMRIGHT", 0, 0)
+    listArea:SetPoint("BOTTOMLEFT", footerBar, "TOPLEFT", 0, (UI.INNER_PAD and (UI.INNER_PAD - 0) or 0))
+    listArea:SetPoint("BOTTOMRIGHT", footerBar, "TOPRIGHT", 0, 0)
+    listArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
+
+    lv = UI.ListView(listArea, cols, {
         buildRow = buildRow,
         updateRow = updateRow,
+        bottomAnchor = footerBar,
     })
 
     ensureSelections(resolveRegistry())
@@ -458,10 +553,7 @@ local function Build(container)
 end
 
 local function Layout()
-    if lv then
-        lv.opts.topOffset = (filtersArea and filtersArea:GetHeight() or 44) + 24
-        lv:Layout()
-    end
+    -- Anchors handle layout; no explicit work needed.
 end
 
 UI.RegisterTab(Tr("tab_trinkets") or "Trinkets", Build, Refresh, Layout, {

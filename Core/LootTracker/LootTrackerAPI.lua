@@ -103,6 +103,15 @@ function GLOG.TestRealMessages()
     end
 end
 
+-- Debug: show a sample trinket ranking popup (10 random players)
+function GLOG.TestTrinketRanks()
+    if ns.UI and ns.UI.Debug_ShowRandomTrinketRankPopup then
+        ns.UI.Debug_ShowRandomTrinketRankPopup()
+    else
+        print("GLOG: UI.Debug_ShowRandomTrinketRankPopup indisponible")
+    end
+end
+
 -- =========================
 -- ===   Initialisation  ===
 -- =========================
@@ -129,6 +138,38 @@ ns.LootTrackerAPI = {
         ns.Events.Register("ENCOUNTER_LOOT_RECEIVED", function(_, _, ...)
             if GLOG and GLOG.LootTracker_HandleEncounterLoot then
                 GLOG.LootTracker_HandleEncounterLoot(...)
+            end
+            -- Opportunistic: show per-player rank popup when an equippable trinket drops
+            local encounterID, itemID, itemLink, quantity, player, difficultyID = ...
+            if ns and ns.LootTrackerParser and ns.LootTrackerParser.IsEquippable then
+                -- Fast type check via inventory type or link parse
+                local isEquip = ns.LootTrackerParser.IsEquippable(itemLink)
+                -- Respect Settings toggle (default ON when nil)
+                local showPopup = true
+                if GLOG and GLOG.GetSavedWindow then
+                    local saved = GLOG.GetSavedWindow() or {}
+                    local pop = saved.popups or {}
+                    if pop.trinketRankPopup == false then showPopup = false end
+                end
+                if isEquip and showPopup and ns.UI and ns.UI.ShowTrinketRankPopupForGroup then
+                    -- Determine if trinket (INVTYPE_TRINKET = 12); prefer C_Item API if available
+                    local invType
+                    if C_Item and C_Item.GetItemInventoryTypeByID and itemID then
+                        invType = C_Item.GetItemInventoryTypeByID(itemID)
+                    end
+                    -- No deprecated API fallback; if inventory type is unknown, skip popup
+                    if invType == 12 then
+                        -- Extract actual ilvl for the dropped item
+                        local ilvl = 0
+                        if C_Item and C_Item.GetDetailedItemLevelInfo then
+                            local ok, lvl = pcall(C_Item.GetDetailedItemLevelInfo, itemLink)
+                            if ok and tonumber(lvl) then ilvl = tonumber(lvl) or 0 end
+                        end
+                        if ilvl <= 0 then ilvl = ns.LootTrackerInstance and ns.LootTrackerInstance.GetEquippedIlvl and ns.LootTrackerInstance.GetEquippedIlvl() or 0 end
+                        local group = ns.LootTrackerInstance and ns.LootTrackerInstance.SnapshotGroup and ns.LootTrackerInstance.SnapshotGroup() or nil
+                        ns.UI.ShowTrinketRankPopupForGroup(tonumber(itemID), ilvl, { group = group, targets = 1 })
+                    end
+                end
             end
         end)
         

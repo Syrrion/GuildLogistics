@@ -60,6 +60,42 @@ UI.VCOL_SEP_ALPHA = UI.VCOL_SEP_ALPHA or 0.05
 -- Registre (faible) des SectionHeaders pour rafraîchissement dynamique des couleurs
 UI._SECTION_HEADERS = UI._SECTION_HEADERS or setmetatable({}, { __mode = "k" })
 
+-- Ensure a single hook on GameTooltip to consistently append simulated ilvl once
+UI._tooltipIlvlHooked = UI._tooltipIlvlHooked or false
+function UI._EnsureIlvlTooltipHook()
+    if UI._tooltipIlvlHooked then return end
+    UI._tooltipIlvlHooked = true
+    if not GameTooltip then return end
+
+    local function append(tt)
+        local override = tonumber(tt and tt._gl_ilvlOverride or 0)
+        if override and override > 0 then
+            local fmt = (Tr and Tr("lbl_ilvl_value")) or "ilvl %d"
+            tt:AddLine(string.format(fmt, override), 0.8, 0.8, 0.8)
+            tt:Show()
+        end
+    end
+
+    -- Preferred: hook event when supported by this client/tooltip
+    local canHookEvent = (GameTooltip.HasScript and GameTooltip:HasScript("OnTooltipSetItem")) or false
+    if canHookEvent and GameTooltip.HookScript then
+        GameTooltip:HookScript("OnTooltipSetItem", append)
+    else
+        -- Fallback: post-hook core setters so our line is appended after the item is set
+        if type(hooksecurefunc) == "function" then
+            pcall(hooksecurefunc, GameTooltip, "SetItemByID", append)
+            pcall(hooksecurefunc, GameTooltip, "SetHyperlink", append)
+        end
+    end
+
+    -- Clear the override marker when tooltip clears/hides
+    if GameTooltip.HasScript and GameTooltip:HasScript("OnTooltipCleared") and GameTooltip.HookScript then
+        GameTooltip:HookScript("OnTooltipCleared", function(tt) tt._gl_ilvlOverride = nil end)
+    elseif GameTooltip.HasScript and GameTooltip:HasScript("OnHide") and GameTooltip.HookScript then
+        GameTooltip:HookScript("OnHide", function(tt) tt._gl_ilvlOverride = nil end)
+    end
+end
+
 -- Fallback local si UI.Colors.GetHeaderRGB() n'existe pas (compat projets plus anciens)
 local function _HeaderRGB()
     if UI and UI.Colors and UI.Colors.GetHeaderRGB then
@@ -873,6 +909,13 @@ function UI.CreateItemCell(parent, opts)
     text:SetPoint("LEFT", btn, "LEFT", 0, 0)
 
     btn:SetScript("OnEnter", function(self)
+        -- Prepare override BEFORE setting the item so hooks can see it
+        local override = tonumber(self._overrideILvl or 0)
+        if override and override > 0 then
+            if UI and UI._EnsureIlvlTooltipHook then UI._EnsureIlvlTooltipHook() end
+            GameTooltip._gl_ilvlOverride = override
+        end
+
         if self._itemID and self._itemID > 0 then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetItemByID(self._itemID)
@@ -880,6 +923,7 @@ function UI.CreateItemCell(parent, opts)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetHyperlink(self._link)
         end
+        GameTooltip:Show()
     end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
@@ -979,11 +1023,12 @@ function UI.SetItemCell(cell, item)
         if ic then cell.icon:SetTexture(ic) else cell.icon:SetTexture(defaultIcon) end
     end
     cell.text:SetText(name or "")
-    cell.btn._itemID = itemID           -- SetItemByID sera utilisé si présent
+    -- N'enregistre pas d'itemID invalide (0 ou nil)
+    cell.btn._itemID = (itemID and itemID > 0) and itemID or nil           -- SetItemByID sera utilisé si présent
     cell.btn._link   = (type(link)=="string") and link or nil -- fallback Hyperlink si pas d'ID
 
     -- If we had to fallback to a placeholder name, try to resolve asynchronously and update
-    if itemID and Item and Item.CreateFromItemID then
+    if itemID and itemID > 0 and Item and Item.CreateFromItemID then
         local btn = cell.btn
         local obj = Item:CreateFromItemID(itemID)
         obj:ContinueOnItemLoad(function()

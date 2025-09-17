@@ -772,8 +772,8 @@ L["mode_firstrun_body"]      = "\nPlease choose which mode to use for "..L["app_
 -- Helpers Trinkets
 L["tab_trinkets"]        = "Trinkets"
 L["lbl_targets"]         = "Targets"
-L["lbl_target_single"]   = "1 target"
-L["lbl_target_plural"]   = "%d targets"
+L["lbl_target_single"]   = "Monocible"
+L["lbl_target_plural"]   = "Multicibles (x %d)"
 L["lbl_ilvl"]            = "Item level"
 L["lbl_ilvl_value"]      = "ilvl %d"
 L["lbl_trinket"]         = "Trinket"
@@ -781,3 +781,10 @@ L["lbl_score"]           = "Score"
 L["lbl_diff"]            = "Diff"
 L["lbl_source"]          = "Source"
 L["label_legendary"]     = "Legendary"
+L["footer_source_bloodmallet"] = "Source: https://bloodmallet.com/"
+
+-- Loot ranking popup
+L["loot_rank_title"] = "Dropped item ranking"
+L["col_spec"] = "Spec"
+L["col_score"] = "Score"
+-- col_player and col_score already defined above
