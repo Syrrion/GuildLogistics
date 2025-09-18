@@ -52,6 +52,10 @@ L["msg_remove_main_balance_body"]  = "This main currently has a balance of %s.\n
 L["lbl_equippable_only"]   = "Equippable only"
 L["tab_guild_members"]    = "Guild members"
 L["tab_mythic_plus"]      = "Mythic+ Rotation"
+L["tab_consumables"]      = "Consumables (Potions & Phials)"
+L["lbl_potions"]          = "Potions"
+L["lbl_phials"]           = "Phials"
+L["lbl_type"]             = "Type"
 
 
 -- ============================================== --

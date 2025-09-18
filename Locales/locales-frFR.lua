@@ -21,6 +21,7 @@ L["tab_debug"]            = "Diffusion des données"
 L["tab_settings"]         = "Options"
 L["tab_guild_members"]    = "Membres de la guilde"
 L["tab_mythic_plus"]      = "Rotation Mythique+"
+L["tab_consumables"]      = "Consommables (Potions & Flacons)"
 
 
 -- ============================================== --

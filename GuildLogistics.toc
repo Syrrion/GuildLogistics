@@ -118,6 +118,10 @@ Data/SimCraft/warrior/fury/5.lua
 Data/SimCraft/warrior/protection/1.lua
 Data/SimCraft/warrior/protection/3.lua
 Data/SimCraft/warrior/protection/5.lua
+# Bloodmallet consumables (potions & phials) data files will be generated per spec as:
+# (Example) Data/SimCraft/death_knight/blood/flacons.lua
+# (Example) Data/SimCraft/death_knight/blood/potions.lua
+# Do NOT add wildcard placeholders here; once generated, add concrete paths if you want them preload. The loader also picks up ns.Consum_* globals so explicit listing is optional if you reference them elsewhere.
 
 Core/Core/DatabaseManager.lua
 Core/Core/Helper.lua
@@ -127,6 +131,7 @@ Core/Core/Timers.lua
 Core/Core/Addon.lua
 Core/Core/Debug.lua
 Core/Core/Permissions.lua
+Core/Core/Consumables.lua
 
 Core/Debug/ErrorHandler.lua
 Core/Debug/ErrorJournal.lua
@@ -212,6 +217,7 @@ Tabs/RaidStart.lua
 Tabs/Resources.lua
 Tabs/Requests.lua
 Tabs/Helpers_Trinkets.lua
+Tabs/Helpers_Consumables.lua
 Tabs/BiS.lua
 Tabs/Helpers_MythicPlus.lua
 Tabs/Helpers_Upgrades.lua
