@@ -54,7 +54,7 @@ jobs:
           python-version: '3.x'
 
       - name: Refresh SimulationCraft datasets
-        run: python Tools/update_simc_data.py
+        run: python Tools/update_simc_data.py --with-consumables
 
       - name: Commit SimCraft updates
         env:
