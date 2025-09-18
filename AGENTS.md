@@ -192,6 +192,27 @@ Built-in testing commands:
 - Debug tabs available when `GuildLogisticsUI.debugEnabled = true`
 - Communication tests in `Core/Comm/CommunicationTest.lua`
 
+### Data Refresh Automation (SimC Trinkets + Consumables)
+
+Trinket simulation datasets and Bloodmallet consumables (potions & phials) are fetched via Python helper scripts in `Tools/`.
+
+Primary script (invoked by CI on version bump):
+```
+python Tools/update_simc_data.py --with-consumables
+```
+
+Options / env:
+- `--dry-run` : n'écrit pas les fichiers (aperçu)
+- `--with-consumables` ou variable env `WITH_CONSUMABLES=1` : déclenche aussi `update_bloodmallet_consumables.py`
+- `BLM_BASE_URL` : surcharge URL trinkets
+- `BLM_BASE_URL_CONS` : surcharge URL potions/phials
+
+Scripts impliqués:
+- `Tools/update_simc_data.py` : met à jour `1.lua`, `3.lua`, `5.lua` (trinkets)
+- `Tools/update_bloodmallet_consumables.py` : génère `flacons.lua` et `potions.lua`
+
+Les fichiers consommables ne nécessitent pas d'inscription explicite dans le `.toc` si chargés via leurs blobs `ns.Consum_*`; le loader `Core/Core/Consumables.lua` s'occupe du bootstrap.
+
 ## Critical Implementation Details
 
 ### Localization

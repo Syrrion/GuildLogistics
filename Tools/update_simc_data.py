@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
-"""Fetch trinket simulation data from bloodmallet.com and update local Lua datasets.
+"""Fetch SimulationCraft trinket datasets and (optionally) Bloodmallet consumables (potions/phials).
 
-The script walks through Data/SimCraft/<class>/<spec> directories, downloads the
-JSON payload for each specialization and rewrites the Lua files (1.lua, 3.lua, 5.lua)
-with a fresh copy of the data embedded as a literal string.
+Primary function (existing):
+    - Iterate Data/SimCraft/<class>/<spec>/ and refresh trinket targets (1,3,5)
+
+New optional integration:
+    - When --with-consumables is passed (or env WITH_CONSUMABLES=1), also call the
+        consumables fetcher (Tools/update_bloodmallet_consumables.py) so CI only needs
+        to invoke this single script.
 
 Usage:
-    python Tools/update_simc_data.py [--dry-run]
+        python Tools/update_simc_data.py [--dry-run] [--with-consumables]
 
-Set BLM_BASE_URL to override the bloodmallet endpoint for testing.
+Environment variables:
+        BLM_BASE_URL              Override trinkets URL template
+        WITH_CONSUMABLES=1        Implicitly enable --with-consumables
+        BLM_BASE_URL_CONS         Override consumables URL template (forwarded)
+
+Note: Keeping this script self-contained avoids duplicating CI steps.
 """
 
 from __future__ import annotations
@@ -23,6 +32,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+import subprocess
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_ROOT = BASE_DIR / "Data" / "SimCraft"
@@ -117,7 +127,15 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("BLM_BASE_URL", DEFAULT_URL_TEMPLATE),
         help="override the bloodmallet URL template",
     )
+    parser.add_argument(
+        "--with-consumables",
+        action="store_true",
+        help="also refresh potions & phials (delegates to update_bloodmallet_consumables.py)",
+    )
     args = parser.parse_args(argv)
+
+    if (not args.with_consumables) and os.environ.get("WITH_CONSUMABLES") == "1":
+        args.with_consumables = True
 
     if not DATA_ROOT.is_dir():
         parser.error(f"Data directory not found: {DATA_ROOT}")
@@ -135,6 +153,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if updated == 0:
         print("[warn] No specialisations processed. Check directory structure.")
+
+    # Optionally chain the consumables updater
+    if args.with_consumables:
+        cons_script = BASE_DIR / "Tools" / "update_bloodmallet_consumables.py"
+        if not cons_script.is_file():
+            print(f"[warn] Consumables script not found: {cons_script}")
+        else:
+            cmd = [sys.executable, str(cons_script)]
+            if args.dry_run:
+                cmd.append("--dry-run")
+            # Forward custom base URL for consumables if provided via env
+            # (the consumables script reads BLM_BASE_URL_CONS itself)
+            print(f"[chain] Running consumables updater: {' '.join(cmd)}")
+            try:
+                subprocess.check_call(cmd)
+            except subprocess.CalledProcessError as exc:
+                print(f"[error] Consumables updater failed: {exc}")
 
     return 0
 
