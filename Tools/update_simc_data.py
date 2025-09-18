@@ -111,7 +111,9 @@ def update_spec(
     consumable_url_template: str | None = None,
 ) -> None:
     spec_slug = spec_path.name
-    targets = sorted(child for child in spec_path.glob("*.lua"))
+    # Find trinket target files (1.lua, 3.lua, 5.lua) - exclude consumable files
+    targets = sorted(child for child in spec_path.glob("*.lua") 
+                    if child.stem not in ["flacons", "potions"])
     if not targets:
         print(f"[warn] No target files found under {spec_path}")
         return
