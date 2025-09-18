@@ -60,16 +60,23 @@ jobs:
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
-          if git diff --quiet -- Data/SimCraft; then
-            echo "No SimCraft changes detected."
+          # Detect changes INCLUDING untracked new files (git diff --quiet misses brand new files)
+          CHANGED=$(git status --porcelain Data/SimCraft | wc -l)
+          if [ "$CHANGED" -eq 0 ]; then
+            echo "No SimCraft changes detected (tracked or untracked)."
             exit 0
           fi
 
+          echo "Detected $CHANGED changed/untracked SimCraft files. Committing..."
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config url."https://${PAT_TOKEN}@github.com/".insteadOf "https://github.com/"
 
           git add Data/SimCraft
+          if git diff --cached --quiet; then
+            echo "Nothing staged after add (unexpected). Aborting commit."
+            exit 0
+          fi
           git commit -m "Refresh SimCraft datas"
           git push origin HEAD:${GITHUB_REF_NAME}
 
