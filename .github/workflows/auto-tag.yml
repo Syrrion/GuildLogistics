@@ -56,9 +56,6 @@ jobs:
       - name: Refresh SimulationCraft datasets
         run: python Tools/update_simc_data.py
 
-      - name: Refresh Bloodmallet consumables
-        run: python Tools/update_bloodmallet_consumables.py
-
       - name: Commit SimCraft updates
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}

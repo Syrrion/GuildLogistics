@@ -194,24 +194,30 @@ Built-in testing commands:
 
 ### Data Refresh Automation (SimC Trinkets + Consumables)
 
-Trinket simulation datasets and Bloodmallet consumables (potions & phials) are fetched via Python helper scripts in `Tools/`.
+Tous les datasets (trinkets 1/3/5 cibles + consommables potions & flacons) sont maintenant gérés par UN SEUL script : `Tools/update_simc_data.py`.
 
-Primary script (invoked by CI on version bump):
+Commande CI recommandée :
 ```
 python Tools/update_simc_data.py --with-consumables
 ```
 
-Options / env:
+Options / variables env :
 - `--dry-run` : n'écrit pas les fichiers (aperçu)
-- `--with-consumables` ou variable env `WITH_CONSUMABLES=1` : déclenche aussi `update_bloodmallet_consumables.py`
-- `BLM_BASE_URL` : surcharge URL trinkets
-- `BLM_BASE_URL_CONS` : surcharge URL potions/phials
+- `--with-consumables` ou `WITH_CONSUMABLES=1` : ajoute génération `flacons.lua` & `potions.lua`
+- `--consumables-base-url` ou `BLM_BASE_URL_CONS` : surcharge URL phials/potions
+- `--base-url` ou `BLM_BASE_URL` : surcharge URL trinkets
 
-Scripts impliqués:
-- `Tools/update_simc_data.py` : met à jour `1.lua`, `3.lua`, `5.lua` (trinkets)
-- `Tools/update_bloodmallet_consumables.py` : génère `flacons.lua` et `potions.lua`
+Fichiers générés par spécialisation :
+- `1.lua` / `3.lua` / `5.lua` (trinkets)
+- `flacons.lua` (phials) / `potions.lua` (potions)
 
-Les fichiers consommables ne nécessitent pas d'inscription explicite dans le `.toc` si chargés via leurs blobs `ns.Consum_*`; le loader `Core/Core/Consumables.lua` s'occupe du bootstrap.
+Le script applique un backoff exponentiel sur erreurs HTTP (403/429/5xx) et réécrit les blobs JSON (indentés) dans des strings Lua :
+- Clés trinkets : `ns.Datas_<class>_<spec>_<target>`
+- Clés consommables : `ns.Consum_<class>_<spec>_<kind>` (kind = flacons|potions)
+
+Ancien script `update_bloodmallet_consumables.py` : SUPPRIMÉ (fusion logique). Tout appel doit être migré vers l'option `--with-consumables`.
+
+Les fichiers consommables ne nécessitent pas d'entrée `.toc` dédiée; `Core/Core/Consumables.lua` gère le chargement paresseux via leurs blobs `ns.Consum_*`.
 
 ## Critical Implementation Details
 

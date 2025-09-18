@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-"""Fetch SimulationCraft trinket datasets and (optionally) Bloodmallet consumables (potions/phials).
+"""Fetch SimulationCraft trinket datasets and (optionally) Bloodmallet consumables (potions/phials) in a SINGLE pass.
 
-Primary function (existing):
-    - Iterate Data/SimCraft/<class>/<spec>/ and refresh trinket targets (1,3,5)
+Features:
+  * Refresh trinket datasets for targets (1,3,5) under Data/SimCraft/<class>/<spec>/
+  * (Optional) Also fetch potions & phials and write flacons.lua / potions.lua adjacent to trinket files
+  * Robust retry & backoff for HTTP and network transient errors
+  * Deterministic file naming; safe for git diff review
 
-New optional integration:
-    - When --with-consumables is passed (or env WITH_CONSUMABLES=1), also call the
-        consumables fetcher (Tools/update_bloodmallet_consumables.py) so CI only needs
-        to invoke this single script.
+Why merged? Eliminates the need for a second Python invocation (previously update_bloodmallet_consumables.py)
+and ensures both trinkets and consumables update atomically for each spec in CI.
 
 Usage:
-        python Tools/update_simc_data.py [--dry-run] [--with-consumables]
+    python Tools/update_simc_data.py [--dry-run] [--with-consumables]
 
 Environment variables:
-        BLM_BASE_URL              Override trinkets URL template
-        WITH_CONSUMABLES=1        Implicitly enable --with-consumables
-        BLM_BASE_URL_CONS         Override consumables URL template (forwarded)
+    BLM_BASE_URL              Override trinkets URL template
+    WITH_CONSUMABLES=1        Implicitly enable --with-consumables
+    BLM_BASE_URL_CONS         Override consumables URL template
 
-Note: Keeping this script self-contained avoids duplicating CI steps.
+Backward compatibility: The separate script is deprecated and its logic fully inlined here.
 """
 
 from __future__ import annotations
@@ -32,11 +33,12 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-import subprocess
+import subprocess  # retained for potential future parallelization (not used now)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_ROOT = BASE_DIR / "Data" / "SimCraft"
 DEFAULT_URL_TEMPLATE = "https://bloodmallet.com/chart/get/trinkets/{endpoint}/{class_slug}/{spec_slug}"
+DEFAULT_CONS_URL_TEMPLATE = "https://bloodmallet.com/chart/get/{kind}/castingpatchwerk/{class_slug}/{spec_slug}"
 TARGET_ENDPOINTS = {
     "1": "castingpatchwerk",
     "3": "castingpatchwerk3",
@@ -52,10 +54,18 @@ HEADER = textwrap.dedent(
     """
 )
 
+CONSUMABLE_KINDS = {"flacons": "phials", "potions": "potions"}
 
-def build_lua_block(class_slug: str, spec_slug: str, target: str, payload: dict) -> str:
+
+def build_lua_block_trinket(class_slug: str, spec_slug: str, target: str, payload: dict) -> str:
     json_blob = json.dumps(payload, indent=4, ensure_ascii=False)
     key = f"ns.Datas_{class_slug}_{spec_slug}_{target}"
+    return f"{HEADER}{key} = [[\n{json_blob}\n]]\n"
+
+
+def build_lua_block_consumable(class_slug: str, spec_slug: str, kind: str, payload: dict) -> str:
+    json_blob = json.dumps(payload, indent=4, ensure_ascii=False)
+    key = f"ns.Consum_{class_slug}_{spec_slug}_{kind}"
     return f"{HEADER}{key} = [[\n{json_blob}\n]]\n"
 
 
@@ -91,7 +101,15 @@ def fetch_payload(url: str, *, retries: int = 3, backoff: float = 1.5) -> dict:
             raise RuntimeError(f"Failed to reach {url}: {exc.reason}") from exc
 
 
-def update_spec(class_slug: str, spec_path: Path, url_template: str, dry_run: bool = False) -> None:
+def update_spec(
+    class_slug: str,
+    spec_path: Path,
+    trinket_url_template: str,
+    *,
+    dry_run: bool = False,
+    with_consumables: bool = False,
+    consumable_url_template: str | None = None,
+) -> None:
     spec_slug = spec_path.name
     targets = sorted(child for child in spec_path.glob("*.lua"))
     if not targets:
@@ -104,15 +122,30 @@ def update_spec(class_slug: str, spec_path: Path, url_template: str, dry_run: bo
         if not endpoint:
             print(f"[warn] Unknown target '{target}' in {spec_path}, skipping")
             continue
-        url = url_template.format(endpoint=endpoint, class_slug=class_slug, spec_slug=spec_slug)
+        url = trinket_url_template.format(endpoint=endpoint, class_slug=class_slug, spec_slug=spec_slug)
         payload = fetch_payload(url)
-        lua_content = build_lua_block(class_slug, spec_slug, target, payload)
+        lua_content = build_lua_block_trinket(class_slug, spec_slug, target, payload)
         display_path = lua_file.relative_to(BASE_DIR)
         if dry_run:
             print(f"[dry-run] Would update {display_path}")
             continue
         lua_file.write_text(lua_content, encoding="utf-8")
         print(f"[update] {display_path}")
+
+    if with_consumables:
+        # Write (or overwrite) flacons.lua and potions.lua
+        for kind, remote_kind in CONSUMABLE_KINDS.items():
+            url_tmpl = consumable_url_template or DEFAULT_CONS_URL_TEMPLATE
+            url = url_tmpl.format(kind=remote_kind, class_slug=class_slug, spec_slug=spec_slug)
+            payload = fetch_payload(url)
+            lua_content = build_lua_block_consumable(class_slug, spec_slug, kind, payload)
+            out_file = spec_path / f"{kind}.lua"
+            rel = out_file.relative_to(BASE_DIR)
+            if dry_run:
+                print(f"[dry-run] Would update {rel}")
+            else:
+                out_file.write_text(lua_content, encoding="utf-8")
+                print(f"[update] {rel}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,12 +158,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--base-url",
         default=os.environ.get("BLM_BASE_URL", DEFAULT_URL_TEMPLATE),
-        help="override the bloodmallet URL template",
+        help="override the bloodmallet trinkets URL template",
     )
     parser.add_argument(
         "--with-consumables",
         action="store_true",
-        help="also refresh potions & phials (delegates to update_bloodmallet_consumables.py)",
+        help="also refresh potions & phials (writes flacons.lua & potions.lua)",
+    )
+    parser.add_argument(
+        "--consumables-base-url",
+        default=os.environ.get("BLM_BASE_URL_CONS", DEFAULT_CONS_URL_TEMPLATE),
+        help="override consumables URL template (phials/potions)",
     )
     args = parser.parse_args(argv)
 
@@ -148,28 +186,20 @@ def main(argv: list[str] | None = None) -> int:
         for spec_dir in sorted(class_dir.iterdir()):
             if not spec_dir.is_dir():
                 continue
-            update_spec(class_slug, spec_dir, args.base_url, dry_run=args.dry_run)
+            update_spec(
+                class_slug,
+                spec_dir,
+                args.base_url,
+                dry_run=args.dry_run,
+                with_consumables=args.with_consumables,
+                consumable_url_template=args.consumables_base_url,
+            )
             updated += 1
 
     if updated == 0:
         print("[warn] No specialisations processed. Check directory structure.")
 
-    # Optionally chain the consumables updater
-    if args.with_consumables:
-        cons_script = BASE_DIR / "Tools" / "update_bloodmallet_consumables.py"
-        if not cons_script.is_file():
-            print(f"[warn] Consumables script not found: {cons_script}")
-        else:
-            cmd = [sys.executable, str(cons_script)]
-            if args.dry_run:
-                cmd.append("--dry-run")
-            # Forward custom base URL for consumables if provided via env
-            # (the consumables script reads BLM_BASE_URL_CONS itself)
-            print(f"[chain] Running consumables updater: {' '.join(cmd)}")
-            try:
-                subprocess.check_call(cmd)
-            except subprocess.CalledProcessError as exc:
-                print(f"[error] Consumables updater failed: {exc}")
+    # No subprocess chaining needed anymore; logic merged inline.
 
     return 0
 
