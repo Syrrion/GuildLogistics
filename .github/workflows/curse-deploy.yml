@@ -15,29 +15,20 @@ on:
 
 jobs:
   release:
-    name: Build & Publish (with data refresh)
+    name: Build & Publish
     runs-on: ubuntu-latest
+    
+    outputs:
+      tag_name: ${{ env.TAG_NAME }}
+
     steps:
+      # Checkout repository with full history and tags (needed for git-cliff & packager)
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
         with:
           fetch-depth: 0
 
-      - name: Setup Python
-        uses: actions/setup-python@v5.1.0
-        with:
-          python-version: '3.x'
-
-      - name: Step 1 - Refresh SimC trinket datasets
-        run: |
-          echo "== Refreshing SimC Trinkets =="
-          python Tools/update_simc_data.py || exit 1
-
-      - name: Step 2 - Refresh consumables (Potions & Phials)
-        run: |
-          echo "== Refreshing Consumables =="
-          python Tools/update_bloodmallet_consumables.py || echo "Consumables refresh encountered a non-fatal issue"
-
+      # Debug info: show the tag name
       - name: Show tag
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
@@ -48,31 +39,38 @@ jobs:
             echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
           fi
 
+      # Install zip, required by BigWigs packager
       - name: Install zip
         run: |
           sudo apt-get update
           sudo apt-get install -y zip
 
+      # Generate the "latest" changelog section (for this tag only)
       - name: Generate changelog for latest tag (scoped)
-        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd
+        uses: tj-actions/git-cliff@8bfb7bf10268aed30bde8e34ecaeddb6c6149edd # v2
         with:
           args: --latest
           output: LATEST_CHANGELOG.md
 
+      # (Optional: only if using .pkgmeta with `manual-changelog: CHANGELOG.md`)
+      # Copy LATEST_CHANGELOG.md into CHANGELOG.md so CurseForge displays only this release section
       - name: Copy latest → CHANGELOG.md for packager
         run: cp LATEST_CHANGELOG.md CHANGELOG.md
 
+      # Run BigWigs packager to build the .zip and upload to CurseForge
+      # Le .pkgmeta gère maintenant l'exclusion des fichiers de développement
       - name: Run BigWigs Packager (Retail)
-        uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60
+        uses: BigWigsMods/packager@fd8ff7f95606c6d63c9a2d4d29c06e0abf1c3a60 # v2
         env:
           CF_API_KEY: ${{ secrets.CF_API_KEY }}
         with:
           args: -g retail
 
+      # Update the GitHub release body with the latest changelog section
       - name: Update GitHub release body with generated changelog
-        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8
+        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2
         with:
-          tag_name: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
+          tag_name: ${{ env.TAG_NAME }}
           body_path: LATEST_CHANGELOG.md
-          append_body: false
+          append_body: false      # overwrite, don't append
           make_latest: true

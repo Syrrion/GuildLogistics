@@ -56,6 +56,9 @@ jobs:
       - name: Refresh SimulationCraft datasets
         run: python Tools/update_simc_data.py
 
+      - name: Refresh Bloodmallet consumables
+        run: python Tools/update_bloodmallet_consumables.py
+
       - name: Commit SimCraft updates
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -70,7 +73,7 @@ jobs:
           git config url."https://${PAT_TOKEN}@github.com/".insteadOf "https://github.com/"
 
           git add Data/SimCraft
-          git commit -m "chore(data): refresh SimCraft trinkets"
+          git commit -m "Refresh SimCraft datas"
           git push origin HEAD:${GITHUB_REF_NAME}
 
       # Créer et pusher le tag Git si la version a changé
