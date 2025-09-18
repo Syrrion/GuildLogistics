@@ -487,7 +487,7 @@ local function Build(container)
     introFS:SetJustifyH("LEFT"); introFS:SetJustifyV("TOP")
     if introFS.SetWordWrap then introFS:SetWordWrap(true) end
     if introFS.SetNonSpaceWrap then introFS:SetNonSpaceWrap(true) end
-    introFS:SetText(Tr("simc_intro") or "This tab shows trinket rankings simulated by class/spec and number of targets. Use the filters below to change class, spec, targets, and item level. Source data: bloodmallet.com")
+    introFS:SetText(Tr("simc_intro") or "This tab shows trinket rankings simulated by class/spec and number of targets. Use the filters below to change class, spec, targets, and item level.")
     do
         local fontPath, fontSize, fontFlags = introFS:GetFont()
         if fontPath and fontSize then introFS:SetFont(fontPath, (fontSize + 2), fontFlags) end
@@ -587,7 +587,7 @@ local function Layout()
     -- Anchors handle layout; no explicit work needed.
 end
 
-UI.RegisterTab(Tr("tab_trinkets") or "Trinkets", Build, Refresh, Layout, {
+UI.RegisterTab(Tr("tab_trinkets") or "BiS DPS : Trinkets", Build, Refresh, Layout, {
     category = Tr("cat_info"),
 })
 

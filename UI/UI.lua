@@ -1081,6 +1081,11 @@ function UI.RelayoutTabs()
             bar._filler:SetColorTexture(1,1,1,0.04)
         end
 
+        -- 9) Met à jour la taille du contenu scrollable
+        if UI.UpdateSidebarScrollableSize then
+            C_Timer.After(0.01, UI.UpdateSidebarScrollableSize)
+        end
+
         return
     end
 
@@ -1758,11 +1763,17 @@ function UI.CreateCategorySidebar()
     sepLight:SetWidth(1)
     sepLight:SetColorTexture(1, 1, 1, 0.08)
 
-    -- === Conteneur des catégories ===
-    local list = CreateFrame("Frame", nil, bar)
+    -- === ScrollFrame pour rendre la sidebar scrollable ===
+    local scrollFrame = CreateFrame("ScrollFrame", nil, bar, "UIPanelScrollFrameTemplate")
+    bar._scrollFrame = scrollFrame
+    scrollFrame:SetPoint("TOPLEFT",     bar, "TOPLEFT",  0, 0)
+    scrollFrame:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -1, 0)
+    
+    -- === Conteneur des catégories (maintenant dans le ScrollFrame) ===
+    local list = CreateFrame("Frame", nil, scrollFrame)
     bar._list = list
-    list:SetPoint("TOPLEFT",     bar, "TOPLEFT",  0, 0)
-    list:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", -1, 0)
+    list:SetSize(1, 1) -- Taille initiale, sera ajustée dynamiquement
+    scrollFrame:SetScrollChild(list)
     list:SetClipsChildren(false)
 
     -- Réserve l’espace global
@@ -1818,6 +1829,48 @@ function UI.CreateCategorySidebar()
     -- Harmoniser les couleurs des catégories avec le thème courant
     if UI.RefreshNavigationColors then UI.RefreshNavigationColors() end
 
+    -- Appliquer le style scrollbar personnalisé
+    if UI.SkinScrollBar and scrollFrame then
+        UI.SkinScrollBar(scrollFrame, {width = UI.SCROLLBAR_W or 5})
+        
+        -- Active l'auto-thumb pour que la hauteur du pouce s'adapte au contenu
+        if UI.EnableAutoThumb then
+            UI.EnableAutoThumb(scrollFrame)
+        end
+        
+        -- Configuration avancée de la scrollbar
+        local scrollBar = UI.GetScrollBar and UI.GetScrollBar(scrollFrame)
+        if scrollBar then
+            -- Démarre invisible, sera gérée par UpdateSidebarScrollableSize
+            scrollBar:SetShown(false)
+            
+            -- Supprime complètement les flèches avec plusieurs méthodes
+            if scrollBar.ScrollUpButton then 
+                scrollBar.ScrollUpButton:Hide()
+                scrollBar.ScrollUpButton:SetEnabled(false)
+                scrollBar.ScrollUpButton:EnableMouse(false)
+                scrollBar.ScrollUpButton:SetAlpha(0)
+                if scrollBar.ScrollUpButton.SetSize then
+                    scrollBar.ScrollUpButton:SetSize(0.1, 0.1)
+                end
+            end
+            if scrollBar.ScrollDownButton then 
+                scrollBar.ScrollDownButton:Hide()
+                scrollBar.ScrollDownButton:SetEnabled(false)
+                scrollBar.ScrollDownButton:EnableMouse(false)
+                scrollBar.ScrollDownButton:SetAlpha(0)
+                if scrollBar.ScrollDownButton.SetSize then
+                    scrollBar.ScrollDownButton:SetSize(0.1, 0.1)
+                end
+            end
+            
+            -- Décale la scrollbar vers la gauche de 5px (ajusté de 10px vers la droite)
+            scrollBar:ClearAllPoints()
+            scrollBar:SetPoint("TOPRIGHT", scrollFrame, "TOPRIGHT", -4, 0)
+            scrollBar:SetPoint("BOTTOMRIGHT", scrollFrame, "BOTTOMRIGHT", -4, 2)
+        end
+    end
+
     return bar
 end
 
@@ -1827,11 +1880,15 @@ function UI.SetActiveCategory(catLabel)
     UI._activeCategory = catLabel
 
     -- Visuel boutons
+    local activeCatButton = nil
     if UI._catBar and UI._catBar._btns then
         for _, b in ipairs(UI._catBar._btns) do
             local sel = (b.txt:GetText() == catLabel)
             b.sel:SetShown(sel)
             b.bar:SetShown(sel)
+            if sel then
+                activeCatButton = b
+            end
         end
     end
 
@@ -1857,6 +1914,17 @@ function UI.SetActiveCategory(catLabel)
     end
 
     if UI._layout then UI._layout() end
+    
+    -- Met à jour la taille du contenu scrollable après changement de catégorie
+    if UI.UpdateSidebarScrollableSize then
+        C_Timer.After(0.01, function()
+            UI.UpdateSidebarScrollableSize()
+            -- S'assure que la catégorie active est visible
+            if activeCatButton and UI.EnsureSidebarElementVisible then
+                UI.EnsureSidebarElementVisible(activeCatButton)
+            end
+        end)
+    end
 end
 
 -- Ouverture par label, avec bascule catégorie
@@ -1875,6 +1943,139 @@ if UI.Main and UI.Main.SetScript then
     UI.Main:HookScript("OnShow", function()
         if not UI._catBar then UI.CreateCategorySidebar() end
     end)
+end
+
+-- Met à jour la taille du contenu scrollable de la sidebar
+function UI.UpdateSidebarScrollableSize()
+    local bar = UI._catBar
+    if not (bar and bar._scrollFrame and bar._list) then return end
+    
+    local scrollFrame = bar._scrollFrame
+    local list = bar._list
+    
+    -- Calcule la hauteur totale nécessaire en additionnant tous les éléments
+    local totalHeight = 0
+    local GAP_LINE = 1
+    local GAP_CAT = UI.CATEGORY_GAP_TOP or 5
+    
+    -- Compte le nombre de catégories visibles et leur hauteur
+    local visibleCategories = 0
+    local categoryHeight = 52 -- Hauteur d'un bouton de catégorie
+    local subListHeight = 0
+    
+    if bar._btns then
+        for _, catBtn in ipairs(bar._btns) do
+            if catBtn and catBtn:IsShown() then
+                visibleCategories = visibleCategories + 1
+                totalHeight = totalHeight + categoryHeight
+                
+                -- Ajoute l'espacement entre catégories (sauf pour la première)
+                if visibleCategories > 1 then
+                    totalHeight = totalHeight + GAP_LINE
+                end
+            end
+        end
+    end
+    
+    -- Ajoute la hauteur de la sous-liste si elle est visible
+    if bar._subList and bar._subList:IsShown() then
+        subListHeight = bar._subList:GetHeight() or 0
+        totalHeight = totalHeight + subListHeight + GAP_CAT
+    end
+    
+    -- Ajoute une marge de sécurité
+    totalHeight = totalHeight + 40
+    
+    -- Détermine si la scrollbar est nécessaire
+    local scrollHeight = scrollFrame:GetHeight() or 0
+    local scrollbarNeeded = totalHeight > scrollHeight
+    
+    -- Ajuste la largeur du contenu en fonction de la visibilité de la scrollbar
+    -- La scrollbar étant décalée de 5px vers la gauche, on ajuste en conséquence
+    local scrollWidth = scrollFrame:GetWidth() or 192
+    local scrollbarWidth = UI.SCROLLBAR_W or 5
+    local scrollbarOffset = 5 -- Décalage vers la gauche (ajusté)
+    local contentWidth = scrollbarNeeded and (scrollWidth - scrollbarOffset - 2) or (scrollWidth - 1)
+    
+    -- Met à jour la taille du contenu scrollable
+    list:SetSize(contentWidth, math.max(totalHeight, scrollHeight))
+    
+    -- Gère la visibilité de la scrollbar
+    local scrollBar = UI.GetScrollBar and UI.GetScrollBar(scrollFrame)
+    if scrollBar then
+        scrollBar:SetShown(scrollbarNeeded)
+        if scrollbarNeeded then
+            -- Repositionne la scrollbar avec le décalage vers la gauche (ajusté)
+            scrollBar:ClearAllPoints()
+            scrollBar:SetPoint("TOPRIGHT", scrollFrame, "TOPRIGHT", -2, 0)
+            scrollBar:SetPoint("BOTTOMRIGHT", scrollFrame, "BOTTOMRIGHT", -2, -20)
+            
+            -- Met à jour la scrollbar seulement si elle est visible
+            if UI.UpdateScrollThumb then
+                UI.UpdateScrollThumb(scrollFrame)
+            end
+        else
+            -- Remet le scroll en haut quand la scrollbar n'est pas nécessaire
+            scrollFrame:SetVerticalScroll(0)
+        end
+    end
+end
+
+-- S'assure qu'un élément spécifique est visible dans la sidebar scrollable
+function UI.EnsureSidebarElementVisible(element)
+    local bar = UI._catBar
+    if not (bar and bar._scrollFrame and element) then return end
+    
+    local scrollFrame = bar._scrollFrame
+    local list = bar._list
+    
+    -- Vérifie d'abord si la scrollbar est nécessaire
+    local scrollBar = UI.GetScrollBar and UI.GetScrollBar(scrollFrame)
+    if not (scrollBar and scrollBar:IsShown()) then
+        -- Pas de scrollbar visible, pas besoin d'ajuster le scroll
+        return
+    end
+    
+    -- Calcule la position de l'élément par rapport au contenu scrollable
+    local elementTop = element:GetTop() or 0
+    local elementBottom = element:GetBottom() or 0
+    local elementHeight = elementTop - elementBottom
+    
+    local listTop = list:GetTop() or 0
+    local listBottom = list:GetBottom() or 0
+    
+    local scrollTop = scrollFrame:GetTop() or 0
+    local scrollBottom = scrollFrame:GetBottom() or 0
+    local scrollHeight = scrollTop - scrollBottom
+    
+    -- Position actuelle du scroll (0 = en haut, valeur positive = scrollé vers le bas)
+    local currentScroll = scrollFrame:GetVerticalScroll() or 0
+    
+    -- Position de l'élément dans le système de coordonnées du scroll
+    local elementOffsetTop = listTop - elementTop
+    local elementOffsetBottom = listTop - elementBottom
+    
+    -- Vérifie si l'élément est déjà visible
+    local elementTopInView = elementOffsetTop >= currentScroll
+    local elementBottomInView = elementOffsetBottom <= (currentScroll + scrollHeight)
+    
+    if not (elementTopInView and elementBottomInView) then
+        -- L'élément n'est pas entièrement visible, ajuste le scroll
+        local newScroll
+        if not elementTopInView then
+            -- L'élément est au-dessus de la zone visible, scroll vers le haut
+            newScroll = elementOffsetTop - 10 -- Petite marge
+        else
+            -- L'élément est en dessous de la zone visible, scroll vers le bas
+            newScroll = elementOffsetBottom - scrollHeight + 10 -- Petite marge
+        end
+        
+        -- S'assure que le scroll reste dans les limites
+        local maxScroll = math.max(0, (list:GetHeight() or 0) - scrollHeight)
+        newScroll = math.max(0, math.min(newScroll, maxScroll))
+        
+        scrollFrame:SetVerticalScroll(newScroll)
+    end
 end
 
 
@@ -1903,8 +2104,18 @@ function UI.CreateSidebarSyncFooter()
     footer:EnableMouse(false)
     footer:SetAlpha(1)
 
-    -- Pousse la liste au-dessus du footer (espace réservé pour le texte de sync)
-    if bar._list then
+    -- Pousse le ScrollFrame au-dessus du footer (espace réservé pour le texte de sync)
+    if bar._scrollFrame then
+        bar._scrollFrame:ClearAllPoints()
+        bar._scrollFrame:SetPoint("TOPLEFT",      bar,    "TOPLEFT",  0, 0)
+        bar._scrollFrame:SetPoint("BOTTOMRIGHT",  footer, "TOPRIGHT", -1, 0)
+        
+        -- Force une mise à jour de la taille du contenu scrollable après le changement de taille
+        if UI.UpdateSidebarScrollableSize then
+            C_Timer.After(0.01, UI.UpdateSidebarScrollableSize)
+        end
+    elseif bar._list then
+        -- Fallback si pas de ScrollFrame (compatibilité)
         bar._list:ClearAllPoints()
         bar._list:SetPoint("TOPLEFT",      bar,    "TOPLEFT",  0, 0)
         bar._list:SetPoint("BOTTOMRIGHT",  footer, "TOPRIGHT", -1, 0)

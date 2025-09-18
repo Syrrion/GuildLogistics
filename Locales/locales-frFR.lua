@@ -21,7 +21,7 @@ L["tab_debug"]            = "Diffusion des données"
 L["tab_settings"]         = "Options"
 L["tab_guild_members"]    = "Membres de la guilde"
 L["tab_mythic_plus"]      = "Rotation Mythique+"
-L["tab_consumables"]      = "Consommables (Potions & Flacons)"
+L["tab_consumables"]      = "BiS DPS : Consommables"
 
 
 -- ============================================== --
@@ -171,6 +171,7 @@ L["lbl_guild_members"]    = "Membres de la guilde"
 L["lbl_usable_bundles"]   = "Lots utilisables"
 L["lbl_used_bundles"]     = "Lots utilisés"
 L["lbl_item_reserve"]     = "Réserve d'objets"
+L["lbl_item"]             = "Objet"
 L["lbl_usable_bundles_raids"] = "Lots utilisables pour les raids"
 L["lbl_participating_players"] = "Joueurs participants"
 L["lbl_reserved_players"] = "Joueurs en réserve"
@@ -375,7 +376,7 @@ L["opt_popup_trinket_ranking"]    = "Afficher la popup de classement du bijou au
 -- ============================================== --
 -- ===           Onglet BiS (Trinkets)        === --
 -- ============================================== --
-L["tab_bis"]         = "Bijoux BiS (Wowhead)"
+L["tab_bis"]         = "BiS : Bijoux (wowhead)"
 L["col_tier"]        = "Rang"
 L["col_owned"]       = "Possédé"
 L["lbl_class"]       = "Classe"
@@ -384,7 +385,7 @@ L["lbl_bis_filters"] = "Filtres"
 L["msg_no_data"]     = "Aucune donnée"
 L["footer_source_wowhead"] = "Source : wowhead.com"
 L["bis_intro"] = "Cet onglet liste les bijoux (trinkets) BiS par classe et spécialisation.\nLes rangs S à F indiquent la priorité (S étant le meilleur). Utilisez les listes déroulantes pour changer la classe et la spécialisation."
-L["simc_intro"] = "Cet onglet affiche le classement des bijoux simulés par classe/spécialisation et nombre de cibles. Utilisez les filtres pour changer la classe, la spé, le nombre de cibles et le niveau d'objet. Source : bloodmallet.com"
+L["simc_intro"] = "Cet onglet affiche le classement des bijoux simulés par classe/spécialisation et nombre de cibles. Utilisez les filtres pour changer la classe, la spé, le nombre de cibles et le niveau d'objet."
 L["col_useful_for"]        = "Utile pour"
 L["btn_useful_for"]        = "Utile pour..."
 L["popup_useful_for"]      = "Autres classes ayant cet objet dans sa Tier-List"
@@ -773,7 +774,12 @@ L["msg_remove_main_balance_title"] = "Supprimer le main avec solde ?"
 L["msg_remove_main_balance_body"]  = "Ce main dispose actuellement d'un solde de %s.\nLa suppression du main remettra ce solde à 0 et supprimera également son appartenance au Roster s’il en fait partie.\n\nContinuer ?"
 
 -- Helpers Trinkets
-L["tab_trinkets"]        = "Bijoux BiS (SimCraft)"
+L["tab_trinkets"]        = "BiS DPS : Bijoux"
+
+-- Missing labels for consumables split lists
+L["lbl_phials"]           = "Flacons"
+L["lbl_potions"]          = "Potions"
+L["consum_intro"]         = "Cet onglet affiche les résultats de simulation DPS pour les flacons offensifs (à gauche) et les potions (à droite) selon votre classe et spécialisation. Sélectionnez votre classe/spé via les menus déroulants."
 L["lbl_targets"]         = "Cibles"
 L["lbl_target_single"]   = "1 cible"
 L["lbl_target_plural"]   = "%d cibles"

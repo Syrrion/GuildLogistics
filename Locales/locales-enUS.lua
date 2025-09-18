@@ -52,10 +52,11 @@ L["msg_remove_main_balance_body"]  = "This main currently has a balance of %s.\n
 L["lbl_equippable_only"]   = "Equippable only"
 L["tab_guild_members"]    = "Guild members"
 L["tab_mythic_plus"]      = "Mythic+ Rotation"
-L["tab_consumables"]      = "Consumables (Potions & Phials)"
+L["tab_consumables"]      = "BiS DPS : Consumables"
 L["lbl_potions"]          = "Potions"
 L["lbl_phials"]           = "Phials"
 L["lbl_type"]             = "Type"
+L["consum_intro"]         = "This tab lists DPS simulation results for offensive phials (left) and potions (right) by class & specialization. Select your class/spec with the dropdowns."
 
 
 -- ============================================== --
@@ -204,6 +205,7 @@ L["lbl_guild_members"]    = "Guild members"
 L["lbl_usable_bundles"]   = "Usable bundles"
 L["lbl_used_bundles"]     = "Used bundles"
 L["lbl_item_reserve"]     = "Item reserve"
+L["lbl_item"]             = "Item"
 L["lbl_usable_bundles_raids"] = "Usable raid bundles"
 L["lbl_participating_players"] = "Participating players"
 L["lbl_reserved_players"] = "Reserved players"
@@ -409,7 +411,7 @@ L["opt_popup_gchat_mention"]      = "Guild chat mention & Ping notification"
 -- ============================================== --
 -- ===           BiS TAB (Trinkets)           === --
 -- ============================================== --
-L["tab_bis"]         = "BiS Trinkets"
+L["tab_bis"]         = "BiS : Trinkets (wowhead)"
 L["col_tier"]        = "Tier"
 L["col_owned"]       = "Owned"
 L["lbl_class"]       = "Class"
@@ -776,7 +778,7 @@ L["mode_firstrun_title"]     = "Choose usage mode"
 L["mode_firstrun_body"]      = "\nPlease choose which mode to use for "..L["app_title"]..":\n\n|cffffd200Guild version|r\n Shares data with other addon users in your guild. A GM or editor usually configures and initiates sharing.\n\n|cffffd200Standalone version|r\n No communication with other players. All features remain local and usable without GM permissions; nothing is broadcast.\n\nYou can change this later in Settings - both modes can operate independently without data loss."
 
 -- Helpers Trinkets
-L["tab_trinkets"]        = "Trinkets"
+L["tab_trinkets"]        = "BiS DPS : Trinkets"
 L["lbl_targets"]         = "Targets"
 L["lbl_target_single"]   = "Monocible"
 L["lbl_target_plural"]   = "Multicibles (x %d)"

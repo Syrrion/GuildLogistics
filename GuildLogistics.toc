@@ -118,10 +118,69 @@ Data/SimCraft/warrior/fury/5.lua
 Data/SimCraft/warrior/protection/1.lua
 Data/SimCraft/warrior/protection/3.lua
 Data/SimCraft/warrior/protection/5.lua
-# Bloodmallet consumables (potions & phials) data files will be generated per spec as:
-# (Example) Data/SimCraft/death_knight/blood/flacons.lua
-# (Example) Data/SimCraft/death_knight/blood/potions.lua
-# Do NOT add wildcard placeholders here; once generated, add concrete paths if you want them preload. The loader also picks up ns.Consum_* globals so explicit listing is optional if you reference them elsewhere.
+## Bloodmallet consumables (phials & potions) generated files
+Data/SimCraft/death_knight/blood/flacons.lua
+Data/SimCraft/death_knight/blood/potions.lua
+Data/SimCraft/death_knight/frost/flacons.lua
+Data/SimCraft/death_knight/frost/potions.lua
+Data/SimCraft/death_knight/unholy/flacons.lua
+Data/SimCraft/death_knight/unholy/potions.lua
+Data/SimCraft/demon_hunter/havoc/flacons.lua
+Data/SimCraft/demon_hunter/havoc/potions.lua
+Data/SimCraft/demon_hunter/vengeance/flacons.lua
+Data/SimCraft/demon_hunter/vengeance/potions.lua
+Data/SimCraft/druid/balance/flacons.lua
+Data/SimCraft/druid/balance/potions.lua
+Data/SimCraft/druid/feral/flacons.lua
+Data/SimCraft/druid/feral/potions.lua
+Data/SimCraft/druid/guardian/flacons.lua
+Data/SimCraft/druid/guardian/potions.lua
+Data/SimCraft/evoker/devastation/flacons.lua
+Data/SimCraft/evoker/devastation/potions.lua
+Data/SimCraft/hunter/beast_mastery/flacons.lua
+Data/SimCraft/hunter/beast_mastery/potions.lua
+Data/SimCraft/hunter/marksmanship/flacons.lua
+Data/SimCraft/hunter/marksmanship/potions.lua
+Data/SimCraft/hunter/survival/flacons.lua
+Data/SimCraft/hunter/survival/potions.lua
+Data/SimCraft/mage/arcane/flacons.lua
+Data/SimCraft/mage/arcane/potions.lua
+Data/SimCraft/mage/fire/flacons.lua
+Data/SimCraft/mage/fire/potions.lua
+Data/SimCraft/mage/frost/flacons.lua
+Data/SimCraft/mage/frost/potions.lua
+Data/SimCraft/monk/brewmaster/flacons.lua
+Data/SimCraft/monk/brewmaster/potions.lua
+Data/SimCraft/monk/windwalker/flacons.lua
+Data/SimCraft/monk/windwalker/potions.lua
+Data/SimCraft/paladin/protection/flacons.lua
+Data/SimCraft/paladin/protection/potions.lua
+Data/SimCraft/paladin/retribution/flacons.lua
+Data/SimCraft/paladin/retribution/potions.lua
+Data/SimCraft/priest/shadow/flacons.lua
+Data/SimCraft/priest/shadow/potions.lua
+Data/SimCraft/rogue/assassination/flacons.lua
+Data/SimCraft/rogue/assassination/potions.lua
+Data/SimCraft/rogue/outlaw/flacons.lua
+Data/SimCraft/rogue/outlaw/potions.lua
+Data/SimCraft/rogue/subtlety/flacons.lua
+Data/SimCraft/rogue/subtlety/potions.lua
+Data/SimCraft/shaman/elemental/flacons.lua
+Data/SimCraft/shaman/elemental/potions.lua
+Data/SimCraft/shaman/enhancement/flacons.lua
+Data/SimCraft/shaman/enhancement/potions.lua
+Data/SimCraft/warlock/affliction/flacons.lua
+Data/SimCraft/warlock/affliction/potions.lua
+Data/SimCraft/warlock/demonology/flacons.lua
+Data/SimCraft/warlock/demonology/potions.lua
+Data/SimCraft/warlock/destruction/flacons.lua
+Data/SimCraft/warlock/destruction/potions.lua
+Data/SimCraft/warrior/arms/flacons.lua
+Data/SimCraft/warrior/arms/potions.lua
+Data/SimCraft/warrior/fury/flacons.lua
+Data/SimCraft/warrior/fury/potions.lua
+Data/SimCraft/warrior/protection/flacons.lua
+Data/SimCraft/warrior/protection/potions.lua
 
 Core/Core/DatabaseManager.lua
 Core/Core/Helper.lua

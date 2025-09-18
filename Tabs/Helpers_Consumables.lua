@@ -1,15 +1,17 @@
 -- Tabs/Helpers_Consumables.lua
--- Combined view for Bloodmallet phials (flacons) and potions.
--- Simpler than trinkets: no targets or ilvl filters; each dataset has a few upgrade steps.
+-- Side-by-side view for Bloodmallet phials (flacons) and potions (two distinct lists).
+-- No target/ilvl filters; each dataset has a few upgrade steps. Buttons removed (both shown by default).
 local ADDON, ns = ...
 local Tr = ns and ns.Tr
 local GLOG, UI = ns.GLOG, ns.UI
 local Consum = ns.Data and ns.Data.Consumables
 
-local panel, lv, footerBar, metaFS
-local classDD, specDD, kindCheckFlasks, kindCheckPotions
+local panel, footerBar, metaFS, sourceFS
+local emptyLeftFS, emptyRightFS
+local introArea, introFS
+local lvFlacons, lvPotions
+local classDD, specDD
 local selectedClass, selectedSpec
-local showFlacons, showPotions = true, true
 local Refresh
 
 local function resolveRegistry()
@@ -78,37 +80,45 @@ local function ensureSelections(reg)
     end
 end
 
-local function datasetList()
-    if not (Consum and Consum.GetDataset) then return {} end
-    local items = {}
-    local kinds = {
-        { key = 'flacons', enabled = showFlacons, label = Tr('lbl_phials') or 'Phials' },
-        { key = 'potions', enabled = showPotions, label = Tr('lbl_potions') or 'Potions' },
-    }
-    for _, k in ipairs(kinds) do
-        if k.enabled then
-            local ds = Consum.GetDataset((selectedClass or ''):upper(), selectedSpec, k.key)
-            if ds and ds.data and ds.data.data then
-                items[#items+1] = { kind = k.key, label = k.label, dataset = ds }
-            end
-        end
+local function buildRowsFor(kindKey)
+    local cls = (selectedClass or ''):upper()
+    local ds
+    if cls:find('_') then
+        ds = Consum.GetDataset(cls, selectedSpec, kindKey) or Consum.GetDataset(cls:gsub('_',''), selectedSpec, kindKey)
+    else
+        ds = Consum.GetDataset(cls, selectedSpec, kindKey)
     end
-    return items
-end
-
-local function buildRows()
+    if not ds then
+        if GLOG and GLOG.Debug then GLOG.Debug("Consumables: dataset missing", cls, selectedSpec, kindKey) end
+        return {}, nil
+    end
+    if not ds.data then
+        -- Force decode (GetDataset should already do it, but be defensive)
+        Consum.GetDataset(cls, selectedSpec, kindKey)
+    end
+    if not (ds.data) then
+        if GLOG and GLOG.Debug then GLOG.Debug("Consumables: no data after decode", cls, selectedSpec, kindKey) end
+        return {}, ds.timestamp
+    end
+    local data = ds.data
+    -- Fallback: some generators may nest differently; accept both ds.data.data and ds.data (if it directly contains item entries)
+    local payload = data.data and data.data or data
+    if not payload or type(payload) ~= 'table' then
+        if GLOG and GLOG.Debug then GLOG.Debug("Consumables: payload missing/invalid", cls, selectedSpec, kindKey) end
+        return {}, ds.timestamp
+    end
+    -- If payload represents an error blob (Bloodmallet returned an error) show nothing gracefully
+    if payload.status == 'error' then
+        if GLOG and GLOG.Debug then GLOG.Debug("Consumables: remote dataset status=error", cls, selectedSpec, kindKey, payload.message) end
+        return {}, ds.timestamp
+    end
+    local base = payload.baseline
+    local baselineScore
+    if base then for _, v in pairs(base) do baselineScore = tonumber(v); break end end
     local rows = {}
-    local blocks = datasetList()
-    for _, block in ipairs(blocks) do
-        local data = block.dataset.data
-        local base = data and data.data and data.data.baseline
-        local baselineScore
-        if base then
-            for _, v in pairs(base) do baselineScore = tonumber(v); break end
-        end
-        for name, values in pairs(data.data or {}) do
-            if name ~= 'baseline' then
-                -- pick best score (max) among steps 1..3 etc.
+    for name, values in pairs(payload) do
+        if name ~= 'baseline' then
+            if type(values) == 'table' then
                 local best
                 for _, v in pairs(values) do
                     local num = tonumber(v)
@@ -120,46 +130,33 @@ local function buildRows()
                         diffPct = ((best / baselineScore) - 1) * 100
                     end
                     rows[#rows+1] = {
-                        kind = block.kind,
-                        category = block.label,
                         name = name,
                         score = best,
                         diffPct = diffPct,
                         itemID = (data.item_ids or {})[name],
-                        timestamp = block.dataset.timestamp,
                     }
                 end
+            else
+                -- Skip non-table entries (e.g., status/message) safely
             end
         end
     end
-    table.sort(rows, function(a,b)
-        if a.kind == b.kind then
-            return (a.score or 0) > (b.score or 0)
-        end
-        return a.kind < b.kind
-    end)
-    local rankByKind = {}
-    for _, r in ipairs(rows) do
-        rankByKind[r.kind] = rankByKind[r.kind] or 0
-        rankByKind[r.kind] = rankByKind[r.kind] + 1
-        r.rank = rankByKind[r.kind]
-    end
-    return rows
+    table.sort(rows, function(a,b) return (a.score or 0) > (b.score or 0) end)
+    for i, r in ipairs(rows) do r.rank = i end
+    return rows, ds.timestamp
 end
 
 -- Columns
 local cols = UI.NormalizeColumns({
-    { key = 'category', title = Tr('lbl_type') or 'Type', w = 80, justify = 'CENTER', vsep = true },
     { key = 'rank', title = '#', w = 30, justify = 'CENTER', vsep = true },
-    { key = 'item', title = Tr('lbl_item') or 'Item', flex = 1, min = 220, justify = 'LEFT', vsep = true },
-    { key = 'score', title = Tr('lbl_score') or 'Score', w = 120, justify = 'CENTER', vsep = true },
-    { key = 'delta', title = Tr('lbl_diff') or 'Diff', w = 90, justify = 'CENTER', vsep = true },
+    { key = 'item', title = Tr('lbl_item') or 'Item', flex = 1, min = 180, justify = 'LEFT', vsep = true },
+    { key = 'score', title = Tr('lbl_score') or 'Score', w = 110, justify = 'CENTER', vsep = true },
+    { key = 'delta', title = Tr('lbl_diff') or 'Diff', w = 85, justify = 'CENTER', vsep = true },
 })
 
 local function buildRow(row)
     local f = {}
-    f.category = row:CreateFontString(nil, 'OVERLAY', 'GameFontHighlightSmall')
-    f.category:SetJustifyH('CENTER')
+    -- category column removed in dual-list layout
     f.rank = row:CreateFontString(nil, 'OVERLAY', 'GameFontHighlightSmall')
     f.rank:SetJustifyH('CENTER')
     f.item = UI.CreateItemCell(row, { size = 18, width = 300 })
@@ -176,11 +173,7 @@ local function updateRow(_, row, f, item)
     local x = 0
     for _, c in ipairs(resolved) do
         local w = c.w or c.min or 80
-        if c.key == 'category' then
-            f.category:ClearAllPoints(); f.category:SetPoint('LEFT', row, 'LEFT', x, 0); f.category:SetWidth(w)
-            local txt = item and item.category or ''
-            f.category:SetText(txt)
-        elseif c.key == 'rank' then
+        if c.key == 'rank' then
             f.rank:ClearAllPoints(); f.rank:SetPoint('LEFT', row, 'LEFT', x, 0); f.rank:SetWidth(w)
             local txt = item and item.rank and tostring(item.rank) or ''
             if item and item.rank == 1 then txt = '|cff33ff33'..txt..'|r' end
@@ -214,9 +207,16 @@ end
 
 local function classMenu()
     local reg = resolveRegistry(); local entries = {}
+    -- classOrder should already be unique, but add a defensive de-duplication layer in case
+    local seen = {}
     for _, token in ipairs(reg.classOrder or {}) do
-        local entry = reg.classes[token]
-        entries[#entries+1] = makeEntry(classLabel(entry, token), token == selectedClass, function() selectedClass = token; selectedSpec = nil; Refresh() end)
+        if token and not seen[token] then
+            seen[token] = true
+            local entry = reg.classes[token]
+            entries[#entries+1] = makeEntry(classLabel(entry, token), token == selectedClass, function()
+                selectedClass = token; selectedSpec = nil; Refresh()
+            end)
+        end
     end
     if #entries == 0 then entries[1] = makeEntry(Tr('msg_no_data') or 'No data', nil, nil, true) end
     return entries
@@ -228,7 +228,9 @@ local function specMenu()
     local entries = {}
     for _, sk in ipairs(ce.specOrder or {}) do
         local se = ce.specs[sk]
-        entries[#entries+1] = makeEntry(specLabel(se), sk == selectedSpec, function() selectedSpec = sk; Refresh() end)
+        entries[#entries+1] = makeEntry(specLabel(se), sk == selectedSpec, function()
+            selectedSpec = sk; Refresh()
+        end)
     end
     if #entries == 0 then entries[1] = makeEntry(Tr('msg_no_data') or 'No data', nil, nil, true) end
     return entries
@@ -242,30 +244,68 @@ local function updateDropdownTexts()
     if specDD then specDD:SetSelected(selectedSpec or '', specLabel(se)) end
 end
 
-local function updateMeta()
+local function updateMeta(tsFlacon, tsPotion)
     if not metaFS then return end
-    local blocks = datasetList()
-    local timestamps = {}
-    for _, b in ipairs(blocks) do if b.dataset and b.dataset.timestamp then timestamps[#timestamps+1] = b.dataset.timestamp end end
-    local ts = table.concat(timestamps, ' / ')
-    metaFS:SetText(ts)
+    local parts = {}
+    if tsFlacon then parts[#parts+1] = (Tr('lbl_phials') or 'Phials')..': '..tsFlacon end
+    if tsPotion then parts[#parts+1] = (Tr('lbl_potions') or 'Potions')..': '..tsPotion end
+    metaFS:SetText(table.concat(parts, '  |  '))
 end
 
 local function doRefresh()
     ensureSelections(resolveRegistry())
     updateDropdownTexts()
-    if lv then UI.RefreshListData(lv, buildRows()) end
-    updateMeta()
+    local rowsFlacon, tsF = buildRowsFor('flacons')
+    local rowsPotion, tsP = buildRowsFor('potions')
+    -- Invalidate signatures so both lists recompute even if the item ordering is identical between specs.
+    -- (Potions often share identical item sets across specs; without this, the right list would keep old diff/score values.)
+    if lvFlacons then lvFlacons._lastDataSig = nil end
+    if lvPotions then lvPotions._lastDataSig = nil end
+    if lvFlacons then UI.RefreshListData(lvFlacons, rowsFlacon) end
+    if lvPotions then UI.RefreshListData(lvPotions, rowsPotion) end
+    -- Empty state messages (visible only when corresponding list has no rows)
+    if emptyLeftFS then
+        if rowsFlacon and #rowsFlacon == 0 then
+            emptyLeftFS:Show()
+        else
+            emptyLeftFS:Hide()
+        end
+    end
+    if emptyRightFS then
+        if rowsPotion and #rowsPotion == 0 then
+            emptyRightFS:Show()
+        else
+            emptyRightFS:Hide()
+        end
+    end
+    updateMeta(tsF, tsP)
 end
 Refresh = doRefresh
 
 local function Build(container)
     panel, footerBar = UI.CreateMainContainer(container, { footer = true })
+    -- Force a registry refresh on first build to pick up any datasets registered late in load order.
+    if Consum and Consum.GetRegistry then
+        Consum.GetRegistry({ refresh = true })
+    end
 
-    -- Filters area (class/spec + kind toggles)
+    -- Intro area (mirrors trinkets style but shorter)
+    introArea = CreateFrame('Frame', nil, panel)
+    introArea:SetPoint('TOPLEFT', panel, 'TOPLEFT', 0, 0)
+    introArea:SetPoint('TOPRIGHT', panel, 'TOPRIGHT', 0, 0)
+    introArea:SetHeight(46)
+    introFS = introArea:CreateFontString(nil, 'OVERLAY', 'GameFontHighlightSmall')
+    introFS:SetPoint('TOPLEFT', introArea, 'TOPLEFT', 0, 0)
+    introFS:SetPoint('TOPRIGHT', introArea, 'TOPRIGHT', 0, 0)
+    introFS:SetJustifyH('LEFT'); introFS:SetJustifyV('TOP')
+    if introFS.SetWordWrap then introFS:SetWordWrap(true) end
+    if introFS.SetNonSpaceWrap then introFS:SetNonSpaceWrap(true) end
+    introFS:SetText(Tr('consum_intro') or 'This tab lists offensive phials (left) and potions (right) by class/spec.')
+
+    -- Filters area (class/spec)
     local filters = CreateFrame('Frame', nil, panel)
-    filters:SetPoint('TOPLEFT', panel, 'TOPLEFT', 0, 0)
-    filters:SetPoint('TOPRIGHT', panel, 'TOPRIGHT', 0, 0)
+    filters:SetPoint('TOPLEFT', introArea, 'BOTTOMLEFT', 0, -4)
+    filters:SetPoint('TOPRIGHT', introArea, 'BOTTOMRIGHT', 0, -4)
     filters:SetHeight(44)
 
     local lblClass = UI.Label(filters, { template = 'GameFontNormal' })
@@ -287,28 +327,72 @@ local function Build(container)
     specDD:SetBuilder(specMenu)
     attachZFix(specDD)
 
-    -- Kind toggles
-    local toggleFlask = UI.Button(filters, Tr('lbl_phials') or 'Phials', { small = true })
-    toggleFlask:SetPoint('LEFT', specDD, 'RIGHT', 24, 0)
-    toggleFlask:SetScript('OnClick', function()
-        showFlacons = not showFlacons; Refresh() end)
+    -- Columns headers labels (above each list)
+    local listsFrame = CreateFrame('Frame', nil, panel)
+    listsFrame:SetPoint('TOPLEFT', filters, 'BOTTOMLEFT', 0, 0)
+    listsFrame:SetPoint('TOPRIGHT', filters, 'BOTTOMRIGHT', 0, 0)
+    listsFrame:SetPoint('BOTTOMLEFT', footerBar, 'TOPLEFT', 0, (UI.INNER_PAD or 0))
+    listsFrame:SetPoint('BOTTOMRIGHT', footerBar, 'TOPRIGHT', 0, 0)
+    listsFrame:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
 
-    local togglePotion = UI.Button(filters, Tr('lbl_potions') or 'Potions', { small = true })
-    togglePotion:SetPoint('LEFT', toggleFlask, 'RIGHT', 12, 0)
-    togglePotion:SetScript('OnClick', function()
-        showPotions = not showPotions; Refresh() end)
+    local midPad = 12
+    local fWidth = function()
+        local w = listsFrame:GetWidth() or 800
+        return (w - midPad) * 0.5
+    end
 
-    -- List area
-    local listArea = CreateFrame('Frame', nil, panel)
-    listArea:SetPoint('TOPLEFT', filters, 'BOTTOMLEFT', 0, 0)
-    listArea:SetPoint('TOPRIGHT', filters, 'BOTTOMRIGHT', 0, 0)
-    listArea:SetPoint('BOTTOMLEFT', footerBar, 'TOPLEFT', 0, (UI.INNER_PAD or 0))
-    listArea:SetPoint('BOTTOMRIGHT', footerBar, 'TOPRIGHT', 0, 0)
-    listArea:SetFrameLevel((panel:GetFrameLevel() or 0) + 1)
+    local leftHeader = UI.Label(listsFrame, { template = 'GameFontNormal' })
+    leftHeader:SetPoint('TOPLEFT', listsFrame, 'TOPLEFT', 0, -2)
+    leftHeader:SetText(Tr('lbl_phials') or 'Phials')
 
-    lv = UI.ListView(listArea, cols, { buildRow = buildRow, updateRow = updateRow, bottomAnchor = footerBar })
+    local rightHeader = UI.Label(listsFrame, { template = 'GameFontNormal' })
+    rightHeader:SetPoint('TOPLEFT', listsFrame, 'TOPLEFT', (listsFrame:GetWidth() or 0)/2 + midPad/2, -2)
+    rightHeader:SetText(Tr('lbl_potions') or 'Potions')
+
+    local leftList = CreateFrame('Frame', nil, listsFrame)
+    leftList:SetPoint('TOPLEFT', leftHeader, 'BOTTOMLEFT', 0, -4)
+    leftList:SetPoint('BOTTOMLEFT', footerBar, 'TOPLEFT', 0, (UI.INNER_PAD or 0))
+    leftList:SetWidth(fWidth())
+
+    local rightList = CreateFrame('Frame', nil, listsFrame)
+    rightList:SetPoint('TOPRIGHT', listsFrame, 'TOPRIGHT', 0, -18)
+    rightList:SetPoint('BOTTOMRIGHT', footerBar, 'TOPRIGHT', 0, (UI.INNER_PAD or 0))
+    rightList:SetWidth(fWidth())
+
+    lvFlacons = UI.ListView(leftList, cols, { buildRow = buildRow, updateRow = updateRow, bottomAnchor = footerBar })
+    lvPotions = UI.ListView(rightList, cols, { buildRow = buildRow, updateRow = updateRow, bottomAnchor = footerBar })
+
+    -- Empty state fontstrings
+    emptyLeftFS = leftList:CreateFontString(nil, 'OVERLAY', 'GameFontDisableSmall')
+    emptyLeftFS:SetPoint('TOPLEFT', leftList, 'TOPLEFT', 4, -4)
+    emptyLeftFS:SetPoint('RIGHT', leftList, 'RIGHT', -4, 0)
+    emptyLeftFS:SetJustifyH('LEFT'); emptyLeftFS:SetJustifyV('TOP')
+    emptyLeftFS:SetText((Tr('msg_no_data') or 'No data')..' – '..(Tr('lbl_phials') or 'Phials'))
+    emptyLeftFS:Hide()
+    emptyRightFS = rightList:CreateFontString(nil, 'OVERLAY', 'GameFontDisableSmall')
+    emptyRightFS:SetPoint('TOPLEFT', rightList, 'TOPLEFT', 4, -4)
+    emptyRightFS:SetPoint('RIGHT', rightList, 'RIGHT', -4, 0)
+    emptyRightFS:SetJustifyH('LEFT'); emptyRightFS:SetJustifyV('TOP')
+    emptyRightFS:SetText((Tr('msg_no_data') or 'No data')..' – '..(Tr('lbl_potions') or 'Potions'))
+    emptyRightFS:Hide()
+
+    -- Responsive resize hook
+    listsFrame:SetScript('OnSizeChanged', function()
+        local half = fWidth()
+        leftList:SetWidth(half)
+        rightList:SetWidth(half)
+        rightHeader:ClearAllPoints()
+        rightHeader:SetPoint('TOPLEFT', listsFrame, 'TOPLEFT', half + midPad, -2)
+    end)
 
     if footerBar then
+        -- Left: Source attribution (bloodmallet) like Trinkets tab
+        sourceFS = footerBar:CreateFontString(nil, 'OVERLAY', 'GameFontDisableSmall')
+        sourceFS:SetPoint('LEFT', footerBar, 'LEFT', UI.LEFT_PAD or 12, 0)
+        sourceFS:SetJustifyH('LEFT')
+        sourceFS:SetText(Tr('footer_source_bloodmallet') or 'Source: https://bloodmallet.com/')
+
+        -- Right: timestamps for both datasets
         metaFS = footerBar:CreateFontString(nil, 'OVERLAY', 'GameFontDisableSmall')
         metaFS:SetPoint('RIGHT', footerBar, 'RIGHT', -(UI.RIGHT_PAD or 12), 0)
         metaFS:SetJustifyH('RIGHT')
