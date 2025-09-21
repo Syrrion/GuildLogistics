@@ -74,24 +74,37 @@ function GLOG.GetAddonVersion()
     return v
 end
 
+-- Small parsed-version cache to avoid repeated tokenize work in hot paths
+local _cmpParseCache, _cmpParseOrder = {}, {}
+local _CMP_CACHE_MAX = 256
+local function _parseVerLimited(s, maxSeg)
+    local cached = _cmpParseCache[s]
+    if cached then return cached end
+    local out, c = {}, 0
+    for n in s:gmatch("(%d+)") do
+        out[#out + 1] = tonumber(n) or 0
+        c = c + 1
+        if c >= maxSeg then break end
+    end
+    _cmpParseCache[s] = out
+    _cmpParseOrder[#_cmpParseOrder+1] = s
+    if #_cmpParseOrder > _CMP_CACHE_MAX then
+        local ev = table.remove(_cmpParseOrder, 1)
+        _cmpParseCache[ev] = nil
+    end
+    return out
+end
+
 -- Compare deux versions sémantiques "a.b.c" ; retourne -1 / 0 / 1.
 function U.CompareVersions(a, b)
     -- Normalize and hard-cap inputs to avoid pathological costs
     local sa = tostring(a or ""):sub(1, 64)
     local sb = tostring(b or ""):sub(1, 64)
+    if sa == sb then return 0 end
     local MAX_SEG = 6
 
-    local function parse(s)
-        local out, c = {}, 0
-        for n in s:gmatch("(%d+)") do
-            out[#out + 1] = tonumber(n) or 0
-            c = c + 1
-            if c >= MAX_SEG then break end
-        end
-        return out
-    end
-
-    local A, B = parse(sa), parse(sb)
+    local A = _parseVerLimited(sa, MAX_SEG)
+    local B = _parseVerLimited(sb, MAX_SEG)
     local n = math.max(#A, #B)
     for i = 1, n do
         local x, y = A[i] or 0, B[i] or 0
@@ -193,7 +206,7 @@ do
     local function processQueue()
         if _verProcessing then return end
         _verProcessing = true
-        local BUDGET = 10 -- éléments par tranche (petit pour éviter long frame)
+    local BUDGET = 10 -- éléments par tranche (petit pour éviter long frame)
         local startT = debugprofilestop and debugprofilestop() or nil
         local i = 1
         while i <= #_verKeys and BUDGET > 0 do
@@ -206,8 +219,8 @@ do
             if rec then processOne(rec.name, rec.version, rec.ts, rec.by) end
             _verQ[k] = nil
             BUDGET = BUDGET - 1
-            -- Time budget: yield if we spent > ~8ms this slice
-            if startT and debugprofilestop and ((debugprofilestop() - startT) > 8) then
+            -- Time budget: yield if we spent > ~4ms this slice
+            if startT and debugprofilestop and ((debugprofilestop() - startT) > 4) then
                 break
             end
         end

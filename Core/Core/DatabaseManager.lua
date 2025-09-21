@@ -290,7 +290,8 @@ local function EnsureDB()
                     if processedThisFrame <= BATCH_MIN and processedThisFrame > 0 and debugprofilestop and (debugprofilestop() - start) > (BATCH_BUDGET_MS * 1.25) then
                         BATCH_MIN = math.max(1, math.floor(BATCH_MIN * 0.8))
                     end
-                    if U and U.After then U.After(0, step) else step() end
+                    -- Use C_Timer.After directly to avoid load-order dependency on ns.Util.After
+                    if C_Timer and C_Timer.After then C_Timer.After(0, step) else step() end
                 else
                     local ts = time and time() or true
                     if needsMapsKey   then active.meta["migr:mplus_maps_key_to_id"] = ts end
@@ -310,7 +311,8 @@ local function EnsureDB()
                     end
                 end
             end
-            if U and U.After then U.After(0, step) else step() end
+            -- Use C_Timer.After directly to avoid load-order dependency on ns.Util.After
+            if C_Timer and C_Timer.After then C_Timer.After(0, step) else step() end
         end
     end
 
