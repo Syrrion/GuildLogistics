@@ -7,6 +7,18 @@ local ADDON, ns = ...
 ns.GLOG = ns.GLOG or {}
 local GLOG = ns.GLOG
 
+-- Local cache to avoid recomputing totals every call (can be invoked often by UI)
+local _lotsCache = { dirty = true, totalAvailableCopper = 0 }
+local function _markLotsDirty()
+    _lotsCache.dirty = true
+end
+-- Invalidate cache on relevant internal events
+if GLOG and GLOG.On then
+    GLOG.On("expenses:changed", _markLotsDirty)
+    GLOG.On("lots:changed", _markLotsDirty)
+    GLOG.On("database:wiped", _markLotsDirty)
+end
+
 -- =========================
 -- ======   LOTS      ======
 -- =========================
@@ -80,6 +92,9 @@ end
 function GLOG.Resources_TotalAvailableCopper()
     local EnsureDB = GLOG.EnsureDB
     EnsureDB(); _ensureLots()
+    if not _lotsCache.dirty and _lotsCache.totalAvailableCopper ~= nil then
+        return _lotsCache.totalAvailableCopper
+    end
     local free = 0
     local e = GuildLogisticsDB.expenses or { list = {} }
     for _, it in ipairs(e.list or {}) do
@@ -90,10 +105,25 @@ function GLOG.Resources_TotalAvailableCopper()
     end
 
     local remainLots = 0
-    for _, l in ipairs(GuildLogisticsDB.lots.list or {}) do
-        remainLots = remainLots + (GLOG.Lot_RemainingCopper(l) or 0)
+    local listLots = GuildLogisticsDB.lots and GuildLogisticsDB.lots.list or nil
+    if listLots then
+        for i = 1, #listLots do
+            local l = listLots[i]
+            -- Inline compute remaining copper to avoid extra function calls
+            local total = tonumber(l and (l.totalCopper or l.copper) or 0) or 0
+            local N     = tonumber(l and l.sessions or 1) or 1
+            if N > 0 then
+                local used  = tonumber(l and l.used or 0) or 0
+                if used < 0 then used = 0 end
+                if used > N then used = N end
+                local remUses = N - used
+                remainLots = remainLots + math.floor((total * remUses) / N)
+            end
+        end
     end
-    return free + remainLots
+    _lotsCache.totalAvailableCopper = free + remainLots
+    _lotsCache.dirty = false
+    return _lotsCache.totalAvailableCopper
 end
 
 -- Création : fige le contenu depuis une liste d'index ABSOLUS de GuildLogisticsDB.expenses.list
@@ -118,6 +148,7 @@ function GLOG.Lot_Create(name, isMulti, sessions, absIdxs)
     local l = { id = id, name = name, sessions = isMulti and (tonumber(sessions) or 2) or 1, used = 0, totalCopper = total, itemIds = itemIds }
     table.insert(L.list, l); L.nextId = id + 1
     if ns.Emit then ns.Emit("lots:changed") end
+    if _markLotsDirty then _markLotsDirty() end
 
     -- ➕ Diffusion GM
     if GLOG.BroadcastLotCreate and GLOG.IsMaster and GLOG.IsMaster() then GLOG.BroadcastLotCreate(l) end
@@ -148,6 +179,7 @@ function GLOG.Lot_CreateFromAmount(name, amountCopper, isMulti, sessions)
     L.nextId = id + 1
 
     if ns.Emit then ns.Emit("lots:changed") end
+    if _markLotsDirty then _markLotsDirty() end
     if ns.RefreshActive then ns.RefreshActive() end
 
     -- ➕ Diffusion GM
@@ -168,6 +200,7 @@ function GLOG.Lot_Delete(id)
     table.remove(list, idx)
     for _, it in ipairs(GuildLogisticsDB.expenses.list or {}) do if it.lotId == id then it.lotId = nil end end
     if ns.Emit then ns.Emit("lots:changed") end
+    if _markLotsDirty then _markLotsDirty() end
     if ns.RefreshActive then ns.RefreshActive() end -- ✅ disparition immédiate à l'écran
 
     -- ➕ Diffusion GM
@@ -212,6 +245,7 @@ function GLOG.Lots_ConsumeMany(ids)
             end
         end
         if ns.Emit then ns.Emit("lots:changed") end
+            if _markLotsDirty then _markLotsDirty() end
         if ns.RefreshActive then ns.RefreshActive() end
 
         -- Diffusion : les autres clients (et GM aussi) recevront LOT_CONSUME,
@@ -231,6 +265,7 @@ function GLOG.Lots_ConsumeMany(ids)
             end
         end
         if ns.Emit then ns.Emit("lots:changed") end
+        if _markLotsDirty then _markLotsDirty() end
     end
 end
 
@@ -300,6 +335,7 @@ function GLOG.PurgeLotsAndItemsExhausted()
 
     if ns.Emit then ns.Emit("expenses:changed") end
     if ns.Emit then ns.Emit("lots:changed") end
+    if _markLotsDirty then _markLotsDirty() end
     if ns.RefreshAll then ns.RefreshAll() end
 
     _BumpRevisionLocal()
@@ -318,6 +354,7 @@ function GLOG.PurgeAllResources()
 
     if ns.Emit then ns.Emit("expenses:changed") end
     if ns.Emit then ns.Emit("lots:changed") end
+    if _markLotsDirty then _markLotsDirty() end
     if ns.RefreshAll then ns.RefreshAll() end
 
     _BumpRevisionLocal()
