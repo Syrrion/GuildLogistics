@@ -207,8 +207,9 @@ local function EnsureDB()
             local nextKey = nil
             local converted, droppedInner, removedOverall, droppedRuns, removedMedals = 0,0,0,0,0
             local processedOverall = 0
-            local BATCH_BUDGET_MS = 6    -- target time slice per frame
-            local BATCH_MIN = 10         -- minimum items before checking time (lowered for smoother frames)
+            -- Keep per-frame work very small to avoid long frames on huge datasets
+            local BATCH_BUDGET_MS = 4    -- target time slice per frame (ms)
+            local BATCH_MIN = 1          -- check time budget every item
 
             local function processPlayer(p)
                 if not p or type(p) ~= "table" then return end
@@ -278,15 +279,16 @@ local function EnsureDB()
                     processPlayer(playersTable[nextKey])
                     processedOverall = processedOverall + 1
                     processedThisFrame = processedThisFrame + 1
-                    if processedThisFrame >= BATCH_MIN and debugprofilestop and (debugprofilestop() - start) > BATCH_BUDGET_MS then
+                    -- Always respect the time budget; check every iteration for smoother yielding
+                    if debugprofilestop and (debugprofilestop() - start) > BATCH_BUDGET_MS then
                         break
                     end
                 until false
 
                 if nextKey ~= nil then
-                    -- Adaptive tweak: if we consistently blow budget early, reduce BATCH_MIN slightly
+                    -- Adaptive tweak retained (no-op with BATCH_MIN=1, but keep future-proofing)
                     if processedThisFrame <= BATCH_MIN and processedThisFrame > 0 and debugprofilestop and (debugprofilestop() - start) > (BATCH_BUDGET_MS * 1.25) then
-                        BATCH_MIN = math.max(5, math.floor(BATCH_MIN * 0.8))
+                        BATCH_MIN = math.max(1, math.floor(BATCH_MIN * 0.8))
                     end
                     if U and U.After then U.After(0, step) else step() end
                 else
