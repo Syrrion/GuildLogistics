@@ -43,6 +43,13 @@ local function _SetIlvlLocal(name, ilvl, ts, by, ilvlMax)
         end
         p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("ilvl:changed", name) end
+        -- 🔄 LiveMappings: mise à jour ciblée de la cellule iLvl si dispo
+        do
+            local LCU = ns and ns.LiveCellUpdater
+            if LCU and LCU.Notify then
+                LCU.Notify('ilvl', { player = name })
+            end
+        end
     end
 end
 
@@ -111,6 +118,13 @@ local function _SetMKeyLocal(name, mapId, level, mapName, ts, by)
         p.mkeyLevel = math.max(0, tonumber(level) or 0)
         p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("mkey:changed", name) end
+        -- 🔄 LiveMappings: mplus couvre colonnes mplus + mkey
+        do
+            local LCU = ns and ns.LiveCellUpdater
+            if LCU and LCU.Notify then
+                LCU.Notify('mplus', { player = name })
+            end
+        end
     end
 end
 
@@ -138,7 +152,15 @@ local function _SetMPlusScoreLocal(name, score, ts, by)
         p.mplusScore = math.max(0, tonumber(score) or 0)
         p.statusTimestamp = nowts
         if ns.Emit then ns.Emit("mplus:changed", name) end
-        if ns.RefreshAll then ns.RefreshAll() end
+        -- 🔄 LiveMappings: mise à jour ciblée des colonnes mplus + mkey; fallback refresh si indisponible
+        do
+            local LCU = ns and ns.LiveCellUpdater
+            if LCU and LCU.Notify then
+                LCU.Notify('mplus', { player = name })
+            else
+                if ns.RefreshAll then ns.RefreshAll() end
+            end
+        end
     end
 end
 
@@ -181,7 +203,13 @@ local function _SetAddonVersionLocal(name, version, ts, by)
             end
         end
         p.statusTimestamp = nowts
-        -- Pas d'événement spécifique pour la version, cela sera inclus dans le refresh global
+        -- 🔄 LiveMappings: mise à jour ciblée de la version (cloche + ver) si dispo
+        do
+            local LCU = ns and ns.LiveCellUpdater
+            if LCU and LCU.Notify then
+                LCU.Notify('version', { player = name })
+            end
+        end
     end
 end
 

@@ -241,6 +241,8 @@ L["lbl_recent_online"]    = "В сети < 1 месяц (последний пе
 L["lbl_old_online"]       = "Последний вход ≥ 1 месяц"
 L["lbl_no_player_found"]  = "Игрок не найден"
 L["lbl_out_of_guild"]     = "Игроки вне гильдии"
+L["lbl_out_of_guild_short"] = "Вне гильдии"
+L["lbl_external_players"] = "Внешние игроки"
 L["confirm_delete"]       = "Удалить этого игрока?"
 L["lbl_scan_roster_progress"] = "Сканирование состава..."
 L["lbl_from_roster_question"] = "Из состава?"
@@ -318,6 +320,7 @@ L["range_to"]             = "до"
 -- ===            COLORED STATUS              === --
 -- ============================================== --
 L["status_online"]        = "В сети"
+L["status_offline"]       = "Не в сети"
 L["status_empty"]         = "-"
 L["status_unknown"]       = "?"
 

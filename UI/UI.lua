@@ -900,6 +900,17 @@ ns.ScheduleRefreshAll = UI.ScheduleRefreshAll
 
 ns.RefreshAll = UI.ScheduleRefreshAll
 
+-- Visibility gating: return true if the main window and the active tab panel are visible
+function UI.ShouldRefreshUI()
+    local Main = UI.Main
+    if not (Main and Main.IsShown and Main:IsShown()) then return false end
+    local idx = UI._current
+    if not idx then return false end
+    local p = (type(Panels) == 'table') and Panels[idx] or nil
+    if p and p.IsShown and p:IsShown() then return true end
+    return false
+end
+
 -- ➕ Récupération du bouton d'un onglet par label
 function UI.GetTabButton(label)
     local idx = UI._tabIndexByLabel and UI._tabIndexByLabel[label]
@@ -1152,6 +1163,10 @@ function UI.ApplyTabsForGuildMembership(inGuild)
     local keepInfo        = Tr("tab_roster")     -- renommé « Info » via locales
     local keepSettings    = Tr("tab_settings")
     local keepDebug       = Tr("tab_debug")
+    local keepGuild       = Tr("tab_guild_members")
+    local catTracker      = Tr("cat_tracker")
+    local catHelpers      = Tr("cat_info")
+    local catRaids        = Tr("cat_raids")
     -- Les trois sous-onglets Debug peuvent ne pas être localisés : prévoir un libellé de secours
     local keepDebugDB     = Tr("tab_debug_db")      or "Base de donnée"
     local keepDebugEvents = Tr("tab_debug_events")  or "Historique des évènements"
@@ -1203,7 +1218,16 @@ function UI.ApplyTabsForGuildMembership(inGuild)
             if inGuild then
                 shown = true
             else
-                shown = (lab == keepInfo) or (lab == keepSettings)
+                -- Hors guilde :
+                -- - masquer tout ce qui est dans la catégorie Raids
+                -- - toujours afficher les onglets de la catégorie Helpers (cat_info)
+                -- - afficher Réglages et Guilde
+                local cat = def.category
+                if cat == catRaids then
+                    shown = false
+                else
+                    shown = (lab == keepSettings) or (lab == keepGuild) or (cat == catHelpers)
+                end
             end
         end
 
@@ -1479,6 +1503,14 @@ function ns.ToggleUI()
         local savedLabel = GLOG and GLOG.GetLastActiveTabLabel and GLOG.GetLastActiveTabLabel() or nil
         if type(savedLabel) == "string" and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[savedLabel] then
             if UI.ShowTabByLabel then UI.ShowTabByLabel(savedLabel); restored = true end
+        end
+
+        -- 2bis) Préférence par défaut: onglet « Guilde » si disponible (même hors guilde)
+        if not restored then
+            local preferred = Tr and Tr("tab_guild_members")
+            if preferred and UI and UI._tabIndexByLabel and UI._tabIndexByLabel[preferred] then
+                if UI.ShowTabByLabel then UI.ShowTabByLabel(preferred); restored = true end
+            end
         end
 
         if not restored then

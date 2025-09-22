@@ -246,6 +246,8 @@ L["lbl_recent_online"]    = "Online < 1 month (most recent char)"
 L["lbl_old_online"]       = "Last login ≥ 1 month"
 L["lbl_no_player_found"]  = "No player found"
 L["lbl_out_of_guild"]     = "Players outside guild"
+L["lbl_out_of_guild_short"] = "Outside the guild"
+L["lbl_external_players"] = "External players"
 L["confirm_delete"]       = "Delete this player?"
 L["lbl_scan_roster_progress"] = "Scanning roster..."
 L["lbl_from_roster_question"] = "From roster?"
@@ -256,6 +258,7 @@ L["lbl_status_recieved"]  = "Received"
 L["lbl_guild_members"]    = "Guild members"
 L["lbl_sep_online"]       = "Online"
 L["lbl_sep_offline"]      = "Offline"
+L["lbl_sep_ingroup"]      = "In group"
 L["btn_clear"]            = "Clear log"
 
 
@@ -323,6 +326,7 @@ L["range_to"]             = "to"
 -- ===            COLORED STATUS              === --
 -- ============================================== --
 L["status_online"]        = "Online"
+L["status_offline"]       = "Offline"
 L["status_empty"]         = "-"
 L["status_unknown"]       = "?"
 

@@ -429,6 +429,10 @@ f:SetScript("OnEvent", function(self, event, name)
         if GLOG.RefreshGuildCache then
             ns.Util.After(3.0, function() GLOG.RefreshGuildCache() end)
         end
+        -- Assure immédiatement une application cohérente de la visibilité des onglets
+        if ns.UI and ns.UI.ApplyTabsForGuildMembership then
+            ns.UI.ApplyTabsForGuildMembership((IsInGuild and IsInGuild()) and true or false)
+        end
         -- ✨ déclenche le statut unifié si on est sur le main
         if GLOG.UpdateOwnStatusIfMain then
             ns.Util.After(5.0, function() GLOG.UpdateOwnStatusIfMain() end)
@@ -530,6 +534,11 @@ f:SetScript("OnEvent", function(self, event, name)
         -- ➕ Met à jour le titre si la guilde a changé / est disponible
         if ns.UI and ns.UI.RefreshTitle then
             ns.UI.RefreshTitle()
+        end
+
+        -- ➕ Ré-applique la visibilité des onglets selon l'appartenance guilde
+        if ns.UI and ns.UI.ApplyTabsForGuildMembership then
+            ns.UI.ApplyTabsForGuildMembership((IsInGuild and IsInGuild()) and true or false)
         end
 
         _ScheduleActiveTabRefresh()

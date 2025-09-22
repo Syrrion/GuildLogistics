@@ -60,6 +60,7 @@ Données statiques : Players.lua, Tracker.lua, Upgrades.lua, BiS\_Trinkets.lua.
 * **UI.lua** : constantes globales UI, formatage gold, couleurs.
 * **UI\_Core.lua** : scheduler, gestion headers, scrollbars, colonnes listview.
 * **UI\_**\* : composants (Buttons, Dropdown, Slider, Scrollbar, Toast, ListView, Popup, TokenList).
+* **UI/UI_DynamicTable.lua** : tableur autonome proche visuellement des ListViews (entêtes, cellules, bordures), supporte tri, lignes accordéon (expand/collapse), mises à jour ciblées par cellule pour minimiser le travail UI. Ne dépend pas de ListView.
 * **UI\_Skin.lua, UI\_Pixel.lua, UI\_Fonts.lua, UI\_Scale.lua** : thèmes et adaptation résolutions.
 * **Layout.lua, UI\_Cell.lua, UI\_Badge.lua, UI\_Float.lua, UI\_PlainWindow\.lua** : helpers d’agencement.
 

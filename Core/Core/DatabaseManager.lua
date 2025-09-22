@@ -118,9 +118,6 @@ local function EnsureDB()
             dest.account  = src.account  or { mains = {}, altToMain = {} }
             dest.errors   = src.errors   or { list = {}, nextId = 1 }
             dest.meta.lastModified = time and time() or (dest.meta.lastModified or 0)
-            if GLOG and GLOG.pushLog then
-                GLOG.pushLog("info", "db:migration", "Migrated legacy store", { source = label, targetKey = targetKey })
-            end
             return true
         end
 
@@ -164,31 +161,6 @@ local function EnsureDB()
     -- Bind runtime aliases
     GuildLogisticsDB = active
     GuildLogisticsUI = GuildLogisticsUI_Char
-
-    -- Lightweight helpers for potentially heavy cleanups (can be deferred if init runs long)
-    local function _migr_drop_medal()
-        active.meta = active.meta or {}
-        local migKey = "migr:drop_mplus_medal"
-        if active.meta[migKey] then return end
-        local removed = 0
-        if type(active.players) == "table" then
-            for _, p in pairs(active.players) do
-                local maps = p and p.mplusMaps
-                if type(maps) == "table" then
-                    for _, s in pairs(maps) do
-                        if type(s) == "table" and s.medal ~= nil then
-                            s.medal = nil
-                            removed = removed + 1
-                        end
-                    end
-                end
-            end
-        end
-        active.meta[migKey] = time and time() or true
-        if removed > 0 and GLOG and GLOG.pushLog then
-            GLOG.pushLog("info", "db:migration", "Dropped legacy medal fields", { count = removed })
-        end
-    end
 
     ------------------------------------------------------------------
     -- Incremental migration scheduler (chunked to avoid long frames) --
@@ -299,16 +271,6 @@ local function EnsureDB()
                     if needsOverall   then active.meta["migr:drop_mplus_overall_fields_v1"] = ts end
                     if needsRunsDrop  then active.meta["migr:drop_mplus_runs_v1"] = ts end
                     if needsMedalDrop then active.meta["migr:drop_mplus_medal"] = ts end
-                    if GLOG and GLOG.pushLog then
-                        GLOG.pushLog("info", "db:migration:chunk", "Completed chunked migrations", {
-                            players = processedOverall,
-                            mapsConverted = converted,
-                            innerDropped = droppedInner,
-                            overallRemoved = removedOverall,
-                            runsDropped = droppedRuns,
-                            medalsRemoved = removedMedals,
-                        })
-                    end
                 end
             end
             -- Use C_Timer.After directly to avoid load-order dependency on ns.Util.After

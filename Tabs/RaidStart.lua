@@ -14,9 +14,9 @@ local lotsDirty = true -- flag d’invalidation des lots
 local cols = {
     { key="check", title="",      w=38,  justify="LEFT"  },
     { key="alias", title=Tr("col_alias"),   vsep=true,  w=140, justify="LEFT" }, -- ➕ avant Nom
-    { key="name",  title=Tr("col_name"),    vsep=true,  min=300, flex=1, justify="LEFT" },
-    { key="solde", title=Tr("col_balance"), vsep=true,  w=160, justify="LEFT"  },
-    { key="after", title=Tr("col_after"),   vsep=true,  w=160, justify="LEFT"  },
+    { key="name",  title=Tr("col_name"),    vsep=true,  min=260, flex=1, justify="LEFT" },
+    { key="solde", title=Tr("col_balance"), vsep=true,  w=140, justify="LEFT"  },
+    { key="after", title=Tr("col_after"),   vsep=true,  w=140, justify="LEFT"  },
 }
 
 -- ===== Utilitaires =====
@@ -63,23 +63,36 @@ local function BuildRow(r)
 end
 
 
-local function UpdateRow(i, r, f, d)
-    if includes[d.name] == nil then includes[d.name] = true end
-    f.check:SetChecked(includes[d.name])
-    f.check:SetScript("OnClick", function(self)
-        includes[d.name] = self:GetChecked() and true or false
-        _cachedPer, _cachedTotalStr, _cachedSelected = nil, nil, nil
-        if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
-    end)
+-- (Roster toggle removed from this tab)
+
+local function UpdateRow(i, r, f, it)
+    -- Gestion des séparateurs de section
+    if it and it.kind == "sep" then
+        -- Nettoie et affiche le label dans la colonne Name
+        if f.check then f.check:Hide() end
+        if f.alias then f.alias:SetText("") end
+        if f.name  then f.name.text:SetText(tostring(it.label or "")) end
+        if f.solde then f.solde:SetText("") end
+        if f.after then f.after:SetText("") end
+        return
+    end
+
+    local d = it.data or it
+    if includes[d.name] == nil then includes[d.name] = (it.fromReserve ~= true and it.fromExternal ~= true) end
+    if f.check then
+        f.check:Show()
+        f.check:SetChecked(includes[d.name])
+        f.check:SetScript("OnClick", function(self)
+            includes[d.name] = self:GetChecked() and true or false
+            _cachedPer, _cachedTotalStr, _cachedSelected = nil, nil, nil
+            if lv and lv.UpdateVisibleRows then lv:UpdateVisibleRows() end
+        end)
+    end
 
     -- ➕ alias avant Nom
     if f.alias then
         local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(d.name)) or ""
-        if a and a ~= "" then
-            f.alias:SetText(a)
-        else
-            f.alias:SetText("")
-        end
+        if a and a ~= "" then f.alias:SetText(a) else f.alias:SetText("") end
     end
 
     UI.SetNameTag(f.name, d.name or "")
@@ -89,6 +102,7 @@ local function UpdateRow(i, r, f, d)
     local isIncluded = includes[d.name] and true or false
     local after = isIncluded and (solde - per) or solde
     f.after:SetText(UI.MoneyText(after))
+
 end
 
 -- ===== ListView Lots =====
@@ -164,16 +178,47 @@ end
 
 
 local function Refresh()
-    -- ✅ Actifs + Réserves éligibles (vu <30j OU solde ≠ 0), cases par défaut :
-    --    - Actifs   : cochées
-    --    - Réserves : décochées
+    -- ✅ Actifs + Réserves éligibles (vu <30j OU solde ≠ 0) + Catégorie "Joueurs externes"
+    --    - Actifs       : cochées par défaut
+    --    - Réserves     : décochées par défaut
+    --    - Externes     : décochées par défaut
     local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
     local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve({ showHidden = false, cutoffDays = 30 })) or {}
 
-    -- Concatène en marquant la provenance pour gérer la case par défaut
     local rows = {}
-    for _, it in ipairs(active)  do rows[#rows+1] = { data = it, fromActive  = true } end
-    for _, it in ipairs(reserve) do rows[#rows+1] = { data = it, fromReserve = true } end
+    for _, it in ipairs(active)  do rows[#rows+1] = { kind = "data", data = it, fromActive  = true } end
+    for _, it in ipairs(reserve) do rows[#rows+1] = { kind = "data", data = it, fromReserve = true } end
+
+    -- Catégorie Joueurs externes (présents en base mais absents de la guilde)
+    local guildSet = {}
+    do
+        local grows = (GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+        for _, r in ipairs(grows) do
+            local amb = r.name_amb or r.name_raw
+            local k = amb and (GLOG.NormName and GLOG.NormName(amb)) or nil
+            if k and k ~= "" then guildSet[k] = true end
+        end
+    end
+    local outs, seen = {}, {}
+    do
+        local arr = (GLOG.GetPlayersArray and GLOG.GetPlayersArray()) or {}
+        for _, rec in ipairs(arr) do
+            local n = rec.name
+            local k = n and (GLOG.NormName and GLOG.NormName(n)) or nil
+            if k and not guildSet[k] and not seen[k] then
+                outs[#outs+1] = rec
+                seen[k] = true
+            end
+        end
+    end
+    table.sort(outs, function(a,b) return tostring(a.name):lower() < tostring(b.name):lower() end)
+    if #outs > 0 then
+        rows[#rows+1] = { kind = "sep", label = Tr("lbl_external_players") }
+        for _, it in ipairs(outs) do
+            rows[#rows+1] = { kind = "data", data = it, fromExternal = true, outOfGuild = true }
+        end
+    end
+
     lv:SetData(rows)
 
     local selectable = (GLOG.Lot_ListSelectable and GLOG.Lot_ListSelectable()) or {}
@@ -338,16 +383,12 @@ local function Build(container)
     lv = UI.ListView(topPane, cols, {
         buildRow = BuildRow,
         updateRow = function(i, r, f, it)
-            local d = it.data or it
-            -- ⚑ Par défaut : actifs cochés, réserves décochées
-            if includes[d.name] == nil then
-                includes[d.name] = not (it.fromReserve == true)
-            end
-            UpdateRow(i, r, f, d) -- réutilise la logique existante (alias/nom/solde/handlers)
+            UpdateRow(i, r, f, it)
         end,
         topOffset = (UI.SECTION_HEADER_H or 26),
         bottomAnchor = lotsPane,
         rowHeight = UI.ROW_H_SMALL,
+        rowHeightForItem = function(item) return (item.kind == "sep") and (UI.ROW_H + 10) or UI.ROW_H_SMALL end,
     })
 
     -- Titre + trait : lots utilisables

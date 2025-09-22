@@ -160,6 +160,11 @@ local function _adjustBalanceByName(name, delta)
     -- Keep roster presence and legacy field in sync for UI/compat
     local p = _ensureRosterEntry(name)
     if p.solde ~= nil then p.solde = nil end -- authoritative value now lives in account.mains
+    -- Live UI: targeted solde updates and totals refresh
+    if ns and ns.LiveCellUpdater and ns.LiveCellUpdater.Notify then
+        ns.LiveCellUpdater.Notify('balance', { player = name })
+    end
+    if ns and ns.Emit then ns.Emit("roster:balance", name) end
 end
 
 function GLOG.GetPlayersArray()
@@ -441,6 +446,12 @@ function GLOG.SetSoldeByUID(uid, value)
     local mu = MA.altToMain[uid] or uid
     MA.mains[mu] = MA.mains[mu] or {}
     MA.mains[mu].solde = tonumber(value) or 0
+    -- Live UI notifications
+    local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(mu)) or nil
+    if name and name ~= "" and ns and ns.LiveCellUpdater and ns.LiveCellUpdater.Notify then
+        ns.LiveCellUpdater.Notify('balance', { player = name })
+        if ns.Emit then ns.Emit("roster:balance", name) end
+    end
 end
 
 function GLOG.CreditByUID(uid, amount)
@@ -451,6 +462,11 @@ function GLOG.CreditByUID(uid, amount)
     MA.mains[mu] = MA.mains[mu] or {}
     MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) + (tonumber(amount) or 0)
     _emitPersonalDeltaToastByMainUID(mu, tonumber(amount) or 0)
+    local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(mu)) or nil
+    if name and name ~= "" and ns and ns.LiveCellUpdater and ns.LiveCellUpdater.Notify then
+        ns.LiveCellUpdater.Notify('balance', { player = name })
+        if ns.Emit then ns.Emit("roster:balance", name) end
+    end
 end
 
 function GLOG.DebitByUID(uid, amount)
@@ -461,6 +477,11 @@ function GLOG.DebitByUID(uid, amount)
     MA.mains[mu] = MA.mains[mu] or {}
     MA.mains[mu].solde = (tonumber(MA.mains[mu].solde) or 0) - (tonumber(amount) or 0)
     _emitPersonalDeltaToastByMainUID(mu, - (tonumber(amount) or 0))
+    local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(mu)) or nil
+    if name and name ~= "" and ns and ns.LiveCellUpdater and ns.LiveCellUpdater.Notify then
+        ns.LiveCellUpdater.Notify('balance', { player = name })
+        if ns.Emit then ns.Emit("roster:balance", name) end
+    end
 end
 
 -- Swap the entire main-level payload between two UIDs (solde, addonVersion, etc.)
@@ -696,6 +717,11 @@ function GLOG.GM_SetReserved(name, flag)
         })
     end
     
+    -- Targeted relocation in Roster DT + general UI refresh fallback
+    if ns and ns.LiveCellUpdater and ns.LiveCellUpdater.Notify then
+        ns.LiveCellUpdater.Notify('reserve', { player = full })
+    end
+    if ns.Emit then ns.Emit("roster:reserve", full, p.reserved) end
     if ns.RefreshAll then ns.RefreshAll() end
     return true
 end

@@ -1,700 +1,495 @@
 local ADDON, ns = ...
 local Tr = ns and ns.Tr
-local GLOG, UI = ns.GLOG, ns.UI
-local PAD, SBW, GUT = UI.OUTER_PAD, UI.SCROLLBAR_W, UI.GUTTER
+local UI = ns and ns.UI
+local GLOG = ns and ns.GLOG
 
-local panel, lvActive, lvReserve, activeArea, reserveArea, footer, totalFS, resourceFS, sepFS, bothFS, noGuildMsg, bankLeftFS, bankSepFS, bankRightFS
+-- DynamicTable-powered Roster (Active + Reserve categories)
+local panel, footer, dt
+local totalFS, resourceFS, sepFS, bothFS, bankLeftFS, bankSepFS, bankRightFS
 
--- État d’affichage ...
-local reserveCollapsed = true
-local reserveToggleBtn
-
--- ➕ État d’affichage des joueurs masqués (réserve)
-local _showHiddenReserve = false
-
-
--- Détecte si le personnage appartient à une guilde
+-- Helpers
 local function _HasGuild()
     return (IsInGuild and IsInGuild()) and true or false
 end
 
--- Affiche un message centré si aucune guilde, et masque les listes + footer
-local function _UpdateNoGuildUI()
-    local hasGuild = _HasGuild()
-    local showMsg = not hasGuild
-
-    if noGuildMsg then noGuildMsg:SetShown(showMsg) end
-    if activeArea  then activeArea:SetShown(not showMsg) end
-    if reserveArea then reserveArea:SetShown(not showMsg) end
-    if footer      then footer:SetShown(not showMsg) end
-    if reserveToggleBtn then reserveToggleBtn:SetShown(not showMsg) end
-
-    -- Ajuste la navigation globale (onglets)
-    if UI and UI.ApplyTabsForGuildMembership then
-        UI.ApplyTabsForGuildMembership(hasGuild)
-    end
-end
-
-
--- Colonnes sans ping (le ping est désormais dans l'onglet Membres de la guilde)
-local cols = UI.NormalizeColumns({
-    { key="alias",  title=Tr("col_alias"),          w=90, justify="LEFT" },
-    { key="lvl",    title=Tr("col_level_short"),    vsep=true,  w=44, justify="CENTER" },
-    { key="name",   title=Tr("col_name"),           vsep=true,  min=200, flex=1 },
-    { key="act",    title="",                       vsep=true,  w=120 },
-    { key="solde",  title=Tr("col_balance"),        vsep=true,  w=70 },
-})
-
--- Helpers
-local function money(v)
-    v = tonumber(v) or 0
-    return (UI and UI.MoneyText) and UI.MoneyText(v) or (tostring(v).." po")
-end
-
--- Affichage cuivre → g/s/c
-local function moneyCopper(v)
-    v = tonumber(v) or 0
-    return (UI and UI.MoneyFromCopper) and UI.MoneyFromCopper(v) or (tostring(math.floor(v/10000)).." po")
+local function FindGuildInfo(playerName)
+    return (GLOG and GLOG.GetMainAggregatedInfo and GLOG.GetMainAggregatedInfo(playerName or "")) or {}
 end
 
 local function CanActOn(name)
-    local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
+    local isMaster = (GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
     if isMaster then return true, true end
-    local meFull = ns.Util.playerFullName and ns.Util.playerFullName()
-    local isSelf = ns.Util.SamePlayer and ns.Util.SamePlayer(name, meFull)
+    local meFull = ns and ns.Util and ns.Util.playerFullName and ns.Util.playerFullName()
+    local isSelf = ns and ns.Util and ns.Util.SamePlayer and ns.Util.SamePlayer(name, meFull)
     return isSelf, isMaster
 end
 
--- Retourne des infos d'agrégation par MAIN + le reroll en ligne (nom + classe)
-local function FindGuildInfo(playerName)
-    return (GLOG.GetMainAggregatedInfo and GLOG.GetMainAggregatedInfo(playerName)) or {}
+-- Build a full name (Name-Realm) for roster operations
+local function EnsureFullName(name)
+    local m = tostring(name or "")
+    if m == "" then return m end
+    if m:find("-", 1, true) then
+        return (ns and ns.Util and ns.Util.CleanFullName and ns.Util.CleanFullName(m)) or m
+    end
+    if ns and ns.GLOG and ns.GLOG.ResolveFullNameStrict then
+        local full = ns.GLOG.ResolveFullNameStrict(m)
+        if full then return full end
+    end
+    return m
 end
 
--- Gestion robuste du solde : accepte soit l'objet "data" de ligne, soit un nom de joueur (string)
-local function GetSolde(data)
-    if type(data) == "string" then
-        return (GLOG.GetSolde and GLOG.GetSolde(data)) or 0
+-- Lazy guild membership set to detect out-of-guild players
+local _guildSet, _guildSetTs
+local function _RebuildGuildSet()
+    _guildSet = {}
+    local rows = (GLOG and GLOG.GetGuildRowsCached and GLOG.GetGuildRowsCached()) or {}
+    for _, r in ipairs(rows) do
+        local amb = r.name_amb or r.name_raw
+        local k = amb and (GLOG.NormName and GLOG.NormName(amb)) or nil
+        if k and k ~= "" then _guildSet[k] = true end
     end
-    if type(data) == "table" then
-        return tonumber(data.solde) or 0
+    _guildSetTs = GetTime and GetTime() or (time and time()) or 0
+end
+local function _IsOutOfGuild(name)
+    if not _guildSet or not _guildSetTs or ((_guildSetTs + 30) < ((GetTime and GetTime()) or (time and time()) or 0)) then
+        _RebuildGuildSet()
     end
-    return 0
+    local k = name and (GLOG and GLOG.NormName and GLOG.NormName(name)) or nil
+    if not k or k == "" then return false end
+    return not (_guildSet[k] == true)
 end
 
--- Boutons scripts
-local function AttachDepositHandler(btn, name, canAct, isMaster)
-    btn:SetScript("OnClick", function()
-        if not canAct then return end
-        UI.PopupPromptNumber(Tr("prefix_add_gold_to")..(name or ""), Tr("lbl_total_amount_gold_alt"), function(amt)
-            amt = math.floor(tonumber(amt) or 0)
-            if amt > 0 then
-                if isMaster then
-                    if GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(name, amt) end
-                else
-                    if GLOG.RequestAdjust then GLOG.RequestAdjust(name, amt) end
-                end
-            end
-        end)
-    end)
+local function _money(v)
+    v = tonumber(v) or 0
+    return (UI and UI.MoneyText) and UI.MoneyText(v) or tostring(v)
 end
 
-local function AttachWithdrawHandler(btn, name, canAct, isMaster)
-    btn:SetScript("OnClick", function()
-        if not canAct then return end
-        UI.PopupPromptNumber(Tr("prefix_remove_gold_from")..(name or ""), Tr("lbl_total_amount_gold_alt"), function(amt)
-            amt = math.floor(tonumber(amt) or 0)
-            if amt > 0 then
-                local delta = -amt
-                if isMaster then
-                    if GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(name, delta) end
-                else
-                    if GLOG.RequestAdjust then GLOG.RequestAdjust(name, delta) end
-                end
-            end
-        end)
-    end)
-end
-
--- BuildRow
--- Construit une ligne de la ListView (actifs/réserve)
--- Suppression de la mécanique de ping dans cet onglet
-
-local function BuildRow(r, context)
-    local f = {}
-    -- Pas de bouton ping dans cet onglet
-    f.lvl   = UI.Label(r, { justify = "CENTER" })
-    f.alias = UI.Label(r, { justify = "LEFT"  })
-    f.name  = UI.CreateNameTag(r)
-    -- Solde (fontstring simple pour compat thèmes)
-    f.solde = r:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-
-    -- Conteneur d’actions
-    f.act = CreateFrame("Frame", nil, r)
-    f.act:SetHeight(UI.ROW_H)
-    f.act:SetFrameLevel(r:GetFrameLevel()+1)
-
-    -- Actions financières
-    r.btnDeposit  = UI.Button(f.act, Tr("btn_deposit_gold"),   { size="sm", minWidth=60 })
-    r.btnWithdraw = UI.Button(f.act, Tr("btn_withdraw_gold"),  { size="sm", variant="ghost", minWidth=60 })
-
-    -- Alignement des actions à droite
-    UI.AttachRowRight(f.act, {  r.btnDeposit, r.btnWithdraw }, 8, -4, { leftPad = 8, align = "center" })
-
-    -- (Ping button removed)
-
-    return f
-end
-
--- UpdateRow
-local function UpdateRow(i, r, f, data)
-    local GHX = (UI and UI.GRAY_OFFLINE_HEX) or "999999"
-    local function gray(t) return "|cff"..GHX..tostring(t).."|r" end
-
-    -- Nom (sans royaume) + ajout éventuel du reroll connecté (icône + nom)
-    UI.SetNameTagShort(f.name, data.name or "")
-
-    -- Récupère le reroll online attaché au main (si différent du main)
-    local gi = FindGuildInfo(data.name or "")
-    local altBase, altFull, altClass = gi and gi.onlineAltBase, gi and gi.onlineAltFull, gi and gi.altClass
-
-    if altBase and altBase ~= "" then
-        -- Icône de classe ronde (texture native)
-        local function classIconMarkup(classTag, size)
-            size = size or 14
-            if not classTag or classTag == "" then return "" end
-            local c = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classTag]
-            if not c then return "" end
-            local w, h = size, size
-            return ("|TInterface\\GLUES\\CHARACTERCREATE\\UI-CHARACTERCREATE-CLASSES:%d:%d:0:0:256:256:%d:%d:%d:%d|t")
-                :format(w, h, c[1]*256, c[2]*256, c[3]*256, c[4]*256)
-        end
-
-        -- Nom du reroll (sans royaume), coloré classe
-        local altShort   = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(altFull or altBase)) or altBase
-        local altColored = (UI and UI.WrapTextClassColor and UI.WrapTextClassColor(altShort, nil, altClass)) or altShort
-        local icon       = classIconMarkup(altClass, 14)
-
-        -- On garde la casse du main ; parenthèses grises uniquement
-        local baseText = (f.name and f.name.text and f.name.text:GetText()) or ""
-        local altPart  = (" |cffaaaaaa( |r%s%s|cffaaaaaa )|r"):format((icon ~= "" and (icon.." ") or ""), altColored)
-
-        if f.name and f.name.text then
-            f.name.text:SetText(baseText .. altPart)
-        end
-    end
-
-    -- Alias
-    if f.alias then
-        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
-        f.alias:SetText((" "..a and a ~= "") and " "..a or "")
-    end
-
-    -- Infos guilde agrégées (online/last seen/level + reroll en ligne)
-    local gi = FindGuildInfo(data.name)
-
-    -- Alias: griser si le joueur est hors ligne
-    if f.alias then
-        local a = (GLOG.GetAliasFor and GLOG.GetAliasFor(data.name)) or ""
-        if a ~= "" and gi and not gi.online then
-            f.alias:SetText(gray(" "..a))
-        end
-    end
-
-    -- Niveau
-    if f.lvl then
-        if gi.level and gi.level > 0 then
-            if gi.online then
-                f.lvl:SetText((UI and UI.ColorizeLevel) and UI.ColorizeLevel(gi.level) or tostring(gi.level))
-            else
-                f.lvl:SetText(gray(tostring(gi.level)))
-            end
-        else
-            f.lvl:SetText("")
-        end
-    end
-    
-    -- Solde banque perso
-    if f.solde then f.solde:SetText(money(GetSolde(data.name))) end
-
-    -- Autorisations & boutons
-    local isSelf, isMaster = CanActOn(data.name)
-    local canAct           = (isMaster or isSelf)       -- GM = tout voir/tout faire ; sinon soi-même
-
-    if r.btnDeposit then
-        r.btnDeposit:SetShown(canAct)
-        AttachDepositHandler(r.btnDeposit, data.name, canAct, isMaster)
-    end
-    if r.btnWithdraw then
-        r.btnWithdraw:SetShown(canAct)
-        AttachWithdrawHandler(r.btnWithdraw, data.name, canAct, isMaster)
-    end
-
-    -- (Ping logic removed)
-
-    -- Recalage du container d’actions
-    if f and f.act and f.act._applyRowActionsLayout then
-        f.act._applyRowActionsLayout()
-    end
-end
-
--- Layout
-local function Layout()
-    if not (activeArea and reserveArea) then return end
-    local panelH = panel:GetHeight()
-    local footerH = (UI.FOOTER_H or 36)
-    local gap = 10
-
-    activeArea:ClearAllPoints()
-    reserveArea:ClearAllPoints()
-
-    if reserveCollapsed then
-        -- Actif plein écran ; Réserve : entête seule
-        reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
-        reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
-        reserveArea:SetHeight((UI.SECTION_HEADER_H or 26))
-
-        activeArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
-        activeArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
-        activeArea:SetPoint("BOTTOMLEFT", reserveArea, "TOPLEFT",  0, gap)
-        activeArea:SetPoint("BOTTOMRIGHT", reserveArea, "TOPRIGHT", 0, gap)
-        activeArea:Show()
-    else
-        -- Réserve dépliée : elle prend toute la hauteur ; Actif complètement masqué
-        activeArea:Hide()
-
-        reserveArea:SetPoint("TOPLEFT",  panel, "TOPLEFT",  UI.OUTER_PAD, -(UI.OUTER_PAD))
-        reserveArea:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -UI.OUTER_PAD, -(UI.OUTER_PAD))
-        reserveArea:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", UI.OUTER_PAD, footerH + gap)
-        reserveArea:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -UI.OUTER_PAD, footerH + gap)
-    end
-
-    if lvActive  and lvActive.Layout  then lvActive:Layout()  end
-    if lvReserve and lvReserve.Layout then lvReserve:Layout() end
-end
-
-
--- Met à jour l’UI du pliage/dépliage de la réserve
-local function UpdateReserveCollapseUI()
-    -- Bouton + / -
-    if reserveToggleBtn then
-        reserveToggleBtn:SetText(reserveCollapsed and Tr("btn_expand") or Tr("btn_collapse") or (reserveCollapsed and "+" or "-"))
-
-        -- Ajustement d’alignement : décale légèrement le bouton vers la gauche et vers le haut (appliqué une seule fois)
-        if not reserveToggleBtn._nudgeApplied then
-            local p, relTo, relP, x, y = reserveToggleBtn:GetPoint(1)
-            reserveToggleBtn:ClearAllPoints()
-            reserveToggleBtn:SetPoint(p or "LEFT", relTo, relP, (x or 0) - 8, (y or 0) + 10)
-            reserveToggleBtn._nudgeApplied = true
-
-            -- Agrandit un peu la zone cliquable côté gauche pour compenser le décalage
-            if reserveToggleBtn.SetHitRectInsets then
-                reserveToggleBtn:SetHitRectInsets(-6, -2, -2, -2)
-            end
-        end
-    end
-
-    -- Bouton "Afficher joueurs masqués" supprimé définitivement
-    
-    -- Masque/affiche le contenu de la ListView "réserve" (et force l’état de l’entête)
-    if lvReserve and lvReserve.scroll then
-        if lvReserve.SetHeaderForceHidden then
-            lvReserve:SetHeaderForceHidden(reserveCollapsed)
-        end
-        if reserveCollapsed then
-            lvReserve.scroll:Hide()
-        else
-            lvReserve.scroll:Show()
-        end
-    end
-
-    -- Recalcule la mise en page liée à l’état
-    if Layout then Layout() end
-
-    -- Rafraîchit les lignes visibles immédiatement si possible
-    if lvActive and lvActive.UpdateVisibleRows then lvActive:UpdateVisibleRows() end
-    if lvReserve and lvReserve.UpdateVisibleRows then lvReserve:UpdateVisibleRows() end
-
-    -- Et planifie un Refresh léger pour recharger les données après le relayout
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0.05, function()
-            if Refresh then Refresh() end
-        end)
-    else
-        if Refresh then Refresh() end
-    end
-end
-
-
--- Tri: en ligne d'abord (ordre alpha à l'intérieur), puis hors-ligne (ordre alpha)
+-- Online-first then alpha
 local function _SortOnlineFirst(arr)
     if not arr or #arr == 0 then return end
     table.sort(arr, function(a, b)
-        -- a/b sont des enregistrements { name=..., ... } (mains agrégés)
         local na = (a.name or ""):lower()
         local nb = (b.name or ""):lower()
-
         local giA = FindGuildInfo(a.name) or {}
         local giB = FindGuildInfo(b.name) or {}
         local oa  = giA.online and 1 or 0
         local ob  = giB.online and 1 or 0
-        if oa ~= ob then
-            return oa > ob            -- 1 (en ligne) doit passer avant 0 (hors-ligne)
-        end
-        return na < nb                -- sinon, simple alpha par Nom
+        if oa ~= ob then return oa > ob end
+        return na < nb
     end)
+end
+
+-- Actions wiring
+local function AttachDepositHandler(btn, name, canAct, isMaster)
+    if not btn then return end
+    btn:SetOnClick(function()
+        if not canAct then return end
+        if not (UI and UI.PopupPromptNumber) then return end
+        UI.PopupPromptNumber(Tr("prefix_add_gold_to")..(name or ""), Tr("lbl_total_amount_gold_alt"), function(amt)
+            amt = math.floor(tonumber(amt) or 0)
+            if amt > 0 then
+                if isMaster and GLOG and GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(name, amt)
+                elseif GLOG and GLOG.RequestAdjust then GLOG.RequestAdjust(name, amt) end
+            end
+        end)
+    end)
+end
+local function AttachWithdrawHandler(btn, name, canAct, isMaster)
+    if not btn then return end
+    btn:SetOnClick(function()
+        if not canAct then return end
+        if not (UI and UI.PopupPromptNumber) then return end
+        UI.PopupPromptNumber(Tr("prefix_remove_gold_from")..(name or ""), Tr("lbl_total_amount_gold_alt"), function(amt)
+            amt = math.floor(tonumber(amt) or 0)
+            if amt > 0 then
+                local delta = -amt
+                if isMaster and GLOG and GLOG.GM_AdjustAndBroadcast then GLOG.GM_AdjustAndBroadcast(name, delta)
+                elseif GLOG and GLOG.RequestAdjust then GLOG.RequestAdjust(name, delta) end
+            end
+        end)
+    end)
+end
+
+-- Columns
+local function BuildColumns()
+    return UI.NormalizeColumns({
+        { key = "alias",  title = Tr("col_alias"),       w = 90,  justify = "LEFT",   vsep = true,  sortValue = "alias" },
+        { key = "lvl",    title = Tr("col_level_short"), w = 44,  justify = "CENTER", vsep = true,  sortNumeric = true, sortValue = "lvl" },
+        { key = "name",   title = Tr("col_name"),        flex = 1, min = 160, justify = "LEFT",  vsep = true,
+          buildCell = function(parent) return UI.CreateNameTag(parent) end,
+          updateCell = function(cell, v)
+              local full = type(v) == 'table' and v.text or v
+              if UI and UI.SetNameTagShort then UI.SetNameTagShort(cell, full or "") else if cell and cell.SetText then cell:SetText(full or "") end end
+              local altShort = type(v) == 'table' and v.alt or nil
+              if altShort and altShort ~= "" and cell and cell.text and cell.text.GetText then
+                  local baseText = cell.text:GetText() or ""
+                  local altPart = (" |cffaaaaaa( %s )|r"):format(altShort)
+                  cell.text:SetText(baseText .. altPart)
+              end
+          end
+        },
+        { key = "act",    title = "",                   w = 240, justify = "CENTER", vsep = true, sortable = false,
+          buildCell = function(parent)
+              local host = CreateFrame("Frame", nil, parent)
+              host:SetHeight(UI.ROW_H)
+              host.btnDeposit  = UI.Button(host, Tr("btn_deposit_gold"),  { size="sm", minWidth=60 })
+              host.btnWithdraw = UI.Button(host, Tr("btn_withdraw_gold"), { size="sm", variant="ghost", minWidth=60 })
+              host.btnRoster   = UI.Button(host, Tr("btn_add_to_roster"), { size="sm", variant="ghost", minWidth=110 })
+              host.btnDelete   = UI.Button(host, Tr("btn_delete"), { size="xs", variant="danger", minWidth=60 })
+              if UI.AttachRowRight then UI.AttachRowRight(host, { host.btnDeposit, host.btnWithdraw, host.btnRoster, host.btnDelete }, 8, -4, { leftPad = 8, align = "center" }) end
+              return host
+          end,
+          updateCell = function(cell, v, row)
+              -- Special action row at end of Out-of-Guild category: show a single "Add player" button
+              local rowKey = (row and row.key) or (cell and cell._rowData and cell._rowData.key) or nil
+              if rowKey == "__add_external__" then
+                  -- Hide deposit/withdraw and repurpose the roster button as "Add player"
+                  if cell.btnDeposit then cell.btnDeposit:Hide() end
+                  if cell.btnWithdraw then cell.btnWithdraw:Hide() end
+                  if cell.btnDelete then cell.btnDelete:Hide() end
+                  local btn = cell.btnRoster
+                  if btn then
+                      local isGM = (GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
+                      btn:SetText(Tr("btn_add_player"))
+                      if btn.SetVariant then btn:SetVariant("primary") end
+                      btn:SetShown(isGM)
+                      if isGM then
+                          btn:SetOnClick(function()
+                              UI.PopupPromptText(Tr("btn_add_player"), Tr("prompt_external_player_name"), function(name)
+                                  name = tostring(name or ""):gsub("^%s+"," "):gsub("%s+$","")
+                                  if name == "" then return end
+                                  -- Add localized external realm suffix if not provided
+                                  if not string.find(name, "-", 1, true) then
+                                      local ext = (Tr and Tr("realm_external")) or "External"
+                                      name = name .. "-" .. tostring(ext or "External")
+                                  end
+                                  if GLOG and GLOG.AddPlayer and GLOG.AddPlayer(name) then
+                                      if ns and ns.RefreshActive then ns.RefreshActive() elseif ns and ns.RefreshAll then ns.RefreshAll() end
+                                  end
+                              end, { width = 460 })
+                          end)
+                      end
+                      if cell._applyRowActionsLayout then cell._applyRowActionsLayout() end
+                  end
+                  return
+              end
+              -- row.key is full name
+              local name = row and row.key or (type(v) == 'string' and v) or nil
+              if not name then return end
+              local isSelf, isMaster = CanActOn(name)
+              local canAct = isMaster or isSelf
+              if cell.btnDeposit then cell.btnDeposit:SetShown(canAct); AttachDepositHandler(cell.btnDeposit, name, canAct, isMaster) end
+              if cell.btnWithdraw then cell.btnWithdraw:SetShown(canAct); AttachWithdrawHandler(cell.btnWithdraw, name, canAct, isMaster) end
+
+              -- GM-only roster toggle (moved from Gestion → Roster)
+              local btn = cell.btnRoster
+              if btn then
+                  local canGM = isMaster and true or false
+                  -- Hide toggle for out-of-guild entries (same rule as Gestion)
+                  local outGuild = _IsOutOfGuild(name)
+                  if not canGM or outGuild then
+                      btn:Hide()
+                  else
+                      btn:Show()
+                      local fullName = EnsureFullName(name)
+                      local isReserved = (GLOG and GLOG.IsReserved and (GLOG.IsReserved(fullName) or GLOG.IsReserved(name))) or false
+                      local inRoster  = ((GLOG and GLOG.HasPlayer and (GLOG.HasPlayer(fullName) or GLOG.HasPlayer(name))) and not isReserved) or false
+                      if not inRoster then
+                          btn:SetText(Tr("btn_add_to_roster"))
+                          btn:SetOnClick(function()
+                              if GLOG and GLOG.GM_SetReserved then GLOG.GM_SetReserved(fullName, false)
+                              elseif GLOG and GLOG.SetReserve then GLOG.SetReserve(fullName, false) end
+                              if ns and ns.RefreshActive then ns.RefreshActive() elseif ns and ns.RefreshAll then ns.RefreshAll() end
+                          end)
+                      else
+                          btn:SetText(Tr("btn_remove_from_roster"))
+                          btn:SetOnClick(function()
+                              if GLOG and GLOG.GM_SetReserved then GLOG.GM_SetReserved(fullName, true)
+                              elseif GLOG and GLOG.SetReserve then GLOG.SetReserve(fullName, true) end
+                              if ns and ns.RefreshActive then ns.RefreshActive() elseif ns and ns.RefreshAll then ns.RefreshAll() end
+                          end)
+                      end
+                  end
+              end
+
+              -- Delete button for out-of-guild players (GM only)
+              if cell.btnDelete then
+                  local fullName = EnsureFullName(name)
+                  local outGuild = _IsOutOfGuild(name)
+                  local showDel = outGuild and ((GLOG and GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false)
+                  cell.btnDelete:SetShown(showDel)
+                  if showDel then
+                      cell.btnDelete:SetText(Tr("btn_delete") or "Supprimer")
+                      cell.btnDelete:SetOnClick(function()
+                          UI.PopupConfirm(Tr("confirm_delete") or "Supprimer ?", function()
+                              if GLOG then
+                                  -- Mapping-aware deletion:
+                                  -- 1) If this is an ALT, unlink it from its main first
+                                  if GLOG.IsAlt and GLOG.IsAlt(fullName) then
+                                      if GLOG.UnassignAlt then GLOG.UnassignAlt(fullName) end
+                                  else
+                                      -- 2) If this is a MAIN with a manual link, remove the MAIN mapping first
+                                      local hasLink = GLOG.HasManualLink and GLOG.HasManualLink(fullName)
+                                      local mainOf  = GLOG.GetMainOf and GLOG.GetMainOf(fullName) or fullName
+                                      local isMain  = (type(mainOf) == "string" and (GLOG.SamePlayer and GLOG.SamePlayer(mainOf, fullName))) or (mainOf == fullName)
+                                      if hasLink and isMain and GLOG.RemoveMain then
+                                          GLOG.RemoveMain(fullName)
+                                      end
+                                  end
+                                  if GLOG.RemovePlayer then GLOG.RemovePlayer(fullName) end
+                              end
+                              if ns and ns.RefreshActive then ns.RefreshActive() elseif ns and ns.RefreshAll then ns.RefreshAll() end
+                          end, nil, { strata = "FULLSCREEN_DIALOG", enforceAction = true })
+                      end)
+                  end
+              end
+              if cell._applyRowActionsLayout then cell._applyRowActionsLayout() end
+          end
+        },
+        { key = "solde",  title = Tr("col_balance"),    w = 100, justify = "RIGHT",  vsep = true,  sortNumeric = true,
+          sortValue = function(row)
+              local v = row and row.cells and row.cells.solde
+              return tonumber(v or 0) or 0
+          end,
+          buildCell = function(parent)
+              local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+              if fs.SetJustifyH then fs:SetJustifyH("RIGHT") end
+              return fs
+          end,
+          updateCell = function(cell, v)
+              cell:SetText(_money(v))
+          end
+        },
+    })
+end
+
+local function BuildRows()
+    local active  = (GLOG and GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
+    local reserve = (GLOG and GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve({ showHidden = true, cutoffDays = 30 })) or {}
+    _SortOnlineFirst(active); _SortOnlineFirst(reserve)
+
+    local total = 0
+    local function rowOf(it)
+        local gi = FindGuildInfo(it.name)
+        local lvl = tonumber(gi and gi.level or 0) or 0
+        local alias = (GLOG and GLOG.GetAliasFor and GLOG.GetAliasFor(it.name)) or ""
+        if not alias or alias == "" then alias = (tostring(it.name):match("^([^%-]+)") or tostring(it.name) or "") end
+        local altShort
+        if gi and gi.onlineAltBase then
+            altShort = (ns and ns.Util and ns.Util.ShortenFullName and ns.Util.ShortenFullName(gi.onlineAltFull or gi.onlineAltBase)) or gi.onlineAltBase
+        end
+        local bal = tonumber(it.solde) or (GLOG and GLOG.GetSolde and GLOG.GetSolde(it.name)) or 0
+        total = total + (tonumber(bal) or 0)
+        return {
+            key = it.name,
+            cells = {
+                alias = alias,
+                lvl   = lvl,
+                name  = { text = it.name, alt = altShort, sig = tostring(it.name or "") .. "|" .. tostring(altShort or "") },
+                act   = it.name,
+                solde = tonumber(bal) or 0,
+            },
+        }
+    end
+
+    -- Build Active/Reserve with only guild members
+    local catA = { key = "__cat_active",  isCategory = true, expanded = true,  title = Tr and Tr("lbl_active_roster")    or "Active roster",   children = {}, count = 0 }
+    local catR = { key = "__cat_reserve", isCategory = true, expanded = true,  title = Tr and Tr("lbl_reserved_players") or "Reserved players", children = {}, count = 0 }
+    for i = 1, #active do
+        local it = active[i]
+        if not _IsOutOfGuild(it.name) then catA.children[#catA.children+1] = rowOf(it) end
+    end
+    catA.count = #catA.children
+    for i = 1, #reserve do
+        local it = reserve[i]
+        if not _IsOutOfGuild(it.name) then catR.children[#catR.children+1] = rowOf(it) end
+    end
+    catR.count = #catR.children
+
+    -- Out-of-guild category: any player in DB not present in guild
+    local seen = {}
+    for i = 1, #catA.children do seen[catA.children[i].key] = true end
+    for i = 1, #catR.children do seen[catR.children[i].key] = true end
+
+    local outs = {}
+    do
+        local arr = (GLOG and GLOG.GetPlayersArray and GLOG.GetPlayersArray()) or {}
+        for _, rec in ipairs(arr) do
+            local n = rec.name
+            if n and _IsOutOfGuild(n) and not seen[n] then
+                outs[#outs+1] = rec
+            end
+        end
+        table.sort(outs, function(a,b) return tostring(a.name):lower() < tostring(b.name):lower() end)
+    end
+
+    local catO = { key = "__cat_outguild", isCategory = true, expanded = true,
+        title = (Tr and (Tr("lbl_out_of_guild_short") or Tr("lbl_out_of_guild"))) or "Out of guild",
+        children = {}, count = 0 }
+    for i = 1, #outs do catO.children[#catO.children+1] = rowOf(outs[i]) end
+    -- Append special action row with Add Player button (no impact on totals)
+    catO.children[#catO.children+1] = {
+        key = "__add_external__",
+        cells = {
+            alias = "",
+            lvl   = "",
+            name  = { text = "", sig = "__add_external__" },
+            act   = "__add_external__",
+            solde = 0,
+        },
+    }
+    catO.count = #catO.children
+
+    return { catA, catR, catO }, total
+end
+
+local function _applyTotals(total, rcopper)
+    if totalFS then totalFS:SetText("|cffffd200"..(Tr and Tr("lbl_total_balance") or "Total").." :|r " .. _money(total)) end
+    rcopper = rcopper or (GLOG and GLOG.Resources_TotalAvailableCopper and (GLOG.Resources_TotalAvailableCopper() or 0)) or 0
+    if resourceFS then resourceFS:SetText("|cffffd200"..(Tr and Tr("lbl_total_resources") or "Resources").." :|r " .. _money(rcopper/10000)) end
+    if bothFS then
+        local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
+        bothFS:SetText("|cffffd200"..(Tr and Tr("lbl_total_both") or "Remaining").." :|r " .. _money(combinedGold))
+    end
+    if bankRightFS and bankLeftFS then
+        local bankCopper = GLOG and GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
+        local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
+        local xTxt, yTxt
+        if bankCopper == nil then
+            local nd = "|cffaaaaaa"..((Tr and Tr("no_data")) or "No data").."|r"
+            xTxt, yTxt = nd, nd
+        else
+            local bankGold   = bankCopper / 10000
+            local equilibrium = (bankGold or 0) - (combinedGold or 0)
+            xTxt = (UI and UI.MoneyText and UI.MoneyText(bankGold)) or tostring(math.floor(bankGold + 0.5)).." po"
+            local base = (UI and UI.MoneyText) and UI.MoneyText(equilibrium) or (tostring(math.floor(equilibrium + 0.5)).." po")
+            if equilibrium and equilibrium > 0 then yTxt = "|cff40ff40"..base.."|r" else yTxt = base end
+        end
+        local orange, reset = "|cffffd200", "|r"
+        bankLeftFS:SetText(orange..((Tr and Tr("lbl_bank_balance")) or "Bank balance").." :"..reset.." "..xTxt)
+        if (bankCopper == nil) and UI and UI.SetTooltip then
+            local hint = (Tr and Tr("hint_open_gbank_to_update")) or "Open the guild bank to update this value"
+            UI.SetTooltip(bankLeftFS, hint); UI.SetTooltip(bankRightFS, hint)
+        else
+            if bankLeftFS.SetScript then bankLeftFS:SetScript("OnEnter", nil); bankLeftFS:SetScript("OnLeave", nil) end
+            if bankRightFS.SetScript then bankRightFS:SetScript("OnEnter", nil); bankRightFS:SetScript("OnLeave", nil) end
+        end
+        bankRightFS:SetText(orange..((Tr and Tr("lbl_equilibrium")) or "Equilibrium").." :"..reset.." "..yTxt)
+    end
+end
+
+local function _DoRefresh()
+    if not dt then return end
+    if not _HasGuild() then
+        -- When out of guild, this tab is hidden by gating; keep data empty silently
+        if dt.SetData then dt:SetData({}) end
+        _applyTotals(0, 0)
+        return
+    end
+    local rows, total = BuildRows()
+    if dt.DiffAndApply then dt:DiffAndApply(rows) else dt:SetData(rows) end
+    _applyTotals(total)
 end
 
 local function Refresh()
-
-    -- Mode « sans guilde » : message centré, pas de listes ni footer
-    _UpdateNoGuildUI()
-    if not _HasGuild() then
-        if lvActive then lvActive:SetData({}) end
-        if lvReserve then lvReserve:SetData({}) end
-        if lvActive and lvActive.Layout then lvActive:Layout() end
-        if lvReserve and lvReserve.Layout then lvReserve:Layout() end
-        return
+    if ns and ns.Util and ns.Util.Debounce then
+        ns.Util.Debounce("roster:dyntable", 0.12, _DoRefresh)
+    else
+        _DoRefresh()
     end
-
-    local active  = (GLOG.GetPlayersArrayActive  and GLOG.GetPlayersArrayActive())  or {}
-    local reserve = (GLOG.GetPlayersArrayReserve and GLOG.GetPlayersArrayReserve({
-        showHidden = _showHiddenReserve,
-        cutoffDays = 30
-    })) or {}
-
-    _SortOnlineFirst(active)
-    _SortOnlineFirst(reserve)
-
-    local totalEntries = (#active) + (#reserve)
-    local CHUNK = 300 -- threshold to start chunking
-    local APPLY_BATCH = 150
-
-    local function applyTotals(total, rcopper)
-        if totalFS then
-            local txt = (UI and UI.MoneyText) and UI.MoneyText(total) or (tostring(total).." po")
-            totalFS:SetText("|cffffd200"..Tr("lbl_total_balance").." :|r " .. txt)
-        end
-        rcopper = rcopper or (GLOG and GLOG.Resources_TotalAvailableCopper and (GLOG.Resources_TotalAvailableCopper() or 0)) or 0
-        if resourceFS then
-            local rtxt = (UI and UI.MoneyText) and UI.MoneyText(rcopper / 10000) or (tostring(math.floor(rcopper / 10000 + 0.5)).." po")
-            resourceFS:SetText("|cffffd200"..Tr("lbl_total_resources").." :|r " .. rtxt)
-        end
-        if bothFS then
-            local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
-            local ctxt = (UI and UI.MoneyText) and UI.MoneyText(combinedGold) or (tostring(math.floor(combinedGold + 0.5)).." po")
-            bothFS:SetText("|cffffd200"..Tr("lbl_total_both").." :|r " .. ctxt)
-        end
-        if bankRightFS and bankLeftFS then
-            local bankCopper = GLOG.GetGuildBankBalanceCopper and GLOG.GetGuildBankBalanceCopper() or nil
-            local combinedGold = (tonumber(total) or 0) - (rcopper / 10000)
-            local xTxt, yTxt
-            if bankCopper == nil then
-                local nd = "|cffaaaaaa"..(Tr("no_data") or "Aucune données").."|r"
-                xTxt, yTxt = nd, nd
-            else
-                local bankGold   = bankCopper / 10000
-                local equilibrium = (bankGold or 0) - (combinedGold or 0)
-                xTxt = (UI and UI.MoneyText and UI.MoneyText(bankGold)) or tostring(math.floor(bankGold + 0.5)).." po"
-                local base = (UI and UI.MoneyText) and UI.MoneyText(equilibrium) or (tostring(math.floor(equilibrium + 0.5)).." po")
-                if equilibrium and equilibrium > 0 then yTxt = "|cff40ff40"..base.."|r" else yTxt = base end
-            end
-            local orange, reset = "|cffffd200", "|r"
-            bankLeftFS:SetText(orange..(Tr("lbl_bank_balance") or "Solde Banque").." :"..reset.." "..xTxt)
-            if (bankCopper == nil) and UI and UI.SetTooltip then
-                local hint = Tr("hint_open_gbank_to_update") or "Ouvrir la banque de guilde pour mettre à jour cette donnée"
-                UI.SetTooltip(bankLeftFS, hint); UI.SetTooltip(bankRightFS, hint)
-            else
-                if bankLeftFS.SetScript then bankLeftFS:SetScript("OnEnter", nil); bankLeftFS:SetScript("OnLeave", nil) end
-                if bankRightFS.SetScript then bankRightFS:SetScript("OnEnter", nil); bankRightFS:SetScript("OnLeave", nil) end
-            end
-            bankRightFS:SetText(orange..(Tr("lbl_equilibrium") or "Équilibre").." :"..reset.." "..yTxt)
-        end
-    end
-
-    if totalEntries <= CHUNK then
-        -- Synchronous path
-        if lvActive then
-            local wrappedA = {}
-            for i, it in ipairs(active) do wrappedA[i] = { data = it, fromActive = true } end
-            lvActive:SetData(wrappedA)
-        end
-        if lvReserve then
-            local wrappedR = {}
-            for i, it in ipairs(reserve) do wrappedR[i] = { data = it, fromReserve = true } end
-            lvReserve:SetData(wrappedR)
-        end
-        local total = 0
-        for _, it in ipairs(active)  do total = total + (tonumber(it.solde) or 0) end
-        for _, it in ipairs(reserve) do total = total + (tonumber(it.solde) or 0) end
-        applyTotals(total)
-        return
-    end
-
-    -- Async / chunked path for large rosters
-    if lvActive then lvActive:SetData({}) end
-    if lvReserve then lvReserve:SetData({}) end
-    local accTotal = 0
-    local idxA, idxR = 1, 1
-
-    local function pushActiveBatch()
-        if not lvActive then return end
-        local batch = {}
-        local added = 0
-        while idxA <= #active and added < APPLY_BATCH do
-            local it = active[idxA]
-            batch[#batch+1] = { data = it, fromActive = true }
-            accTotal = accTotal + (tonumber(it.solde) or 0)
-            idxA = idxA + 1
-            added = added + 1
-        end
-        if #batch > 0 then
-            lvActive:AppendData(batch) -- assumes ListView has AppendData; fallback if not
-        elseif lvActive.SetData and idxA == 1 then
-            lvActive:SetData({})
-        end
-        if idxA <= #active then
-            if C_Timer and C_Timer.After then C_Timer.After(0, pushActiveBatch) else pushActiveBatch() end
-        else
-            -- move to reserve
-            if C_Timer and C_Timer.After then C_Timer.After(0, pushReserveBatch) else pushReserveBatch() end
-        end
-    end
-    function pushReserveBatch()
-        if not lvReserve then return end
-        local batch = {}
-        local added = 0
-        while idxR <= #reserve and added < APPLY_BATCH do
-            local it = reserve[idxR]
-            batch[#batch+1] = { data = it, fromReserve = true }
-            accTotal = accTotal + (tonumber(it.solde) or 0)
-            idxR = idxR + 1
-            added = added + 1
-        end
-        if #batch > 0 then
-            if lvReserve.AppendData then
-                lvReserve:AppendData(batch)
-            else
-                -- Fallback: on first batch set, then append by concatenation
-                if idxR - added == 1 and lvReserve.SetData then
-                    lvReserve:SetData(batch)
-                elseif lvReserve.rows then
-                    -- naive fallback not exposing internal API; skip
-                end
-            end
-        end
-        if idxR <= #reserve then
-            if C_Timer and C_Timer.After then C_Timer.After(0, pushReserveBatch) else pushReserveBatch() end
-        else
-            applyTotals(accTotal)
-        end
-    end
-
-    -- Kick off
-    pushActiveBatch()
 end
 
--- Footer
--- Boutons footer supprimés: aucun bouton spécifique dans le footer du Roster
-
-
--- Build panel
 local function Build(container)
-    -- Création du conteneur
-    panel, footer = UI.CreateMainContainer(container, {footer = true})
-    activeArea  = CreateFrame("Frame", nil, panel)
-    reserveArea = CreateFrame("Frame", nil, panel)
+    panel, footer = UI.CreateMainContainer(container, { footer = true })
 
-    UI.SectionHeader(activeArea,  Tr("lbl_active_roster"),      { topPad = 2 })
-    -- L’entête de la réserve garde un padding à gauche pour le petit bouton +/-
-    UI.SectionHeader(reserveArea, Tr("lbl_reserved_players"),   { topPad = 2, padLeft = 18 })
+    local cols = BuildColumns()
+    dt = UI.DynamicTable(panel, cols, { reserveScrollbarGutter = true, headerBGColor = {0.10, 0.10, 0.10, 1.0} })
 
-    if panel and panel.GetFrameLevel then
-        local base = (panel:GetFrameLevel() or 0)
-        if activeArea and activeArea.SetFrameLevel then
-            activeArea:SetFrameLevel(base + 1)
-        end
-        if reserveArea and reserveArea.SetFrameLevel then
-            reserveArea:SetFrameLevel(base + 1)
-        end
+    -- Attach to LiveCellUpdater for targeted solde/reserve updates
+    if ns and ns.LiveCellUpdater and ns.LiveCellUpdater.AttachInstance then
+        ns.LiveCellUpdater.AttachInstance("roster", dt)
     end
 
-    -- Petit bouton + / - à gauche du texte d’entête de la réserve
-    reserveToggleBtn = CreateFrame("Button", nil, reserveArea, "UIPanelButtonTemplate")
-    reserveToggleBtn:SetSize(20, 20)
-    reserveToggleBtn:SetPoint("TOPLEFT", reserveArea, "TOPLEFT", 0, -(4 + 4))
-    reserveToggleBtn:SetText("+")
-    reserveToggleBtn:SetScript("OnClick", function()
-        reserveCollapsed = not reserveCollapsed
-        UpdateReserveCollapseUI()
-    end)
+    -- Footer counters
+    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); totalFS:SetPoint("LEFT", footer, "LEFT", UI.OUTER_PAD, 0)
+    resourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); resourceFS:SetPoint("LEFT", totalFS, "RIGHT", 24, 0)
+    sepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisable"); sepFS:SetPoint("LEFT", resourceFS, "RIGHT", 16, 0); sepFS:SetText("|")
+    bothFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); bothFS:SetPoint("LEFT", sepFS, "RIGHT", 16, 0)
+    bankRightFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); bankRightFS:SetPoint("RIGHT", footer, "RIGHT", - (UI.FOOTER_RIGHT_PAD or 8), 0); bankRightFS:SetJustifyH("RIGHT")
+    bankSepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisable"); bankSepFS:SetPoint("RIGHT", bankRightFS, "LEFT", -16, 0); bankSepFS:SetText("|")
+    bankLeftFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); bankLeftFS:SetPoint("RIGHT", bankSepFS, "LEFT", -16, 0); bankLeftFS:SetJustifyH("RIGHT")
 
-    lvActive = UI.ListView(activeArea, cols, {
-        buildRow = function(r) return BuildRow(r, "active") end,
-        updateRow = function(i, r, f, it)
-            local data = it.data or it
-            UpdateRow(i, r, f, data)
-            if r.btnReserve then
-                local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
-                r.btnReserve:SetShown(isMaster)
-                if r.btnRoster then r.btnRoster:SetShown(false) end
-                if isMaster then
-                    r.btnReserve:SetOnClick(function()
-                        if GLOG.GM_SetReserved then GLOG.GM_SetReserved(data.name, true) end
-                    end)
+    -- No-guild message removed from Raids; message is handled in Guild tab
+
+    Refresh()
+
+    -- Events: roster/group changes → refresh; reserve toggle → refresh; bank updates → footer refresh
+    local function _throttled()
+        if UI and UI.ShouldRefreshUI and not UI.ShouldRefreshUI() then return end
+        if panel and panel.IsShown and (not panel:IsShown()) then return end
+        Refresh()
+    end
+    ns.Events.Register("GUILD_ROSTER_UPDATE", "roster-dyntable", _throttled)
+    ns.Events.Register("GROUP_ROSTER_UPDATE",  "roster-dyntable", _throttled)
+    -- React to Main/Alt mapping changes (assign/unassign/promote/remove): refresh roster view
+    if ns and ns.On then
+        ns.On("mainalt:changed", function()
+            _throttled()
+        end)
+    end
+    if GLOG and GLOG.On then
+        GLOG.On("mainalt:changed", function()
+            _throttled()
+        end)
+    end
+    if ns and ns.On then
+        ns.On("roster:reserve", function()
+            -- If LiveCellUpdater is wired, it already relocates rows; avoid full rebuild
+            if ns and ns.LiveCellUpdater and ns.LiveCellUpdater.AttachInstance then
+                return
+            end
+            _throttled()
+        end)
+    end
+    -- Lightweight footer-only refresh when only totals changed
+    local function _refreshTotalsOnly()
+        if UI and UI.ShouldRefreshUI and not UI.ShouldRefreshUI() then return end
+        if not dt or not dt._rawData then return end
+        -- Recompute totals based on current rows to avoid full rebuild
+        local total = 0
+        local function addFrom(cat)
+            if not cat or not cat.children then return end
+            for i = 1, #cat.children do
+                local r = cat.children[i]
+                if r and r.key then
+                    -- Use authoritative balance for accuracy
+                    local bal = (GLOG and GLOG.GetSolde and GLOG.GetSolde(r.key)) or 0
+                    total = total + (tonumber(bal) or 0)
                 end
             end
-        end,
-        topOffset = UI.SECTION_HEADER_H or 26,
-        rowHeight = UI.ROW_H_SMALL,
-        maxCreatePerFrame = 60,
-    })
-
-    lvReserve = UI.ListView(reserveArea, cols, {
-        buildRow = function(r) return BuildRow(r, "reserve") end,
-        updateRow = function(i, r, f, it)
-            local data = it.data or it
-            UpdateRow(i, r, f, data)
-            if r.btnRoster then
-                local isMaster = (GLOG.CanModifyGuildData and GLOG.CanModifyGuildData()) or false
-                r.btnRoster:SetShown(isMaster)
-                if r.btnReserve then r.btnReserve:SetShown(false) end
-                if isMaster then
-                    r.btnRoster:SetOnClick(function()
-                        if GLOG.GM_SetReserved then GLOG.GM_SetReserved(data.name, false) end
-                    end)
-                end
-            end
-        end,
-        topOffset = UI.SECTION_HEADER_H or 26,
-        bottomAnchor = footer,
-        rowHeight = UI.ROW_H_SMALL,
-        maxCreatePerFrame = 60,
-    })
-
-    -- Masque de fond englobant (header + contenu) pour la ListView des Actifs
-    do
-        -- Cache (par prudence) le containerBG générique si présent pour éviter un double assombrissement
-        if lvActive and lvActive._containerBG and lvActive._containerBG.Hide then
-            lvActive._containerBG:Hide()
         end
-
-        local col = (UI.GetListViewContainerColor and UI.GetListViewContainerColor()) or { r = 0, g = 0, b = 0, a = 0.20 }
-        local bg = activeArea:CreateTexture(nil, "BACKGROUND")
-        bg:SetColorTexture(col.r or 0, col.g or 0, col.b or 0, col.a or 0.20)
-
-        -- Englobe exactement le header de colonnes + la zone scroll de la ListView
-        if lvActive and lvActive.header and lvActive.scroll then
-            bg:SetPoint("TOPLEFT",     lvActive.header, "TOPLEFT",     0, 0)
-            bg:SetPoint("BOTTOMRIGHT", lvActive.scroll, "BOTTOMRIGHT", 0, 0)
-        end
-
-        -- Si la vue est relayoutée, on recale proprement le masque
-        if lvActive and lvActive.Layout and not lvActive._synth_bg_hook then
-            local _old = lvActive.Layout
-            function lvActive:Layout(...)
-                local res = _old(self, ...)
-                if bg and self.header and self.scroll then
-                    bg:ClearAllPoints()
-                    bg:SetPoint("TOPLEFT",     self.header, "TOPLEFT",     0, 0)
-                    bg:SetPoint("BOTTOMRIGHT", self.scroll, "BOTTOMRIGHT", 0, 0)
-                end
-                return res
-            end
-            lvActive._synth_bg_hook = true
-        end
-    end
-
-    totalFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    totalFS:SetPoint("LEFT", footer, "LEFT", PAD, 0)
-
-    -- Compteur "Total ressources" (si vous l'avez déjà créé, ce bloc est idempotent)
-    if not resourceFS then
-        resourceFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        resourceFS:SetPoint("LEFT", totalFS, "RIGHT", 24, 0)
-    end
-
-    -- Séparateur visuel (léger, gris)
-    if not sepFS then
-        sepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-        sepFS:SetPoint("LEFT", resourceFS, "RIGHT", 16, 0)
-        sepFS:SetText("|")
-    end
-
-    -- Compteur "Total cumulé" (soldes + ressources)
-    if not bothFS then
-        bothFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        bothFS:SetPoint("LEFT", sepFS, "RIGHT", 16, 0)
-    end
-
-    -- Bloc aligné à droite: "Solde Banque : X | Équilibre : Y" avec séparateur gris et espacement identique
-    if not bankRightFS then
-        bankRightFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        bankRightFS:SetPoint("RIGHT", footer, "RIGHT", - (UI.FOOTER_RIGHT_PAD or 8), 0)
-        bankRightFS:SetJustifyH("RIGHT")
-    end
-    if not bankSepFS then
-        bankSepFS = footer:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-        bankSepFS:SetPoint("RIGHT", bankRightFS, "LEFT", -16, 0)
-        bankSepFS:SetText("|")
-    end
-    if not bankLeftFS then
-        bankLeftFS = footer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        bankLeftFS:SetPoint("RIGHT", bankSepFS, "LEFT", -16, 0)
-        bankLeftFS:SetJustifyH("RIGHT")
-    end
-
-
-    -- Aucun bouton footer à créer dans l'onglet Roster
-
-    if not noGuildMsg then
-        noGuildMsg = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-        noGuildMsg:SetPoint("CENTER", panel, "CENTER", 0, 0)
-        noGuildMsg:SetJustifyH("CENTER"); noGuildMsg:SetJustifyV("MIDDLE")
-        noGuildMsg:SetText(Tr("msg_no_guild"))
-        noGuildMsg:Hide()
-    end
-
-    -- Applique l’état par défaut (“réserve” repliée) et ajuste la mise en page
-    UpdateReserveCollapseUI()
-    _UpdateNoGuildUI()
-end
-
--- ➕ Surveille les changements de groupe pour mettre à jour le surlignage
-do
-    local function _onGroupChanged()
-        -- MàJ légère si possible (affecte surtout l'accent des lignes)
-        if lvActive and lvActive.UpdateVisibleRows then lvActive:UpdateVisibleRows() end
-        if lvReserve and lvReserve.UpdateVisibleRows then lvReserve:UpdateVisibleRows() end
-        -- Et debounce un Refresh complet pour re-trier si nécessaire
-        if ns and ns.Util and ns.Util.Debounce then
-            ns.Util.Debounce("tab:roster:refresh", 0.15, function()
-                if Refresh then Refresh() end
-            end)
+        local raw = dt._rawData or {}
+        if #raw > 0 and raw[1] and raw[1].isCategory then
+            for i = 1, #raw do addFrom(raw[i]) end
         else
-            if Refresh then Refresh() end
-        end
-    end
-    ns.Events.Register("GROUP_ROSTER_UPDATE", _onGroupChanged)
-end
-
--- Rafraîchir le footer quand la banque de guilde met à jour son solde
-do
-    local function _onGuildBankUpdated()
-        -- Rafraîchit uniquement si l'UI principale est visible
-        if ns and ns.UI and ns.UI.Main and ns.UI.Main:IsShown() then
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0.1, function()
-                    if Refresh then Refresh() end
-                end)
-            else
-                if Refresh then Refresh() end
+            for i = 1, #raw do
+                local r = raw[i]
+                if r and r.key then
+                    local bal = (GLOG and GLOG.GetSolde and GLOG.GetSolde(r.key)) or 0
+                    total = total + (tonumber(bal) or 0)
+                end
             end
         end
+        _applyTotals(total)
     end
-    if GLOG and GLOG.On then GLOG.On("guildbank:updated", _onGuildBankUpdated) end
+    if GLOG and GLOG.On then
+        GLOG.On("guildbank:updated", function() _refreshTotalsOnly() end)
+    end
+    if ns and ns.On then
+        ns.On("roster:balance", function() _refreshTotalsOnly() end)
+    end
 end
 
+local function Layout() end
 
-UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout, {
-    category = Tr("cat_raids"),
-})
+UI.RegisterTab(Tr("tab_roster"), Build, Refresh, Layout, { category = Tr("cat_raids") })

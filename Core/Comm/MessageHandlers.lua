@@ -509,6 +509,13 @@ local function handleRosterReserve(sender, kv)
             meta.rev = (safenum(kv.rv, -1) >= 0) and safenum(kv.rv, -1) or safenum(meta.rev, 0)
             meta.lastModified = safenum(kv.lm, now())
             if ns.Emit then ns.Emit("roster:reserve", full, p.reserved) end
+            -- Trigger live relocation in the Roster DynamicTable if attached
+            do
+                local LCU = ns and ns.LiveCellUpdater
+                if LCU and LCU.Notify then
+                    LCU.Notify('reserve', { player = full })
+                end
+            end
             refreshActive()
         end
     end
@@ -743,9 +750,11 @@ local function handleStatusUpdate(sender, kv)
             end
         end
 
-        local n_ts   = safenum(info.ts, now())
-        local prev   = safenum(p.statusTimestamp, 0)
-        local changed= false
+    local n_ts   = safenum(info.ts, now())
+    local prev   = safenum(p.statusTimestamp, 0)
+    local changed= false
+    -- Flags de changement par champ pour LiveMappings
+    local changedIlvl, changedMKey, changedScore, changedVersion = false, false, false, false
 
         -- ===== iLvl =====
         if not isAlt then
@@ -755,6 +764,7 @@ local function handleStatusUpdate(sender, kv)
                 p.ilvl = math.floor(n_ilvl)
                 if n_ilvlMax >= 0 then p.ilvlMax = math.floor(n_ilvlMax) end
                 changed = true
+                changedIlvl = true
                 if ns.Emit then ns.Emit("ilvl:changed", pname) end
             end
         end
@@ -767,6 +777,7 @@ local function handleStatusUpdate(sender, kv)
                 if n_mid >= 0 then p.mkeyMapId = n_mid end
                 if n_lvl >= 0 then p.mkeyLevel = n_lvl end
                 changed = true
+                changedMKey = true
                 if ns.Emit then ns.Emit("mkey:changed", pname) end
             end
         end
@@ -777,6 +788,7 @@ local function handleStatusUpdate(sender, kv)
             if n_score >= 0 and n_ts >= prev then
                 p.mplusScore = n_score
                 changed = true
+                changedScore = true
                 if ns.Emit then ns.Emit("mplus:changed", pname) end
             end
         end
@@ -799,20 +811,24 @@ local function handleStatusUpdate(sender, kv)
                     if type(t.mains[mu]) == "table" then
                         t.mains[mu].addonVersion = version
                         changed = true
+                        changedVersion = true
                     else
                         -- Le MAIN n'existe pas encore → copie locale pour affichage
                         p.addonVersion = version
                         changed = true
+                        changedVersion = true
                     end
                 elseif type(t.mains[mu]) == "table" then
                     -- MAIN déjà confirmé: mise à jour uniquement
                     t.mains[mu].addonVersion = version
                     changed = true
+                    changedVersion = true
                 else
                     -- Ni mappé, ni main confirmé → ne pas créer une entrée MAIN
                     -- Conserver une copie locale au niveau du personnage
                     p.addonVersion = version
                     changed = true
+                    changedVersion = true
                 end
             end
             -- Utiliser aussi la fonction de traçage de version si disponible
@@ -824,7 +840,19 @@ local function handleStatusUpdate(sender, kv)
         end
 
         if changed and n_ts > prev then p.statusTimestamp = n_ts end
-        if changed and ns.RefreshAll then ns.RefreshAll() end
+        -- ✅ Déclencher des mises à jour ciblées via LiveMappings uniquement pour les valeurs modifiées
+        do
+            local LCU = ns and ns.LiveCellUpdater
+            if LCU and LCU.Notify then
+                if changedIlvl then LCU.Notify('ilvl',   { player = pname }) end
+                -- Regroupe score et mkey sous l'effet "mplus" (met à jour colonnes mplus + mkey)
+                if changedMKey or changedScore then LCU.Notify('mplus', { player = pname }) end
+                if changedVersion then LCU.Notify('version', { player = pname }) end
+            else
+                -- Fallback : rafraîchissement global si le système LiveMappings n'est pas disponible
+                if changed and ns and ns.RefreshAll then ns.RefreshAll() end
+            end
+        end
     end
 
     local function _applyByUID(uid, info)
@@ -843,7 +871,7 @@ local function handleStatusUpdate(sender, kv)
                 local uid, ts, ilvl, ilvlMax, mid, lvl, score, version =
                     rec:match("^([^;]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);(.*)$")
                 if uid and ts then
-                    _applyByUID(uid, {
+                    local info = {
                         ts = safenum(ts, now()),
                         ilvl = safenum(ilvl, -1),
                         ilvlMax = safenum(ilvlMax, -1),
@@ -851,7 +879,8 @@ local function handleStatusUpdate(sender, kv)
                         lvl = safenum(lvl, -1),
                         score = safenum(score, -1),
                         version = tostring(version or ""),
-                    })
+                    }
+                    _applyByUID(uid, info)
                 end
             elseif type(rec) == "table" then
                 local uid = rec.uid or rec.u
@@ -997,6 +1026,32 @@ local function handleStatusUpdate(sender, kv)
             _applyByUID(uid, info)
         elseif name ~= "" then
             _applyOne(name, info)
+        end
+    end
+
+    -- 🔄 Mises à jour live complémentaires basées sur présence/zone
+    do
+        local LCU = ns and ns.LiveCellUpdater
+        if LCU and LCU.Notify then
+            -- STATUS_UPDATE peut impacter l'état online (ping, ilvl, last) via FindGuildInfo
+            -- On notifie "online" pour les joueurs présents dans ce batch si on peut les résoudre.
+            if type(kv.S) == "table" then
+                for _, rec in ipairs(kv.S) do
+                    local who
+                    if type(rec) == "string" then
+                        local uid = rec:match("^([^;:]+)[;:]") -- uid avant ';' ou ':'
+                        if uid and GLOG and GLOG.GetNameByUID then who = GLOG.GetNameByUID(uid) end
+                    elseif type(rec) == "table" then
+                        local uid = tostring(rec.uid or rec.u or "")
+                        local name = tostring(rec.name or rec.n or "")
+                        if uid ~= "" and GLOG and GLOG.GetNameByUID then who = GLOG.GetNameByUID(uid) end
+                        if (not who or who == "") and name ~= "" then who = name end
+                    end
+                    if who and who ~= "" then
+                        LCU.Notify('online', { player = who })
+                    end
+                end
+            end
         end
     end
 end

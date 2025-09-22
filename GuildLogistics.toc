@@ -2,7 +2,7 @@
 ## Title: |cffffa500G|cffff9500u|cffff8500i|cffff7500l|cffff6500d|r |cffff5500L|cffff4500o|cffff3500g|cffff2500i|cffff1500s|cffff0500t|cffff0000i|cffcc0000c|cff990000s|r
 ## Notes: Guild Logistics
 ## Author: Ysendril-KirinTor
-## Version: 4.4.3
+## Version: 5.0.0
 ## Category: Guild
 ## X-Curse-Project-ID: 1331099
 ## SavedVariables: GuildLogisticsShared
@@ -191,6 +191,8 @@ Core/Core/Addon.lua
 Core/Core/Debug.lua
 Core/Core/Permissions.lua
 Core/Core/Consumables.lua
+Core/Core/LiveCellUpdater.lua
+Core/Core/LiveMappings.lua
 
 Core/Debug/ErrorHandler.lua
 Core/Debug/ErrorJournal.lua
@@ -255,6 +257,7 @@ UI/UI_Cell.lua
 UI/UI_Skin.lua
 UI/UI.lua
 UI/UI_ListView.lua
+UI/UI_DynamicTable.lua
 UI/UI_Popup.lua
 UI/UI_LootRanks.lua
 UI/UI_Buttons.lua
@@ -270,7 +273,6 @@ UI/UI_Toast.lua
 
 Tabs/Guild.lua
 Tabs/Roster.lua
-Tabs/RosterManage.lua
 Tabs/RaidHistory.lua
 Tabs/RaidStart.lua
 Tabs/Resources.lua
