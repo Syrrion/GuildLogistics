@@ -8,32 +8,32 @@ ns.Consum_monk_windwalker_flacons = [[
     "class_id": 10,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5581564,
-            "2": 5592507,
-            "3": 5609378
+            "1": 5643355,
+            "2": 5653495,
+            "3": 5666508
         },
         "Flask of Tempered Aggression": {
-            "1": 5545092,
-            "2": 5551920,
-            "3": 5568743
+            "1": 5598421,
+            "2": 5611967,
+            "3": 5623788
         },
         "Flask of Tempered Mastery": {
-            "1": 5543352,
-            "2": 5553153,
-            "3": 5561363
+            "1": 5597457,
+            "2": 5614212,
+            "3": 5621321
         },
         "Flask of Tempered Swiftness": {
-            "1": 5557469,
-            "2": 5566486,
-            "3": 5586323
+            "1": 5613341,
+            "2": 5629574,
+            "3": 5645044
         },
         "Flask of Tempered Versatility": {
-            "1": 5546119,
-            "2": 5553113,
-            "3": 5566388
+            "1": 5606073,
+            "2": 5616367,
+            "3": 5632352
         },
         "baseline": {
-            "1": 5433632
+            "1": 5493326
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_monk_windwalker_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:30:51.832199"
+        "timestamp": "2025-09-24 06:13:06.418471"
     },
     "profile": {
         "character": {
@@ -143,14 +143,14 @@ ns.Consum_monk_windwalker_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5433632.458572749
+            "base_dps": 5493326.887057751
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -162,14 +162,14 @@ ns.Consum_monk_windwalker_flacons = [[
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
         "Flask of Tempered Swiftness",
-        "Flask of Tempered Aggression",
         "Flask of Tempered Versatility",
+        "Flask of Tempered Aggression",
         "Flask of Tempered Mastery",
         "baseline"
     ],
     "spec_id": 269,
-    "subtitle": "UTC 2025-09-17 02:30 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:30",
+    "subtitle": "UTC 2025-09-24 06:13 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:13",
     "title": "Phials | Windwalker Monk | Castingpatchwerk",
     "translations": {}
 }

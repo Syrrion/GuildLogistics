@@ -8,32 +8,32 @@ ns.Consum_death_knight_frost_flacons = [[
     "class_id": 6,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5624038,
-            "2": 5641703,
-            "3": 5665327
+            "1": 5626091,
+            "2": 5644583,
+            "3": 5660617
         },
         "Flask of Tempered Aggression": {
-            "1": 5582152,
-            "2": 5594005,
-            "3": 5610972
+            "1": 5581265,
+            "2": 5597832,
+            "3": 5609013
         },
         "Flask of Tempered Mastery": {
-            "1": 5579008,
-            "2": 5597773,
-            "3": 5606434
+            "1": 5577815,
+            "2": 5592354,
+            "3": 5611493
         },
         "Flask of Tempered Swiftness": {
-            "1": 5592237,
-            "2": 5601660,
-            "3": 5619824
+            "1": 5592352,
+            "2": 5603125,
+            "3": 5623790
         },
         "Flask of Tempered Versatility": {
-            "1": 5578501,
-            "2": 5595543,
-            "3": 5607699
+            "1": 5575885,
+            "2": 5596239,
+            "3": 5610047
         },
         "baseline": {
-            "1": 5458108
+            "1": 5459581
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_death_knight_frost_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:25:22.901570"
+        "timestamp": "2025-09-24 06:03:48.340330"
     },
     "profile": {
         "character": {
@@ -138,14 +138,14 @@ ns.Consum_death_knight_frost_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5458108.659604549
+            "base_dps": 5459581.931079087
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -157,14 +157,14 @@ ns.Consum_death_knight_frost_flacons = [[
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
         "Flask of Tempered Swiftness",
-        "Flask of Tempered Aggression",
-        "Flask of Tempered Versatility",
         "Flask of Tempered Mastery",
+        "Flask of Tempered Versatility",
+        "Flask of Tempered Aggression",
         "baseline"
     ],
     "spec_id": 251,
-    "subtitle": "UTC 2025-09-17 02:25 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:25",
+    "subtitle": "UTC 2025-09-24 06:03 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:03",
     "title": "Phials | Frost Death Knight | Castingpatchwerk",
     "translations": {}
 }

@@ -8,17 +8,17 @@ ns.Consum_mage_fire_potions = [[
     "class_id": 8,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5625491,
-            "2": 5628156,
-            "3": 5633367
+            "1": 5616616,
+            "2": 5620403,
+            "3": 5628550
         },
         "Tempered Potion": {
-            "1": 5674724,
-            "2": 5678748,
-            "3": 5689970
+            "1": 5674508,
+            "2": 5682935,
+            "3": 5684264
         },
         "baseline": {
-            "1": 5609256
+            "1": 5605474
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_mage_fire_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:40:10.962612"
+        "timestamp": "2025-09-24 06:24:38.025229"
     },
     "profile": {
         "character": {
@@ -128,14 +128,14 @@ ns.Consum_mage_fire_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5609256.389016574
+            "base_dps": 5605474.222002392
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -150,8 +150,8 @@ ns.Consum_mage_fire_potions = [[
         "baseline"
     ],
     "spec_id": 63,
-    "subtitle": "UTC 2025-09-17 02:40 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:40",
+    "subtitle": "UTC 2025-09-24 06:24 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:24",
     "title": "Potions | Fire Mage | Castingpatchwerk",
     "translations": {}
 }

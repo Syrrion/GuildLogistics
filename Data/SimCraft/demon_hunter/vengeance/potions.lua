@@ -8,17 +8,17 @@ ns.Consum_demon_hunter_vengeance_potions = [[
     "class_id": 12,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 3006301,
-            "2": 3014461,
-            "3": 3016466
+            "1": 3170676,
+            "2": 3175399,
+            "3": 3180631
         },
         "Tempered Potion": {
-            "1": 3058527,
-            "2": 3063213,
-            "3": 3068332
+            "1": 3220731,
+            "2": 3228477,
+            "3": 3233194
         },
         "baseline": {
-            "1": 2994581
+            "1": 3157855
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_demon_hunter_vengeance_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:36:36.948251"
+        "timestamp": "2025-09-24 06:20:53.107394"
     },
     "profile": {
         "character": {
@@ -126,14 +126,14 @@ ns.Consum_demon_hunter_vengeance_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 2994581.8526557703
+            "base_dps": 3157855.6824096874
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -148,8 +148,8 @@ ns.Consum_demon_hunter_vengeance_potions = [[
         "baseline"
     ],
     "spec_id": 581,
-    "subtitle": "UTC 2025-09-17 02:36 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:36",
+    "subtitle": "UTC 2025-09-24 06:20 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:20",
     "title": "Potions | Vengeance Demon Hunter | Castingpatchwerk",
     "translations": {}
 }

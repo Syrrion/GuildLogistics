@@ -8,17 +8,17 @@ ns.Consum_druid_guardian_potions = [[
     "class_id": 11,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 3581856,
-            "2": 3585027,
-            "3": 3586279
+            "1": 3582720,
+            "2": 3583958,
+            "3": 3589092
         },
         "Tempered Potion": {
-            "1": 3620153,
-            "2": 3623214,
-            "3": 3625376
+            "1": 3617299,
+            "2": 3619244,
+            "3": 3623703
         },
         "baseline": {
-            "1": 3572696
+            "1": 3577346
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_druid_guardian_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:37:49.074528"
+        "timestamp": "2025-09-24 06:22:01.273528"
     },
     "profile": {
         "character": {
@@ -122,14 +122,14 @@ ns.Consum_druid_guardian_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 3572696.510777451
+            "base_dps": 3577346.9698427888
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -144,8 +144,8 @@ ns.Consum_druid_guardian_potions = [[
         "baseline"
     ],
     "spec_id": 104,
-    "subtitle": "UTC 2025-09-17 02:37 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:37",
+    "subtitle": "UTC 2025-09-24 06:22 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:22",
     "title": "Potions | Guardian Druid | Castingpatchwerk",
     "translations": {}
 }

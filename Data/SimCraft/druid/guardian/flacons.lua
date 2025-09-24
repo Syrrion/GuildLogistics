@@ -8,32 +8,32 @@ ns.Consum_druid_guardian_flacons = [[
     "class_id": 11,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 3610887,
-            "2": 3618380,
-            "3": 3627124
+            "1": 3611605,
+            "2": 3618920,
+            "3": 3624654
         },
         "Flask of Tempered Aggression": {
-            "1": 3595683,
-            "2": 3605840,
-            "3": 3610099
+            "1": 3593519,
+            "2": 3601606,
+            "3": 3610059
         },
         "Flask of Tempered Mastery": {
-            "1": 3585555,
-            "2": 3593559,
-            "3": 3601583
+            "1": 3588239,
+            "2": 3596898,
+            "3": 3601616
         },
         "Flask of Tempered Swiftness": {
-            "1": 3603136,
-            "2": 3611942,
-            "3": 3621017
+            "1": 3603455,
+            "2": 3613389,
+            "3": 3617305
         },
         "Flask of Tempered Versatility": {
-            "1": 3598119,
-            "2": 3598990,
-            "3": 3613070
+            "1": 3597727,
+            "2": 3603635,
+            "3": 3610623
         },
         "baseline": {
-            "1": 3527200
+            "1": 3527243
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_druid_guardian_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:28:13.538708"
+        "timestamp": "2025-09-24 06:09:21.310223"
     },
     "profile": {
         "character": {
@@ -140,14 +140,14 @@ ns.Consum_druid_guardian_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 3527200.321918065
+            "base_dps": 3527243.5013974444
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -165,8 +165,8 @@ ns.Consum_druid_guardian_flacons = [[
         "baseline"
     ],
     "spec_id": 104,
-    "subtitle": "UTC 2025-09-17 02:28 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:28",
+    "subtitle": "UTC 2025-09-24 06:09 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:09",
     "title": "Phials | Guardian Druid | Castingpatchwerk",
     "translations": {}
 }

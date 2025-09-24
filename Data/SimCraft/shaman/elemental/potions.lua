@@ -8,17 +8,17 @@ ns.Consum_shaman_elemental_potions = [[
     "class_id": 7,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 6285912,
-            "2": 6290555,
-            "3": 6311967
+            "1": 6192506,
+            "2": 6193899,
+            "3": 6201786
         },
         "Tempered Potion": {
-            "1": 6384545,
-            "2": 6395761,
-            "3": 6406135
+            "1": 6289692,
+            "2": 6296708,
+            "3": 6311348
         },
         "baseline": {
-            "1": 6272590
+            "1": 6165668
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_shaman_elemental_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:42:56.896975"
+        "timestamp": "2025-09-24 06:27:27.682716"
     },
     "profile": {
         "character": {
@@ -126,14 +126,14 @@ ns.Consum_shaman_elemental_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 6272590.448016392
+            "base_dps": 6165668.066837448
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -148,8 +148,8 @@ ns.Consum_shaman_elemental_potions = [[
         "baseline"
     ],
     "spec_id": 262,
-    "subtitle": "UTC 2025-09-17 02:42 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:42",
+    "subtitle": "UTC 2025-09-24 06:27 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:27",
     "title": "Potions | Elemental Shaman | Castingpatchwerk",
     "translations": {}
 }

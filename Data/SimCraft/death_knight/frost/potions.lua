@@ -8,17 +8,17 @@ ns.Consum_death_knight_frost_potions = [[
     "class_id": 6,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5492196,
-            "2": 5496565,
-            "3": 5489838
+            "1": 5486389,
+            "2": 5494535,
+            "3": 5490277
         },
         "Tempered Potion": {
-            "1": 5632919,
-            "2": 5648383,
-            "3": 5658093
+            "1": 5634181,
+            "2": 5646673,
+            "3": 5660503
         },
         "baseline": {
-            "1": 5493169
+            "1": 5489422
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_death_knight_frost_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:35:35.204291"
+        "timestamp": "2025-09-24 06:19:26.758941"
     },
     "profile": {
         "character": {
@@ -120,14 +120,14 @@ ns.Consum_death_knight_frost_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5493169.382735135
+            "base_dps": 5489422.562720854
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -142,8 +142,8 @@ ns.Consum_death_knight_frost_potions = [[
         "baseline"
     ],
     "spec_id": 251,
-    "subtitle": "UTC 2025-09-17 02:35 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:35",
+    "subtitle": "UTC 2025-09-24 06:19 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:19",
     "title": "Potions | Frost Death Knight | Castingpatchwerk",
     "translations": {}
 }

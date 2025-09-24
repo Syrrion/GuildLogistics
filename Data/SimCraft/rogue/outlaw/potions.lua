@@ -8,17 +8,17 @@ ns.Consum_rogue_outlaw_potions = [[
     "class_id": 4,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5771745,
-            "2": 5776612,
-            "3": 5787080
+            "1": 5659058,
+            "2": 5659582,
+            "3": 5667224
         },
         "Tempered Potion": {
-            "1": 5788572,
-            "2": 5800023,
-            "3": 5802178
+            "1": 5681823,
+            "2": 5683176,
+            "3": 5682615
         },
         "baseline": {
-            "1": 5767293
+            "1": 5646922
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_rogue_outlaw_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:42:23.030060"
+        "timestamp": "2025-09-24 06:26:39.662321"
     },
     "profile": {
         "character": {
@@ -127,14 +127,14 @@ ns.Consum_rogue_outlaw_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5767293.939721538
+            "base_dps": 5646922.620853477
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -149,8 +149,8 @@ ns.Consum_rogue_outlaw_potions = [[
         "baseline"
     ],
     "spec_id": 260,
-    "subtitle": "UTC 2025-09-17 02:42 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:42",
+    "subtitle": "UTC 2025-09-24 06:26 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:26",
     "title": "Potions | Outlaw Rogue | Castingpatchwerk",
     "translations": {}
 }

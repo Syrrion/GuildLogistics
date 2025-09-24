@@ -8,32 +8,32 @@ ns.Consum_rogue_subtlety_flacons = [[
     "class_id": 4,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5253464,
-            "2": 5260040,
-            "3": 5271865
+            "1": 5251643,
+            "2": 5262954,
+            "3": 5271300
         },
         "Flask of Tempered Aggression": {
-            "1": 5230757,
-            "2": 5242300,
-            "3": 5246971
+            "1": 5233993,
+            "2": 5241744,
+            "3": 5247424
         },
         "Flask of Tempered Mastery": {
-            "1": 5228341,
-            "2": 5240420,
-            "3": 5236508
+            "1": 5223989,
+            "2": 5232717,
+            "3": 5246524
         },
         "Flask of Tempered Swiftness": {
-            "1": 5216016,
-            "2": 5224105,
-            "3": 5226592
+            "1": 5208156,
+            "2": 5225603,
+            "3": 5236287
         },
         "Flask of Tempered Versatility": {
-            "1": 5233443,
-            "2": 5249285,
-            "3": 5254456
+            "1": 5235855,
+            "2": 5251221,
+            "3": 5254435
         },
         "baseline": {
-            "1": 5147695
+            "1": 5144099
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_rogue_subtlety_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:32:48.002836"
+        "timestamp": "2025-09-24 06:15:11.172177"
     },
     "profile": {
         "character": {
@@ -142,14 +142,14 @@ ns.Consum_rogue_subtlety_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5147695.080825517
+            "base_dps": 5144099.228277886
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -167,8 +167,8 @@ ns.Consum_rogue_subtlety_flacons = [[
         "baseline"
     ],
     "spec_id": 261,
-    "subtitle": "UTC 2025-09-17 02:32 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:32",
+    "subtitle": "UTC 2025-09-24 06:15 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:15",
     "title": "Phials | Subtlety Rogue | Castingpatchwerk",
     "translations": {}
 }

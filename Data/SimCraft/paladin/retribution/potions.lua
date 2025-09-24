@@ -8,17 +8,17 @@ ns.Consum_paladin_retribution_potions = [[
     "class_id": 2,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5635692,
-            "2": 5645056,
-            "3": 5654235
+            "1": 5642875,
+            "2": 5646261,
+            "3": 5658544
         },
         "Tempered Potion": {
-            "1": 5721138,
-            "2": 5732366,
-            "3": 5742759
+            "1": 5721894,
+            "2": 5732531,
+            "3": 5746776
         },
         "baseline": {
-            "1": 5631653
+            "1": 5629705
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_paladin_retribution_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:41:22.479615"
+        "timestamp": "2025-09-24 06:26:04.250325"
     },
     "profile": {
         "character": {
@@ -122,14 +122,14 @@ ns.Consum_paladin_retribution_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5631653.0513673285
+            "base_dps": 5629705.884002262
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -144,8 +144,8 @@ ns.Consum_paladin_retribution_potions = [[
         "baseline"
     ],
     "spec_id": 70,
-    "subtitle": "UTC 2025-09-17 02:41 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:41",
+    "subtitle": "UTC 2025-09-24 06:26 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:26",
     "title": "Potions | Retribution Paladin | Castingpatchwerk",
     "translations": {}
 }

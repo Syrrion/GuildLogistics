@@ -8,17 +8,17 @@ ns.Consum_rogue_assassination_potions = [[
     "class_id": 4,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5595027,
-            "2": 5604775,
-            "3": 5615445
+            "1": 5529410,
+            "2": 5530326,
+            "3": 5538364
         },
         "Tempered Potion": {
-            "1": 5675430,
-            "2": 5686319,
-            "3": 5693499
+            "1": 5606278,
+            "2": 5611921,
+            "3": 5614188
         },
         "baseline": {
-            "1": 5581136
+            "1": 5509223
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_rogue_assassination_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:42:10.371054"
+        "timestamp": "2025-09-24 06:26:27.777349"
     },
     "profile": {
         "character": {
@@ -132,14 +132,14 @@ ns.Consum_rogue_assassination_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5581136.294369467
+            "base_dps": 5509223.601417496
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -154,8 +154,8 @@ ns.Consum_rogue_assassination_potions = [[
         "baseline"
     ],
     "spec_id": 259,
-    "subtitle": "UTC 2025-09-17 02:42 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:42",
+    "subtitle": "UTC 2025-09-24 06:26 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:26",
     "title": "Potions | Assassination Rogue | Castingpatchwerk",
     "translations": {}
 }

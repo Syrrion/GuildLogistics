@@ -8,17 +8,17 @@ ns.Consum_warlock_destruction_potions = [[
     "class_id": 9,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5971328,
-            "2": 5974032,
-            "3": 5972650
+            "1": 6010688,
+            "2": 6009270,
+            "3": 6011831
         },
         "Tempered Potion": {
-            "1": 6045517,
-            "2": 6043474,
-            "3": 6056451
+            "1": 6080611,
+            "2": 6090093,
+            "3": 6092764
         },
         "baseline": {
-            "1": 5958119
+            "1": 6001033
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_warlock_destruction_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:44:20.524846"
+        "timestamp": "2025-09-24 06:29:02.951530"
     },
     "profile": {
         "character": {
@@ -127,14 +127,14 @@ ns.Consum_warlock_destruction_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5958119.058802458
+            "base_dps": 6001033.155694903
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -149,8 +149,8 @@ ns.Consum_warlock_destruction_potions = [[
         "baseline"
     ],
     "spec_id": 267,
-    "subtitle": "UTC 2025-09-17 02:44 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:44",
+    "subtitle": "UTC 2025-09-24 06:29 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:29",
     "title": "Potions | Destruction Warlock | Castingpatchwerk",
     "translations": {}
 }

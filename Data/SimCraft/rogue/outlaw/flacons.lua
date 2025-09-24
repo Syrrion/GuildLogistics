@@ -8,32 +8,32 @@ ns.Consum_rogue_outlaw_flacons = [[
     "class_id": 4,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5782212,
-            "2": 5786510,
-            "3": 5790766
+            "1": 5660278,
+            "2": 5667384,
+            "3": 5677169
         },
         "Flask of Tempered Aggression": {
-            "1": 5779466,
-            "2": 5794064,
-            "3": 5795934
+            "1": 5664752,
+            "2": 5674896,
+            "3": 5686824
         },
         "Flask of Tempered Mastery": {
-            "1": 5723965,
-            "2": 5734034,
-            "3": 5737053
+            "1": 5612451,
+            "2": 5619918,
+            "3": 5623171
         },
         "Flask of Tempered Swiftness": {
-            "1": 5752666,
-            "2": 5755828,
-            "3": 5769674
+            "1": 5638382,
+            "2": 5643559,
+            "3": 5648309
         },
         "Flask of Tempered Versatility": {
-            "1": 5780590,
-            "2": 5787291,
-            "3": 5799266
+            "1": 5673628,
+            "2": 5676078,
+            "3": 5676048
         },
         "baseline": {
-            "1": 5688288
+            "1": 5572773
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_rogue_outlaw_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:32:25.456967"
+        "timestamp": "2025-09-24 06:14:42.011286"
     },
     "profile": {
         "character": {
@@ -145,14 +145,14 @@ ns.Consum_rogue_outlaw_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5688288.14078837
+            "base_dps": 5572773.390309126
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -162,16 +162,16 @@ ns.Consum_rogue_outlaw_flacons = [[
         1
     ],
     "sorted_data_keys": [
-        "Flask of Tempered Versatility",
         "Flask of Tempered Aggression",
         "Flask of Alchemical Chaos",
+        "Flask of Tempered Versatility",
         "Flask of Tempered Swiftness",
         "Flask of Tempered Mastery",
         "baseline"
     ],
     "spec_id": 260,
-    "subtitle": "UTC 2025-09-17 02:32 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:32",
+    "subtitle": "UTC 2025-09-24 06:14 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:14",
     "title": "Phials | Outlaw Rogue | Castingpatchwerk",
     "translations": {}
 }

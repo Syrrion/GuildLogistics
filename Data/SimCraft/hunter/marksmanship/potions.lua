@@ -8,17 +8,17 @@ ns.Consum_hunter_marksmanship_potions = [[
     "class_id": 3,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5610297,
-            "2": 5621057,
-            "3": 5629323
+            "1": 5600075,
+            "2": 5613213,
+            "3": 5619852
         },
         "Tempered Potion": {
-            "1": 5704169,
-            "2": 5715874,
-            "3": 5732433
+            "1": 5701138,
+            "2": 5704690,
+            "3": 5714239
         },
         "baseline": {
-            "1": 5595368
+            "1": 5583399
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_hunter_marksmanship_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:38:37.484369"
+        "timestamp": "2025-09-24 06:23:10.395894"
     },
     "profile": {
         "character": {
@@ -125,14 +125,14 @@ ns.Consum_hunter_marksmanship_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5595368.1154448595
+            "base_dps": 5583399.468170386
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -147,8 +147,8 @@ ns.Consum_hunter_marksmanship_potions = [[
         "baseline"
     ],
     "spec_id": 254,
-    "subtitle": "UTC 2025-09-17 02:38 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:38",
+    "subtitle": "UTC 2025-09-24 06:23 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:23",
     "title": "Potions | Marksmanship Hunter | Castingpatchwerk",
     "translations": {}
 }

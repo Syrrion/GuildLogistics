@@ -8,17 +8,17 @@ ns.Consum_monk_brewmaster_potions = [[
     "class_id": 10,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 3813536,
-            "2": 3817591,
-            "3": 3822875
+            "1": 3911574,
+            "2": 3916213,
+            "3": 3917505
         },
         "Tempered Potion": {
-            "1": 3843619,
-            "2": 3851898,
-            "3": 3850120
+            "1": 3949081,
+            "2": 3946594,
+            "3": 3950666
         },
         "baseline": {
-            "1": 3803782
+            "1": 3903270
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_monk_brewmaster_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:40:43.629002"
+        "timestamp": "2025-09-24 06:25:08.923250"
     },
     "profile": {
         "character": {
@@ -120,14 +120,14 @@ ns.Consum_monk_brewmaster_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 3803782.607922615
+            "base_dps": 3903270.752443322
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -142,8 +142,8 @@ ns.Consum_monk_brewmaster_potions = [[
         "baseline"
     ],
     "spec_id": 268,
-    "subtitle": "UTC 2025-09-17 02:40 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:40",
+    "subtitle": "UTC 2025-09-24 06:25 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:25",
     "title": "Potions | Brewmaster Monk | Castingpatchwerk",
     "translations": {}
 }

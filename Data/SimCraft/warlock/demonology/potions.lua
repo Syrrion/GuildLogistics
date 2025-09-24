@@ -8,17 +8,17 @@ ns.Consum_warlock_demonology_potions = [[
     "class_id": 9,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5818089,
-            "2": 5821160,
-            "3": 5823918
+            "1": 5819871,
+            "2": 5824722,
+            "3": 5816614
         },
         "Tempered Potion": {
-            "1": 5893625,
-            "2": 5907273,
-            "3": 5917233
+            "1": 5897787,
+            "2": 5910543,
+            "3": 5920691
         },
         "baseline": {
-            "1": 5812642
+            "1": 5813502
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_warlock_demonology_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:43:55.044255"
+        "timestamp": "2025-09-24 06:28:27.173776"
     },
     "profile": {
         "character": {
@@ -127,14 +127,14 @@ ns.Consum_warlock_demonology_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5812642.325465351
+            "base_dps": 5813502.296343375
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -149,8 +149,8 @@ ns.Consum_warlock_demonology_potions = [[
         "baseline"
     ],
     "spec_id": 266,
-    "subtitle": "UTC 2025-09-17 02:43 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:43",
+    "subtitle": "UTC 2025-09-24 06:28 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:28",
     "title": "Potions | Demonology Warlock | Castingpatchwerk",
     "translations": {}
 }

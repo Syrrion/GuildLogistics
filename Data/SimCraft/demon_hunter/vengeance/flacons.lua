@@ -8,32 +8,32 @@ ns.Consum_demon_hunter_vengeance_flacons = [[
     "class_id": 12,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 3057409,
-            "2": 3061197,
-            "3": 3067119
+            "1": 3213617,
+            "2": 3227200,
+            "3": 3233324
         },
         "Flask of Tempered Aggression": {
-            "1": 3032243,
-            "2": 3040256,
-            "3": 3046509
+            "1": 3195068,
+            "2": 3199012,
+            "3": 3205169
         },
         "Flask of Tempered Mastery": {
-            "1": 3046602,
-            "2": 3052981,
-            "3": 3057350
+            "1": 3202006,
+            "2": 3210075,
+            "3": 3215764
         },
         "Flask of Tempered Swiftness": {
-            "1": 3023120,
-            "2": 3026654,
-            "3": 3031935
+            "1": 3186058,
+            "2": 3188272,
+            "3": 3193188
         },
         "Flask of Tempered Versatility": {
-            "1": 3049548,
-            "2": 3056666,
-            "3": 3065773
+            "1": 3207475,
+            "2": 3216855,
+            "3": 3226260
         },
         "baseline": {
-            "1": 2985042
+            "1": 3142827
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_demon_hunter_vengeance_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:26:54.343030"
+        "timestamp": "2025-09-24 06:07:13.744543"
     },
     "profile": {
         "character": {
@@ -144,14 +144,14 @@ ns.Consum_demon_hunter_vengeance_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 2985042.0070478646
+            "base_dps": 3142827.175680235
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -169,8 +169,8 @@ ns.Consum_demon_hunter_vengeance_flacons = [[
         "baseline"
     ],
     "spec_id": 581,
-    "subtitle": "UTC 2025-09-17 02:26 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:26",
+    "subtitle": "UTC 2025-09-24 06:07 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:07",
     "title": "Phials | Vengeance Demon Hunter | Castingpatchwerk",
     "translations": {}
 }

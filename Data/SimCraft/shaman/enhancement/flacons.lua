@@ -8,32 +8,32 @@ ns.Consum_shaman_enhancement_flacons = [[
     "class_id": 7,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5450206,
-            "2": 5459550,
-            "3": 5478417
+            "1": 5447813,
+            "2": 5469883,
+            "3": 5473966
         },
         "Flask of Tempered Aggression": {
-            "1": 5420141,
-            "2": 5432892,
-            "3": 5448495
+            "1": 5419431,
+            "2": 5437373,
+            "3": 5445263
         },
         "Flask of Tempered Mastery": {
-            "1": 5421150,
-            "2": 5435295,
-            "3": 5448791
+            "1": 5421258,
+            "2": 5434186,
+            "3": 5449292
         },
         "Flask of Tempered Swiftness": {
-            "1": 5410704,
-            "2": 5426328,
-            "3": 5436535
+            "1": 5406875,
+            "2": 5424197,
+            "3": 5436226
         },
         "Flask of Tempered Versatility": {
-            "1": 5424375,
-            "2": 5438807,
-            "3": 5447889
+            "1": 5418264,
+            "2": 5443262,
+            "3": 5450573
         },
         "baseline": {
-            "1": 5316550
+            "1": 5312519
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_shaman_enhancement_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:33:26.725259"
+        "timestamp": "2025-09-24 06:16:10.240144"
     },
     "profile": {
         "character": {
@@ -152,14 +152,14 @@ ns.Consum_shaman_enhancement_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5316550.3070591865
+            "base_dps": 5312519.417322156
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -170,15 +170,15 @@ ns.Consum_shaman_enhancement_flacons = [[
     ],
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
+        "Flask of Tempered Versatility",
         "Flask of Tempered Mastery",
         "Flask of Tempered Aggression",
-        "Flask of Tempered Versatility",
         "Flask of Tempered Swiftness",
         "baseline"
     ],
     "spec_id": 263,
-    "subtitle": "UTC 2025-09-17 02:33 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:33",
+    "subtitle": "UTC 2025-09-24 06:16 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:16",
     "title": "Phials | Enhancement Shaman | Castingpatchwerk",
     "translations": {}
 }

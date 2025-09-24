@@ -8,32 +8,32 @@ ns.Consum_hunter_marksmanship_flacons = [[
     "class_id": 3,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5701273,
-            "2": 5713156,
-            "3": 5726127
+            "1": 5693381,
+            "2": 5700838,
+            "3": 5718904
         },
         "Flask of Tempered Aggression": {
-            "1": 5669092,
-            "2": 5685209,
-            "3": 5699285
+            "1": 5660542,
+            "2": 5669408,
+            "3": 5690122
         },
         "Flask of Tempered Mastery": {
-            "1": 5655276,
-            "2": 5668287,
-            "3": 5685049
+            "1": 5644187,
+            "2": 5659979,
+            "3": 5673977
         },
         "Flask of Tempered Swiftness": {
-            "1": 5655932,
-            "2": 5674452,
-            "3": 5688980
+            "1": 5656627,
+            "2": 5660460,
+            "3": 5674895
         },
         "Flask of Tempered Versatility": {
-            "1": 5661240,
-            "2": 5671770,
-            "3": 5686407
+            "1": 5646153,
+            "2": 5660713,
+            "3": 5677567
         },
         "baseline": {
-            "1": 5541233
+            "1": 5533990
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_hunter_marksmanship_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:29:07.876434"
+        "timestamp": "2025-09-24 06:10:25.943401"
     },
     "profile": {
         "character": {
@@ -143,14 +143,14 @@ ns.Consum_hunter_marksmanship_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5541233.396647878
+            "base_dps": 5533990.026627715
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -162,14 +162,14 @@ ns.Consum_hunter_marksmanship_flacons = [[
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
         "Flask of Tempered Aggression",
-        "Flask of Tempered Swiftness",
         "Flask of Tempered Versatility",
+        "Flask of Tempered Swiftness",
         "Flask of Tempered Mastery",
         "baseline"
     ],
     "spec_id": 254,
-    "subtitle": "UTC 2025-09-17 02:29 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:29",
+    "subtitle": "UTC 2025-09-24 06:10 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:10",
     "title": "Phials | Marksmanship Hunter | Castingpatchwerk",
     "translations": {}
 }

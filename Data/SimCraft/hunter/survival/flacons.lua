@@ -8,32 +8,32 @@ ns.Consum_hunter_survival_flacons = [[
     "class_id": 3,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5557467,
-            "2": 5571001,
-            "3": 5580200
+            "1": 5548205,
+            "2": 5568787,
+            "3": 5583115
         },
         "Flask of Tempered Aggression": {
-            "1": 5528450,
-            "2": 5541874,
-            "3": 5561103
+            "1": 5531730,
+            "2": 5550405,
+            "3": 5557970
         },
         "Flask of Tempered Mastery": {
-            "1": 5529697,
-            "2": 5547683,
-            "3": 5563776
+            "1": 5536045,
+            "2": 5550506,
+            "3": 5561990
         },
         "Flask of Tempered Swiftness": {
-            "1": 5493405,
-            "2": 5507547,
-            "3": 5519339
+            "1": 5488849,
+            "2": 5504902,
+            "3": 5525237
         },
         "Flask of Tempered Versatility": {
-            "1": 5536885,
-            "2": 5556751,
-            "3": 5565903
+            "1": 5540464,
+            "2": 5553092,
+            "3": 5571370
         },
         "baseline": {
-            "1": 5417349
+            "1": 5418859
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_hunter_survival_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:29:29.467119"
+        "timestamp": "2025-09-24 06:11:19.184033"
     },
     "profile": {
         "character": {
@@ -144,14 +144,14 @@ ns.Consum_hunter_survival_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5417349.724750689
+            "base_dps": 5418859.058411922
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -169,8 +169,8 @@ ns.Consum_hunter_survival_flacons = [[
         "baseline"
     ],
     "spec_id": 255,
-    "subtitle": "UTC 2025-09-17 02:29 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:29",
+    "subtitle": "UTC 2025-09-24 06:11 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:11",
     "title": "Phials | Survival Hunter | Castingpatchwerk",
     "translations": {}
 }

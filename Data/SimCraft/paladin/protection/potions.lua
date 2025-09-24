@@ -8,17 +8,17 @@ ns.Consum_paladin_protection_potions = [[
     "class_id": 2,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 3202133,
-            "2": 3213276,
-            "3": 3219153
+            "1": 3197748,
+            "2": 3203332,
+            "3": 3206070
         },
         "Tempered Potion": {
-            "1": 3274423,
-            "2": 3282198,
-            "3": 3288862
+            "1": 3259675,
+            "2": 3273186,
+            "3": 3276300
         },
         "baseline": {
-            "1": 3196400
+            "1": 3187417
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_paladin_protection_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:41:15.729181"
+        "timestamp": "2025-09-24 06:25:38.798208"
     },
     "profile": {
         "character": {
@@ -136,14 +136,14 @@ ns.Consum_paladin_protection_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 3196400.1912332685
+            "base_dps": 3187417.5811581505
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -158,8 +158,8 @@ ns.Consum_paladin_protection_potions = [[
         "baseline"
     ],
     "spec_id": 66,
-    "subtitle": "UTC 2025-09-17 02:41 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:41",
+    "subtitle": "UTC 2025-09-24 06:25 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:25",
     "title": "Potions | Protection Paladin | Castingpatchwerk",
     "translations": {}
 }

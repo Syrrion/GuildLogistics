@@ -8,32 +8,32 @@ ns.Consum_warlock_demonology_flacons = [[
     "class_id": 9,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5892951,
-            "2": 5902114,
-            "3": 5918828
+            "1": 5893419,
+            "2": 5902882,
+            "3": 5920943
         },
         "Flask of Tempered Aggression": {
-            "1": 5881455,
-            "2": 5897399,
-            "3": 5912169
+            "1": 5880573,
+            "2": 5893166,
+            "3": 5910575
         },
         "Flask of Tempered Mastery": {
-            "1": 5854825,
-            "2": 5868034,
-            "3": 5881280
+            "1": 5850542,
+            "2": 5867340,
+            "3": 5879457
         },
         "Flask of Tempered Swiftness": {
-            "1": 5853513,
-            "2": 5858471,
-            "3": 5869160
+            "1": 5858517,
+            "2": 5859047,
+            "3": 5864372
         },
         "Flask of Tempered Versatility": {
-            "1": 5872338,
-            "2": 5882661,
-            "3": 5902575
+            "1": 5870087,
+            "2": 5876735,
+            "3": 5897855
         },
         "baseline": {
-            "1": 5750589
+            "1": 5750544
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_warlock_demonology_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:33:59.795432"
+        "timestamp": "2025-09-24 06:17:07.342242"
     },
     "profile": {
         "character": {
@@ -145,14 +145,14 @@ ns.Consum_warlock_demonology_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5750589.154619735
+            "base_dps": 5750544.918714586
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -170,8 +170,8 @@ ns.Consum_warlock_demonology_flacons = [[
         "baseline"
     ],
     "spec_id": 266,
-    "subtitle": "UTC 2025-09-17 02:33 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:33",
+    "subtitle": "UTC 2025-09-24 06:17 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:17",
     "title": "Phials | Demonology Warlock | Castingpatchwerk",
     "translations": {}
 }

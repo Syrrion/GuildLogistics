@@ -8,17 +8,17 @@ ns.Consum_death_knight_unholy_potions = [[
     "class_id": 6,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5897034,
-            "2": 5901993,
-            "3": 5895935
+            "1": 5902634,
+            "2": 5892023,
+            "3": 5902182
         },
         "Tempered Potion": {
-            "1": 6059585,
-            "2": 6078559,
-            "3": 6092482
+            "1": 6062931,
+            "2": 6074904,
+            "3": 6094539
         },
         "baseline": {
-            "1": 5896179
+            "1": 5901282
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_death_knight_unholy_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:35:45.501184"
+        "timestamp": "2025-09-24 06:19:32.357468"
     },
     "profile": {
         "character": {
@@ -131,14 +131,14 @@ ns.Consum_death_knight_unholy_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5896179.589921187
+            "base_dps": 5901282.341172814
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -153,8 +153,8 @@ ns.Consum_death_knight_unholy_potions = [[
         "baseline"
     ],
     "spec_id": 252,
-    "subtitle": "UTC 2025-09-17 02:35 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:35",
+    "subtitle": "UTC 2025-09-24 06:19 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:19",
     "title": "Potions | Unholy Death Knight | Castingpatchwerk",
     "translations": {}
 }

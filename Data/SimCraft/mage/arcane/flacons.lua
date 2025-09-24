@@ -8,32 +8,32 @@ ns.Consum_mage_arcane_flacons = [[
     "class_id": 8,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5910882,
-            "2": 5929532,
-            "3": 5936349
+            "1": 5911902,
+            "2": 5925695,
+            "3": 5933722
         },
         "Flask of Tempered Aggression": {
-            "1": 5885490,
-            "2": 5897454,
-            "3": 5912859
+            "1": 5885921,
+            "2": 5898929,
+            "3": 5917291
         },
         "Flask of Tempered Mastery": {
-            "1": 5892258,
-            "2": 5895961,
-            "3": 5919682
+            "1": 5894117,
+            "2": 5903508,
+            "3": 5916938
         },
         "Flask of Tempered Swiftness": {
-            "1": 5896446,
-            "2": 5912518,
-            "3": 5916748
+            "1": 5898342,
+            "2": 5906943,
+            "3": 5914734
         },
         "Flask of Tempered Versatility": {
-            "1": 5887379,
-            "2": 5895070,
-            "3": 5911391
+            "1": 5885076,
+            "2": 5898283,
+            "3": 5909862
         },
         "baseline": {
-            "1": 5774163
+            "1": 5777700
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_mage_arcane_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:29:47.888279"
+        "timestamp": "2025-09-24 06:11:38.692753"
     },
     "profile": {
         "character": {
@@ -149,14 +149,14 @@ ns.Consum_mage_arcane_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5774163.571586396
+            "base_dps": 5777700.795084995
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -167,15 +167,15 @@ ns.Consum_mage_arcane_flacons = [[
     ],
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
+        "Flask of Tempered Aggression",
         "Flask of Tempered Mastery",
         "Flask of Tempered Swiftness",
-        "Flask of Tempered Aggression",
         "Flask of Tempered Versatility",
         "baseline"
     ],
     "spec_id": 62,
-    "subtitle": "UTC 2025-09-17 02:29 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:29",
+    "subtitle": "UTC 2025-09-24 06:11 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:11",
     "title": "Phials | Arcane Mage | Castingpatchwerk",
     "translations": {}
 }

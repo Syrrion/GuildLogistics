@@ -8,17 +8,17 @@ ns.Consum_druid_feral_potions = [[
     "class_id": 11,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5818549,
-            "2": 5826254,
-            "3": 5845407
+            "1": 5816959,
+            "2": 5828692,
+            "3": 5840064
         },
         "Tempered Potion": {
-            "1": 5924480,
-            "2": 5935281,
-            "3": 5947709
+            "1": 5931232,
+            "2": 5942439,
+            "3": 5950643
         },
         "baseline": {
-            "1": 5793276
+            "1": 5785060
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_druid_feral_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:37:27.660254"
+        "timestamp": "2025-09-24 06:21:32.455743"
     },
     "profile": {
         "character": {
@@ -125,14 +125,14 @@ ns.Consum_druid_feral_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5793276.961872377
+            "base_dps": 5785060.300706133
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -147,8 +147,8 @@ ns.Consum_druid_feral_potions = [[
         "baseline"
     ],
     "spec_id": 103,
-    "subtitle": "UTC 2025-09-17 02:37 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:37",
+    "subtitle": "UTC 2025-09-24 06:21 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:21",
     "title": "Potions | Feral Druid | Castingpatchwerk",
     "translations": {}
 }

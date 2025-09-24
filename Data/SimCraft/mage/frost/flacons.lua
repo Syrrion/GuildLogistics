@@ -8,32 +8,32 @@ ns.Consum_mage_frost_flacons = [[
     "class_id": 8,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5990075,
-            "2": 6000145,
-            "3": 6014041
+            "1": 5993606,
+            "2": 6001432,
+            "3": 6018727
         },
         "Flask of Tempered Aggression": {
-            "1": 5983446,
-            "2": 5994315,
-            "3": 6017341
+            "1": 5987400,
+            "2": 6001574,
+            "3": 6016559
         },
         "Flask of Tempered Mastery": {
-            "1": 5965112,
-            "2": 5977417,
-            "3": 5984085
+            "1": 5964299,
+            "2": 5978627,
+            "3": 5985847
         },
         "Flask of Tempered Swiftness": {
-            "1": 5976742,
-            "2": 5985493,
-            "3": 5998309
+            "1": 5972100,
+            "2": 5985235,
+            "3": 5993866
         },
         "Flask of Tempered Versatility": {
-            "1": 5964686,
-            "2": 5978565,
-            "3": 5997646
+            "1": 5967802,
+            "2": 5986431,
+            "3": 5998654
         },
         "baseline": {
-            "1": 5859035
+            "1": 5860217
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_mage_frost_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:30:25.210800"
+        "timestamp": "2025-09-24 06:12:22.027270"
     },
     "profile": {
         "character": {
@@ -145,14 +145,14 @@ ns.Consum_mage_frost_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5859035.854573052
+            "base_dps": 5860217.46913583
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -162,16 +162,16 @@ ns.Consum_mage_frost_flacons = [[
         1
     ],
     "sorted_data_keys": [
-        "Flask of Tempered Aggression",
         "Flask of Alchemical Chaos",
-        "Flask of Tempered Swiftness",
+        "Flask of Tempered Aggression",
         "Flask of Tempered Versatility",
+        "Flask of Tempered Swiftness",
         "Flask of Tempered Mastery",
         "baseline"
     ],
     "spec_id": 64,
-    "subtitle": "UTC 2025-09-17 02:30 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:30",
+    "subtitle": "UTC 2025-09-24 06:12 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:12",
     "title": "Phials | Frost Mage | Castingpatchwerk",
     "translations": {}
 }

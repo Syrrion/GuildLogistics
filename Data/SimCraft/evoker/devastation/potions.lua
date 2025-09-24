@@ -8,17 +8,17 @@ ns.Consum_evoker_devastation_potions = [[
     "class_id": 13,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5409847,
-            "2": 5418471,
-            "3": 5433061
+            "1": 5412283,
+            "2": 5424362,
+            "3": 5427009
         },
         "Tempered Potion": {
-            "1": 5519727,
-            "2": 5527825,
-            "3": 5545488
+            "1": 5522581,
+            "2": 5536316,
+            "3": 5545994
         },
         "baseline": {
-            "1": 5392322
+            "1": 5392645
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_evoker_devastation_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:38:05.270743"
+        "timestamp": "2025-09-24 06:22:35.141729"
     },
     "profile": {
         "character": {
@@ -131,14 +131,14 @@ ns.Consum_evoker_devastation_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5392322.928483922
+            "base_dps": 5392645.407387282
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -153,8 +153,8 @@ ns.Consum_evoker_devastation_potions = [[
         "baseline"
     ],
     "spec_id": 1467,
-    "subtitle": "UTC 2025-09-17 02:38 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:38",
+    "subtitle": "UTC 2025-09-24 06:22 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:22",
     "title": "Potions | Devastation Evoker | Castingpatchwerk",
     "translations": {}
 }

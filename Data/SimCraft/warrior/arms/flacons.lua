@@ -8,32 +8,32 @@ ns.Consum_warrior_arms_flacons = [[
     "class_id": 1,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5722434,
-            "2": 5738599,
-            "3": 5753498
+            "1": 5726279,
+            "2": 5741954,
+            "3": 5754747
         },
         "Flask of Tempered Aggression": {
-            "1": 5703666,
-            "2": 5717238,
-            "3": 5730686
+            "1": 5703409,
+            "2": 5714663,
+            "3": 5730741
         },
         "Flask of Tempered Mastery": {
-            "1": 5696486,
-            "2": 5707844,
-            "3": 5720182
+            "1": 5700810,
+            "2": 5709785,
+            "3": 5719130
         },
         "Flask of Tempered Swiftness": {
-            "1": 5699765,
-            "2": 5709162,
-            "3": 5721845
+            "1": 5703115,
+            "2": 5708567,
+            "3": 5720783
         },
         "Flask of Tempered Versatility": {
-            "1": 5696020,
-            "2": 5707442,
-            "3": 5728048
+            "1": 5697408,
+            "2": 5709283,
+            "3": 5722851
         },
         "baseline": {
-            "1": 5581779
+            "1": 5569106
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_warrior_arms_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:34:36.779806"
+        "timestamp": "2025-09-24 06:17:44.763473"
     },
     "profile": {
         "character": {
@@ -151,14 +151,14 @@ ns.Consum_warrior_arms_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5581779.605024187
+            "base_dps": 5569106.521737768
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -176,8 +176,8 @@ ns.Consum_warrior_arms_flacons = [[
         "baseline"
     ],
     "spec_id": 71,
-    "subtitle": "UTC 2025-09-17 02:34 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:34",
+    "subtitle": "UTC 2025-09-24 06:17 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:17",
     "title": "Phials | Arms Warrior | Castingpatchwerk",
     "translations": {}
 }

@@ -8,32 +8,32 @@ ns.Consum_paladin_retribution_flacons = [[
     "class_id": 2,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5711748,
-            "2": 5722880,
-            "3": 5740551
+            "1": 5711336,
+            "2": 5724436,
+            "3": 5737699
         },
         "Flask of Tempered Aggression": {
-            "1": 5676539,
-            "2": 5690078,
-            "3": 5708378
+            "1": 5679551,
+            "2": 5689169,
+            "3": 5711398
         },
         "Flask of Tempered Mastery": {
-            "1": 5667648,
-            "2": 5685809,
-            "3": 5702780
+            "1": 5671712,
+            "2": 5689447,
+            "3": 5705186
         },
         "Flask of Tempered Swiftness": {
-            "1": 5704203,
-            "2": 5714218,
-            "3": 5724019
+            "1": 5696638,
+            "2": 5712803,
+            "3": 5723608
         },
         "Flask of Tempered Versatility": {
-            "1": 5678457,
-            "2": 5690912,
-            "3": 5702636
+            "1": 5680965,
+            "2": 5689843,
+            "3": 5706172
         },
         "baseline": {
-            "1": 5545023
+            "1": 5547651
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_paladin_retribution_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:31:43.213180"
+        "timestamp": "2025-09-24 06:13:53.242222"
     },
     "profile": {
         "character": {
@@ -140,14 +140,14 @@ ns.Consum_paladin_retribution_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5545023.6393067865
+            "base_dps": 5547651.62766228
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -160,13 +160,13 @@ ns.Consum_paladin_retribution_flacons = [[
         "Flask of Alchemical Chaos",
         "Flask of Tempered Swiftness",
         "Flask of Tempered Aggression",
-        "Flask of Tempered Mastery",
         "Flask of Tempered Versatility",
+        "Flask of Tempered Mastery",
         "baseline"
     ],
     "spec_id": 70,
-    "subtitle": "UTC 2025-09-17 02:31 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:31",
+    "subtitle": "UTC 2025-09-24 06:13 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:13",
     "title": "Phials | Retribution Paladin | Castingpatchwerk",
     "translations": {}
 }

@@ -8,32 +8,32 @@ ns.Consum_druid_balance_flacons = [[
     "class_id": 11,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 6000468,
-            "2": 6015713,
-            "3": 6030538
+            "1": 6004325,
+            "2": 6019529,
+            "3": 6038310
         },
         "Flask of Tempered Aggression": {
-            "1": 5957145,
-            "2": 5970951,
-            "3": 5987030
+            "1": 5956707,
+            "2": 5974614,
+            "3": 5987560
         },
         "Flask of Tempered Mastery": {
-            "1": 5951343,
-            "2": 5959295,
-            "3": 5975174
+            "1": 5948117,
+            "2": 5968271,
+            "3": 5976990
         },
         "Flask of Tempered Swiftness": {
-            "1": 5955620,
-            "2": 5973488,
-            "3": 5979978
+            "1": 5953860,
+            "2": 5972365,
+            "3": 5989997
         },
         "Flask of Tempered Versatility": {
-            "1": 5954965,
-            "2": 5962817,
-            "3": 5976088
+            "1": 5947607,
+            "2": 5959985,
+            "3": 5976544
         },
         "baseline": {
-            "1": 5858824
+            "1": 5855151
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_druid_balance_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:27:31.383630"
+        "timestamp": "2025-09-24 06:07:49.490495"
     },
     "profile": {
         "character": {
@@ -159,14 +159,14 @@ ns.Consum_druid_balance_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5858824.011719362
+            "base_dps": 5855151.317418765
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -177,15 +177,15 @@ ns.Consum_druid_balance_flacons = [[
     ],
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
-        "Flask of Tempered Aggression",
         "Flask of Tempered Swiftness",
-        "Flask of Tempered Versatility",
+        "Flask of Tempered Aggression",
         "Flask of Tempered Mastery",
+        "Flask of Tempered Versatility",
         "baseline"
     ],
     "spec_id": 102,
-    "subtitle": "UTC 2025-09-17 02:27 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:27",
+    "subtitle": "UTC 2025-09-24 06:07 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:07",
     "title": "Phials | Balance Druid | Castingpatchwerk",
     "translations": {}
 }

@@ -8,17 +8,17 @@ ns.Consum_hunter_beast_mastery_potions = [[
     "class_id": 3,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5984865,
-            "2": 5987016,
-            "3": 5998319
+            "1": 5999396,
+            "2": 6001862,
+            "3": 6004944
         },
         "Tempered Potion": {
-            "1": 6063479,
-            "2": 6068878,
-            "3": 6078537
+            "1": 6079292,
+            "2": 6089515,
+            "3": 6093164
         },
         "baseline": {
-            "1": 5967713
+            "1": 5985154
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_hunter_beast_mastery_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:39:42.270468"
+        "timestamp": "2025-09-24 06:22:58.895215"
     },
     "profile": {
         "character": {
@@ -127,14 +127,14 @@ ns.Consum_hunter_beast_mastery_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5967713.1999897305
+            "base_dps": 5985154.978093859
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -149,8 +149,8 @@ ns.Consum_hunter_beast_mastery_potions = [[
         "baseline"
     ],
     "spec_id": 253,
-    "subtitle": "UTC 2025-09-17 02:39 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:39",
+    "subtitle": "UTC 2025-09-24 06:22 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:22",
     "title": "Potions | Beast_Mastery Hunter | Castingpatchwerk",
     "translations": {}
 }

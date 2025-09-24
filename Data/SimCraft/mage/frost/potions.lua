@@ -8,17 +8,17 @@ ns.Consum_mage_frost_potions = [[
     "class_id": 8,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5942389,
-            "2": 5940788,
-            "3": 5942279
+            "1": 5933833,
+            "2": 5941598,
+            "3": 5947912
         },
         "Tempered Potion": {
-            "1": 6004095,
-            "2": 6007137,
-            "3": 6017765
+            "1": 6002101,
+            "2": 6002174,
+            "3": 6014358
         },
         "baseline": {
-            "1": 5922190
+            "1": 5921291
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_mage_frost_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:40:27.582865"
+        "timestamp": "2025-09-24 06:24:50.243686"
     },
     "profile": {
         "character": {
@@ -127,14 +127,14 @@ ns.Consum_mage_frost_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5922190.857614954
+            "base_dps": 5921291.634281541
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -149,8 +149,8 @@ ns.Consum_mage_frost_potions = [[
         "baseline"
     ],
     "spec_id": 64,
-    "subtitle": "UTC 2025-09-17 02:40 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:40",
+    "subtitle": "UTC 2025-09-24 06:24 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:24",
     "title": "Potions | Frost Mage | Castingpatchwerk",
     "translations": {}
 }

@@ -8,32 +8,32 @@ ns.Consum_death_knight_blood_flacons = [[
     "class_id": 6,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 3856820,
-            "2": 3860461,
-            "3": 3875386
+            "1": 4263443,
+            "2": 4271887,
+            "3": 4275782
         },
         "Flask of Tempered Aggression": {
-            "1": 3838992,
-            "2": 3852852,
-            "3": 3854930
+            "1": 4245657,
+            "2": 4248386,
+            "3": 4260646
         },
         "Flask of Tempered Mastery": {
-            "1": 3846556,
-            "2": 3860780,
-            "3": 3866044
+            "1": 4251610,
+            "2": 4266598,
+            "3": 4271462
         },
         "Flask of Tempered Swiftness": {
-            "1": 3825973,
-            "2": 3825157,
-            "3": 3836011
+            "1": 4227707,
+            "2": 4232691,
+            "3": 4242193
         },
         "Flask of Tempered Versatility": {
-            "1": 3847552,
-            "2": 3850184,
-            "3": 3859893
+            "1": 4245258,
+            "2": 4253980,
+            "3": 4267591
         },
         "baseline": {
-            "1": 3767688
+            "1": 4165208
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_death_knight_blood_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:24:17.584227"
+        "timestamp": "2025-09-24 06:02:00.354953"
     },
     "profile": {
         "character": {
@@ -145,14 +145,14 @@ ns.Consum_death_knight_blood_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 3767688.0535119977
+            "base_dps": 4165208.0198140363
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -170,8 +170,8 @@ ns.Consum_death_knight_blood_flacons = [[
         "baseline"
     ],
     "spec_id": 250,
-    "subtitle": "UTC 2025-09-17 02:24 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:24",
+    "subtitle": "UTC 2025-09-24 06:02 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:02",
     "title": "Phials | Blood Death Knight | Castingpatchwerk",
     "translations": {}
 }

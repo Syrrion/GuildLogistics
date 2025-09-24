@@ -8,17 +8,17 @@ ns.Consum_hunter_survival_potions = [[
     "class_id": 3,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5451953,
-            "2": 5460725,
-            "3": 5465255
+            "1": 5449632,
+            "2": 5458634,
+            "3": 5466645
         },
         "Tempered Potion": {
-            "1": 5561797,
-            "2": 5565348,
-            "3": 5583413
+            "1": 5559972,
+            "2": 5570094,
+            "3": 5582968
         },
         "baseline": {
-            "1": 5435029
+            "1": 5437228
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_hunter_survival_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:39:41.861477"
+        "timestamp": "2025-09-24 06:23:33.862880"
     },
     "profile": {
         "character": {
@@ -126,14 +126,14 @@ ns.Consum_hunter_survival_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5435029.515054232
+            "base_dps": 5437228.855688188
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -148,8 +148,8 @@ ns.Consum_hunter_survival_potions = [[
         "baseline"
     ],
     "spec_id": 255,
-    "subtitle": "UTC 2025-09-17 02:39 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:39",
+    "subtitle": "UTC 2025-09-24 06:23 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:23",
     "title": "Potions | Survival Hunter | Castingpatchwerk",
     "translations": {}
 }

@@ -8,17 +8,17 @@ ns.Consum_rogue_subtlety_potions = [[
     "class_id": 4,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5190364,
-            "2": 5194908,
-            "3": 5210186
+            "1": 5185760,
+            "2": 5197887,
+            "3": 5207472
         },
         "Tempered Potion": {
-            "1": 5254789,
-            "2": 5264178,
-            "3": 5273821
+            "1": 5259547,
+            "2": 5266815,
+            "3": 5272159
         },
         "baseline": {
-            "1": 5172464
+            "1": 5174386
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_rogue_subtlety_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:42:38.401587"
+        "timestamp": "2025-09-24 06:27:00.762657"
     },
     "profile": {
         "character": {
@@ -124,14 +124,14 @@ ns.Consum_rogue_subtlety_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5172464.418937328
+            "base_dps": 5174386.756880763
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -146,8 +146,8 @@ ns.Consum_rogue_subtlety_potions = [[
         "baseline"
     ],
     "spec_id": 261,
-    "subtitle": "UTC 2025-09-17 02:42 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:42",
+    "subtitle": "UTC 2025-09-24 06:27 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:27",
     "title": "Potions | Subtlety Rogue | Castingpatchwerk",
     "translations": {}
 }

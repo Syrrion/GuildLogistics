@@ -8,17 +8,17 @@ ns.Consum_monk_windwalker_potions = [[
     "class_id": 10,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5495422,
-            "2": 5504412,
-            "3": 5510480
+            "1": 5548037,
+            "2": 5562156,
+            "3": 5568766
         },
         "Tempered Potion": {
-            "1": 5590423,
-            "2": 5598075,
-            "3": 5608000
+            "1": 5646949,
+            "2": 5661502,
+            "3": 5669726
         },
         "baseline": {
-            "1": 5480637
+            "1": 5534362
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_monk_windwalker_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:40:58.981323"
+        "timestamp": "2025-09-24 06:25:17.512650"
     },
     "profile": {
         "character": {
@@ -125,14 +125,14 @@ ns.Consum_monk_windwalker_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5480637.805604393
+            "base_dps": 5534362.644101665
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -147,8 +147,8 @@ ns.Consum_monk_windwalker_potions = [[
         "baseline"
     ],
     "spec_id": 269,
-    "subtitle": "UTC 2025-09-17 02:40 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:40",
+    "subtitle": "UTC 2025-09-24 06:25 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:25",
     "title": "Potions | Windwalker Monk | Castingpatchwerk",
     "translations": {}
 }

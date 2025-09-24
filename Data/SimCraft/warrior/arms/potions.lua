@@ -8,17 +8,17 @@ ns.Consum_warrior_arms_potions = [[
     "class_id": 1,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5662655,
-            "2": 5664504,
-            "3": 5675890
+            "1": 5656909,
+            "2": 5666517,
+            "3": 5669424
         },
         "Tempered Potion": {
-            "1": 5733440,
-            "2": 5743462,
-            "3": 5753961
+            "1": 5734441,
+            "2": 5741606,
+            "3": 5755376
         },
         "baseline": {
-            "1": 5645266
+            "1": 5646024
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_warrior_arms_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:44:37.337199"
+        "timestamp": "2025-09-24 06:29:23.941375"
     },
     "profile": {
         "character": {
@@ -133,14 +133,14 @@ ns.Consum_warrior_arms_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5645266.772563947
+            "base_dps": 5646024.275215426
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -155,8 +155,8 @@ ns.Consum_warrior_arms_potions = [[
         "baseline"
     ],
     "spec_id": 71,
-    "subtitle": "UTC 2025-09-17 02:44 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:44",
+    "subtitle": "UTC 2025-09-24 06:29 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:29",
     "title": "Potions | Arms Warrior | Castingpatchwerk",
     "translations": {}
 }

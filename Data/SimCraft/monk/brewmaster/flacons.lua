@@ -8,32 +8,32 @@ ns.Consum_monk_brewmaster_flacons = [[
     "class_id": 10,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 3845445,
-            "2": 3847475,
-            "3": 3854241
+            "1": 3940866,
+            "2": 3943693,
+            "3": 3948943
         },
         "Flask of Tempered Aggression": {
-            "1": 3848274,
-            "2": 3858086,
-            "3": 3859659
+            "1": 3940244,
+            "2": 3947561,
+            "3": 3955775
         },
         "Flask of Tempered Mastery": {
-            "1": 3845356,
-            "2": 3847067,
-            "3": 3858201
+            "1": 3938834,
+            "2": 3945510,
+            "3": 3952610
         },
         "Flask of Tempered Swiftness": {
-            "1": 3798747,
-            "2": 3800475,
-            "3": 3808999
+            "1": 3897138,
+            "2": 3897487,
+            "3": 3898922
         },
         "Flask of Tempered Versatility": {
-            "1": 3843651,
-            "2": 3851710,
-            "3": 3861417
+            "1": 3938648,
+            "2": 3946609,
+            "3": 3952108
         },
         "baseline": {
-            "1": 3781317
+            "1": 3871777
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_monk_brewmaster_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:30:41.852086"
+        "timestamp": "2025-09-24 06:12:40.418703"
     },
     "profile": {
         "character": {
@@ -138,14 +138,14 @@ ns.Consum_monk_brewmaster_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 3781317.3586695916
+            "base_dps": 3871777.9526214413
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -155,16 +155,16 @@ ns.Consum_monk_brewmaster_flacons = [[
         1
     ],
     "sorted_data_keys": [
-        "Flask of Tempered Versatility",
         "Flask of Tempered Aggression",
         "Flask of Tempered Mastery",
+        "Flask of Tempered Versatility",
         "Flask of Alchemical Chaos",
         "Flask of Tempered Swiftness",
         "baseline"
     ],
     "spec_id": 268,
-    "subtitle": "UTC 2025-09-17 02:30 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:30",
+    "subtitle": "UTC 2025-09-24 06:12 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:12",
     "title": "Phials | Brewmaster Monk | Castingpatchwerk",
     "translations": {}
 }

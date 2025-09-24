@@ -8,32 +8,32 @@ ns.Consum_paladin_protection_flacons = [[
     "class_id": 2,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 3271925,
-            "2": 3278754,
-            "3": 3288901
+            "1": 3259854,
+            "2": 3267926,
+            "3": 3277763
         },
         "Flask of Tempered Aggression": {
-            "1": 3252020,
-            "2": 3265175,
-            "3": 3268953
+            "1": 3242899,
+            "2": 3252056,
+            "3": 3256769
         },
         "Flask of Tempered Mastery": {
-            "1": 3243909,
-            "2": 3247938,
-            "3": 3257928
+            "1": 3230925,
+            "2": 3241028,
+            "3": 3248608
         },
         "Flask of Tempered Swiftness": {
-            "1": 3247017,
-            "2": 3261540,
-            "3": 3265392
+            "1": 3234035,
+            "2": 3243617,
+            "3": 3251642
         },
         "Flask of Tempered Versatility": {
-            "1": 3248058,
-            "2": 3259943,
-            "3": 3267311
+            "1": 3237570,
+            "2": 3250190,
+            "3": 3252273
         },
         "baseline": {
-            "1": 3177151
+            "1": 3173080
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_paladin_protection_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:31:17.559642"
+        "timestamp": "2025-09-24 06:13:22.222609"
     },
     "profile": {
         "character": {
@@ -154,14 +154,14 @@ ns.Consum_paladin_protection_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 3177151.2276493553
+            "base_dps": 3173080.3210232235
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -179,8 +179,8 @@ ns.Consum_paladin_protection_flacons = [[
         "baseline"
     ],
     "spec_id": 66,
-    "subtitle": "UTC 2025-09-17 02:31 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:31",
+    "subtitle": "UTC 2025-09-24 06:13 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:13",
     "title": "Phials | Protection Paladin | Castingpatchwerk",
     "translations": {}
 }

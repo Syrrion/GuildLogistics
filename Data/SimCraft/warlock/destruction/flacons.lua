@@ -8,32 +8,32 @@ ns.Consum_warlock_destruction_flacons = [[
     "class_id": 9,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 6028503,
-            "2": 6041612,
-            "3": 6053282
+            "1": 6069168,
+            "2": 6075246,
+            "3": 6095911
         },
         "Flask of Tempered Aggression": {
-            "1": 6003032,
-            "2": 6013842,
-            "3": 6033064
+            "1": 6045594,
+            "2": 6056852,
+            "3": 6066173
         },
         "Flask of Tempered Mastery": {
-            "1": 6001453,
-            "2": 6019500,
-            "3": 6033208
+            "1": 6040967,
+            "2": 6062778,
+            "3": 6073467
         },
         "Flask of Tempered Swiftness": {
-            "1": 6005014,
-            "2": 6019238,
-            "3": 6030188
+            "1": 6046601,
+            "2": 6066042,
+            "3": 6076764
         },
         "Flask of Tempered Versatility": {
-            "1": 6002139,
-            "2": 6021530,
-            "3": 6039861
+            "1": 6052067,
+            "2": 6063575,
+            "3": 6082345
         },
         "baseline": {
-            "1": 5874351
+            "1": 5908197
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_warlock_destruction_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:34:22.711183"
+        "timestamp": "2025-09-24 06:17:24.143589"
     },
     "profile": {
         "character": {
@@ -145,14 +145,14 @@ ns.Consum_warlock_destruction_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5874351.6996539375
+            "base_dps": 5908197.990272948
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -164,14 +164,14 @@ ns.Consum_warlock_destruction_flacons = [[
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
         "Flask of Tempered Versatility",
+        "Flask of Tempered Swiftness",
         "Flask of Tempered Mastery",
         "Flask of Tempered Aggression",
-        "Flask of Tempered Swiftness",
         "baseline"
     ],
     "spec_id": 267,
-    "subtitle": "UTC 2025-09-17 02:34 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:34",
+    "subtitle": "UTC 2025-09-24 06:17 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:17",
     "title": "Phials | Destruction Warlock | Castingpatchwerk",
     "translations": {}
 }

@@ -8,17 +8,17 @@ ns.Consum_death_knight_blood_potions = [[
     "class_id": 6,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 3814517,
-            "2": 3817121,
-            "3": 3810526
+            "1": 4210317,
+            "2": 4211809,
+            "3": 4215850
         },
         "Tempered Potion": {
-            "1": 3861677,
-            "2": 3865433,
-            "3": 3872050
+            "1": 4267248,
+            "2": 4276519,
+            "3": 4281036
         },
         "baseline": {
-            "1": 3813376
+            "1": 4217161
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_death_knight_blood_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:35:07.899393"
+        "timestamp": "2025-09-24 06:18:52.502636"
     },
     "profile": {
         "character": {
@@ -127,14 +127,14 @@ ns.Consum_death_knight_blood_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 3813376.370194014
+            "base_dps": 4217161.380235418
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -145,12 +145,12 @@ ns.Consum_death_knight_blood_potions = [[
     ],
     "sorted_data_keys": [
         "Tempered Potion",
-        "Potion of Unwavering Focus",
-        "baseline"
+        "baseline",
+        "Potion of Unwavering Focus"
     ],
     "spec_id": 250,
-    "subtitle": "UTC 2025-09-17 02:35 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:35",
+    "subtitle": "UTC 2025-09-24 06:18 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:18",
     "title": "Potions | Blood Death Knight | Castingpatchwerk",
     "translations": {}
 }

@@ -8,32 +8,32 @@ ns.Consum_death_knight_unholy_flacons = [[
     "class_id": 6,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 6053398,
-            "2": 6057271,
-            "3": 6095116
+            "1": 6051125,
+            "2": 6062495,
+            "3": 6088619
         },
         "Flask of Tempered Aggression": {
-            "1": 5992602,
-            "2": 6015668,
-            "3": 6035161
+            "1": 5998614,
+            "2": 6014949,
+            "3": 6029903
         },
         "Flask of Tempered Mastery": {
-            "1": 6021392,
-            "2": 6040881,
-            "3": 6060047
+            "1": 6026329,
+            "2": 6037550,
+            "3": 6068273
         },
         "Flask of Tempered Swiftness": {
-            "1": 5952731,
-            "2": 5998157,
-            "3": 6010441
+            "1": 5952150,
+            "2": 6001143,
+            "3": 6010253
         },
         "Flask of Tempered Versatility": {
-            "1": 5986762,
-            "2": 5996974,
-            "3": 6026615
+            "1": 5986959,
+            "2": 6005564,
+            "3": 6018675
         },
         "baseline": {
-            "1": 5861686
+            "1": 5867113
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_death_knight_unholy_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:26:08.807657"
+        "timestamp": "2025-09-24 06:04:45.888232"
     },
     "profile": {
         "character": {
@@ -149,14 +149,14 @@ ns.Consum_death_knight_unholy_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5861686.674529673
+            "base_dps": 5867113.619880008
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -174,8 +174,8 @@ ns.Consum_death_knight_unholy_flacons = [[
         "baseline"
     ],
     "spec_id": 252,
-    "subtitle": "UTC 2025-09-17 02:26 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:26",
+    "subtitle": "UTC 2025-09-24 06:04 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:04",
     "title": "Phials | Unholy Death Knight | Castingpatchwerk",
     "translations": {}
 }

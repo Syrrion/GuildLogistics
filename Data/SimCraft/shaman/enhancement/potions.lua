@@ -8,17 +8,17 @@ ns.Consum_shaman_enhancement_potions = [[
     "class_id": 7,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5355155,
-            "2": 5367587,
-            "3": 5380260
+            "1": 5364921,
+            "2": 5374164,
+            "3": 5384018
         },
         "Tempered Potion": {
-            "1": 5458301,
-            "2": 5469612,
-            "3": 5476899
+            "1": 5451509,
+            "2": 5465415,
+            "3": 5473576
         },
         "baseline": {
-            "1": 5344801
+            "1": 5347537
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_shaman_enhancement_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:43:19.132716"
+        "timestamp": "2025-09-24 06:27:50.342590"
     },
     "profile": {
         "character": {
@@ -134,14 +134,14 @@ ns.Consum_shaman_enhancement_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5344801.024115323
+            "base_dps": 5347537.5008943435
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -156,8 +156,8 @@ ns.Consum_shaman_enhancement_potions = [[
         "baseline"
     ],
     "spec_id": 263,
-    "subtitle": "UTC 2025-09-17 02:43 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:43",
+    "subtitle": "UTC 2025-09-24 06:27 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:27",
     "title": "Potions | Enhancement Shaman | Castingpatchwerk",
     "translations": {}
 }

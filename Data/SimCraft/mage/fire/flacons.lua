@@ -8,32 +8,32 @@ ns.Consum_mage_fire_flacons = [[
     "class_id": 8,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5661466,
-            "2": 5675439,
-            "3": 5686045
+            "1": 5668159,
+            "2": 5676524,
+            "3": 5695326
         },
         "Flask of Tempered Aggression": {
-            "1": 5596719,
-            "2": 5612756,
-            "3": 5618474
+            "1": 5599855,
+            "2": 5611777,
+            "3": 5621308
         },
         "Flask of Tempered Mastery": {
-            "1": 5616710,
-            "2": 5633558,
-            "3": 5643562
+            "1": 5615210,
+            "2": 5628980,
+            "3": 5642296
         },
         "Flask of Tempered Swiftness": {
-            "1": 5721108,
-            "2": 5745041,
-            "3": 5761924
+            "1": 5720270,
+            "2": 5741489,
+            "3": 5769637
         },
         "Flask of Tempered Versatility": {
-            "1": 5618818,
-            "2": 5632566,
-            "3": 5640737
+            "1": 5613690,
+            "2": 5630034,
+            "3": 5642000
         },
         "baseline": {
-            "1": 5506609
+            "1": 5503595
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_mage_fire_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:30:11.317147"
+        "timestamp": "2025-09-24 06:12:05.358935"
     },
     "profile": {
         "character": {
@@ -146,14 +146,14 @@ ns.Consum_mage_fire_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5506609.187427102
+            "base_dps": 5503595.109090855
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -171,8 +171,8 @@ ns.Consum_mage_fire_flacons = [[
         "baseline"
     ],
     "spec_id": 63,
-    "subtitle": "UTC 2025-09-17 02:30 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:30",
+    "subtitle": "UTC 2025-09-24 06:12 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:12",
     "title": "Phials | Fire Mage | Castingpatchwerk",
     "translations": {}
 }

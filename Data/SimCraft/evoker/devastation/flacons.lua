@@ -8,32 +8,32 @@ ns.Consum_evoker_devastation_flacons = [[
     "class_id": 13,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 5518740,
-            "2": 5527211,
-            "3": 5547570
+            "1": 5520097,
+            "2": 5535434,
+            "3": 5547342
         },
         "Flask of Tempered Aggression": {
-            "1": 5465495,
-            "2": 5480014,
-            "3": 5488703
+            "1": 5466673,
+            "2": 5480449,
+            "3": 5487436
         },
         "Flask of Tempered Mastery": {
-            "1": 5467250,
-            "2": 5472481,
-            "3": 5489783
+            "1": 5468185,
+            "2": 5480678,
+            "3": 5490422
         },
         "Flask of Tempered Swiftness": {
-            "1": 5480414,
-            "2": 5496473,
-            "3": 5512508
+            "1": 5479897,
+            "2": 5494498,
+            "3": 5507072
         },
         "Flask of Tempered Versatility": {
-            "1": 5482370,
-            "2": 5497534,
-            "3": 5512423
+            "1": 5483032,
+            "2": 5499091,
+            "3": 5509384
         },
         "baseline": {
-            "1": 5363433
+            "1": 5367727
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_evoker_devastation_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:28:42.626763"
+        "timestamp": "2025-09-24 06:09:57.193754"
     },
     "profile": {
         "character": {
@@ -149,14 +149,14 @@ ns.Consum_evoker_devastation_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 5363433.996815976
+            "base_dps": 5367727.904760378
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -167,15 +167,15 @@ ns.Consum_evoker_devastation_flacons = [[
     ],
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
-        "Flask of Tempered Swiftness",
         "Flask of Tempered Versatility",
+        "Flask of Tempered Swiftness",
         "Flask of Tempered Mastery",
         "Flask of Tempered Aggression",
         "baseline"
     ],
     "spec_id": 1467,
-    "subtitle": "UTC 2025-09-17 02:28 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:28",
+    "subtitle": "UTC 2025-09-24 06:09 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:09",
     "title": "Phials | Devastation Evoker | Castingpatchwerk",
     "translations": {}
 }

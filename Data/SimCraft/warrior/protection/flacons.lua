@@ -8,32 +8,32 @@ ns.Consum_warrior_protection_flacons = [[
     "class_id": 1,
     "data": {
         "Flask of Alchemical Chaos": {
-            "1": 3752783,
-            "2": 3757696,
-            "3": 3767903
+            "1": 3753390,
+            "2": 3762367,
+            "3": 3767732
         },
         "Flask of Tempered Aggression": {
-            "1": 3734154,
-            "2": 3740565,
-            "3": 3750619
+            "1": 3734384,
+            "2": 3743057,
+            "3": 3752203
         },
         "Flask of Tempered Mastery": {
-            "1": 3731281,
-            "2": 3741708,
-            "3": 3748206
+            "1": 3736563,
+            "2": 3739938,
+            "3": 3748580
         },
         "Flask of Tempered Swiftness": {
-            "1": 3727715,
-            "2": 3737797,
-            "3": 3754140
+            "1": 3726965,
+            "2": 3739743,
+            "3": 3756146
         },
         "Flask of Tempered Versatility": {
-            "1": 3736150,
-            "2": 3741362,
-            "3": 3751512
+            "1": 3732764,
+            "2": 3742241,
+            "3": 3750768
         },
         "baseline": {
-            "1": 3654184
+            "1": 3657119
         }
     },
     "data_type": "phials",
@@ -45,9 +45,9 @@ ns.Consum_warrior_protection_flacons = [[
         "Flask of Tempered Versatility": "212277"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:35:05.404528"
+        "timestamp": "2025-09-24 06:18:23.101650"
     },
     "profile": {
         "character": {
@@ -142,14 +142,14 @@ ns.Consum_warrior_protection_flacons = [[
             }
         },
         "metadata": {
-            "base_dps": 3654184.1796997027
+            "base_dps": 3657119.2971966104
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -161,14 +161,14 @@ ns.Consum_warrior_protection_flacons = [[
     "sorted_data_keys": [
         "Flask of Alchemical Chaos",
         "Flask of Tempered Swiftness",
-        "Flask of Tempered Versatility",
         "Flask of Tempered Aggression",
+        "Flask of Tempered Versatility",
         "Flask of Tempered Mastery",
         "baseline"
     ],
     "spec_id": 73,
-    "subtitle": "UTC 2025-09-17 02:35 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:35",
+    "subtitle": "UTC 2025-09-24 06:18 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:18",
     "title": "Phials | Protection Warrior | Castingpatchwerk",
     "translations": {}
 }

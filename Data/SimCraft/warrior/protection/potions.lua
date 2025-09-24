@@ -8,17 +8,17 @@ ns.Consum_warrior_protection_potions = [[
     "class_id": 1,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 3709032,
-            "2": 3717645,
-            "3": 3717498
+            "1": 3712268,
+            "2": 3712731,
+            "3": 3720063
         },
         "Tempered Potion": {
-            "1": 3756510,
-            "2": 3761148,
-            "3": 3765938
+            "1": 3757754,
+            "2": 3765178,
+            "3": 3763300
         },
         "baseline": {
-            "1": 3703804
+            "1": 3701881
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_warrior_protection_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:45:08.511213"
+        "timestamp": "2025-09-24 06:29:48.363466"
     },
     "profile": {
         "character": {
@@ -124,14 +124,14 @@ ns.Consum_warrior_protection_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 3703804.5247575957
+            "base_dps": 3701881.6566438954
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -146,8 +146,8 @@ ns.Consum_warrior_protection_potions = [[
         "baseline"
     ],
     "spec_id": 73,
-    "subtitle": "UTC 2025-09-17 02:45 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:45",
+    "subtitle": "UTC 2025-09-24 06:29 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:29",
     "title": "Potions | Protection Warrior | Castingpatchwerk",
     "translations": {}
 }

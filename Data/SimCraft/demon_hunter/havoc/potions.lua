@@ -8,17 +8,17 @@ ns.Consum_demon_hunter_havoc_potions = [[
     "class_id": 12,
     "data": {
         "Potion of Unwavering Focus": {
-            "1": 5493341,
-            "2": 5501976,
-            "3": 5513216
+            "1": 5501994,
+            "2": 5507199,
+            "3": 5514942
         },
         "Tempered Potion": {
-            "1": 5581682,
-            "2": 5592415,
-            "3": 5602313
+            "1": 5583291,
+            "2": 5589568,
+            "3": 5599430
         },
         "baseline": {
-            "1": 5485015
+            "1": 5486425
         }
     },
     "data_type": "potions",
@@ -27,9 +27,9 @@ ns.Consum_demon_hunter_havoc_potions = [[
         "Tempered Potion": "212265"
     },
     "metadata": {
-        "SimulationCraft": "6e59fdd",
+        "SimulationCraft": "3945f09",
         "bloodytools": "8ee54970aa33896c2c888c8b1bd00e74de5cafc7",
-        "timestamp": "2025-09-17 02:36:22.032641"
+        "timestamp": "2025-09-24 06:20:13.826301"
     },
     "profile": {
         "character": {
@@ -133,14 +133,14 @@ ns.Consum_demon_hunter_havoc_potions = [[
             }
         },
         "metadata": {
-            "base_dps": 5485015.848756527
+            "base_dps": 5486425.452290197
         }
     },
     "simc_settings": {
         "fight_style": "castingpatchwerk",
         "iterations": "60000",
         "ptr": "0",
-        "simc_hash": "6e59fdd",
+        "simc_hash": "3945f09",
         "target_error": "0.1",
         "tier": "TWW3"
     },
@@ -155,8 +155,8 @@ ns.Consum_demon_hunter_havoc_potions = [[
         "baseline"
     ],
     "spec_id": 577,
-    "subtitle": "UTC 2025-09-17 02:36 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/6e59fdd\" target=\"blank\">6e59fdd</a>",
-    "timestamp": "2025-09-17 02:36",
+    "subtitle": "UTC 2025-09-24 06:20 | SimC build: <a href=\"https://github.com/simulationcraft/simc/commit/3945f09\" target=\"blank\">3945f09</a>",
+    "timestamp": "2025-09-24 06:20",
     "title": "Potions | Havoc Demon Hunter | Castingpatchwerk",
     "translations": {}
 }
