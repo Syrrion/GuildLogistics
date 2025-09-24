@@ -12,6 +12,116 @@ local now = U.now
 local truthy = U.truthy
 local playerFullName = U.playerFullName
 
+-- ===== STATUS_UPDATE processing (time-sliced queue) =====
+-- Large STATUS_UPDATE batches can cause long frames; process them incrementally.
+local SUQ = { S = {}, MP = {}, running = false }
+
+local function _getNowPrecise()
+    return (GetTimePreciseSec and GetTimePreciseSec())
+        or (debugprofilestop and (debugprofilestop() / 1000))
+        or 0
+end
+
+-- Forward declarations for shared helpers
+local _statusApplyOne
+local _statusApplyByUID
+local _statusApplyMPByUID
+
+-- Slice processor
+local function _processStatusQueue(budgetMS)
+    if SUQ.running then
+        -- already running in this frame slice
+    end
+    SUQ.running = true
+    local startT = _getNowPrecise()
+    local budget = tonumber(budgetMS) or 6 -- ~6ms/frame budget
+
+    local LCU = ns and ns.LiveCellUpdater
+    while true do
+        -- Respect time budget
+        if (_getNowPrecise() - startT) * 1000 >= budget then break end
+
+        local item = table.remove(SUQ.S, 1)
+        if item then
+            -- item can be string or table; parse consistently with handler format
+            if type(item) == "string" then
+                local uid, ts, ilvl, ilvlMax, mid, lvl, score, version =
+                    item:match("^([^;]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);(.*)$")
+                if uid and ts then
+                    local info = {
+                        ts = safenum(ts, now()),
+                        ilvl = safenum(ilvl, -1),
+                        ilvlMax = safenum(ilvlMax, -1),
+                        mid = safenum(mid, -1),
+                        lvl = safenum(lvl, -1),
+                        score = safenum(score, -1),
+                        version = tostring(version or ""),
+                    }
+                    _statusApplyByUID(uid, info)
+                    -- Online/ping-related live refresh for this player
+                    if LCU and LCU.Notify then
+                        local who = (GLOG and GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+                        if who and who ~= "" then LCU.Notify('online', { player = who }) end
+                    end
+                end
+            elseif type(item) == "table" then
+                local uid = item.uid or item.u
+                local name = item.name or item.n
+                local info = {
+                    ts = safenum(item.ts, now()),
+                    ilvl = item.ilvl, ilvlMax = item.ilvlMax,
+                    mid = item.mid,   lvl = item.lvl,
+                    score = item.score,
+                    version = tostring(item.version or ""),
+                }
+                if uid then _statusApplyByUID(uid, info)
+                elseif name then _statusApplyOne(name, info) end
+                if LCU and LCU.Notify then
+                    local who = nil
+                    if uid and GLOG and GLOG.GetNameByUID then who = GLOG.GetNameByUID(uid) end
+                    if (not who or who == "") and name then who = name end
+                    if who and who ~= "" then LCU.Notify('online', { player = who }) end
+                end
+            end
+        else
+            -- No S item; try MP compact entries
+            local mpItem = table.remove(SUQ.MP, 1)
+            if not mpItem then break end
+            if type(mpItem) == "string" then
+                local uid = mpItem:match("^([^:]+):")
+                if uid then _statusApplyMPByUID(uid, mpItem) end
+            elseif type(mpItem) == "table" then
+                local uid = tostring(mpItem.uid or mpItem.u or "")
+                local ts  = safenum(mpItem.ts or mpItem.t, 0)
+                if uid ~= "" and ts > 0 then
+                    local parts = {}
+                    if type(mpItem.M) == "table" then
+                        for _, r in ipairs(mpItem.M) do
+                            local mid = safenum(r.mid or r.id, 0)
+                            if mid > 0 then
+                                local s = safenum(r.score or r.s, 0)
+                                local b = safenum(r.best or r.b, 0)
+                                local t = (r.timed and 1 or safenum(r.t, 0))
+                                local d = safenum(r.durMS or r.d or 0)
+                                parts[#parts+1] = table.concat({ tostring(mid), tostring(s), tostring(b), tostring(t), tostring(d) }, ",")
+                            end
+                        end
+                    end
+                    local line = uid..":"..tostring(ts).."|"..table.concat(parts, ";")
+                    _statusApplyMPByUID(uid, line)
+                end
+            end
+        end
+    end
+
+    -- Continue later if pending
+    if (#SUQ.S > 0) or (#SUQ.MP > 0) then
+        if U.After then U.After(0, function() _processStatusQueue(budget) end) else _processStatusQueue(budget) end
+    else
+        SUQ.running = false
+    end
+end
+
 -- ===== File complète → traitement ordonné =====
 -- CompleteQ: trié par (lm asc, rv asc, insertion). Utilise insertion binaire + pop tête O(1) via indices.
 local CompleteQ = { _data = {}, _head = 1, _tail = 0 }
@@ -717,6 +827,202 @@ local function handleTxBatch(sender, kv)
 end
 
 -- ===== Status Update Handler =====
+-- Shared helpers extracted from original handler
+_statusApplyOne = function(pname, info)
+    if not pname or pname == "" then return end
+    GuildLogisticsDB = GuildLogisticsDB or {}
+    GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
+    if not p then return end
+
+    -- Garde-fou: ignorer les stats pour les ALTs (déterminé via db.account.altToMain)
+    local isAlt = false
+    do
+        local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or "")
+        if uid ~= "" then
+            GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+            local t = GuildLogisticsDB.account
+            local mu = t.altToMain and t.altToMain[uid]
+            if mu and mu ~= uid then
+                isAlt = true
+                -- Garde-fou fort: un ALT ne doit jamais figurer dans la table des mains
+                if t.mains and t.mains[uid] ~= nil then t.mains[uid] = nil end
+            end
+        end
+    end
+
+    local n_ts   = safenum(info.ts, now())
+    local prev   = safenum(p.statusTimestamp, 0)
+    local changed= false
+    -- Flags de changement par champ pour LiveMappings
+    local changedIlvl, changedMKey, changedScore, changedVersion = false, false, false, false
+
+    -- ===== iLvl =====
+    if not isAlt then
+        local n_ilvl    = safenum(info.ilvl, -1)
+        local n_ilvlMax = safenum(info.ilvlMax, -1)
+        if n_ilvl >= 0 and n_ts >= prev then
+            p.ilvl = math.floor(n_ilvl)
+            if n_ilvlMax >= 0 then p.ilvlMax = math.floor(n_ilvlMax) end
+            changed = true
+            changedIlvl = true
+            if ns.Emit then ns.Emit("ilvl:changed", pname) end
+        end
+    end
+
+    -- ===== Clé M+ (mid/lvl) =====
+    if not isAlt then
+        local n_mid = safenum(info.mid, -1)
+        local n_lvl = safenum(info.lvl, -1)
+        if (n_mid >= 0 or n_lvl >= 0) and n_ts >= prev then
+            if n_mid >= 0 then p.mkeyMapId = n_mid end
+            if n_lvl >= 0 then p.mkeyLevel = n_lvl end
+            changed = true
+            changedMKey = true
+            if ns.Emit then ns.Emit("mkey:changed", pname) end
+        end
+    end
+
+    -- ✨ ===== Score M+ =====
+    if not isAlt then
+        local n_score = safenum(info.score, -1)
+        if n_score >= 0 and n_ts >= prev then
+            p.mplusScore = n_score
+            changed = true
+            changedScore = true
+            if ns.Emit then ns.Emit("mplus:changed", pname) end
+        end
+    end
+
+    -- ✨ ===== Version de l'addon =====
+    local version = tostring(info.version or "")
+    if version ~= "" and n_ts >= prev then
+        -- Stocker la version au niveau du MAIN uniquement si:
+        --  - le joueur est déjà mappé comme ALT -> MAIN (écrire sur MAIN, autorisé à créer l'entrée MAIN)
+        --  - OU l'UID cible est déjà un MAIN confirmé (ne pas promouvoir implicitement)
+        local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or "")
+        if uid ~= "" then
+            GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+            local t = GuildLogisticsDB.account
+            local mapped = t.altToMain and t.altToMain[uid]
+            local mu = tostring(mapped or uid)
+            t.mains = t.mains or {}
+            if mapped and mapped ~= uid then
+                -- Alt connu: NE PAS créer d'entrée MAIN implicite. Mettre à jour seulement si le MAIN existe déjà.
+                if type(t.mains[mu]) == "table" then
+                    t.mains[mu].addonVersion = version
+                    changed = true
+                    changedVersion = true
+                else
+                    -- Le MAIN n'existe pas encore → copie locale pour affichage
+                    p.addonVersion = version
+                    changed = true
+                    changedVersion = true
+                end
+            elseif type(t.mains[mu]) == "table" then
+                -- MAIN déjà confirmé: mise à jour uniquement
+                t.mains[mu].addonVersion = version
+                changed = true
+                changedVersion = true
+            else
+                -- Ni mappé, ni main confirmé → ne pas créer une entrée MAIN
+                -- Conserver une copie locale au niveau du personnage
+                p.addonVersion = version
+                changed = true
+                changedVersion = true
+            end
+        end
+        -- Utiliser aussi la fonction de traçage de version si disponible
+        if GLOG.SetPlayerAddonVersion then
+            GLOG.SetPlayerAddonVersion(pname, version, n_ts, nil)
+        end
+        -- Sécurité supplémentaire: sanitiser immédiatement après un changement potentiel
+        if GLOG.SanitizeMainAltState then pcall(GLOG.SanitizeMainAltState) end
+    end
+
+    if changed and n_ts > prev then p.statusTimestamp = n_ts end
+    -- ✅ Déclencher des mises à jour ciblées via LiveMappings uniquement pour les valeurs modifiées
+    do
+        local LCU = ns and ns.LiveCellUpdater
+        if LCU and LCU.Notify then
+            if changedIlvl then LCU.Notify('ilvl',   { player = pname }) end
+            -- Regroupe score et mkey sous l'effet "mplus" (met à jour colonnes mplus + mkey)
+            if changedMKey or changedScore then LCU.Notify('mplus', { player = pname }) end
+            if changedVersion then LCU.Notify('version', { player = pname }) end
+        else
+            -- Fallback : rafraîchissement global si le système LiveMappings n'est pas disponible
+            if changed and ns and ns.RefreshAll then ns.RefreshAll() end
+        end
+    end
+end
+
+_statusApplyByUID = function(uid, info)
+    uid = tostring(uid or "")
+    if uid == "" then return end
+    local name = (GLOG and GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+    if not name or name == "" then return end -- ⚠️ on n'invente pas d'entrée
+    _statusApplyOne(name, info)
+end
+
+_statusApplyMPByUID = function(uid, line)
+    uid = tostring(uid or "")
+    if uid == "" then return end
+    local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
+    if not name or name == "" then return end
+    -- Do not create entries here; apply only if player exists locally
+    GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
+    local p = GuildLogisticsDB.players[name]
+    if not p then return end
+    -- Respect alt/main guard: ignore for ALTs
+    local isAlt = false
+    do
+        local puid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name)) or "")
+        if puid ~= "" then
+            GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
+            local t = GuildLogisticsDB.account
+            local mu = t.altToMain and t.altToMain[puid]
+            if mu and mu ~= puid then isAlt = true end
+        end
+    end
+    if isAlt then return end
+
+    -- Parse compact string: "uid:ts|mid,s,b,t,d;mid,..." (MPv=2)
+    -- Backward-compat: also accepts MPv=1 with an extra 'runs' field (mid,s,b,r,t,d) and ignores it
+    local tsStr, rest = tostring(line or ""):match("^[^:]+:([%-%d]+)|(.+)$")
+    if not tsStr then return end
+    local ts = safenum(tsStr, 0)
+    local prev = safenum(p.mplusMapsTs, 0)
+    if ts <= prev then return end
+    local newMap = {}
+    for tok in tostring(rest or ""):gmatch("([^;]+)") do
+        -- Try MPv=2 (5 fields)
+        local mid,s,b,t,d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+        local ok = false
+        if mid then ok = true
+        else
+            -- Fallback MPv=1 (6 fields, includes 'runs' we ignore)
+            local _mid,_s,_b,_r,_t,_d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
+            if _mid then mid,s,b,t,d = _mid,_s,_b,_t,_d; ok = true end
+        end
+        if ok and mid then
+            local id = tonumber(mid) or 0
+            if id > 0 then
+                newMap[id] = {
+                    score = safenum(s,0),
+                    best  = safenum(b,0),
+                    timed = (safenum(t,0) ~= 0),
+                    durMS = safenum(d,0),
+                }
+            end
+        end
+    end
+    if next(newMap) then
+        p.mplusMaps = newMap
+        p.mplusMapsTs = ts
+        if ns.Emit then ns.Emit("mplus:maps-updated", name) end
+    end
+end
+
 local function handleStatusUpdate(sender, kv)
     -- Compat: conserve le traçage de version d'addon si présent
     do
@@ -727,268 +1033,19 @@ local function handleStatusUpdate(sender, kv)
         end
     end
 
-    local function _applyOne(pname, info)
-        if not pname or pname == "" then return end
-        GuildLogisticsDB = GuildLogisticsDB or {}
-        GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-        local p = GuildLogisticsDB.players[pname]      -- ⚠️ ne jamais créer ici
-        if not p then return end
-
-        -- Garde-fou: ignorer les stats pour les ALTs (déterminé via db.account.altToMain)
-        local isAlt = false
-        do
-            local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or "")
-            if uid ~= "" then
-                GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
-                local t = GuildLogisticsDB.account
-                local mu = t.altToMain and t.altToMain[uid]
-                if mu and mu ~= uid then
-                    isAlt = true
-                    -- Garde-fou fort: un ALT ne doit jamais figurer dans la table des mains
-                    if t.mains and t.mains[uid] ~= nil then t.mains[uid] = nil end
-                end
-            end
-        end
-
-    local n_ts   = safenum(info.ts, now())
-    local prev   = safenum(p.statusTimestamp, 0)
-    local changed= false
-    -- Flags de changement par champ pour LiveMappings
-    local changedIlvl, changedMKey, changedScore, changedVersion = false, false, false, false
-
-        -- ===== iLvl =====
-        if not isAlt then
-            local n_ilvl    = safenum(info.ilvl, -1)
-            local n_ilvlMax = safenum(info.ilvlMax, -1)
-            if n_ilvl >= 0 and n_ts >= prev then
-                p.ilvl = math.floor(n_ilvl)
-                if n_ilvlMax >= 0 then p.ilvlMax = math.floor(n_ilvlMax) end
-                changed = true
-                changedIlvl = true
-                if ns.Emit then ns.Emit("ilvl:changed", pname) end
-            end
-        end
-
-        -- ===== Clé M+ (mid/lvl) =====
-        if not isAlt then
-            local n_mid = safenum(info.mid, -1)
-            local n_lvl = safenum(info.lvl, -1)
-            if (n_mid >= 0 or n_lvl >= 0) and n_ts >= prev then
-                if n_mid >= 0 then p.mkeyMapId = n_mid end
-                if n_lvl >= 0 then p.mkeyLevel = n_lvl end
-                changed = true
-                changedMKey = true
-                if ns.Emit then ns.Emit("mkey:changed", pname) end
-            end
-        end
-
-        -- ✨ ===== Score M+ =====
-        if not isAlt then
-            local n_score = safenum(info.score, -1)
-            if n_score >= 0 and n_ts >= prev then
-                p.mplusScore = n_score
-                changed = true
-                changedScore = true
-                if ns.Emit then ns.Emit("mplus:changed", pname) end
-            end
-        end
-
-    -- ✨ ===== Version de l'addon =====
-        local version = tostring(info.version or "")
-        if version ~= "" and n_ts >= prev then
-            -- Stocker la version au niveau du MAIN uniquement si:
-            --  - le joueur est déjà mappé comme ALT -> MAIN (écrire sur MAIN, autorisé à créer l'entrée MAIN)
-            --  - OU l'UID cible est déjà un MAIN confirmé (ne pas promouvoir implicitement)
-            local uid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(pname)) or "")
-            if uid ~= "" then
-                GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
-                local t = GuildLogisticsDB.account
-                local mapped = t.altToMain and t.altToMain[uid]
-                local mu = tostring(mapped or uid)
-                t.mains = t.mains or {}
-                if mapped and mapped ~= uid then
-                    -- Alt connu: NE PAS créer d'entrée MAIN implicite. Mettre à jour seulement si le MAIN existe déjà.
-                    if type(t.mains[mu]) == "table" then
-                        t.mains[mu].addonVersion = version
-                        changed = true
-                        changedVersion = true
-                    else
-                        -- Le MAIN n'existe pas encore → copie locale pour affichage
-                        p.addonVersion = version
-                        changed = true
-                        changedVersion = true
-                    end
-                elseif type(t.mains[mu]) == "table" then
-                    -- MAIN déjà confirmé: mise à jour uniquement
-                    t.mains[mu].addonVersion = version
-                    changed = true
-                    changedVersion = true
-                else
-                    -- Ni mappé, ni main confirmé → ne pas créer une entrée MAIN
-                    -- Conserver une copie locale au niveau du personnage
-                    p.addonVersion = version
-                    changed = true
-                    changedVersion = true
-                end
-            end
-            -- Utiliser aussi la fonction de traçage de version si disponible
-            if GLOG.SetPlayerAddonVersion then
-                GLOG.SetPlayerAddonVersion(pname, version, n_ts, sender)
-            end
-            -- Sécurité supplémentaire: sanitiser immédiatement après un changement potentiel
-            if GLOG.SanitizeMainAltState then pcall(GLOG.SanitizeMainAltState) end
-        end
-
-        if changed and n_ts > prev then p.statusTimestamp = n_ts end
-        -- ✅ Déclencher des mises à jour ciblées via LiveMappings uniquement pour les valeurs modifiées
-        do
-            local LCU = ns and ns.LiveCellUpdater
-            if LCU and LCU.Notify then
-                if changedIlvl then LCU.Notify('ilvl',   { player = pname }) end
-                -- Regroupe score et mkey sous l'effet "mplus" (met à jour colonnes mplus + mkey)
-                if changedMKey or changedScore then LCU.Notify('mplus', { player = pname }) end
-                if changedVersion then LCU.Notify('version', { player = pname }) end
-            else
-                -- Fallback : rafraîchissement global si le système LiveMappings n'est pas disponible
-                if changed and ns and ns.RefreshAll then ns.RefreshAll() end
-            end
-        end
-    end
-
-    local function _applyByUID(uid, info)
-        uid = tostring(uid or "")
-        if uid == "" then return end
-        local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
-        if not name or name == "" then return end -- ⚠️ on n'invente pas d'entrée
-        _applyOne(name, info)
-    end
+    
 
     -- 1) Batch (nouveau) : kv.S peut être une liste de chaînes "uid;ts;ilvl;ilvlMax;mid;lvl;score;version"
     if type(kv.S) == "table" then
-        for _, rec in ipairs(kv.S) do
-            if type(rec) == "string" then
-                -- Format UID + ';' avec version
-                local uid, ts, ilvl, ilvlMax, mid, lvl, score, version =
-                    rec:match("^([^;]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);([%-%d]+);(.*)$")
-                if uid and ts then
-                    local info = {
-                        ts = safenum(ts, now()),
-                        ilvl = safenum(ilvl, -1),
-                        ilvlMax = safenum(ilvlMax, -1),
-                        mid = safenum(mid, -1),
-                        lvl = safenum(lvl, -1),
-                        score = safenum(score, -1),
-                        version = tostring(version or ""),
-                    }
-                    _applyByUID(uid, info)
-                end
-            elseif type(rec) == "table" then
-                local uid = rec.uid or rec.u
-                local name = rec.name or rec.n
-                local info = {
-                    ts = safenum(rec.ts, now()),
-                    ilvl = rec.ilvl, ilvlMax = rec.ilvlMax,
-                    mid = rec.mid,   lvl = rec.lvl,
-                    score = rec.score,
-                    version = tostring(rec.version or ""),
-                }
-                if uid then _applyByUID(uid, info)
-                elseif name then _applyOne(name, info) end
-            end
-        end
+        -- Enqueue for time-sliced processing
+        for i = 1, #kv.S do SUQ.S[#SUQ.S+1] = kv.S[i] end
     end
 
     -- 1.bis) Mythic+ per-dungeon maps (compact MP) with timestamp freshness
     do
-        local function _applyMPByUID(uid, line)
-            uid = tostring(uid or "")
-            if uid == "" then return end
-            local name = (GLOG.GetNameByUID and GLOG.GetNameByUID(uid)) or nil
-            if not name or name == "" then return end
-            -- Do not create entries here; apply only if player exists locally
-            GuildLogisticsDB = GuildLogisticsDB or {}; GuildLogisticsDB.players = GuildLogisticsDB.players or {}
-            local p = GuildLogisticsDB.players[name]
-            if not p then return end
-            -- Respect alt/main guard: ignore for ALTs
-            local isAlt = false
-            do
-                local puid = tostring(p.uid or (GLOG.GetOrAssignUID and GLOG.GetOrAssignUID(name)) or "")
-                if puid ~= "" then
-                    GuildLogisticsDB.account = GuildLogisticsDB.account or { mains = {}, altToMain = {} }
-                    local t = GuildLogisticsDB.account
-                    local mu = t.altToMain and t.altToMain[puid]
-                    if mu and mu ~= puid then isAlt = true end
-                end
-            end
-            if isAlt then return end
-
-            -- Parse compact string: "uid:ts|mid,s,b,t,d;mid,..." (MPv=2)
-            -- Backward-compat: also accepts MPv=1 with an extra 'runs' field (mid,s,b,r,t,d) and ignores it
-            local tsStr, rest = tostring(line or ""):match("^[^:]+:([%-%d]+)|(.+)$")
-            if not tsStr then return end
-            local ts = safenum(tsStr, 0)
-            local prev = safenum(p.mplusMapsTs, 0)
-            if ts <= prev then return end
-            local newMap = {}
-            for tok in tostring(rest or ""):gmatch("([^;]+)") do
-                -- Try MPv=2 (5 fields)
-                local mid,s,b,t,d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
-                local ok = false
-                if mid then ok = true
-                else
-                    -- Fallback MPv=1 (6 fields, includes 'runs' we ignore)
-                    local _mid,_s,_b,_r,_t,_d = tok:match("^(%-?%d+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+),([%-%d]+)$")
-                    if _mid then mid,s,b,t,d = _mid,_s,_b,_t,_d; ok = true end
-                end
-                if ok and mid then
-                    local id = tonumber(mid) or 0
-                    if id > 0 then
-                        newMap[id] = {
-                            score = safenum(s,0),
-                            best  = safenum(b,0),
-                            timed = (safenum(t,0) ~= 0),
-                            durMS = safenum(d,0),
-                        }
-                    end
-                end
-            end
-            if next(newMap) then
-                p.mplusMaps = newMap
-                p.mplusMapsTs = ts
-                if ns.Emit then ns.Emit("mplus:maps-updated", name) end
-            end
-        end
         -- Accept MP either as compact strings array or table entries with fields
         if type(kv.MP) == "table" then
-            for _, item in ipairs(kv.MP) do
-                if type(item) == "string" then
-                    local uid = item:match("^([^:]+):")
-                    if uid then _applyMPByUID(uid, item) end
-                elseif type(item) == "table" then
-                    -- Object form: { uid=, ts=, M={ {mid=,score=,best=,timed=,durMS=}... } }
-                    local uid = tostring(item.uid or item.u or "")
-                    local ts  = safenum(item.ts or item.t, 0)
-                    if uid ~= "" and ts > 0 then
-                        -- Reconstruct compact line and reuse parser for uniformity
-                        local parts = {}
-                        if type(item.M) == "table" then
-                            for _, r in ipairs(item.M) do
-                                local mid = safenum(r.mid or r.id, 0)
-                                if mid > 0 then
-                                    local s = safenum(r.score or r.s, 0)
-                                    local b = safenum(r.best or r.b, 0)
-                                    local t = (r.timed and 1 or safenum(r.t, 0))
-                                    local d = safenum(r.durMS or r.d or 0)
-                                    -- MPv=2 compact entry (no runs)
-                                    parts[#parts+1] = table.concat({ tostring(mid), tostring(s), tostring(b), tostring(t), tostring(d) }, ",")
-                                end
-                            end
-                        end
-                        local line = uid..":"..tostring(ts).."|"..table.concat(parts, ";")
-                        _applyMPByUID(uid, line)
-                    end
-                end
-            end
+            for i = 1, #kv.MP do SUQ.MP[#SUQ.MP+1] = kv.MP[i] end
         end
     end
 
@@ -1020,39 +1077,18 @@ local function handleStatusUpdate(sender, kv)
         local name = tostring(kv.name or "")
         local info = {
             ts = safenum(kv.ts, now()),
-            -- Les champs ilvl, ilvlMax, mid, lvl, score sont maintenant uniquement dans le tableau S
         }
         if uid ~= "" then
-            _applyByUID(uid, info)
+            SUQ.S[#SUQ.S+1] = { uid = uid, ts = info.ts }
         elseif name ~= "" then
-            _applyOne(name, info)
+            SUQ.S[#SUQ.S+1] = { name = name, ts = info.ts }
         end
     end
 
     -- 🔄 Mises à jour live complémentaires basées sur présence/zone
-    do
-        local LCU = ns and ns.LiveCellUpdater
-        if LCU and LCU.Notify then
-            -- STATUS_UPDATE peut impacter l'état online (ping, ilvl, last) via FindGuildInfo
-            -- On notifie "online" pour les joueurs présents dans ce batch si on peut les résoudre.
-            if type(kv.S) == "table" then
-                for _, rec in ipairs(kv.S) do
-                    local who
-                    if type(rec) == "string" then
-                        local uid = rec:match("^([^;:]+)[;:]") -- uid avant ';' ou ':'
-                        if uid and GLOG and GLOG.GetNameByUID then who = GLOG.GetNameByUID(uid) end
-                    elseif type(rec) == "table" then
-                        local uid = tostring(rec.uid or rec.u or "")
-                        local name = tostring(rec.name or rec.n or "")
-                        if uid ~= "" and GLOG and GLOG.GetNameByUID then who = GLOG.GetNameByUID(uid) end
-                        if (not who or who == "") and name ~= "" then who = name end
-                    end
-                    if who and who ~= "" then
-                        LCU.Notify('online', { player = who })
-                    end
-                end
-            end
-        end
+    -- Schedule incremental processing of enqueued STATUS_UPDATE payloads
+    if not SUQ.running then
+        if U.After then U.After(0, function() _processStatusQueue(6) end) else _processStatusQueue(6) end
     end
 end
 
